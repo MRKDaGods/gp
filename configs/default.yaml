@@ -1,0 +1,127 @@
+project:
+  name: "mtmc-tracker"
+  output_dir: "data/outputs"
+  run_name: null  # auto-generated as run_YYYYMMDD_HHMMSS if null
+  log_level: "INFO"
+
+stage0:
+  input_dir: "data/raw/aic2023"
+  video_extensions: [".mp4", ".avi", ".mkv", ".mov"]
+  output_fps: 10
+  target_size: null  # [width, height] or null to keep original
+  normalize: false
+  denoise: false
+  denoise_strength: 3  # bilateral filter d parameter
+
+stage1:
+  detector:
+    model: "yolo11m.pt"
+    confidence_threshold: 0.25
+    iou_threshold: 0.45
+    classes: [0, 2, 5, 7]  # COCO: person=0, car=2, bus=5, truck=7
+    device: "cuda:0"
+    half: true
+    img_size: 640
+  tracker:
+    algorithm: "botsort"  # botsort | deepocsort | strongsort | bytetrack | ocsort
+    reid_weights: "osnet_x0_25_msmt17.pt"
+    device: "cuda:0"
+    half: true
+    track_high_thresh: 0.5
+    track_low_thresh: 0.1
+    new_track_thresh: 0.6
+    track_buffer: 30
+    match_thresh: 0.8
+  min_tracklet_length: 5  # minimum frames for a valid tracklet
+  min_tracklet_area: 500  # minimum bbox area in pixels
+
+stage2:
+  reid:
+    person:
+      model_name: "osnet_x1_0"
+      weights_path: "models/reid/person_osnet_market1501.pth"
+      embedding_dim: 512
+      input_size: [256, 128]  # [H, W]
+    vehicle:
+      model_name: "resnet50_ibn_a"
+      weights_path: "models/reid/vehicle_resnet50ibn_veri776.pth"
+      embedding_dim: 2048
+      input_size: [224, 224]  # [H, W]
+    batch_size: 64
+    device: "cuda:0"
+    half: true
+  hsv:
+    h_bins: 16
+    s_bins: 8
+    v_bins: 8
+  pca:
+    enabled: true
+    n_components: 512
+    pca_model_path: "models/reid/pca_transform.pkl"
+  crop:
+    min_area: 500
+    padding_ratio: 0.1
+    samples_per_tracklet: 10
+
+stage3:
+  faiss:
+    index_type: "flat_ip"  # inner product on L2-normed = cosine similarity
+  metadata:
+    db_path: null  # auto-set to output_dir/stage3/metadata.db
+
+stage4:
+  association:
+    top_k: 100
+    reranking:
+      enabled: true
+      k1: 20
+      k2: 6
+      lambda_value: 0.3
+    weights:
+      appearance: 0.7
+      hsv: 0.1
+      spatiotemporal: 0.2
+    spatiotemporal:
+      max_time_gap: 300  # seconds
+      min_time_gap: 2    # seconds
+      camera_transitions: null  # loaded from dataset config if available
+    graph:
+      similarity_threshold: 0.5
+      algorithm: "connected_components"  # connected_components | community_detection
+
+stage5:
+  evaluator: "trackeval"  # trackeval | pymotmetrics
+  ground_truth_dir: null  # set per dataset
+  metrics: ["HOTA", "MOTA", "IDF1"]
+  generate_report: true
+  report_format: "html"  # html | markdown
+
+stage6:
+  video:
+    enabled: true
+    draw_bboxes: true
+    draw_ids: true
+    draw_trails: true
+    trail_length: 30
+    output_fps: 10
+    codec: "mp4v"
+    colors_by: "global_id"  # global_id | class
+  bev:
+    enabled: false
+    map_image: null
+    scale: 1.0
+  timeline:
+    enabled: true
+  export:
+    formats: ["json", "csv"]
+
+apps:
+  dashboard:
+    host: "localhost"
+    port: 8501
+  nl_query:
+    model: "all-MiniLM-L6-v2"
+    top_k: 10
+  simulation_3d:
+    enabled: true
+    backend: "plotly"  # plotly | pydeck

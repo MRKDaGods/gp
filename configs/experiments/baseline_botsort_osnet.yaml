@@ -1,0 +1,8 @@
+# Baseline experiment: BoT-SORT tracker + OSNet ReID
+# This is the default configuration for comparison baseline.
+# Inherits all defaults from configs/default.yaml.
+#
+# Run: python scripts/run_pipeline.py --config configs/default.yaml
+
+# No overrides needed — configs/default.yaml IS the baseline.
+# This file exists for documentation and as a template for ablation configs.

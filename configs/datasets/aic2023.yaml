@@ -1,0 +1,28 @@
+# AI City Challenge 2023 Track 2 dataset configuration
+dataset:
+  name: "aic2023_track2"
+  type: "mtmc_vehicle"
+  root_dir: "data/raw/aic2023"
+
+  # Video structure
+  videos_dir: "videos"  # relative to root_dir
+  cameras: null  # auto-discover from directory structure
+
+  # Annotation format
+  annotations_dir: "annotations"
+  annotation_format: "aic"  # aic | mot | custom
+
+  # Ground truth for evaluation
+  ground_truth_dir: "ground_truth"
+  gt_format: "aic"
+
+  # Camera topology (transition time priors between camera pairs)
+  # Format: {cam_a: {cam_b: {min_time: X, max_time: Y}}}
+  camera_transitions: null  # learn from data if null
+
+  # Detection classes relevant for this dataset
+  target_classes: [2, 5, 7]  # car, bus, truck (no persons in AIC vehicle track)
+  class_mapping:
+    2: "car"
+    5: "bus"
+    7: "truck"

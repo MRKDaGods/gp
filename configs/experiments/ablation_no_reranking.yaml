@@ -1,0 +1,10 @@
+# Ablation: disable k-reciprocal re-ranking
+# Compare against baseline to measure re-ranking contribution.
+#
+# Run: python scripts/run_pipeline.py --config configs/default.yaml \
+#        -o stage4.association.reranking.enabled=false
+
+stage4:
+  association:
+    reranking:
+      enabled: false

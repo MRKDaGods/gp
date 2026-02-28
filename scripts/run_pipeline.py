@@ -1,0 +1,205 @@
+"""Entry point: run the full MTMC tracking pipeline or selected stages.
+
+Usage:
+    python scripts/run_pipeline.py --config configs/default.yaml
+    python scripts/run_pipeline.py --config configs/default.yaml --stages 0,1,2
+    python scripts/run_pipeline.py --config configs/default.yaml --smoke-test
+"""
+
+from __future__ import annotations
+
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import click
+from rich.console import Console
+from rich.panel import Panel
+
+# Ensure project root on path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from src.core.config import load_config, save_config
+from src.core.logging_utils import setup_logging
+
+console = Console()
+
+
+@click.command()
+@click.option("--config", "-c", required=True, type=click.Path(exists=True), help="Config YAML path")
+@click.option("--dataset-config", "-d", type=click.Path(exists=True), default=None, help="Dataset config")
+@click.option("--stages", "-s", default="0,1,2,3,4,5,6", help="Comma-separated stage numbers to run")
+@click.option("--smoke-test", is_flag=True, default=False, help="Run on tiny data subset")
+@click.option("--override", "-o", multiple=True, help="Config overrides in dotlist format")
+def main(config: str, dataset_config: str, stages: str, smoke_test: bool, override: tuple):
+    """Run the MTMC tracking pipeline."""
+    # Parse stages
+    stage_nums = [int(s.strip()) for s in stages.split(",")]
+
+    # Load config
+    cfg = load_config(config, overrides=list(override), dataset_config=dataset_config)
+
+    # Setup run directory
+    run_name = cfg.project.get("run_name") or f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    output_base = Path(cfg.project.output_dir) / run_name
+
+    setup_logging(level=cfg.project.get("log_level", "INFO"), log_file=output_base / "pipeline.log")
+    save_config(cfg, output_base / "config.yaml")
+
+    console.print(Panel(
+        f"[bold]MTMC Tracking Pipeline[/bold]\n"
+        f"Config: {config}\n"
+        f"Stages: {stage_nums}\n"
+        f"Output: {output_base}\n"
+        f"Smoke test: {smoke_test}",
+        title="Pipeline Start",
+    ))
+
+    # Stage data passed between stages
+    frames = None
+    tracklets_by_camera = None
+    features = None
+    faiss_index = None
+    metadata_store = None
+    trajectories = None
+
+    # Discover video paths (needed by multiple stages)
+    video_paths = _discover_video_paths(cfg)
+
+    # --- Stage 0: Ingestion ---
+    if 0 in stage_nums:
+        console.print("\n[bold cyan]Stage 0: Ingestion & Pre-Processing[/bold cyan]")
+        from src.stage0_ingestion import run_stage0
+
+        frames = run_stage0(cfg, output_dir=output_base / "stage0", smoke_test=smoke_test)
+
+    # --- Stage 1: Detection & Tracking ---
+    if 1 in stage_nums:
+        console.print("\n[bold cyan]Stage 1: Per-Camera Detection & Tracking[/bold cyan]")
+        from src.stage1_tracking import run_stage1
+
+        if frames is None:
+            from src.core.io_utils import load_frame_manifest
+            frames = load_frame_manifest(output_base / "stage0" / "frames_manifest.json")
+
+        tracklets_by_camera = run_stage1(
+            cfg, frames, output_dir=output_base / "stage1", smoke_test=smoke_test
+        )
+
+    # --- Stage 2: Feature Extraction ---
+    if 2 in stage_nums:
+        console.print("\n[bold cyan]Stage 2: Feature Extraction & Refinement[/bold cyan]")
+        from src.stage2_features import run_stage2
+
+        if tracklets_by_camera is None:
+            from src.core.io_utils import load_tracklets_by_camera
+            tracklets_by_camera = load_tracklets_by_camera(output_base / "stage1")
+
+        features = run_stage2(
+            cfg, tracklets_by_camera, video_paths,
+            output_dir=output_base / "stage2", smoke_test=smoke_test
+        )
+
+    # --- Stage 3: Indexing ---
+    if 3 in stage_nums:
+        console.print("\n[bold cyan]Stage 3: Indexing & Storage[/bold cyan]")
+        from src.stage3_indexing import run_stage3
+
+        if features is None:
+            console.print("[yellow]Stage 3 requires features from Stage 2. Skipping.[/yellow]")
+        elif tracklets_by_camera is None:
+            from src.core.io_utils import load_tracklets_by_camera
+            tracklets_by_camera = load_tracklets_by_camera(output_base / "stage1")
+            faiss_index, metadata_store = run_stage3(
+                cfg, features, tracklets_by_camera, output_dir=output_base / "stage3"
+            )
+        else:
+            faiss_index, metadata_store = run_stage3(
+                cfg, features, tracklets_by_camera, output_dir=output_base / "stage3"
+            )
+
+    # --- Stage 4: Cross-Camera Association ---
+    if 4 in stage_nums:
+        console.print("\n[bold cyan]Stage 4: Multi-Camera Association[/bold cyan]")
+        from src.stage4_association import run_stage4
+
+        if faiss_index is None or metadata_store is None or features is None:
+            console.print("[yellow]Stage 4 requires Stages 2-3. Skipping.[/yellow]")
+        else:
+            if tracklets_by_camera is None:
+                from src.core.io_utils import load_tracklets_by_camera
+                tracklets_by_camera = load_tracklets_by_camera(output_base / "stage1")
+
+            trajectories = run_stage4(
+                cfg, faiss_index, metadata_store, features,
+                tracklets_by_camera, output_dir=output_base / "stage4"
+            )
+
+    # --- Stage 5: Evaluation ---
+    if 5 in stage_nums:
+        console.print("\n[bold cyan]Stage 5: Evaluation[/bold cyan]")
+        from src.stage5_evaluation import run_stage5
+
+        if trajectories is None:
+            from src.core.io_utils import load_global_trajectories
+            traj_path = output_base / "stage4" / "global_trajectories.json"
+            if traj_path.exists():
+                trajectories = load_global_trajectories(traj_path)
+            else:
+                console.print("[yellow]No trajectories found. Skipping evaluation.[/yellow]")
+
+        if trajectories is not None:
+            run_stage5(cfg, trajectories, output_dir=output_base / "stage5")
+
+    # --- Stage 6: Visualization ---
+    if 6 in stage_nums:
+        console.print("\n[bold cyan]Stage 6: Visualization & Outputs[/bold cyan]")
+        from src.stage6_visualization import run_stage6
+
+        if trajectories is None:
+            from src.core.io_utils import load_global_trajectories
+            traj_path = output_base / "stage4" / "global_trajectories.json"
+            if traj_path.exists():
+                trajectories = load_global_trajectories(traj_path)
+
+        if tracklets_by_camera is None:
+            from src.core.io_utils import load_tracklets_by_camera
+            stage1_dir = output_base / "stage1"
+            if stage1_dir.exists():
+                tracklets_by_camera = load_tracklets_by_camera(stage1_dir)
+
+        if trajectories is not None and tracklets_by_camera is not None:
+            run_stage6(
+                cfg, trajectories, tracklets_by_camera, video_paths,
+                output_dir=output_base / "stage6"
+            )
+        else:
+            console.print("[yellow]Missing data for visualization. Skipping.[/yellow]")
+
+    console.print(Panel(
+        f"[bold green]Pipeline complete![/bold green]\nOutputs: {output_base}",
+        title="Done",
+    ))
+
+
+def _discover_video_paths(cfg) -> dict:
+    """Build a camera_id -> video_path mapping from the input directory."""
+    input_dir = Path(cfg.stage0.input_dir)
+    extensions = cfg.stage0.get("video_extensions", [".mp4", ".avi", ".mkv", ".mov"])
+    video_paths = {}
+
+    for ext in extensions:
+        for vpath in input_dir.rglob(f"*{ext}"):
+            relative = vpath.relative_to(input_dir)
+            if len(relative.parts) > 1:
+                cam_id = relative.parts[-2]
+            else:
+                cam_id = vpath.stem
+            video_paths[cam_id] = str(vpath)
+
+    return video_paths
+
+
+if __name__ == "__main__":
+    main()

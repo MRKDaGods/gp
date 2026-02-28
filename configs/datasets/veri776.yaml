@@ -1,0 +1,37 @@
+# VeRi-776 dataset configuration (Vehicle ReID)
+dataset:
+  name: "veri776"
+  type: "reid_vehicle"
+  root_dir: "data/raw/veri776"
+
+  # Standard splits
+  train_dir: "image_train"
+  query_dir: "image_query"
+  gallery_dir: "image_test"
+
+  # Dataset stats
+  num_train_ids: 576
+  num_train_images: 37778
+  num_query_images: 1678
+  num_gallery_images: 11579
+  num_cameras: 20
+
+  # Image format
+  image_size: [224, 224]  # vehicles are roughly square
+
+  # Training parameters for ReID
+  training:
+    input_size: [224, 224]  # [W, H]
+    batch_size: 64
+    num_instances: 4
+    epochs: 120
+    lr: 0.00035
+    weight_decay: 0.0005
+    warmup_epochs: 10
+    label_smoothing: 0.1
+    random_erasing_prob: 0.5
+    augmentations:
+      - horizontal_flip
+      - random_crop_pad
+      - random_erasing
+      - color_jitter

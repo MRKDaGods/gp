@@ -1,0 +1,92 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mtmc-tracker"
+version = "0.1.0"
+description = "Multi-Camera City-Wide Tracking System for Vehicles and Humans"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = {text = "MIT"}
+
+dependencies = [
+    # Core
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pandas>=2.0",
+
+    # Configuration
+    "omegaconf>=2.3",
+
+    # Computer Vision
+    "opencv-python-headless>=4.8",
+    "Pillow>=10.0",
+
+    # Detection
+    "ultralytics>=8.1",
+
+    # Tracking
+    "boxmot>=10.0",
+
+    # Deep Learning
+    "torch>=2.1",
+    "torchvision>=0.16",
+
+    # Indexing
+    "faiss-cpu>=1.7",
+
+    # Graphs
+    "networkx>=3.1",
+
+    # Visualization
+    "matplotlib>=3.7",
+    "plotly>=5.15",
+    "seaborn>=0.12",
+
+    # Web Dashboard
+    "streamlit>=1.28",
+
+    # NL Query
+    "sentence-transformers>=2.2",
+
+    # Utilities
+    "tqdm>=4.65",
+    "loguru>=0.7",
+    "click>=8.1",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.1",
+]
+reid = [
+    "gdown>=4.7",
+]
+lpr = [
+    "paddleocr>=2.7",
+]
+
+[project.scripts]
+mtmc-run = "scripts.run_pipeline:main"
+mtmc-stage = "scripts.run_stage:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "scripts*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

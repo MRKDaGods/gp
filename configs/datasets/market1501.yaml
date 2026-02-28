@@ -1,0 +1,38 @@
+# Market-1501 dataset configuration (Person ReID)
+dataset:
+  name: "market1501"
+  type: "reid_person"
+  root_dir: "data/raw/market1501"
+
+  # Standard splits
+  train_dir: "bounding_box_train"
+  query_dir: "query"
+  gallery_dir: "bounding_box_test"
+
+  # Dataset stats
+  num_train_ids: 751
+  num_train_images: 12936
+  num_query_images: 3368
+  num_gallery_images: 19732
+  num_cameras: 6
+
+  # Image format
+  # Filename: XXXX_cY_sZ_NNNNNN.jpg
+  # XXXX = person ID, Y = camera ID, Z = sequence, NNNNNN = frame
+  image_size: [128, 256]  # [W, H] - original crop size
+
+  # Training parameters for ReID
+  training:
+    input_size: [128, 256]  # [W, H]
+    batch_size: 64
+    num_instances: 4  # images per identity in batch (for triplet sampling)
+    epochs: 120
+    lr: 0.00035
+    weight_decay: 0.0005
+    warmup_epochs: 10
+    label_smoothing: 0.1
+    random_erasing_prob: 0.5
+    augmentations:
+      - horizontal_flip
+      - random_crop_pad
+      - random_erasing

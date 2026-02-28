@@ -1,0 +1,120 @@
+"""Stage 1 — Per-Camera Detection & Tracking pipeline.
+
+Runs YOLO detection and BoxMOT tracking on extracted frames for each camera,
+producing per-camera Tracklet lists.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from loguru import logger
+from omegaconf import DictConfig
+
+from src.core.data_models import FrameInfo, Tracklet
+from src.core.io_utils import save_tracklets_by_camera
+from src.stage1_tracking.detector import Detector
+from src.stage1_tracking.tracker import TrackerWrapper
+from src.stage1_tracking.tracklet_builder import TrackletBuilder
+
+
+def run_stage1(
+    cfg: DictConfig,
+    frames: List[FrameInfo],
+    output_dir: str | Path,
+    smoke_test: bool = False,
+) -> Dict[str, List[Tracklet]]:
+    """Run detection and tracking on all cameras.
+
+    Args:
+        cfg: Full pipeline config (uses cfg.stage1).
+        frames: List of FrameInfo from Stage 0.
+        output_dir: Directory for this run's stage1 outputs.
+        smoke_test: If True, process only first 10 frames per camera.
+
+    Returns:
+        Dict mapping camera_id to list of Tracklets.
+    """
+    stage_cfg = cfg.stage1
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Group frames by camera
+    frames_by_camera: Dict[str, List[FrameInfo]] = {}
+    for f in frames:
+        frames_by_camera.setdefault(f.camera_id, []).append(f)
+
+    # Sort each camera's frames by frame_id
+    for cam_id in frames_by_camera:
+        frames_by_camera[cam_id].sort(key=lambda f: f.frame_id)
+
+    # Initialize detector
+    detector = Detector(
+        model_path=stage_cfg.detector.model,
+        confidence_threshold=stage_cfg.detector.confidence_threshold,
+        iou_threshold=stage_cfg.detector.iou_threshold,
+        classes=list(stage_cfg.detector.classes),
+        device=stage_cfg.detector.device,
+        half=stage_cfg.detector.get("half", True),
+        img_size=stage_cfg.detector.get("img_size", 640),
+    )
+
+    min_tracklet_length = stage_cfg.get("min_tracklet_length", 5)
+    min_tracklet_area = stage_cfg.get("min_tracklet_area", 500)
+
+    all_tracklets: Dict[str, List[Tracklet]] = {}
+
+    for camera_id, cam_frames in frames_by_camera.items():
+        logger.info(f"Processing camera {camera_id}: {len(cam_frames)} frames")
+
+        if smoke_test:
+            cam_frames = cam_frames[:10]
+
+        # Initialize tracker for this camera
+        tracker = TrackerWrapper(
+            algorithm=stage_cfg.tracker.algorithm,
+            reid_weights=stage_cfg.tracker.get("reid_weights"),
+            device=stage_cfg.tracker.device,
+            half=stage_cfg.tracker.get("half", True),
+            tracker_config=stage_cfg.tracker,
+        )
+
+        # Build tracklets
+        builder = TrackletBuilder(
+            camera_id=camera_id,
+            min_length=min_tracklet_length,
+            min_area=min_tracklet_area,
+        )
+
+        for frame_info in cam_frames:
+            import cv2
+
+            frame = cv2.imread(frame_info.frame_path)
+            if frame is None:
+                logger.warning(f"Cannot read frame: {frame_info.frame_path}")
+                continue
+
+            # Detect
+            detections = detector.detect(frame)
+
+            # Track
+            tracks = tracker.update(detections, frame)
+
+            # Accumulate
+            builder.add_frame(
+                tracks=tracks,
+                frame_id=frame_info.frame_id,
+                timestamp=frame_info.timestamp,
+            )
+
+        # Finalize tracklets
+        tracklets = builder.finalize()
+        all_tracklets[camera_id] = tracklets
+        logger.info(f"  Camera {camera_id}: {len(tracklets)} tracklets")
+
+    # Save
+    save_tracklets_by_camera(all_tracklets, output_dir)
+    logger.info(f"Saved tracklets for {len(all_tracklets)} cameras to {output_dir}")
+
+    return all_tracklets
