@@ -40,6 +40,13 @@ def run_stage3(
     # Build FAISS index
     import numpy as np
 
+    if not features:
+        logger.warning("No features to index (0 tracklets). Creating empty index.")
+        faiss_index = FAISSIndex(index_type=stage_cfg.faiss.index_type)
+        db_path = output_dir / "metadata.db"
+        metadata_store = MetadataStore(db_path)
+        return faiss_index, metadata_store
+
     embeddings = np.stack([f.embedding for f in features], axis=0)
     ids = list(range(len(features)))
 

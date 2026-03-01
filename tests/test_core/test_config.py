@@ -16,7 +16,7 @@ project:
   output_dir: /tmp/test
 stage1:
   detector:
-    model: yolo11m.pt
+    model: yolo26m.pt
     confidence_threshold: 0.25
 """
     config_path = tmp_path / "test_config.yaml"
@@ -35,13 +35,13 @@ project:
   name: test
 stage1:
   detector:
-    model: yolo11m.pt
+    model: yolo26m.pt
 """
     config_path = tmp_path / "test_config.yaml"
     config_path.write_text(config_content)
 
-    cfg = load_config(config_path, overrides=["stage1.detector.model=yolo11s.pt"])
-    assert cfg.stage1.detector.model == "yolo11s.pt"
+    cfg = load_config(config_path, overrides=["stage1.detector.model=yolo26s.pt"])
+    assert cfg.stage1.detector.model == "yolo26s.pt"
 
 
 def test_save_and_load_config(tmp_path):

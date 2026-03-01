@@ -19,7 +19,7 @@ class Detector:
 
     def __init__(
         self,
-        model_path: str = "yolo11m.pt",
+        model_path: str = "yolo26m.pt",
         confidence_threshold: float = 0.25,
         iou_threshold: float = 0.45,
         classes: Optional[List[int]] = None,

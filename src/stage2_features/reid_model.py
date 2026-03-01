@@ -55,7 +55,7 @@ class ReIDModel:
 
         if weights_path is not None:
             try:
-                state_dict = torch.load(weights_path, map_location="cpu")
+                state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
                 # Handle state_dict wrapped in a checkpoint
                 if "state_dict" in state_dict:
                     state_dict = state_dict["state_dict"]
@@ -63,9 +63,10 @@ class ReIDModel:
                     state_dict = state_dict["model"]
 
                 # Remove classifier keys for feature extraction
+                # Also strip 'module.' prefix from DataParallel checkpoints
                 state_dict = {
-                    k: v for k, v in state_dict.items()
-                    if not k.startswith("classifier")
+                    k.replace("module.", "", 1): v for k, v in state_dict.items()
+                    if not k.replace("module.", "", 1).startswith("classifier")
                 }
                 model.load_state_dict(state_dict, strict=False)
                 logger.info(f"Loaded ReID weights from {weights_path}")

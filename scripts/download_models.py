@@ -1,7 +1,7 @@
 """Download pre-trained model weights for the pipeline.
 
 Downloads:
-  - YOLO11m weights (via ultralytics)
+  - YOLO26m weights (via ultralytics)
   - BoxMOT ReID weights for the tracker
 
 Usage:
@@ -31,25 +31,25 @@ def main(models_dir: str):
     print("MTMC Tracker — Model Weight Download")
     print("=" * 60)
 
-    # 1. YOLO11m
-    print("\n[1/3] Downloading YOLO11m weights...")
+    # 1. YOLO26m
+    print("\n[1/3] Downloading YOLO26m weights...")
     det_dir = models_dir / "detection"
     det_dir.mkdir(exist_ok=True)
 
     try:
         from ultralytics import YOLO
-        model = YOLO("yolo11m.pt")  # auto-downloads to working dir
+        model = YOLO("yolo26m.pt")  # auto-downloads to working dir
         # Move to models dir if needed
-        yolo_path = Path("yolo11m.pt")
+        yolo_path = Path("yolo26m.pt")
         if yolo_path.exists():
-            target = det_dir / "yolo11m.pt"
+            target = det_dir / "yolo26m.pt"
             if not target.exists():
                 yolo_path.rename(target)
-            print(f"  YOLO11m saved to {target}")
+            print(f"  YOLO26m saved to {target}")
         else:
-            print("  YOLO11m downloaded (cached by ultralytics)")
+            print("  YOLO26m downloaded (cached by ultralytics)")
     except Exception as e:
-        print(f"  Warning: Could not download YOLO11m: {e}")
+        print(f"  Warning: Could not download YOLO26m: {e}")
         print("  It will be auto-downloaded on first use.")
 
     # 2. BoxMOT ReID weights

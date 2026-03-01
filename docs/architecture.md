@@ -15,7 +15,7 @@ flowchart TD
     end
 
     subgraph Stage1["Stage 1: Detection & Tracking"]
-        FC --> DET[YOLO11m Detection]
+        FC --> DET[YOLO26m Detection]
         DET --> TRK[BoxMOT Tracking<br/>BoT-SORT / Deep-OCSORT]
         TRK --> TB[Tracklet Builder]
     end
@@ -68,7 +68,7 @@ flowchart TD
 
 | Component | Library | Purpose |
 |-----------|---------|---------|
-| Detection | `ultralytics` (YOLO11m) | Pre-trained COCO, person/car/bus/truck |
+| Detection | `ultralytics` (YOLO26m) | Pre-trained COCO, person/car/bus/truck |
 | Tracking | `boxmot` (BoT-SORT default) | Unified multi-tracker API |
 | ReID | `torchreid` (OSNet-x1.0 / ResNet50-IBN-a) | Train on Kaggle, inference locally |
 | Indexing | `faiss-cpu` (IndexFlatIP) | Cosine similarity on L2-normed vectors |
@@ -95,7 +95,7 @@ flowchart TD
 
 ### Stage 1: Detection & Tracking
 
-- YOLO11m detects persons, cars, buses, trucks (COCO classes).
+- YOLO26m detects persons, cars, buses, trucks (COCO classes).
 - Configurable confidence threshold (default 0.25) and NMS IoU (0.45).
 - BoxMOT provides unified tracker API (BoT-SORT default).
 - `TrackletBuilder` accumulates detections into tracklets with `min_length` filtering.

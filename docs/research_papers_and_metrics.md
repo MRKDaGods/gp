@@ -474,7 +474,7 @@ BoT-SORT is already competitive. Cross-camera association quality is where your 
 
 1. **HOTA** - Primary metric (AI City Challenge standard). Balances detection and association.
 2. **IDF1** - Critical for MTMC. Directly measures cross-camera identity consistency.
-3. **MOTA** - Important but dominated by detection quality (YOLO11m handles this).
+3. **MOTA** - Important but dominated by detection quality (YOLO26m handles this).
 4. **mAP / Rank-1** - ReID quality directly impacts cross-camera association accuracy.
 5. **IDSW / Frag** - Lower is better. Measures tracking stability.
 

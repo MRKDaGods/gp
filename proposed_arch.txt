@@ -12,7 +12,7 @@ flowchart LR
   end
  subgraph S1["Stage 1 – Per-Camera Analytics"]
     direction LR
-        B["YOLO11<br>Person / Vehicle Detection"]
+        B["YOLO26<br>Person / Vehicle Detection"]
         C["Deep-OCSORT<br>Per-Camera Tracking"]
         D["Adaptive Kalman Filter<br>Motion Prediction"]
         F["Per-Camera Tracklets<br>(ID, Boxes, Time,<br>Motion States)"]

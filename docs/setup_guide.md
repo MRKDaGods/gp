@@ -34,7 +34,7 @@ python -c "import faiss; print(f'FAISS {faiss.__version__}')"
 
 ### 3. Download Models
 ```bash
-# Downloads YOLO11m (auto-download by ultralytics)
+# Downloads YOLO26m (auto-download by ultralytics)
 # BoxMOT ReID weights (auto-download on first use)
 python scripts/download_models.py
 ```

@@ -40,7 +40,7 @@ class TrackerWrapper:
         # Import and create the tracker
         tracker_cls = self._get_tracker_class(algorithm)
 
-        kwargs = {"device": device, "fp16": half}
+        kwargs = {"device": device, "half": half}
         if reid_weights:
             kwargs["reid_weights"] = reid_weights
 
@@ -57,15 +57,15 @@ class TrackerWrapper:
     @staticmethod
     def _get_tracker_class(algorithm: str):
         """Dynamically import the tracker class from boxmot."""
-        from boxmot import BoTSORT, DeepOCSORT, StrongSORT, BYTETracker, OCSORT, HybridSORT
+        from boxmot import BotSort, DeepOcSort, StrongSort, ByteTrack, OcSort, HybridSort
 
         mapping = {
-            "botsort": BoTSORT,
-            "deepocsort": DeepOCSORT,
-            "strongsort": StrongSORT,
-            "bytetrack": BYTETracker,
-            "ocsort": OCSORT,
-            "hybridsort": HybridSORT,
+            "botsort": BotSort,
+            "deepocsort": DeepOcSort,
+            "strongsort": StrongSort,
+            "bytetrack": ByteTrack,
+            "ocsort": OcSort,
+            "hybridsort": HybridSort,
         }
         return mapping[algorithm]
 

@@ -15,7 +15,7 @@ stage0:
 
 stage1:
   detector:
-    model: "yolo11m.pt"
+    model: "yolo26m.pt"
     confidence_threshold: 0.25
     iou_threshold: 0.45
     classes: [0, 2, 5, 7]  # COCO: person=0, car=2, bus=5, truck=7
@@ -24,7 +24,7 @@ stage1:
     img_size: 640
   tracker:
     algorithm: "botsort"  # botsort | deepocsort | strongsort | bytetrack | ocsort
-    reid_weights: "osnet_x0_25_msmt17.pt"
+    reid_weights: "models/tracker/osnet_x0_25_msmt17.pt"
     device: "cuda:0"
     half: true
     track_high_thresh: 0.5

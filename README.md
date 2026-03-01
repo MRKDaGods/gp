@@ -6,7 +6,7 @@ Multi-camera tracking system for vehicles and humans on a city-wide scale. Proce
 
 ```
 Stage 0: Ingestion       → Frame extraction, preprocessing, format unification
-Stage 1: Tracking        → YOLO11 detection + BoxMOT per-camera tracking
+Stage 1: Tracking        → YOLO26 detection + BoxMOT per-camera tracking
 Stage 2: Features        → ReID embeddings (OSNet/ResNet50-IBN) + HSV histograms + PCA
 Stage 3: Indexing        → FAISS vector index + SQLite metadata store
 Stage 4: Association     → Cross-camera matching via similarity graph + connected components
@@ -21,7 +21,7 @@ Apps:    Dashboard        → Streamlit web UI, NL query, 3D simulation
 # Install
 pip install -e .
 
-# Download pre-trained models (YOLO11, BoxMOT ReID weights)
+# Download pre-trained models (YOLO26, BoxMOT ReID weights)
 python scripts/download_models.py
 
 # Run full pipeline

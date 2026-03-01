@@ -44,3 +44,5 @@ credentials.json
 
 # Claude temp files
 tmpclaude-*-cwd
+temp_logs/
+nul

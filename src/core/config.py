@@ -17,7 +17,7 @@ def load_config(
 
     Args:
         config_path: Path to the main YAML config file.
-        overrides: List of dotlist overrides, e.g. ["stage1.detector.model=yolo11s.pt"].
+        overrides: List of dotlist overrides, e.g. ["stage1.detector.model=yolo26s.pt"].
         dataset_config: Optional path to a dataset-specific YAML to merge in.
 
     Returns:

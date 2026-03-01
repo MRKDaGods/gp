@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=75.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "mtmc-tracker"
 version = "0.1.0"
 description = "Multi-Camera City-Wide Tracking System for Vehicles and Humans"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<3.14"
 license = {text = "MIT"}
 
 dependencies = [

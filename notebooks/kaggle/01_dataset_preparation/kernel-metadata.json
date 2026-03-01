@@ -1,0 +1,14 @@
+{
+  "id": "mrkdagods/01-dataset-preparation",
+  "title": "01 Dataset Preparation",
+  "code_file": "01_dataset_preparation.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": ["pengcw1/market-1501", "abhyudaya12/veri-vehicle-re-identification-dataset"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

@@ -30,7 +30,7 @@ GLOBAL_TRAJECTORIES_FILE = "global_trajectories.json"
 EVALUATION_REPORT_FILE = "evaluation_report.json"
 
 # Default model file names
-YOLO_WEIGHTS = "yolo11m.pt"
+YOLO_WEIGHTS = "yolo26m.pt"
 PERSON_REID_WEIGHTS = "person_osnet_market1501.pth"
 VEHICLE_REID_WEIGHTS = "vehicle_resnet50ibn_veri776.pth"
 PCA_TRANSFORM_FILE = "pca_transform.pkl"
