@@ -141,20 +141,31 @@ def run_stage2(
     raw_matrix = np.stack(all_raw_embeddings, axis=0)  # (N, D)
     logger.info(f"Raw embedding matrix: {raw_matrix.shape}")
 
-    # PCA whitening
+    # PCA whitening (only useful with enough samples to estimate covariance)
     if stage_cfg.pca.enabled:
-        whitener = PCAWhitener(n_components=stage_cfg.pca.n_components)
-        pca_path = stage_cfg.pca.pca_model_path
+        n_samples, n_features = raw_matrix.shape
+        min_samples_for_pca = n_features * 2  # need at least 2x features for reliable PCA
 
-        if Path(pca_path).exists():
-            whitener.load(pca_path)
-            logger.info(f"Loaded PCA model from {pca_path}")
+        if n_samples >= min_samples_for_pca:
+            whitener = PCAWhitener(n_components=stage_cfg.pca.n_components)
+            pca_path = stage_cfg.pca.pca_model_path
+
+            if Path(pca_path).exists():
+                whitener.load(pca_path)
+                logger.info(f"Loaded PCA model from {pca_path}")
+            else:
+                whitener.fit(raw_matrix)
+                whitener.save(pca_path)
+                logger.info(f"Fitted and saved PCA model to {pca_path}")
+
+            embeddings = whitener.transform(raw_matrix)
         else:
-            whitener.fit(raw_matrix)
-            whitener.save(pca_path)
-            logger.info(f"Fitted and saved PCA model to {pca_path}")
-
-        embeddings = whitener.transform(raw_matrix)
+            logger.warning(
+                f"Skipping PCA: need at least {min_samples_for_pca} samples "
+                f"for reliable {n_features}D PCA, but only have {n_samples}. "
+                f"Using raw embeddings."
+            )
+            embeddings = raw_matrix
     else:
         embeddings = raw_matrix
 

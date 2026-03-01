@@ -141,6 +141,7 @@ def run_stage4(
     solver = GraphSolver(
         similarity_threshold=stage_cfg.graph.similarity_threshold,
         algorithm=stage_cfg.graph.algorithm,
+        louvain_resolution=stage_cfg.graph.get("louvain_resolution", 1.0),
     )
 
     clusters = solver.solve(combined_sim, n)

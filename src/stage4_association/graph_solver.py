@@ -20,9 +20,11 @@ class GraphSolver:
         self,
         similarity_threshold: float = 0.5,
         algorithm: str = "connected_components",
+        louvain_resolution: float = 1.0,
     ):
         self.similarity_threshold = similarity_threshold
         self.algorithm = algorithm
+        self.louvain_resolution = louvain_resolution
 
     def solve(
         self,
@@ -58,7 +60,7 @@ class GraphSolver:
         if self.algorithm == "connected_components":
             clusters = list(nx.connected_components(G))
         elif self.algorithm == "community_detection":
-            clusters = self._community_detection(G)
+            clusters = self._community_detection(G, self.louvain_resolution)
         else:
             raise ValueError(f"Unknown algorithm: {self.algorithm}")
 
@@ -73,11 +75,11 @@ class GraphSolver:
         return clusters
 
     @staticmethod
-    def _community_detection(G: nx.Graph) -> List[Set[int]]:
+    def _community_detection(G: nx.Graph, resolution: float = 1.0) -> List[Set[int]]:
         """Run Louvain community detection on the similarity graph."""
         from networkx.algorithms.community import louvain_communities
 
-        communities = louvain_communities(G, weight="weight", resolution=1.0)
+        communities = louvain_communities(G, weight="weight", resolution=resolution)
         return [set(c) for c in communities]
 
     def get_graph_stats(

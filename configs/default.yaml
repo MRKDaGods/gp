@@ -27,11 +27,13 @@ stage1:
     reid_weights: "models/tracker/osnet_x0_25_msmt17.pt"
     device: "cuda:0"
     half: true
-    track_high_thresh: 0.5
+    track_high_thresh: 0.3     # lowered: accept more detections for association
     track_low_thresh: 0.1
-    new_track_thresh: 0.6
-    track_buffer: 30
-    match_thresh: 0.8
+    new_track_thresh: 0.4      # lowered: create tracks from lower-confidence detections
+    track_buffer: 60           # increased: keep lost tracks alive longer (crucial at low fps)
+    match_thresh: 0.85
+    appearance_thresh: 0.5     # increased: tolerate larger appearance changes (turning, etc)
+    proximity_thresh: 0.5
   min_tracklet_length: 5  # minimum frames for a valid tracklet
   min_tracklet_area: 500  # minimum bbox area in pixels
 
@@ -78,8 +80,8 @@ stage4:
       k2: 6
       lambda_value: 0.3
     weights:
-      appearance: 0.7
-      hsv: 0.1
+      appearance: 0.5
+      hsv: 0.3
       spatiotemporal: 0.2
     spatiotemporal:
       max_time_gap: 300  # seconds
@@ -87,7 +89,8 @@ stage4:
       camera_transitions: null  # loaded from dataset config if available
     graph:
       similarity_threshold: 0.5
-      algorithm: "connected_components"  # connected_components | community_detection
+      algorithm: "community_detection"  # connected_components | community_detection
+      louvain_resolution: 2.0  # higher = more granular clusters
 
 stage5:
   evaluator: "trackeval"  # trackeval | pymotmetrics

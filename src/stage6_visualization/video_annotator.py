@@ -26,6 +26,11 @@ def _get_color(identity_id: int) -> Tuple[int, int, int]:
     return _COLORS[identity_id % len(_COLORS)]
 
 
+def _lerp_bbox(bbox_a, bbox_b, t: float):
+    """Linearly interpolate between two bounding boxes."""
+    return tuple(a + (b - a) * t for a, b in zip(bbox_a, bbox_b))
+
+
 class VideoAnnotator:
     """Draws tracking annotations on video frames."""
 
@@ -45,6 +50,58 @@ class VideoAnnotator:
         self.output_fps = output_fps
         self.codec = codec
 
+    def _build_interpolated_frame_data(
+        self,
+        tracklets: List[Tracklet],
+        global_id_map: Dict[tuple, int],
+        total_frames: int,
+    ) -> Dict[int, list]:
+        """Build per-frame annotation data with interpolation between keyframes.
+
+        For each tracklet, we have detections at sparse keyframes.
+        This interpolates bounding boxes linearly for all frames in between,
+        so annotations appear smoothly instead of flickering.
+        """
+        frame_data: Dict[int, list] = defaultdict(list)
+
+        for t in tracklets:
+            global_id = global_id_map.get((t.camera_id, t.track_id), t.track_id)
+            if not t.frames:
+                continue
+
+            # Sort frames by frame_id
+            sorted_frames = sorted(t.frames, key=lambda f: f.frame_id)
+
+            # Add keyframe data directly
+            for f in sorted_frames:
+                frame_data[f.frame_id].append({
+                    "bbox": f.bbox,
+                    "track_id": t.track_id,
+                    "global_id": global_id,
+                    "class_name": t.class_name,
+                })
+
+            # Interpolate between consecutive keyframes
+            for i in range(len(sorted_frames) - 1):
+                f_a = sorted_frames[i]
+                f_b = sorted_frames[i + 1]
+                gap = f_b.frame_id - f_a.frame_id
+
+                if gap <= 1:
+                    continue  # Adjacent frames, no interpolation needed
+
+                for mid in range(f_a.frame_id + 1, f_b.frame_id):
+                    t_ratio = (mid - f_a.frame_id) / gap
+                    interp_bbox = _lerp_bbox(f_a.bbox, f_b.bbox, t_ratio)
+                    frame_data[mid].append({
+                        "bbox": interp_bbox,
+                        "track_id": t.track_id,
+                        "global_id": global_id,
+                        "class_name": t.class_name,
+                    })
+
+        return frame_data
+
     def annotate_video(
         self,
         video_path: str,
@@ -62,17 +119,10 @@ class VideoAnnotator:
         """
         info = get_video_info(video_path)
 
-        # Build frame-level lookup: frame_id -> list of (bbox, track_id, global_id, class_name)
-        frame_data = defaultdict(list)
-        for t in tracklets:
-            global_id = global_id_map.get((t.camera_id, t.track_id), t.track_id)
-            for f in t.frames:
-                frame_data[f.frame_id].append({
-                    "bbox": f.bbox,
-                    "track_id": t.track_id,
-                    "global_id": global_id,
-                    "class_name": t.class_name,
-                })
+        # Build interpolated frame data so annotations are smooth
+        frame_data = self._build_interpolated_frame_data(
+            tracklets, global_id_map, info.total_frames,
+        )
 
         # Trail history: global_id -> list of (cx, cy) centers
         trails: Dict[int, list] = defaultdict(list)

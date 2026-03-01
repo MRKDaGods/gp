@@ -47,7 +47,9 @@ class TrackerWrapper:
         # Pass BoxMOT-specific config params
         if tracker_config:
             for key in ["track_high_thresh", "track_low_thresh", "new_track_thresh",
-                        "track_buffer", "match_thresh"]:
+                        "track_buffer", "match_thresh", "proximity_thresh",
+                        "appearance_thresh", "fuse_first_associate",
+                        "max_age", "max_obs", "min_hits", "iou_threshold"]:
                 if key in tracker_config:
                     kwargs[key] = tracker_config[key]
 

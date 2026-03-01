@@ -95,7 +95,9 @@ class ReIDModel:
             img = cv2.resize(img, (w, h), interpolation=cv2.INTER_LINEAR)
             # Normalize to [0, 1] then with ImageNet stats
             img = img.astype(np.float32) / 255.0
-            img = (img - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]
+            mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+            std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+            img = (img - mean) / std
             # HWC -> CHW
             img = np.transpose(img, (2, 0, 1))
             processed.append(img)
