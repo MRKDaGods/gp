@@ -7,7 +7,7 @@
   "is_private": true,
   "enable_gpu": false,
   "enable_internet": true,
-  "dataset_sources": [],
+  "dataset_sources": ["aryashah2k/large-scale-multicamera-detection-dataset"],
   "competition_sources": [],
   "kernel_sources": [],
   "model_sources": []
