@@ -1,6 +1,6 @@
 {
   "id": "mrkdagods/05-pipeline-citywide-evaluation",
-  "title": "05 Pipeline City-Wide Evaluation (CityFlowV2 + WILDTRACK)",
+  "title": "05 Pipeline Citywide Evaluation",
   "code_file": "05_pipeline_citywide.ipynb",
   "language": "python",
   "kernel_type": "notebook",
