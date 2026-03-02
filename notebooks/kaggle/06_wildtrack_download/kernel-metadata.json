@@ -1,7 +1,7 @@
 {
-  "id": "mrkdagods/05-cityflowv2-dataset-download",
-  "title": "05 CityFlowV2 Dataset Download",
-  "code_file": "05_pipeline_citywide.ipynb",
+  "id": "mrkdagods/06-wildtrack-dataset-download",
+  "title": "06 WILDTRACK Dataset Download",
+  "code_file": "06_wildtrack_download.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
