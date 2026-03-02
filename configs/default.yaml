@@ -5,7 +5,7 @@ project:
   log_level: "INFO"
 
 stage0:
-  input_dir: "data/raw/aic2023"
+  input_dir: "data/raw/cityflowv2"
   video_extensions: [".mp4", ".avi", ".mkv", ".mov"]
   output_fps: 10
   target_size: null  # [width, height] or null to keep original
@@ -40,9 +40,9 @@ stage1:
 stage2:
   reid:
     person:
-      model_name: "osnet_x1_0"
-      weights_path: "models/reid/person_osnet_market1501.pth"
-      embedding_dim: 512
+      model_name: "resnet50_ibn_a"
+      weights_path: "models/reid/person_resnet50ibn_market1501.pth"
+      embedding_dim: 2048
       input_size: [256, 128]  # [H, W]
     vehicle:
       model_name: "resnet50_ibn_a"
@@ -63,7 +63,7 @@ stage2:
   crop:
     min_area: 500
     padding_ratio: 0.1
-    samples_per_tracklet: 10
+    samples_per_tracklet: 16
 
 stage3:
   faiss:
@@ -88,9 +88,9 @@ stage4:
       min_time_gap: 2    # seconds
       camera_transitions: null  # loaded from dataset config if available
     graph:
-      similarity_threshold: 0.5
+      similarity_threshold: 0.45
       algorithm: "community_detection"  # connected_components | community_detection
-      louvain_resolution: 2.0  # higher = more granular clusters
+      louvain_resolution: 1.5  # higher = more granular clusters
 
 stage5:
   evaluator: "trackeval"  # trackeval | pymotmetrics

@@ -1,0 +1,52 @@
+# WILDTRACK — EPFL CVLAB Multi-Camera Pedestrian Dataset
+#
+# 7 synchronized HD cameras (1920x1080) in an outdoor public area
+# Dense annotations at 2 fps, ~400 annotated frames, ~20 people per frame
+# Source: https://www.epfl.ch/labs/cvlab/data/data-wildtrack/
+
+dataset:
+  name: "wildtrack"
+  type: "mtmc_person"
+  root_dir: "data/raw/wildtrack"
+
+  # After download_datasets.py, videos are in data/raw/wildtrack/videos/
+  videos_dir: "videos"
+  cameras: null  # auto-discover C1..C7
+
+  annotation_format: "wildtrack"  # custom JSON format
+  annotations_dir: "annotations_positions"
+  ground_truth_dir: "data/raw/wildtrack/annotations_positions"
+
+  camera_transitions: null  # all cameras share overlapping FOV
+
+  target_classes: [0]  # person only
+  class_mapping:
+    0: "person"
+
+# Override pipeline defaults for this dataset
+stage0:
+  input_dir: "data/raw/wildtrack/videos"
+  output_fps: 2  # WILDTRACK is annotated at 2 fps
+
+stage1:
+  detector:
+    classes: [0]              # person only
+    confidence_threshold: 0.25
+  min_tracklet_length: 3      # shorter tracklets valid at 2 fps
+  min_tracklet_area: 500
+
+stage2:
+  crop:
+    min_area: 500
+    samples_per_tracklet: 16
+
+stage4:
+  association:
+    spatiotemporal:
+      max_time_gap: 30     # small outdoor area, transitions are fast
+      min_time_gap: 0      # overlapping FOV means same-time sightings are valid
+    graph:
+      similarity_threshold: 0.45
+
+stage5:
+  ground_truth_dir: "data/raw/wildtrack/annotations_positions"

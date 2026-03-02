@@ -42,6 +42,7 @@ class VideoAnnotator:
         trail_length: int = 30,
         output_fps: float = 10.0,
         codec: str = "mp4v",
+        max_interp_seconds: float = 0.8,
     ):
         self.draw_bboxes = draw_bboxes
         self.draw_ids = draw_ids
@@ -49,19 +50,30 @@ class VideoAnnotator:
         self.trail_length = trail_length
         self.output_fps = output_fps
         self.codec = codec
+        self.max_interp_seconds = max_interp_seconds
 
     def _build_interpolated_frame_data(
         self,
         tracklets: List[Tracklet],
         global_id_map: Dict[tuple, int],
         total_frames: int,
+        video_fps: float,
     ) -> Dict[int, list]:
         """Build per-frame annotation data with interpolation between keyframes.
 
         For each tracklet, we have detections at sparse keyframes.
-        This interpolates bounding boxes linearly for all frames in between,
-        so annotations appear smoothly instead of flickering.
+        This interpolates bounding boxes linearly for frames in between,
+        but only when the gap is small enough that interpolation is reliable.
+        Large gaps (where the person was lost) are skipped to avoid drawing
+        stale boxes at wrong positions.
         """
+        # Max gap in original video frames for interpolation
+        max_interp_gap = int(video_fps * self.max_interp_seconds)
+        logger.debug(
+            f"Interpolation: max gap = {max_interp_gap} frames "
+            f"({self.max_interp_seconds}s at {video_fps:.0f}fps)"
+        )
+
         frame_data: Dict[int, list] = defaultdict(list)
 
         for t in tracklets:
@@ -81,7 +93,7 @@ class VideoAnnotator:
                     "class_name": t.class_name,
                 })
 
-            # Interpolate between consecutive keyframes
+            # Interpolate between consecutive keyframes (only if gap is small)
             for i in range(len(sorted_frames) - 1):
                 f_a = sorted_frames[i]
                 f_b = sorted_frames[i + 1]
@@ -89,6 +101,9 @@ class VideoAnnotator:
 
                 if gap <= 1:
                     continue  # Adjacent frames, no interpolation needed
+
+                if gap > max_interp_gap:
+                    continue  # Gap too large, person was likely lost — don't interpolate
 
                 for mid in range(f_a.frame_id + 1, f_b.frame_id):
                     t_ratio = (mid - f_a.frame_id) / gap
@@ -119,13 +134,18 @@ class VideoAnnotator:
         """
         info = get_video_info(video_path)
 
+        # Max gap in frames for trail continuity (same as interpolation)
+        max_trail_gap = int(info.fps * self.max_interp_seconds)
+
         # Build interpolated frame data so annotations are smooth
         frame_data = self._build_interpolated_frame_data(
-            tracklets, global_id_map, info.total_frames,
+            tracklets, global_id_map, info.total_frames, info.fps,
         )
 
         # Trail history: global_id -> list of (cx, cy) centers
         trails: Dict[int, list] = defaultdict(list)
+        # Track last frame each gid was seen (for trail gap detection)
+        trail_last_frame: Dict[int, int] = {}
 
         # Process video
         cap = cv2.VideoCapture(video_path)
@@ -164,6 +184,13 @@ class VideoAnnotator:
                     if self.draw_trails:
                         cx = (x1 + x2) // 2
                         cy = (y1 + y2) // 2
+
+                        # Reset trail if there's a large temporal gap
+                        if gid in trail_last_frame:
+                            if (frame_idx - trail_last_frame[gid]) > max_trail_gap:
+                                trails[gid] = []
+
+                        trail_last_frame[gid] = frame_idx
                         trails[gid].append((cx, cy))
                         if len(trails[gid]) > self.trail_length:
                             trails[gid] = trails[gid][-self.trail_length:]

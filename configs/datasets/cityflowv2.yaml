@@ -1,0 +1,53 @@
+# CityFlowV2 — AI City Challenge 2022 Track 1
+# Multi-Camera Multi-Target Vehicle Tracking
+#
+# 46 cameras across 16 intersections, 960p+ resolution, ~3.5 hours of footage
+# 880 vehicle identities, 313,931 bounding boxes
+# Source: https://www.aicitychallenge.org/2022-data-and-evaluation/
+
+dataset:
+  name: "cityflowv2"
+  type: "mtmc_vehicle"
+  root_dir: "data/raw/cityflowv2"
+
+  videos_dir: null  # videos are in per-camera subfolders (S001_c001/, S001_c002/, ...)
+  cameras: null     # auto-discover from directory structure
+
+  annotation_format: "mot"   # CityFlow uses MOT-like gt.txt per camera
+  ground_truth_dir: null     # gt.txt lives alongside each video
+
+  camera_transitions: null   # learn from data
+
+  target_classes: [2, 5, 7]  # car, bus, truck — vehicles only
+  class_mapping:
+    2: "car"
+    5: "bus"
+    7: "truck"
+
+# Override pipeline defaults for this dataset
+stage0:
+  input_dir: "data/raw/cityflowv2"
+  output_fps: 10
+
+stage1:
+  detector:
+    classes: [2, 5, 7]       # vehicle classes only for this dataset
+    confidence_threshold: 0.3
+  min_tracklet_length: 5
+  min_tracklet_area: 800     # vehicles are larger than pedestrians
+
+stage2:
+  crop:
+    min_area: 800
+    samples_per_tracklet: 16
+
+stage4:
+  association:
+    spatiotemporal:
+      max_time_gap: 600      # vehicles can take longer between cameras at city scale
+      min_time_gap: 5
+    graph:
+      similarity_threshold: 0.4
+
+stage5:
+  ground_truth_dir: "data/raw/cityflowv2"  # gt.txt files alongside videos
