@@ -31,6 +31,6 @@ EVALUATION_REPORT_FILE = "evaluation_report.json"
 
 # Default model file names
 YOLO_WEIGHTS = "yolo26m.pt"
-PERSON_REID_WEIGHTS = "person_osnet_market1501.pth"
-VEHICLE_REID_WEIGHTS = "vehicle_resnet50ibn_veri776.pth"
+PERSON_REID_WEIGHTS = "person_transreid_vit_base_market1501.pth"
+VEHICLE_REID_WEIGHTS = "vehicle_transreid_vit_base_veri776.pth"
 PCA_TRANSFORM_FILE = "pca_transform.pkl"

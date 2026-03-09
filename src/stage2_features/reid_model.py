@@ -79,10 +79,6 @@ class ReIDModel:
         # Select interpolation: BICUBIC for ViT (matches training), LINEAR for CNNs
         self._interp = cv2.INTER_CUBIC if self.is_transreid else cv2.INTER_LINEAR
 
-        # TransReID defaults to 224×224 unless overridden
-        if self.is_transreid and input_size == (256, 128):
-            self.input_size = (224, 224)
-
         self.model = self._build_model(model_name, weights_path)
         self.model.eval()
         self.model.to(device)
@@ -117,6 +113,7 @@ class ReIDModel:
             vit_model=self.vit_model,
             pretrained=weights_path is None,
             weights_path=weights_path,
+            img_size=self.input_size,  # (H, W) — sets correct patch grid
         )
         return model
 

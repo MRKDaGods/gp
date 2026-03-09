@@ -45,6 +45,7 @@ class TransReID(nn.Module):
         pretrained: bool = False,
         sie_camera: bool = True,
         jpm: bool = True,
+        img_size: tuple[int, int] | None = None,
     ):
         super().__init__()
         import timm
@@ -52,10 +53,12 @@ class TransReID(nn.Module):
         self.sie_camera = sie_camera and num_cameras > 0
         self.jpm = jpm
 
-        # ViT backbone
-        self.vit = timm.create_model(
-            vit_model, pretrained=pretrained, num_classes=0,
-        )
+        # ViT backbone — pass img_size when it differs from the timm default
+        # (e.g. person ReID uses 256×128 → grid 16×8 = 128 patches)
+        timm_kwargs = dict(pretrained=pretrained, num_classes=0)
+        if img_size is not None:
+            timm_kwargs["img_size"] = img_size
+        self.vit = timm.create_model(vit_model, **timm_kwargs)
         self.vit_dim = self.vit.embed_dim  # 768 for ViT-Base, 384 for ViT-Small
         self.num_blocks = len(self.vit.blocks)
 
@@ -162,6 +165,7 @@ def build_transreid(
     vit_model: str = "vit_base_patch16_clip_224.openai",
     pretrained: bool = False,
     weights_path: str | None = None,
+    img_size: tuple[int, int] | None = None,
 ) -> TransReID:
     """Build TransReID model and optionally load weights.
 
@@ -172,6 +176,9 @@ def build_transreid(
         vit_model: timm model name for the ViT backbone.
         pretrained: Load pretrained ViT weights from timm.
         weights_path: Path to trained TransReID checkpoint.
+        img_size: (H, W) input image size.  When different from the timm
+            default (224×224), timm creates the ViT with the correct
+            patch grid and positional embedding length.
 
     Returns:
         TransReID model instance.
@@ -184,6 +191,7 @@ def build_transreid(
         pretrained=pretrained,
         sie_camera=num_cameras > 0,
         jpm=True,
+        img_size=img_size,
     )
 
     if weights_path:
@@ -197,6 +205,50 @@ def build_transreid(
         state_dict = {
             k.replace("module.", "", 1): v for k, v in state_dict.items()
         }
+
+        # ------------------------------------------------------------------
+        # Handle shape mismatches between checkpoint and model:
+        #   - pos_embed: training resolution may differ from timm default
+        #   - sie_embed: checkpoint may have fewer cameras than deployment
+        #   - cls_head / jpm_cls: num_classes differs at inference
+        # Strategy: drop mismatched keys and let `strict=False` handle them.
+        # For sie_embed specifically, we zero-pad if the checkpoint has fewer
+        # cameras (safe: extra cameras just get zero SIE bias).
+        # ------------------------------------------------------------------
+        model_sd = model.state_dict()
+        keys_to_drop = []
+        for key in list(state_dict.keys()):
+            if key not in model_sd:
+                continue
+            if state_dict[key].shape != model_sd[key].shape:
+                if key == "sie_embed" and state_dict[key].shape[0] < model_sd[key].shape[0]:
+                    # Zero-pad SIE: copy trained cameras, leave extras as zero
+                    ckpt_cams = state_dict[key].shape[0]
+                    padded = torch.zeros_like(model_sd[key])
+                    padded[:ckpt_cams] = state_dict[key]
+                    state_dict[key] = padded
+                    logger.info(
+                        f"SIE embed: padded {ckpt_cams} → "
+                        f"{model_sd[key].shape[0]} cameras"
+                    )
+                elif key == "vit.pos_embed":
+                    # Resize model param to match checkpoint (keep trained values)
+                    logger.info(
+                        f"Resizing vit.pos_embed: model {model_sd[key].shape} → "
+                        f"checkpoint {state_dict[key].shape}"
+                    )
+                    model.vit.pos_embed = nn.Parameter(
+                        torch.zeros_like(state_dict[key]), requires_grad=False,
+                    )
+                else:
+                    # Shape mismatch on classifier heads etc. — drop
+                    logger.debug(
+                        f"Dropping key {key}: ckpt {state_dict[key].shape} "
+                        f"vs model {model_sd[key].shape}"
+                    )
+                    keys_to_drop.append(key)
+        for key in keys_to_drop:
+            del state_dict[key]
 
         # Load with relaxed strictness (num_classes may differ)
         missing, unexpected = model.load_state_dict(state_dict, strict=False)

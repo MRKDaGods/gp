@@ -56,15 +56,18 @@ stage1:
 stage2:
   reid:
     person:
-      model_name: "resnet50_ibn_a"
-      weights_path: "models/reid/person_resnet50ibn_market1501.pth"
-      embedding_dim: 2048
-      input_size: [256, 128]  # [H, W]
+      model_name: "transreid"
+      weights_path: "models/reid/person_transreid_vit_base_market1501.pth"
+      embedding_dim: 768
+      input_size: [256, 128]  # [H, W] — matches NB07 training
+      vit_model: "vit_base_patch16_clip_224.openai"
+      num_cameras: 20
+      clip_normalization: true
     vehicle:
       model_name: "transreid"
-      weights_path: "models/reid/vehicle_transreid_clip_veri776.pth"
+      weights_path: "models/reid/vehicle_transreid_vit_base_veri776.pth"
       embedding_dim: 768
-      input_size: [224, 224]  # [H, W]
+      input_size: [224, 224]  # [H, W] — matches NB08 training
       vit_model: "vit_base_patch16_clip_224.openai"
       num_cameras: 20
       clip_normalization: true
@@ -80,7 +83,7 @@ stage2:
     n_stripes: 3       # spatial: 3 horizontal stripes (head/torso/legs)
   pca:
     enabled: true
-    n_components: 512
+    n_components: 512  # 768 → 512 via PCA whitening
     pca_model_path: "models/reid/pca_transform.pkl"
   crop:
     min_area: 500
@@ -112,34 +115,34 @@ stage4:
       top_k_per_query: 10
     reranking:
       enabled: true
-      k1: 25           # tuned up from 20 (broader neighbourhood)
-      k2: 8            # tuned up from 6  (deeper expansion)
-      lambda_value: 0.35  # tuned up from 0.3 (slightly more original sim)
+      k1: 30           # broader neighbourhood for CLIP embeddings
+      k2: 10           # deeper expansion
+      lambda_value: 0.4  # blend: 60% Jaccard + 40% original cosine
     weights:
-      appearance: 0.5
-      hsv: 0.3
-      spatiotemporal: 0.2
-      # --- NEW: per-class weight overrides ---
+      appearance: 0.55
+      hsv: 0.25
+      spatiotemporal: 0.20
+      # --- Per-class weight overrides (SOTA TransReID CLIP) ---
       person:
-        appearance: 0.65
-        hsv: 0.10
+        appearance: 0.70   # TransReID CLIP person: mAP 90.5% — very strong
+        hsv: 0.05          # clothing colour less reliable across cameras
         spatiotemporal: 0.25
       vehicle:
-        appearance: 0.50
-        hsv: 0.25
+        appearance: 0.55   # TransReID CLIP vehicle: mAP 82.2%
+        hsv: 0.20          # vehicle colour more stable
         spatiotemporal: 0.25
     spatiotemporal:
       max_time_gap: 300  # seconds
       min_time_gap: 2    # seconds
       camera_transitions: null  # loaded from dataset config if available
     graph:
-      similarity_threshold: 0.45
+      similarity_threshold: 0.50  # raised: CLIP embeddings have cleaner separation
       algorithm: "community_detection"  # connected_components | community_detection
       louvain_resolution: 1.5  # higher = more granular clusters
-    # --- NEW: iterative gallery expansion for orphan tracklets ---
+    # --- Iterative gallery expansion for orphan tracklets ---
     gallery_expansion:
       enabled: true
-      threshold: 0.5     # min cosine sim to absorb an orphan
+      threshold: 0.55    # min cosine sim to absorb an orphan (raised for CLIP)
       max_rounds: 2
 
 stage5:
