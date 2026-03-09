@@ -35,6 +35,15 @@ desktop.ini
 # Jupyter
 .ipynb_checkpoints/
 
+# Model weights / training artifacts
+*.pt
+*.pth
+*.onnx
+
+# Notebook outputs
+**/output*/
+**/exported_models/
+
 # Logs
 *.log
 logs/
