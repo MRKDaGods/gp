@@ -45,6 +45,5 @@ def test_graph_stats():
     stats = solver.get_graph_stats(similarities, num_nodes=4)
     assert stats["num_nodes"] == 4
     assert stats["num_edges"] == 2
-    assert stats["num_components"] == 4  # 2 pairs + 0 isolated nodes.. wait no, 4 nodes, 2 edges -> 2 components of size 2
-    # Actually: nodes 0,1,2,3. Edges: 0-1, 2-3. Components: {0,1}, {2,3} = 2 components
+    # nodes 0,1,2,3. Edges: 0-1, 2-3. Components: {0,1}, {2,3} = 2 components
     assert stats["num_components"] == 2

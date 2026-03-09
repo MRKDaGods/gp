@@ -3,19 +3,27 @@
 # 7 synchronized HD cameras (1920x1080) in an outdoor public area
 # Dense annotations at 2 fps, ~400 annotated frames, ~20 people per frame
 # Source: https://www.epfl.ch/labs/cvlab/data/data-wildtrack/
+#
+# Published baselines (papers / leaderboard):
+#   MOTA ≈ 80-92%    IDF1 ≈ 70-85%    HOTA ≈ 55-70%
+#
+# Key characteristics:
+#   - Outdoor, variable lighting → CLAHE useful
+#   - Heavy occlusion in crowded scenes
+#   - All 7 cameras share heavily overlapping FOV
+#   - Annotated at 2 fps (low temporal resolution)
 
 dataset:
   name: "wildtrack"
   type: "mtmc_person"
   root_dir: "data/raw/wildtrack"
 
-  # After download_datasets.py, videos are in data/raw/wildtrack/videos/
   videos_dir: "videos"
   cameras: null  # auto-discover C1..C7
 
   annotation_format: "wildtrack"  # custom JSON format
   annotations_dir: "annotations_positions"
-  ground_truth_dir: "data/raw/wildtrack/annotations_positions"
+  ground_truth_dir: "data/raw/wildtrack/manifests/ground_truth"
 
   camera_transitions: null  # all cameras share overlapping FOV
 
@@ -23,30 +31,113 @@ dataset:
   class_mapping:
     0: "person"
 
-# Override pipeline defaults for this dataset
+# ─── Pipeline overrides ──────────────────────────────────────────────────
+
 stage0:
   input_dir: "data/raw/wildtrack/videos"
   output_fps: 2  # WILDTRACK is annotated at 2 fps
+  clahe: true
+  clahe_clip_limit: 2.0
+  time_offsets: {}   # cameras are pre-synchronized
+  lossless: false
 
 stage1:
   detector:
-    classes: [0]              # person only
-    confidence_threshold: 0.25
-  min_tracklet_length: 3      # shorter tracklets valid at 2 fps
-  min_tracklet_area: 500
+    classes: [0]               # person only
+    confidence_threshold: 0.35 # raised from 0.20 — reduces FP significantly
+    iou_threshold: 0.45
+    img_size: 1280             # HD cameras → larger inference size helps
+  tracker:
+    algorithm: "botsort"
+    track_buffer: 20           # at 2fps, 20 frames = 10s — reduces fragmentation
+    match_thresh: 0.80         # slightly less strict matching
+    appearance_thresh: 0.45    # tolerate larger appearance changes
+    new_track_thresh: 0.50     # raised: fewer spurious new tracks
+  min_tracklet_length: 3       # 3 frames = 1.5s at 2fps
+  min_tracklet_area: 400       # outdoor, people can be small
+  interpolation:
+    enabled: true
+    max_gap: 8                 # at 2fps, 8 frames = 4s max gap
+  intra_merge:
+    enabled: true
+    max_time_gap: 8.0          # raised: more aggressive merge at 2fps
+    max_iou_distance: 0.6
 
 stage2:
+  reid:
+    person:
+      model_name: "resnet50_ibn_a"
+      weights_path: "models/reid/person_resnet50ibn_market1501.pth"
+      embedding_dim: 2048
+      input_size: [256, 128]
+    batch_size: 64
+    device: "cuda:0"
+    half: true
+    flip_augment: true
+  hsv:
+    h_bins: 32
+    s_bins: 16
+    v_bins: 16
+    n_stripes: 3
+  pca:
+    enabled: true
+    n_components: 256
+    pca_model_path: "models/reid/pca_transform.pkl"
   crop:
-    min_area: 500
+    min_area: 400
+    padding_ratio: 0.1
     samples_per_tracklet: 16
+    min_quality: 0.05
+    laplacian_min_var: 20.0
+  camera_bn:
+    enabled: true
 
 stage4:
   association:
+    top_k: 80
+    query_expansion:
+      enabled: true
+      k: 5
+      alpha: 1.0
+    mutual_nn:
+      enabled: true
+      top_k_per_query: 8
+    reranking:
+      enabled: true
+      k1: 25
+      k2: 8
+      lambda_value: 0.35
+    weights:
+      appearance: 0.5
+      hsv: 0.3
+      spatiotemporal: 0.2
+      person:
+        appearance: 0.80       # overlapping FOV → ReID is dominant cue
+        hsv: 0.10
+        spatiotemporal: 0.10   # all cameras see same location → ST less useful
     spatiotemporal:
-      max_time_gap: 30     # small outdoor area, transitions are fast
-      min_time_gap: 0      # overlapping FOV means same-time sightings are valid
+      max_time_gap: 15         # overlapping FOV → simultaneous or very fast transitions
+      min_time_gap: 0          # overlapping FOV → same-time sightings valid
+      camera_transitions: null
     graph:
-      similarity_threshold: 0.45
+      similarity_threshold: 0.30   # lowered: allow more cross-camera merging (40 people, 7 cams)
+      algorithm: "community_detection"
+      louvain_resolution: 1.5      # lowered: coarser clusters → fewer final trajectories
+    gallery_expansion:
+      enabled: true
+      threshold: 0.35              # lowered: absorb more orphan tracklets
+      max_rounds: 3                # extra round to catch remaining orphans
 
 stage5:
-  ground_truth_dir: "data/raw/wildtrack/annotations_positions"
+  ground_truth_dir: "data/raw/wildtrack/manifests/ground_truth"
+  iou_threshold: 0.5
+  metrics: ["HOTA", "MOTA", "IDF1"]
+  generate_report: true
+  report_format: "html"
+  ground_plane_eval:
+    enabled: true
+    annotations_dir: "data/raw/wildtrack/annotations_positions"
+    calibrations_dir: "data/raw/wildtrack/calibrations"
+    conf_threshold: 0.25
+    match_threshold_cm: 50.0
+    nms_radius_cm: 50.0

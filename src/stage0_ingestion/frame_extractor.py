@@ -23,12 +23,16 @@ def extract_frames_from_video(
     denoise: bool = False,
     denoise_strength: int = 3,
     max_frames: Optional[int] = None,
+    clahe: bool = False,
+    clahe_clip_limit: float = 2.0,
+    time_offset: float = 0.0,
+    lossless: bool = False,
 ) -> List[FrameInfo]:
-    """Extract frames from a single video and save as JPEG images.
+    """Extract frames from a single video and save as images.
 
     Args:
         video_path: Path to the source video.
-        output_dir: Directory to write extracted JPEG frames.
+        output_dir: Directory to write extracted frames.
         camera_id: Camera identifier for this video.
         target_fps: Target frame rate for extraction.
         target_size: (width, height) to resize to, or None for original.
@@ -36,6 +40,10 @@ def extract_frames_from_video(
         denoise: Whether to apply denoising.
         denoise_strength: Bilateral filter d parameter.
         max_frames: Maximum frames to extract (for smoke tests).
+        clahe: Whether to apply CLAHE enhancement.
+        clahe_clip_limit: CLAHE contrast clip limit.
+        time_offset: Camera-specific time offset in seconds for synchronization.
+        lossless: If True, save as PNG (lossless) instead of JPEG.
 
     Returns:
         List of FrameInfo for each extracted frame.
@@ -62,19 +70,29 @@ def extract_frames_from_video(
             normalize=normalize,
             denoise=denoise,
             denoise_strength=denoise_strength,
+            clahe=clahe,
+            clahe_clip_limit=clahe_clip_limit,
         )
 
-        # Save frame
-        frame_filename = f"frame_{frame_idx:06d}.jpg"
-        frame_path = output_dir / frame_filename
-        cv2.imwrite(str(frame_path), frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        # Apply camera time synchronization offset
+        synced_timestamp = timestamp + time_offset
+
+        # Save frame (PNG for lossless / JPEG for speed)
+        if lossless:
+            frame_filename = f"frame_{frame_idx:06d}.png"
+            frame_path = output_dir / frame_filename
+            cv2.imwrite(str(frame_path), frame)
+        else:
+            frame_filename = f"frame_{frame_idx:06d}.jpg"
+            frame_path = output_dir / frame_filename
+            cv2.imwrite(str(frame_path), frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
 
         h, w = frame.shape[:2]
         frames.append(
             FrameInfo(
                 frame_id=frame_idx,
                 camera_id=camera_id,
-                timestamp=timestamp,
+                timestamp=synced_timestamp,
                 frame_path=str(frame_path),
                 width=w,
                 height=h,

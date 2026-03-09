@@ -1,0 +1,128 @@
+# EPFL Laboratory — Multi-Camera Pedestrian Tracking
+#
+# 4 synchronized cameras in an indoor lab environment
+# 6 people, ~2 min duration, 25fps source, ~120s footage
+# Dense overlapping FOV — all cameras can see most of the room
+#
+# Published baselines (from MTMC literature):
+#   IDF1 ≈ 65-85%   MOTA ≈ 70-90%   (varies by method)
+#
+# Key characteristics:
+#   - Indoor, uniform lighting → CLAHE helps less but doesn't hurt
+#   - Small scene → very short transition times (0-5s between cameras)
+#   - Overlapping FOV → min_time_gap = 0 (simultaneous sightings valid)
+#   - Only 6 people → expect 6 global identities
+
+dataset:
+  name: "epfl_lab"
+  type: "mtmc_person"
+  root_dir: "data/raw/epfl_lab"
+  videos_dir: null           # videos are in per-camera subdirs (c0/, c1/, ...)
+  cameras: ["c0", "c1", "c2", "c3"]
+  annotation_format: "mot"
+  ground_truth_dir: null     # set if GT is available
+  camera_transitions: null   # overlapping FOV, learn from data or use global prior
+  target_classes: [0]        # person only
+  class_mapping:
+    0: "person"
+
+# ─── Pipeline overrides ──────────────────────────────────────────────────
+
+stage0:
+  input_dir: "data/raw/epfl_lab"
+  output_fps: 5              # 25fps source → 5fps is sufficient for tracking
+  clahe: true
+  clahe_clip_limit: 2.0
+  time_offsets: {}           # cameras are pre-synchronized
+  lossless: false
+
+stage1:
+  detector:
+    model: "models/detection/yolo26m.pt"
+    classes: [0]               # person only
+    confidence_threshold: 0.15 # low threshold — indoor, well-lit, want high recall
+    iou_threshold: 0.45
+    img_size: 640
+  tracker:
+    algorithm: "botsort"
+    track_buffer: 60           # keep lost tracks for 12s at 5fps
+    match_thresh: 0.85
+    appearance_thresh: 0.5
+    new_track_thresh: 0.35
+  min_tracklet_length: 3       # at 5fps, 3 frames = 0.6s minimum
+  min_tracklet_area: 200       # people can be small in wide-angle lab cameras
+  interpolation:
+    enabled: true
+    max_gap: 15                # interpolate gaps up to 3s at 5fps
+  intra_merge:
+    enabled: true
+    max_time_gap: 3.0          # merge fragments within 3s
+    max_iou_distance: 0.6
+
+stage2:
+  reid:
+    person:
+      model_name: "resnet50_ibn_a"
+      weights_path: "models/reid/person_resnet50ibn_market1501.pth"
+      embedding_dim: 2048
+      input_size: [256, 128]
+    batch_size: 64
+    device: "cuda:0"
+    half: true
+    flip_augment: true
+  hsv:
+    h_bins: 32
+    s_bins: 16
+    v_bins: 16
+    n_stripes: 3
+  pca:
+    enabled: true
+    n_components: 256          # 126 tracklets < 512, so use 256 (need n > 2*components)
+    pca_model_path: "models/reid/pca_transform.pkl"
+  crop:
+    min_area: 200
+    padding_ratio: 0.1
+    samples_per_tracklet: 16
+    min_quality: 0.05
+    laplacian_min_var: 20.0    # indoor = generally sharp, lower threshold
+  camera_bn:
+    enabled: true
+
+stage4:
+  association:
+    top_k: 50                  # only 126 tracklets — 50 is plenty
+    mutual_nn:
+      enabled: true
+      top_k_per_query: 5       # small dataset → tighter filter
+    reranking:
+      enabled: true
+      k1: 15
+      k2: 6
+      lambda_value: 0.3
+    weights:
+      appearance: 0.5
+      hsv: 0.3
+      spatiotemporal: 0.2
+      person:
+        appearance: 0.70       # ReID is strong for persons in controlled indoor
+        hsv: 0.10
+        spatiotemporal: 0.20
+    spatiotemporal:
+      max_time_gap: 30         # small room — 30s max transition is generous
+      min_time_gap: 0          # overlapping FOV: simultaneous sightings valid
+      camera_transitions: null
+    graph:
+      similarity_threshold: 0.55  # slightly higher to avoid over-merging
+      algorithm: "community_detection"
+      louvain_resolution: 2.5    # higher = more conservative (more clusters)
+    gallery_expansion:
+      enabled: true
+      threshold: 0.45
+      max_rounds: 3
+
+stage5:
+  ground_truth_dir: null       # set to GT path if available
+  iou_threshold: 0.5
+  metrics: ["HOTA", "MOTA", "IDF1"]
+  generate_report: true
+  report_format: "html"

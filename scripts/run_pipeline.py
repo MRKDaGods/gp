@@ -98,7 +98,8 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
 
         features = run_stage2(
             cfg, tracklets_by_camera, video_paths,
-            output_dir=output_base / "stage2", smoke_test=smoke_test
+            output_dir=output_base / "stage2", smoke_test=smoke_test,
+            stage0_dir=output_base / "stage0",
         )
 
     # --- Stage 3: Indexing ---
@@ -123,6 +124,41 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
     if 4 in stage_nums:
         console.print("\n[bold cyan]Stage 4: Multi-Camera Association[/bold cyan]")
         from src.stage4_association import run_stage4
+
+        # Load Stage 2-3 artifacts from disk if not in memory
+        if features is None:
+            stage2_dir = output_base / "stage2"
+            if (stage2_dir / "embeddings.npy").exists():
+                from src.core.io_utils import load_embeddings, load_hsv_features
+                from src.core.data_models import TrackletFeatures
+                embeddings, index_map = load_embeddings(stage2_dir)
+                hsv_matrix = load_hsv_features(stage2_dir)
+                features = [
+                    TrackletFeatures(
+                        track_id=m["track_id"],
+                        camera_id=m["camera_id"],
+                        class_id=m["class_id"],
+                        embedding=embeddings[i],
+                        hsv_histogram=hsv_matrix[i],
+                    )
+                    for i, m in enumerate(index_map)
+                ]
+                console.print(f"  Loaded {len(features)} features from disk")
+
+        if faiss_index is None:
+            index_path = output_base / "stage3" / "faiss_index.bin"
+            if index_path.exists():
+                from src.stage3_indexing.faiss_index import FAISSIndex
+                faiss_index = FAISSIndex(cfg.stage3.faiss.get("index_type", "flat_ip"))
+                faiss_index.load(index_path)
+                console.print("  Loaded FAISS index from disk")
+
+        if metadata_store is None:
+            db_path = output_base / "stage3" / "metadata.db"
+            if db_path.exists():
+                from src.stage3_indexing.metadata_store import MetadataStore
+                metadata_store = MetadataStore(db_path)
+                console.print("  Loaded metadata store from disk")
 
         if faiss_index is None or metadata_store is None or features is None:
             console.print("[yellow]Stage 4 requires Stages 2-3. Skipping.[/yellow]")

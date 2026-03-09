@@ -63,6 +63,13 @@ def run_stage1(
     min_tracklet_length = stage_cfg.get("min_tracklet_length", 5)
     min_tracklet_area = stage_cfg.get("min_tracklet_area", 500)
 
+    # Interpolation & intra-camera merge settings
+    interpolate = stage_cfg.get("interpolation", {}).get("enabled", True)
+    interpolation_max_gap = stage_cfg.get("interpolation", {}).get("max_gap", 30)
+    intra_merge = stage_cfg.get("intra_merge", {}).get("enabled", True)
+    merge_max_time_gap = stage_cfg.get("intra_merge", {}).get("max_time_gap", 5.0)
+    merge_max_iou_distance = stage_cfg.get("intra_merge", {}).get("max_iou_distance", 0.7)
+
     all_tracklets: Dict[str, List[Tracklet]] = {}
 
     for camera_id, cam_frames in frames_by_camera.items():
@@ -85,6 +92,11 @@ def run_stage1(
             camera_id=camera_id,
             min_length=min_tracklet_length,
             min_area=min_tracklet_area,
+            interpolate=interpolate,
+            interpolation_max_gap=interpolation_max_gap,
+            intra_merge=intra_merge,
+            merge_max_time_gap=merge_max_time_gap,
+            merge_max_iou_distance=merge_max_iou_distance,
         )
 
         for frame_info in cam_frames:

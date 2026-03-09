@@ -187,11 +187,16 @@ def prepare_wildtrack(root: Path, output: Path):
     json_files = sorted(ann_dir.glob("*.json"))
     print(f"  Found {len(json_files)} annotation frames")
 
+    # WILDTRACK frame resolution
+    FRAME_W, FRAME_H = 1920, 1080
+    MIN_VISIBLE_RATIO = 0.25  # skip bboxes with less than 25% visible area
+
     # Accumulate per-camera tracks: camera_id -> {person_id -> [(frame, bbox)]}
     cam_tracks: dict[str, dict[int, list]] = {}
+    clipped_count = 0
+    skipped_count = 0
 
-    for json_path in json_files:
-        frame_id = int(json_path.stem)
+    for frame_id, json_path in enumerate(json_files):
 
         with open(json_path, "r") as f:
             annotations = json.load(f)
@@ -208,17 +213,41 @@ def prepare_wildtrack(root: Path, output: Path):
                 if xmin < 0 or ymin < 0 or xmax <= xmin or ymax <= ymin:
                     continue
 
+                # Clip bounding boxes to frame boundaries
+                orig_area = (xmax - xmin) * (ymax - ymin)
+                xmin_c = max(0, xmin)
+                ymin_c = max(0, ymin)
+                xmax_c = min(FRAME_W, xmax)
+                ymax_c = min(FRAME_H, ymax)
+
+                if xmax_c <= xmin_c or ymax_c <= ymin_c:
+                    skipped_count += 1
+                    continue
+
+                clipped_area = (xmax_c - xmin_c) * (ymax_c - ymin_c)
+                if clipped_area / orig_area < MIN_VISIBLE_RATIO:
+                    skipped_count += 1
+                    continue
+
+                if (xmin_c, ymin_c, xmax_c, ymax_c) != (xmin, ymin, xmax, ymax):
+                    clipped_count += 1
+
                 camera_id = f"C{view_num + 1}"
                 if camera_id not in cam_tracks:
                     cam_tracks[camera_id] = {}
                 if person_id not in cam_tracks[camera_id]:
                     cam_tracks[camera_id][person_id] = []
 
-                w = xmax - xmin
-                h = ymax - ymin
+                w = xmax_c - xmin_c
+                h = ymax_c - ymin_c
                 cam_tracks[camera_id][person_id].append(
-                    (frame_id, person_id, xmin, ymin, w, h, 1.0, 0)
+                    (frame_id, person_id, xmin_c, ymin_c, w, h, 1.0, 0)
                 )
+
+    if clipped_count:
+        print(f"  Clipped {clipped_count} bboxes to frame boundaries ({FRAME_W}x{FRAME_H})")
+    if skipped_count:
+        print(f"  Skipped {skipped_count} bboxes (off-screen or <{MIN_VISIBLE_RATIO:.0%} visible)")
 
     # Write per-camera gt.txt in MOT format
     gt_dir = output / "ground_truth"
@@ -230,7 +259,7 @@ def prepare_wildtrack(root: Path, output: Path):
             rows.extend(detections)
         rows.sort(key=lambda r: (r[0], r[1]))
 
-        gt_path = gt_dir / f"{camera_id}_gt.txt"
+        gt_path = gt_dir / f"{camera_id}.txt"
         with open(gt_path, "w") as f:
             for row in rows:
                 f.write(",".join(str(v) for v in row) + "\n")

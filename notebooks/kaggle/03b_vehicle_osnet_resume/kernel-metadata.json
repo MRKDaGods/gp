@@ -1,5 +1,5 @@
 {
-  "id": "mrkdagods/03b-vehicle-osnet-resume",
+  "id": "ali369/03b-vehicle-osnet-resume",
   "title": "03b Vehicle OSNet Resume",
   "code_file": "03b_vehicle_osnet_resume.ipynb",
   "language": "python",
@@ -13,7 +13,7 @@
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "mrkdagods/03-vehicle-reid-training"
+    "ali369/03-vehicle-reid-training"
   ],
   "model_sources": []
 }

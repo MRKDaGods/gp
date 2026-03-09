@@ -1,0 +1,17 @@
+{
+  "id": "yahiaakhalafallah/08-vehicle-reid-sota",
+  "title": "08 Vehicle ReID SOTA",
+  "code_file": "08_vehicle_reid_sota.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

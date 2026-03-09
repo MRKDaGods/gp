@@ -1,16 +1,23 @@
 # CityFlowV2 — AI City Challenge 2022 Track 1
 # Multi-Camera Multi-Target Vehicle Tracking
 #
-# 46 cameras across 16 intersections, 960p+ resolution, ~3.5 hours of footage
-# 880 vehicle identities, 313,931 bounding boxes
+# 6 cameras across 2 scenes, 960p+ resolution
 # Source: https://www.aicitychallenge.org/2022-data-and-evaluation/
+#
+# Published baselines (AIC 2022 leaderboard):
+#   IDF1 ≈ 70-84%    MOTA ≈ 60-78%    HOTA ≈ 50-65%
+#
+# Key characteristics:
+#   - Intersection cameras → vehicles transit between scenes
+#   - Significant viewpoint / lighting differences between cameras
+#   - Larger objects but high intra-class similarity (same-model cars)
 
 dataset:
   name: "cityflowv2"
   type: "mtmc_vehicle"
   root_dir: "data/raw/cityflowv2"
 
-  videos_dir: null  # videos are in per-camera subfolders (S001_c001/, S001_c002/, ...)
+  videos_dir: null  # videos are in per-camera subfolders (S01_c001/, S01_c002/, ...)
   cameras: null     # auto-discover from directory structure
 
   annotation_format: "mot"   # CityFlow uses MOT-like gt.txt per camera
@@ -24,30 +31,109 @@ dataset:
     5: "bus"
     7: "truck"
 
-# Override pipeline defaults for this dataset
+# ─── Pipeline overrides ──────────────────────────────────────────────────
+
 stage0:
   input_dir: "data/raw/cityflowv2"
   output_fps: 10
+  clahe: true
+  clahe_clip_limit: 2.5       # intersection cameras can have harsh light
+  time_offsets: {}
+  lossless: false
 
 stage1:
   detector:
-    classes: [2, 5, 7]       # vehicle classes only for this dataset
-    confidence_threshold: 0.3
+    classes: [2, 5, 7]         # vehicle classes only
+    confidence_threshold: 0.30
+    iou_threshold: 0.45
+    img_size: 1280             # high-res traffic camera footage
+  tracker:
+    algorithm: "botsort"
+    track_buffer: 80           # vehicles at red lights can be static for a while
+    match_thresh: 0.85
+    appearance_thresh: 0.5
+    new_track_thresh: 0.4
   min_tracklet_length: 5
-  min_tracklet_area: 800     # vehicles are larger than pedestrians
+  min_tracklet_area: 800       # vehicles are large
+  interpolation:
+    enabled: true
+    max_gap: 30
+  intra_merge:
+    enabled: true
+    max_time_gap: 5.0
+    max_iou_distance: 0.7
 
 stage2:
+  reid:
+    vehicle:
+      model_name: "transreid"
+      weights_path: "models/reid/vehicle_transreid_clip_veri776.pth"
+      embedding_dim: 768
+      input_size: [224, 224]
+      vit_model: "vit_base_patch16_clip_224.openai"
+      num_cameras: 46  # CityFlow v2 has 46 cameras
+      clip_normalization: true
+    batch_size: 64
+    device: "cuda:0"
+    half: true
+    flip_augment: true
+  hsv:
+    h_bins: 32
+    s_bins: 16
+    v_bins: 16
+    n_stripes: 3               # front/middle/rear for vehicles
+  pca:
+    enabled: true
+    n_components: 512
+    pca_model_path: "models/reid/pca_transform.pkl"
   crop:
     min_area: 800
-    samples_per_tracklet: 16
+    padding_ratio: 0.05        # tighter crops for vehicles
+    samples_per_tracklet: 20
+    min_quality: 0.05
+    laplacian_min_var: 30.0
+  camera_bn:
+    enabled: true
 
 stage4:
   association:
+    top_k: 100
+    query_expansion:
+      enabled: true
+      k: 5
+      alpha: 1.0
+    mutual_nn:
+      enabled: true
+      top_k_per_query: 10
+    reranking:
+      enabled: true
+      k1: 25
+      k2: 8
+      lambda_value: 0.35
+    weights:
+      appearance: 0.5
+      hsv: 0.3
+      spatiotemporal: 0.2
+      vehicle:
+        appearance: 0.50       # vehicles are harder (many same-colour/model)
+        hsv: 0.25              # colour is important differentiator for vehicles
+        spatiotemporal: 0.25   # transit times are informative at city scale
     spatiotemporal:
-      max_time_gap: 600      # vehicles can take longer between cameras at city scale
-      min_time_gap: 5
+      max_time_gap: 600        # vehicles can take up to 10min between cameras
+      min_time_gap: 5          # non-overlapping cameras
+      camera_transitions: null
     graph:
-      similarity_threshold: 0.4
+      similarity_threshold: 0.55
+      algorithm: "community_detection"
+      louvain_resolution: 2.5
+    gallery_expansion:
+      enabled: true
+      threshold: 0.50
+      max_rounds: 2
 
 stage5:
   ground_truth_dir: "data/raw/cityflowv2"  # gt.txt files alongside videos
+  iou_threshold: 0.5
+  metrics: ["HOTA", "MOTA", "IDF1"]
+  generate_report: true
+  report_format: "html"

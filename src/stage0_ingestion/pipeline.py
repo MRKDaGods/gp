@@ -57,12 +57,19 @@ def run_stage0(
     all_frames: List[FrameInfo] = []
     max_frames = 10 if smoke_test else None
 
+    # Load per-camera time offsets for synchronization
+    time_offsets = dict(stage_cfg.get("time_offsets", {}))
+
     for video_path in video_paths:
         camera_id = _camera_id_from_path(video_path, input_dir)
         frames_dir = output_dir / camera_id
         frames_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Processing camera {camera_id}: {video_path}")
+
+        cam_time_offset = float(time_offsets.get(camera_id, 0.0))
+        if cam_time_offset != 0.0:
+            logger.info(f"  Applying time offset: {cam_time_offset:.3f}s")
 
         frames = extract_frames_from_video(
             video_path=video_path,
@@ -74,6 +81,10 @@ def run_stage0(
             denoise=stage_cfg.get("denoise", False),
             denoise_strength=stage_cfg.get("denoise_strength", 3),
             max_frames=max_frames,
+            clahe=stage_cfg.get("clahe", False),
+            clahe_clip_limit=stage_cfg.get("clahe_clip_limit", 2.0),
+            time_offset=cam_time_offset,
+            lossless=stage_cfg.get("lossless", False),
         )
 
         logger.info(f"  Extracted {len(frames)} frames from camera {camera_id}")

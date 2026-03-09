@@ -1,11 +1,17 @@
-"""Multi-modal similarity computation for cross-camera association."""
+"""Multi-modal similarity computation for cross-camera association.
+
+Supports class-adaptive weighting (person vs vehicle) and mutual
+nearest-neighbor filtering.
+"""
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Set, Tuple
 
 import numpy as np
+from loguru import logger
 
+from src.core.constants import PERSON_CLASSES
 from src.stage4_association.spatial_temporal import SpatioTemporalValidator
 
 
@@ -17,19 +23,64 @@ def compute_hsv_similarity(hist_a: np.ndarray, hist_b: np.ndarray) -> float:
     return float(np.dot(hist_a, hist_b))
 
 
+def mutual_nearest_neighbor_filter(
+    candidate_pairs: List[Tuple[int, int, float]],
+    top_k_per_query: int = 10,
+) -> List[Tuple[int, int, float]]:
+    """Filter candidate pairs to mutual nearest neighbors.
+
+    A pair (i, j) is kept only if j is in i's top-K *and* i is in j's top-K.
+    This dramatically reduces false-positive edges in the similarity graph.
+
+    Args:
+        candidate_pairs: List of (i, j, similarity) tuples.
+        top_k_per_query: How many top matches per query to consider.
+
+    Returns:
+        Filtered list of mutual-NN pairs.
+    """
+    # Build top-K sets for each node
+    from collections import defaultdict
+    neighbors: Dict[int, List[Tuple[int, float]]] = defaultdict(list)
+
+    for i, j, sim in candidate_pairs:
+        neighbors[i].append((j, sim))
+        neighbors[j].append((i, sim))
+
+    # Keep only top-K per node
+    top_k_sets: Dict[int, Set[int]] = {}
+    for node, nbrs in neighbors.items():
+        nbrs.sort(key=lambda x: x[1], reverse=True)
+        top_k_sets[node] = {n for n, _ in nbrs[:top_k_per_query]}
+
+    # Filter: keep only mutual pairs
+    result = []
+    for i, j, sim in candidate_pairs:
+        if j in top_k_sets.get(i, set()) and i in top_k_sets.get(j, set()):
+            result.append((i, j, sim))
+
+    logger.debug(
+        f"Mutual NN filter: {len(candidate_pairs)} -> {len(result)} pairs "
+        f"(top_k={top_k_per_query})"
+    )
+    return result
+
+
 def compute_combined_similarity(
     appearance_sim: Dict[Tuple[int, int], float],
     hsv_features: np.ndarray,
     start_times: List[float],
     end_times: List[float],
     camera_ids: List[str],
+    class_ids: List[int],
     st_validator: SpatioTemporalValidator,
     weights: dict,
 ) -> Dict[Tuple[int, int], float]:
-    """Compute weighted combined similarity for all candidate pairs.
+    """Compute weighted combined similarity with class-adaptive weights.
 
-    Combines appearance similarity, HSV color similarity, and
-    spatio-temporal compatibility into a single score.
+    Uses different weight profiles for persons vs vehicles:
+    - **Persons**: Higher appearance weight, lower HSV (clothing vs. lighting).
+    - **Vehicles**: Higher HSV weight (more stable colour across cameras).
 
     Args:
         appearance_sim: Dict[(i, j)] -> appearance similarity score.
@@ -37,17 +88,29 @@ def compute_combined_similarity(
         start_times: Start timestamp for each tracklet.
         end_times: End timestamp for each tracklet.
         camera_ids: Camera ID for each tracklet.
+        class_ids: Class ID for each tracklet.
         st_validator: Spatio-temporal validator instance.
-        weights: Dict with keys 'appearance', 'hsv', 'spatiotemporal'.
+        weights: Dict with keys 'appearance', 'hsv', 'spatiotemporal',
+                 and optionally 'person' / 'vehicle' sub-dicts.
 
     Returns:
         Dict[(i, j)] -> combined similarity score.
     """
-    w_app = weights.get("appearance", 0.7)
-    w_hsv = weights.get("hsv", 0.1)
-    w_st = weights.get("spatiotemporal", 0.2)
+    # Default weights
+    default_w = {
+        "appearance": weights.get("appearance", 0.6),
+        "hsv": weights.get("hsv", 0.15),
+        "spatiotemporal": weights.get("spatiotemporal", 0.25),
+    }
+    # Class-specific overrides
+    person_w = weights.get("person", {
+        "appearance": 0.65, "hsv": 0.10, "spatiotemporal": 0.25,
+    })
+    vehicle_w = weights.get("vehicle", {
+        "appearance": 0.50, "hsv": 0.25, "spatiotemporal": 0.25,
+    })
 
-    combined = {}
+    combined: Dict[Tuple[int, int], float] = {}
 
     for (i, j), app_sim in appearance_sim.items():
         # Spatio-temporal validation
@@ -64,9 +127,18 @@ def compute_combined_similarity(
         # HSV similarity
         hsv_sim = compute_hsv_similarity(hsv_features[i], hsv_features[j])
 
+        # Select class-adaptive weights
+        if class_ids[i] in PERSON_CLASSES:
+            w = person_w
+        else:
+            w = vehicle_w
+
+        w_app = w.get("appearance", default_w["appearance"])
+        w_hsv = w.get("hsv", default_w["hsv"])
+        w_st = w.get("spatiotemporal", default_w["spatiotemporal"])
+
         # Combined score
         score = w_app * app_sim + w_hsv * hsv_sim + w_st * st_score
-
         combined[(i, j)] = score
 
     return combined

@@ -12,6 +12,13 @@ stage0:
   normalize: false
   denoise: false
   denoise_strength: 3  # bilateral filter d parameter
+  # --- NEW: CLAHE contrast enhancement ---
+  clahe: true
+  clahe_clip_limit: 2.0
+  # --- NEW: per-camera time offsets for synchronisation (seconds) ---
+  time_offsets: {}   # e.g. {"cam01": 0.0, "cam02": -0.5, "cam03": 1.2}
+  # --- NEW: lossless frame output (PNG instead of JPEG) ---
+  lossless: false
 
 stage1:
   detector:
@@ -36,6 +43,15 @@ stage1:
     proximity_thresh: 0.5
   min_tracklet_length: 5  # minimum frames for a valid tracklet
   min_tracklet_area: 500  # minimum bbox area in pixels
+  # --- NEW: bbox interpolation for detection gaps ---
+  interpolation:
+    enabled: true
+    max_gap: 30              # max frames to interpolate across
+  # --- NEW: intra-camera tracklet merging ---
+  intra_merge:
+    enabled: true
+    max_time_gap: 5.0        # seconds between tracklet end and next start
+    max_iou_distance: 0.7    # max 1-IoU distance for merging
 
 stage2:
   reid:
@@ -45,17 +61,23 @@ stage2:
       embedding_dim: 2048
       input_size: [256, 128]  # [H, W]
     vehicle:
-      model_name: "resnet50_ibn_a"
-      weights_path: "models/reid/vehicle_resnet50ibn_veri776.pth"
-      embedding_dim: 2048
+      model_name: "transreid"
+      weights_path: "models/reid/vehicle_transreid_clip_veri776.pth"
+      embedding_dim: 768
       input_size: [224, 224]  # [H, W]
+      vit_model: "vit_base_patch16_clip_224.openai"
+      num_cameras: 20
+      clip_normalization: true
     batch_size: 64
     device: "cuda:0"
     half: true
+    # --- NEW: flip augmentation at inference ---
+    flip_augment: true
   hsv:
-    h_bins: 16
-    s_bins: 8
-    v_bins: 8
+    h_bins: 32         # increased from 16 for better colour discrimination
+    s_bins: 16         # increased from 8
+    v_bins: 16         # increased from 8
+    n_stripes: 3       # spatial: 3 horizontal stripes (head/torso/legs)
   pca:
     enabled: true
     n_components: 512
@@ -64,6 +86,11 @@ stage2:
     min_area: 500
     padding_ratio: 0.1
     samples_per_tracklet: 16
+    min_quality: 0.05       # composite quality threshold [0, 1]
+    laplacian_min_var: 30.0   # Laplacian-variance blur filter (0 = disabled)
+  # --- NEW: camera-aware batch normalisation ---
+  camera_bn:
+    enabled: true
 
 stage3:
   faiss:
@@ -74,15 +101,33 @@ stage3:
 stage4:
   association:
     top_k: 100
+    # --- Average Query Expansion (from gp-stage-2 analysis) ---
+    query_expansion:
+      enabled: true
+      k: 5        # average with top-5 nearest neighbours
+      alpha: 1.0  # weight for original embedding (1.0 = uniform averaging)
+    # --- Mutual nearest-neighbour filter ---
+    mutual_nn:
+      enabled: true
+      top_k_per_query: 10
     reranking:
       enabled: true
-      k1: 20
-      k2: 6
-      lambda_value: 0.3
+      k1: 25           # tuned up from 20 (broader neighbourhood)
+      k2: 8            # tuned up from 6  (deeper expansion)
+      lambda_value: 0.35  # tuned up from 0.3 (slightly more original sim)
     weights:
       appearance: 0.5
       hsv: 0.3
       spatiotemporal: 0.2
+      # --- NEW: per-class weight overrides ---
+      person:
+        appearance: 0.65
+        hsv: 0.10
+        spatiotemporal: 0.25
+      vehicle:
+        appearance: 0.50
+        hsv: 0.25
+        spatiotemporal: 0.25
     spatiotemporal:
       max_time_gap: 300  # seconds
       min_time_gap: 2    # seconds
@@ -91,11 +136,17 @@ stage4:
       similarity_threshold: 0.45
       algorithm: "community_detection"  # connected_components | community_detection
       louvain_resolution: 1.5  # higher = more granular clusters
+    # --- NEW: iterative gallery expansion for orphan tracklets ---
+    gallery_expansion:
+      enabled: true
+      threshold: 0.5     # min cosine sim to absorb an orphan
+      max_rounds: 2
 
 stage5:
   evaluator: "trackeval"  # trackeval | pymotmetrics
   ground_truth_dir: null  # set per dataset
   metrics: ["HOTA", "MOTA", "IDF1"]
+  iou_threshold: 0.5
   generate_report: true
   report_format: "html"  # html | markdown
 

@@ -5,6 +5,7 @@ outputs/
 
 # Python
 __pycache__/
+.pycache/
 *.py[cod]
 *$py.class
 *.egg-info/
@@ -21,6 +22,7 @@ env/
 # IDE
 .idea/
 .vscode/
+.streamlit/
 *.swp
 *.swo
 *~
@@ -46,3 +48,4 @@ credentials.json
 tmpclaude-*-cwd
 temp_logs/
 nul
+yolo26m.pt
