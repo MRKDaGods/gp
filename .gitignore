@@ -58,3 +58,5 @@ tmpclaude-*-cwd
 temp_logs/
 nul
 yolo26m.pt
+
+*.zip
