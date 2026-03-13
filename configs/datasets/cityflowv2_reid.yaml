@@ -1,0 +1,75 @@
+# CityFlowV2 Re-Identification dataset configuration
+# Derived from AI City Challenge 2022 Track 1 MTMC vehicle tracking data
+#
+# Crops are extracted from video frames using GT annotations (gt.txt per camera).
+# This is a REAL multi-camera tracking dataset — vehicles appear across multiple
+# cameras at city intersections, enabling true cross-camera ReID evaluation.
+#
+# Extraction: python scripts/extract_cityflowv2_crops.py
+# Training:   notebooks/kaggle/09_vehicle_reid_cityflowv2/
+#
+# Published baselines (cross-camera vehicle ReID on CityFlowV2):
+#   mAP ≈ 40-65%    Rank-1 ≈ 55-80%    (depends on camera subset)
+#
+# Key characteristics:
+#   - Real traffic intersection footage (not studio/controlled)
+#   - Significant viewpoint, lighting, and scale differences across cameras
+#   - High intra-class similarity (same-make/model vehicles)
+#   - Occlusions, truncation, and motion blur common
+
+dataset:
+  name: "cityflowv2_reid"
+  type: "reid_vehicle"
+  root_dir: "data/processed/cityflowv2_reid"
+  source_dir: "data/raw/cityflowv2"  # raw video + GT source
+
+  # Split directories (created by extract_cityflowv2_crops.py)
+  train_dir: "train"     # {vid:04d}_{cam}_{frame:06d}.jpg
+  query_dir: "query"
+  gallery_dir: "gallery"
+
+  # Cameras used (subset of full 46-camera set)
+  # Default: 2 scenes × 3 cameras each (overlapping coverage)
+  cameras:
+    - "S01_c001"
+    - "S01_c002"
+    - "S01_c003"
+    - "S02_c006"
+    - "S02_c007"
+    - "S02_c008"
+
+  # Image format
+  image_size: [224, 224]  # vehicles are roughly square
+
+  # Extraction parameters
+  extraction:
+    max_crops_per_id_cam: 15    # sample up to 15 frames per vehicle per camera
+    min_area: 2000              # minimum bbox area in pixels
+    train_ratio: 0.7            # 70% of multi-cam IDs for training
+    query_per_cam: 1            # 1 query crop per camera per vehicle
+    min_cams_for_eval: 2        # need ≥2 cameras for meaningful cross-cam eval
+
+  # Training parameters for ReID
+  training:
+    input_size: [224, 224]  # [H, W]
+    batch_size: 48
+    num_instances: 4        # K in PK sampler
+    epochs: 80              # fine-tune from VeRi-776 pretrained; fewer epochs needed
+    lr: 0.0001              # lower LR for fine-tuning
+    backbone_lr_factor: 0.1 # backbone LR = lr * factor
+    weight_decay: 0.0005
+    warmup_epochs: 5
+    label_smoothing: 0.1
+    random_erasing_prob: 0.5
+    center_loss_weight: 0.0005
+    center_loss_start_epoch: 15
+    augmentations:
+      - horizontal_flip
+      - random_crop_pad
+      - random_erasing
+      - color_jitter
+
+  # Evaluation metrics available on this dataset
+  eval_metrics:
+    reid: ["mAP", "Rank-1", "Rank-5", "Rank-10"]
+    mtmc: ["IDF1", "HOTA", "MOTA", "MOTP"]  # available via Stage 5

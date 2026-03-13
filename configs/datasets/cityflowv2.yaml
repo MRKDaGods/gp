@@ -67,11 +67,13 @@ stage2:
   reid:
     vehicle:
       model_name: "transreid"
-      weights_path: "models/reid/vehicle_transreid_clip_veri776.pth"
+      # Use CityFlowV2-trained model if available, fallback to VeRi-776
+      weights_path: "models/reid/vehicle_transreid_vit_base_cityflowv2.pth"
+      weights_fallback: "models/reid/vehicle_transreid_vit_base_veri776.pth"
       embedding_dim: 768
       input_size: [224, 224]
       vit_model: "vit_base_patch16_clip_224.openai"
-      num_cameras: 46  # CityFlow v2 has 46 cameras
+      num_cameras: 6   # 6 cameras used in NB09 training
       clip_normalization: true
     batch_size: 64
     device: "cuda:0"

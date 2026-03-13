@@ -28,7 +28,7 @@ sys.path.insert(0, str(project_root))
 @click.command()
 @click.option(
     "--dataset", "-d", required=True,
-    type=click.Choice(["market1501", "veri776", "aic2023", "cityflowv2", "wildtrack"]),
+    type=click.Choice(["market1501", "veri776", "aic2023", "cityflowv2", "cityflowv2_reid", "wildtrack"]),
 )
 @click.option("--root", "-r", required=True, type=click.Path(exists=True))
 @click.option("--output", "-o", default=None, type=click.Path())
@@ -47,6 +47,9 @@ def main(dataset: str, root: str, output: str | None):
         print("The pipeline reads videos directly from the dataset directory.")
     elif dataset == "cityflowv2":
         prepare_cityflowv2(root, output)
+    elif dataset == "cityflowv2_reid":
+        print(f"CityFlowV2 ReID crop extraction: use scripts/extract_cityflowv2_crops.py")
+        print(f"  python scripts/extract_cityflowv2_crops.py --data_root {root}")
     elif dataset == "wildtrack":
         prepare_wildtrack(root, output)
 

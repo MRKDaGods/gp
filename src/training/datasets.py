@@ -126,10 +126,61 @@ def parse_msmt17(root: str) -> Tuple[List, List, List]:
     return train, query, gallery
 
 
+def parse_cityflowv2(root: str) -> Tuple[List, List, List]:
+    """Parse CityFlowV2 ReID crops.
+
+    Expected structure (created by scripts/extract_cityflowv2_crops.py):
+        root/
+          train/   XXXX_SCENE_cNNN_fFFFFFF.jpg
+          query/   XXXX_SCENE_cNNN_fFFFFFF.jpg
+          gallery/ XXXX_SCENE_cNNN_fFFFFFF.jpg
+
+    Filename: {vehicle_id:04d}_{scene}_{camera}_f{frame:06d}.jpg
+    Camera ID is extracted as scene_camera (e.g. S01_c001).
+    """
+    train, query, gallery = [], [], []
+
+    for split_name, split_list in [
+        ("train", train),
+        ("query", query),
+        ("gallery", gallery),
+    ]:
+        split_dir = os.path.join(root, split_name)
+        if not os.path.isdir(split_dir):
+            raise FileNotFoundError(f"CityFlowV2 ReID split not found: {split_dir}")
+
+        for fname in sorted(os.listdir(split_dir)):
+            if not fname.endswith(".jpg"):
+                continue
+            # Format: 0042_S01_c001_f000123.jpg
+            parts = fname.split("_")
+            if len(parts) < 4:
+                continue
+            pid = int(parts[0])
+            cam_name = parts[1] + "_" + parts[2]  # e.g. S01_c001
+            img_path = os.path.join(split_dir, fname)
+            split_list.append((img_path, pid, cam_name))
+
+    # Map camera names to integer IDs
+    all_cams = sorted({cam for _, _, cam in train + query + gallery})
+    cam2id = {c: i for i, c in enumerate(all_cams)}
+    train = [(p, pid, cam2id[c]) for p, pid, c in train]
+    query = [(p, pid, cam2id[c]) for p, pid, c in query]
+    gallery = [(p, pid, cam2id[c]) for p, pid, c in gallery]
+
+    # Re-label train pids to 0..N-1
+    train_pids = sorted(set(pid for _, pid, _ in train))
+    pid2label = {pid: label for label, pid in enumerate(train_pids)}
+    train = [(path, pid2label[pid], cam) for path, pid, cam in train]
+
+    return train, query, gallery
+
+
 DATASET_PARSERS = {
     "market1501": parse_market1501,
     "veri776": parse_veri776,
     "msmt17": parse_msmt17,
+    "cityflowv2": parse_cityflowv2,
 }
 
 
