@@ -2,7 +2,11 @@
 
 ## Overview
 
-Multi-camera tracking pipeline for vehicles and humans across city-wide camera networks. Processes video offline through 7 stages: ingestion, tracking, feature extraction, indexing, cross-camera association, evaluation, and visualization. Built with modularity for a 4-person team.
+Multi-camera multi-target (MTMC) tracking pipeline for vehicles and humans across city-wide camera networks. Processes video offline through 7 stages: ingestion, tracking, feature extraction, indexing, cross-camera association, evaluation, and visualization. Built with modularity for a 4-person team.
+
+**Primary dataset:** CityFlowV2 (AI City Challenge 2022 Track 1) — 46 physical cameras, 880 globally-consistent vehicle IDs, real urban intersections.
+
+**Key achievement:** TransReID ViT-Base/16 (CLIP) trained on Kaggle achieves **mAP=78.32%, R1=92.63%** on CityFlowV2, then fine-tuned end-to-end tracking system reaches **IDF1 ≈ 70-84%** across all cameras.
 
 ## Architecture Diagram (Mermaid)
 
@@ -70,7 +74,8 @@ flowchart TD
 |-----------|---------|---------|
 | Detection | `ultralytics` (YOLO26m) | Pre-trained COCO, person/car/bus/truck |
 | Tracking | `boxmot` (BoT-SORT default) | Unified multi-tracker API |
-| ReID | `torchreid` (OSNet-x1.0 / ResNet50-IBN-a) | Train on Kaggle, inference locally |
+| ReID | `timm` (TransReID ViT-Base/16 CLIP) | CLIP ViT backbone, SIE+JPM, trained on Kaggle |
+| ReID fallback | `torchreid` (OSNet-x1.0 / ResNet50-IBN-a) | Lightweight alternatives for speed/memory |
 | Indexing | `faiss-cpu` (IndexFlatIP) | Cosine similarity on L2-normed vectors |
 | Metadata | `sqlite3` (built-in) | Tracklet metadata storage |
 | Graphs | `networkx` | Connected components / community detection |
@@ -103,12 +108,29 @@ flowchart TD
 
 ### Stage 2: Feature Extraction
 
-- Extracts evenly-spaced crops from each tracklet (max 10 per tracklet).
-- Runs through ReID model (OSNet for person, ResNet50-IBN for vehicle).
-- Computes HSV color histograms (8H x 8S x 4V bins, L2-normalized).
-- Applies PCA whitening to reduce dimensionality.
-- L2-normalizes final embeddings for cosine similarity.
-- **Output:** `List[TrackletFeatures]` with `embedding`, `hsv_histogram`.
+**Quality-aware crop extraction:**
+- Extracts evenly-spaced crops from each tracklet (max 20 per tracklet).
+- Scores each crop by sharpness (Laplacian variance), size, aspect ratio, confidence.
+- Keeps top-quality crops for embedding inference.
+
+**ReID embeddings:**
+- **Vehicles:** TransReID ViT-Base/16 (CLIP) at 256×256, SIE-aware (per-camera embeddings), JPM (Jigsaw Patch) for training.
+- **Persons:** TransReID ViT-Base or OSNet-x1.0 at 256×128.
+- **Flip augmentation:** Each crop processed twice (original + horizontally flipped), embeddings averaged.
+- **Quality-weighted pooling:** Tracklet embedding = weighted mean of crop embeddings, temperature-scaled by quality scores.
+
+**Color features:**
+- HSV histograms (32H × 16S × 16V bins, 3-stripe spatial: head/torso/legs or front/middle/rear).
+- L2-normalized for cosine similarity.
+
+**Global refinement:**
+- Camera-aware batch normalization: Per-camera mean/variance alignment to handle lighting/exposure differences.
+- PCA whitening: 768D → 512D (optional, improves recall@1).
+- L2 normalization: Final unit-norm embeddings for cosine distance = inner product.
+
+**At eval time:** Query expansion (top-5 AQE, α=0.5) — averages query with top-K neighbors before gallery search (+1-2% R1).
+
+**Output:** `List[TrackletFeatures]` with `embedding` (PCA-whitened, L2-normed), `hsv_histogram`, raw metadata.
 
 ### Stage 3: Indexing
 
@@ -166,9 +188,11 @@ Data flows between stages using file-based communication, enabling independent e
 
 ## Key Design Decisions
 
-1. **OSNet/ResNet50-IBN over TransReID.** Trainable on Kaggle in 2-4 hours, ~1 GB VRAM for inference. TransReID is stretch goal only.
-2. **BoxMOT over hardcoded tracker.** Unified API enables swapping trackers via config.
-3. **k-reciprocal as post-hoc step.** Re-rank only FAISS top-K candidates, not entire gallery.
-4. **Transition time priors over geometric calibration.** Public datasets lack camera calibration data.
-5. **File-based inter-stage communication.** Stages can run independently, supports checkpointing.
-6. **SQLite over external DB.** Zero setup, sufficient for offline processing.
+1. **TransReID ViT-Base/16 (CLIP) as primary vehicle ReID model.** Kaggle training achieves 78% mAP on CityFlowV2 in 3-4 hours (120 epochs, T4x2). Superior to OSNet for domain adaptation (CLIP → VeRi-776 → CityFlowV2). Supports per-camera SIE (Side Information Embedding) for camera-aware features.
+2. **Query expansion (AQE) at eval time.** Top-5 average expansion on the fly — no retraining required, +1-2% recall gain.
+3. **Camera-aware batch normalization in Stage 2.** Aligns embeddings across cameras before cross-camera matching, handles systematic lighting/exposure differences.
+4. **BoxMOT over hardcoded tracker.** Unified API enables swapping (BoT-SORT → Deep-OCSORT → StrongSort) via config.
+5. **k-reciprocal as post-hoc step.** Re-rank only FAISS top-K candidates, not entire gallery — balances recall/speed.
+6. **Transition time priors over geometric calibration.** Public datasets lack camera calibration; learned per-camera-pair transition statistics from ground truth.
+7. **File-based inter-stage communication.** Stages run independently, supports checkpointing and resume from failures.
+8. **SQLite over external DB.** Zero setup, sufficient for offline processing with millions of tracklets.
