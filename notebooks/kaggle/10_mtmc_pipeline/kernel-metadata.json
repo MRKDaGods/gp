@@ -1,0 +1,19 @@
+{
+  "id": "mrkdagods/10-mtmc-pipeline",
+  "title": "10 MTMC Pipeline — CityFlowV2 Full Run",
+  "code_file": "10_mtmc_pipeline.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaP100",
+  "dataset_sources": [
+    "mrkdagods/mtmc-tracker-source",
+    "mrkdagods/mtmc-weights",
+    "mrkdagods/cityflowv2-mtmc"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

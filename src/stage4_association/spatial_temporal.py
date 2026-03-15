@@ -64,12 +64,29 @@ class SpatioTemporalValidator:
         time_a: float,
         time_b: float,
     ) -> bool:
-        """Check if a transition from cam_a to cam_b is temporally plausible."""
+        """Check if a transition from cam_a to cam_b is temporally plausible.
+
+        When ``camera_transitions`` is provided and cam_a is listed in it,
+        only explicitly listed target cameras are allowed.  Unlisted targets
+        are blocked (return False).  This enforces scene topology constraints
+        (e.g. S01 cameras never link to S02 cameras in CityFlowV2).
+        """
         time_diff = time_b - time_a
+        abs_diff = abs(time_diff)  # direction-agnostic: pairs are ordered by FAISS index, not time
 
         pair_prior = self._get_pair_prior(cam_a, cam_b)
         if pair_prior is not None:
-            return pair_prior["min_time"] <= time_diff <= pair_prior["max_time"]
+            return pair_prior["min_time"] <= abs_diff <= pair_prior["max_time"]
+
+        # If camera_transitions is non-empty and cam_a is a listed source,
+        # block any target that is NOT explicitly in the transitions map.
+        if self.camera_transitions:
+            cam_a_listed = cam_a in self.camera_transitions
+            cam_b_listed = cam_b in self.camera_transitions
+            if cam_a_listed and cam_b not in self.camera_transitions.get(cam_a, {}):
+                return False
+            if cam_b_listed and cam_a not in self.camera_transitions.get(cam_b, {}):
+                return False
 
         abs_diff = abs(time_diff)
         return self.min_time_gap <= abs_diff <= self.max_time_gap
@@ -86,6 +103,9 @@ class SpatioTemporalValidator:
         Uses a Gaussian centred on the expected transition time.
         Returns 0 for invalid transitions.
         """
+        if not self.is_valid_transition(cam_a, cam_b, time_a, time_b):
+            return 0.0
+
         time_diff = time_b - time_a
         abs_diff = abs(time_diff)
 

@@ -113,16 +113,27 @@ def compute_combined_similarity(
     combined: Dict[Tuple[int, int], float] = {}
 
     for (i, j), app_sim in appearance_sim.items():
-        # Spatio-temporal validation
+        # Spatio-temporal validation.
+        # Use minimum temporal gap: max(0, later_start - earlier_end).
+        # This correctly handles both overlapping cameras (gap=0) and
+        # sequential cameras, regardless of FAISS-index ordering of (i, j).
+        later_start = max(start_times[i], start_times[j])
+        earlier_end = min(end_times[i], end_times[j])
+        min_gap = max(0.0, later_start - earlier_end)
+        # Select camera order so the "earlier" camera is cam_a
+        if start_times[i] <= start_times[j]:
+            cam_a, cam_b = camera_ids[i], camera_ids[j]
+        else:
+            cam_a, cam_b = camera_ids[j], camera_ids[i]
         st_score = st_validator.transition_score(
-            cam_a=camera_ids[i],
-            cam_b=camera_ids[j],
-            time_a=end_times[i],
-            time_b=start_times[j],
+            cam_a=cam_a,
+            cam_b=cam_b,
+            time_a=0.0,
+            time_b=min_gap,
         )
 
         if st_score <= 0:
-            continue  # Invalid transition, skip
+            continue  # Invalid transition (e.g. cross-scene), skip
 
         # HSV similarity
         hsv_sim = compute_hsv_similarity(hsv_features[i], hsv_features[j])

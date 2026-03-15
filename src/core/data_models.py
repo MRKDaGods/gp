@@ -114,10 +114,37 @@ class TrackletFeatures:
 
 @dataclass
 class GlobalTrajectory:
-    """A cross-camera trajectory: multiple tracklets linked to one identity."""
+    """A cross-camera trajectory: multiple tracklets linked to one identity.
+
+    Forensic / intelligence metadata
+    ---------------------------------
+    confidence : mean pairwise cosine similarity between all tracklet pairs in
+        the cluster, in [0, 1].  A score ≥ 0.7 indicates a high-confidence
+        identity match suitable for operational decisions.  Scores below 0.5
+        should be treated as tentative.
+
+    evidence : ordered list of merge evidence records, each containing::
+
+        {
+          "tracklet_a": "(cam_id, track_id)",
+          "tracklet_b": "(cam_id, track_id)",
+          "similarity": float,   # appearance cosine similarity
+          "merge_stage": str,    # "graph" | "gallery_expansion" | "orphan_pair"
+        }
+
+    This provides a full, reproducible audit trail for every cross-camera link
+    so forensic analysts and intelligence analysts can trace exactly why two
+    sightings were attributed to the same vehicle / person.
+    """
 
     global_id: int
     tracklets: List[Tracklet] = field(default_factory=list)
+
+    # ── Forensic metadata ─────────────────────────────────────────────────────
+    confidence: float = 0.0   # mean pairwise appearance similarity (0–1)
+    evidence: List[Dict[str, Any]] = field(default_factory=list)
+    # Camera-ordered timeline: [{"camera_id": str, "start": float, "end": float}]
+    timeline: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def camera_sequence(self) -> List[str]:
@@ -150,6 +177,29 @@ class GlobalTrajectory:
     def num_cameras(self) -> int:
         return len(set(t.camera_id for t in self.tracklets))
 
+    @property
+    def is_cross_camera(self) -> bool:
+        """True if this identity was seen in more than one camera."""
+        return self.num_cameras > 1
+
+    def to_forensic_dict(self) -> Dict[str, Any]:
+        """Full serialisable record suitable for forensic export / audit logs."""
+        span = self.time_span
+        return {
+            "global_id": self.global_id,
+            "class": self.class_name,
+            "confidence": round(self.confidence, 4),
+            "cross_camera": self.is_cross_camera,
+            "num_cameras": self.num_cameras,
+            "cameras_visited": self.camera_sequence,
+            "first_seen": round(span[0], 3),
+            "last_seen": round(span[1], 3),
+            "total_duration_s": round(self.total_duration, 3),
+            "num_tracklets": len(self.tracklets),
+            "timeline": self.timeline,
+            "evidence": self.evidence,
+        }
+
 
 # ---------------------------------------------------------------------------
 # Stage 5 outputs
@@ -161,6 +211,7 @@ class EvaluationResult:
 
     mota: float = 0.0
     idf1: float = 0.0
+    mtmc_idf1: float = 0.0  # AI City Challenge protocol (trajectory-level, globally unique IDs)
     hota: float = 0.0
     id_switches: int = 0
     mostly_tracked: float = 0.0

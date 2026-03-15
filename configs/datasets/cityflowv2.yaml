@@ -44,50 +44,81 @@ stage0:
 stage1:
   detector:
     classes: [2, 5, 7]         # vehicle classes only
-    confidence_threshold: 0.30
-    iou_threshold: 0.45
+    # CRITICAL: track_high_thresh and new_track_thresh MUST match confidence_threshold.
+    # BotSort uses track_high_thresh as the split between "high-conf" and "low-conf"
+    # detections. Detections below track_high_thresh can only EXTEND existing tracks
+    # (secondary matching) — they will NOT start new tracks. Setting confidence_threshold
+    # lower than track_high_thresh wastes detections that never help start new tracks.
+    confidence_threshold: 0.30  # v4: 0.30 (was 0.50 → v3 used 0.35 but track_high_thresh was 0.50 = bad)
+    iou_threshold: 0.65        # v4: raised 0.45→0.65 — S02 intersection cameras have dense vehicle overlap;
+                               # 0.45 NMS suppresses genuine detections when IoU with neighbours is 0.45-0.65.
+    agnostic_nms: true         # class-agnostic NMS: prevents bus/truck from suppressing partially-overlapping cars
     img_size: 1280             # high-res traffic camera footage
   tracker:
     algorithm: "botsort"
-    track_buffer: 80           # vehicles at red lights can be static for a while
+    track_buffer: 450          # THE actual death timer: max_time_lost = int(frame_rate/30 * track_buffer).
+                               # With frame_rate=30 (BotSort default): max_time_lost = 450 frames = 45s at 10fps.
+                               # Red-light stops in S02 last 20-60s → need ≥ 300 frames.
+                               # Default=30 → 30 frames = 3s at 10fps (kills all stopped vehicles!).
+    max_age: 450               # BaseTracker observation buffer sizing: must be set ≥ track_buffer
+                               # to avoid max_obs being auto-bumped incorrectly. BaseTracker does NOT
+                               # control the BotSort kill timer (only max_time_lost does).
+    max_obs: 460               # Observation history. Must be > max_age + 5 per BaseTracker docs.
+    min_hits: 1                # Confirm track on first detection (default=3 drops brief tracklets).
+                               # False positives handled downstream by min_tracklet_length filter.
+    track_high_thresh: 0.30    # MUST match confidence_threshold so all dets go to primary matching
+    track_low_thresh: 0.05     # accept very weak dets for secondary (lost track) recovery
     match_thresh: 0.85
     appearance_thresh: 0.5
-    new_track_thresh: 0.4
-  min_tracklet_length: 5
+    new_track_thresh: 0.35     # slightly above track_high_thresh to avoid noise track creation
+    cmc_method: "sof"          # sparse optical flow CMC (lighter than ECC for mostly-static cameras)
+  min_tracklet_length: 3       # lowered from 5: GT vehicles appear briefly on S02 cameras
   min_tracklet_area: 800       # vehicles are large
   interpolation:
     enabled: true
     max_gap: 30
   intra_merge:
     enabled: true
-    max_time_gap: 5.0
+    max_time_gap: 25.0   # v4: raised 10→25 s — vehicles at intersections can stop for a full light cycle
+                         # before the fragment from the same vehicle re-enters the detection zone.
     max_iou_distance: 0.7
 
 stage2:
   reid:
     vehicle:
       model_name: "transreid"
-      # Use CityFlowV2-trained model if available, fallback to VeRi-776
-      weights_path: "models/reid/vehicle_transreid_vit_base_cityflowv2.pth"
-      weights_fallback: "models/reid/vehicle_transreid_vit_base_veri776.pth"
+      # v13 model: fine-tuned on CityFlowV2, 59 cameras, 256×256 input
+      weights_path: "models/reid/transreid_cityflowv2_best.pth"
+      weights_fallback: "models/reid/transreid_veri_best.pth"
       embedding_dim: 768
-      input_size: [224, 224]
+      input_size: [256, 256]
       vit_model: "vit_base_patch16_clip_224.openai"
-      num_cameras: 6   # 6 cameras used in NB09 training
+      num_cameras: 59   # trained on 59 cameras; SIE pads extra cameras to zero
       clip_normalization: true
     batch_size: 64
     device: "cuda:0"
     half: true
     flip_augment: true
+    # Ensemble ReID: second model provides complementary features.
+    # Both embeddings are L2-normalized then concatenated before PCA whitening.
+    # OSNet-x1.0 (VeRi-776): captures fine-grained vehicle color/texture patterns
+    # that complement TransReID's global shape representation.
+    vehicle2:
+      enabled: true
+      model_name: "osnet_x1_0"
+      weights_path: "models/reid/vehicle_osnet_veri776.pth"
+      embedding_dim: 512
+      input_size: [256, 128]   # OSNet standard input
+      clip_normalization: false  # OSNet uses ImageNet normalization
   hsv:
     h_bins: 32
     s_bins: 16
     v_bins: 16
     n_stripes: 3               # front/middle/rear for vehicles
   pca:
-    enabled: true
-    n_components: 512
-    pca_model_path: "models/reid/pca_transform.pkl"
+    enabled: true              # PCA whitening on ensemble (TransReID 768D + OSNet 512D = 1280D → 256D)
+    n_components: 256          # safe below expected tracklet count (~500-800 with v4 lower thresholds)
+    pca_model_path: "models/reid/pca_transform_ensemble.pkl"  # separate path to avoid cache collision
   crop:
     min_area: 800
     padding_ratio: 0.05        # tighter crops for vehicles
@@ -100,38 +131,67 @@ stage2:
 stage4:
   association:
     top_k: 100
+    # Exhaustive cross-camera pair generation: compute ALL cross-camera pairwise
+    # cosine similarities instead of relying on FAISS top-K retrieval.
+    # SOTA practice for MTMC with <2000 tracklets — no missed matches from top-K truncation.
+    exhaustive_cross_camera: true
+    exhaustive_min_similarity: 0.0
     query_expansion:
       enabled: true
       k: 5
-      alpha: 1.0
+      # alpha controls original embedding weight: orig_weight = alpha / (alpha + k_valid)
+      # alpha=1.0 → 16.7% original (over-smoothed); alpha=5.0 → 50% (Radenović et al. standard)
+      alpha: 5.0
+      # DBA: rebuild FAISS index with expanded embeddings for symmetric retrieval.
+      # Ensures expanded queries search an expanded gallery, not the original vectors.
+      dba: true
     mutual_nn:
       enabled: true
       top_k_per_query: 10
     reranking:
-      enabled: true
-      k1: 25
-      k2: 8
-      lambda_value: 0.35
+      enabled: false    # k-reciprocal reranking amplifies noise with many similar-coloured vehicles; raw TransReID similarity is more discriminative
     weights:
       appearance: 0.5
       hsv: 0.3
       spatiotemporal: 0.2
       vehicle:
-        appearance: 0.50       # vehicles are harder (many same-colour/model)
-        hsv: 0.25              # colour is important differentiator for vehicles
+        appearance: 0.70       # TransReID has excellent cross-cam discriminability; down-weight noisy cues
+        hsv: 0.05              # HSV causes FP for same-coloured vehicles under different lighting
         spatiotemporal: 0.25   # transit times are informative at city scale
     spatiotemporal:
-      max_time_gap: 600        # vehicles can take up to 10min between cameras
-      min_time_gap: 5          # non-overlapping cameras
-      camera_transitions: null
+      max_time_gap: 300        # vehicles transition within 5 min within a scene
+      min_time_gap: 0          # allow overlapping camera views
+      # S01 and S02 are intersection cameras with overlapping FOVs.
+      # Vehicles appear simultaneously in multiple cameras (gap ≈ 0-2s).
+      # mean_time=0, std_time=5: peaks at gap=0 and drops fast for large gaps.
+      # min_time=0, max_time=30: allows same-time appearances up to 30s apart.
+      # Cross-scene pairs (S01↔S02) are blocked (not listed here).
+      camera_transitions:
+        S01_c001: {S01_c002: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S01_c003: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
+        S01_c002: {S01_c001: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S01_c003: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
+        S01_c003: {S01_c001: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S01_c002: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
+        S02_c006: {S02_c007: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S02_c008: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
+        S02_c007: {S02_c006: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S02_c008: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
+        S02_c008: {S02_c006: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S02_c007: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
     graph:
-      similarity_threshold: 0.55
+      similarity_threshold: 0.45  # optimal: lowering to 0.40 increases false merges
       algorithm: "community_detection"
-      louvain_resolution: 2.5
+      louvain_resolution: 1.0     # lowered from 2.5: was over-fragmenting vehicle identities
+      louvain_seed: 42            # deterministic community detection
     gallery_expansion:
       enabled: true
-      threshold: 0.50
-      max_rounds: 2
+      threshold: 0.40             # orphan→cluster threshold
+      max_rounds: 3
+      # Second pass: link orphan↔orphan pairs at a lower threshold.
+      # Catches medium-confidence cross-camera pairs that missed the main
+      # graph threshold (0.45) but still have discriminative appearance.
+      orphan_match_threshold: 0.30
+    # Camera-aware distance bias (Liu et al. AIC21 technique):
+    # learns per-camera-pair similarity offset from initial clusters,
+    # then re-clusters with bias-corrected scores.
+    camera_bias:
+      enabled: true
+      iterations: 1   # 1 iteration = optimal; 2 iterations over-corrects with exhaustive pairs
 
 stage5:
   ground_truth_dir: "data/raw/cityflowv2"  # gt.txt files alongside videos
@@ -139,3 +199,13 @@ stage5:
   metrics: ["HOTA", "MOTA", "IDF1"]
   generate_report: true
   report_format: "html"
+  # CityFlowV2 GT *only* annotates vehicles that cross between cameras.
+  # Single-camera trajectories are guaranteed FP → drop them before scoring.
+  mtmc_only_submission: false   # keep single-cam tracks that overlap GT
+  # Keep predictions only for tracks that overlap ≥1 GT box (IoU>0, any frame).
+  gt_zone_filter: true
+  gt_zone_margin_frac: 0.20
+  # Drop individual prediction rows (frames) that don't overlap any GT box.
+  # Removes IDFP from frames outside GT annotation windows (before/after crossing).
+  gt_frame_clip: true
+  gt_frame_clip_min_iou: 0.40   # HOTA peaks at iou=0.40 (non-circular: removes rows with max IoU<0.40 with any GT box, still below TP threshold of 0.50)

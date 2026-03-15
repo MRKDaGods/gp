@@ -92,30 +92,86 @@ def run_stage4(
     distances, indices = faiss_index.search(embeddings, top_k)
     logger.info(f"FAISS retrieval: top-{top_k} candidates per tracklet")
 
-    # Step 1b: Average Query Expansion (AQE)
-    # Averages each embedding with its top-K nearest neighbours then
-    # re-normalises → makes embeddings more robust and boosts recall.
+    # Step 1b: Average Query Expansion (AQE) + Database-side Augmentation (DBA)
+    #
+    # AQE: expand each query embedding by averaging with its k-NN, then L2-renorm.
+    # DBA: after AQE, rebuild the FAISS index with the expanded embeddings so that
+    #      retrieval is symmetric — expanded queries search an expanded gallery.
+    #      Without DBA the second search still uses the original gallery vectors,
+    #      which means QE only partially improves retrieval.
+    #
+    # Alpha interpretation: original weight = alpha / (alpha + k_valid).
+    #   alpha=1.0, k=5 → 16.7 % original (aggressive, pushes embeddings toward centroid)
+    #   alpha=5.0, k=5 → 50.0 % original (balanced — matches Radenović et al. α=0.5)
+    #   alpha=10.0, k=5 → 66.7 % original (conservative)
     qe_cfg = stage_cfg.get("query_expansion", {})
     if qe_cfg.get("enabled", True):
         qe_k = qe_cfg.get("k", 5)
-        qe_alpha = qe_cfg.get("alpha", 1.0)
+        qe_alpha = qe_cfg.get("alpha", 5.0)
         embeddings = average_query_expansion_batched(
             embeddings, indices, k=qe_k, alpha=qe_alpha,
         )
-        # Re-run FAISS retrieval with expanded embeddings for better candidates
-        distances, indices = faiss_index.search(embeddings, top_k)
-        logger.info("Re-retrieved candidates with QE-expanded embeddings")
+        # DBA: rebuild FAISS with expanded embeddings for symmetric retrieval.
+        # Enabled by default; disable only for ablation studies.
+        if qe_cfg.get("dba", True):
+            dba_index = FAISSIndex(index_type="flat_ip")
+            dba_index.build(embeddings.astype(np.float32))
+            distances, indices = dba_index.search(embeddings, top_k)
+            logger.info(
+                f"QE+DBA: rebuilt FAISS with expanded embeddings "
+                f"(alpha={qe_alpha}, k={qe_k})"
+            )
+        else:
+            distances, indices = faiss_index.search(embeddings, top_k)
+            logger.info(
+                f"QE (no DBA): re-retrieved with expanded queries "
+                f"(alpha={qe_alpha}, k={qe_k})"
+            )
 
     # Step 2: Build candidate pairs (cross-camera, same class)
-    candidate_pairs = _build_candidate_pairs(
-        n, indices, distances, top_k, camera_ids, class_ids,
-    )
+    #
+    # Two modes:
+    #  - exhaustive (default): compute ALL cross-camera pairwise cosine similarities.
+    #    SOTA practice for MTMC with <2000 tracklets — avoids top-K truncation errors
+    #    where true matches fall below the FAISS cutoff due to visually-similar decoys.
+    #  - topk: keep only FAISS top-K candidates (legacy; faster but misses long-tail matches).
+    exhaustive_cfg = stage_cfg.get("exhaustive_cross_camera", True)
+    if exhaustive_cfg:
+        min_sim = float(stage_cfg.get("exhaustive_min_similarity", 0.0))
+        candidate_pairs = _build_all_cross_camera_pairs(
+            n, embeddings, camera_ids, class_ids, min_similarity=min_sim,
+        )
+    else:
+        candidate_pairs = _build_candidate_pairs(
+            n, indices, distances, top_k, camera_ids, class_ids,
+        )
     logger.info(f"Candidate pairs after filtering: {len(candidate_pairs)}")
 
     if not candidate_pairs:
         logger.warning("No cross-camera candidate pairs found")
         all_tracklets = [t for tl in tracklets_by_camera.values() for t in tl]
         return _assign_individual_ids(all_tracklets)
+
+    # Step 2a: Hard temporal constraint — pre-filter pairs where the two tracklets
+    # overlap in time within the SAME camera.  These are provably different identities
+    # and should never enter the graph, regardless of embedding similarity. Removing them
+    # here prevents Louvain from creating false transitive links (A~B~C where A and C
+    # share camera+time but B bridges them from another camera).
+    pre_hard = len(candidate_pairs)
+    candidate_pairs = [
+        (i, j, sim) for i, j, sim in candidate_pairs
+        if not (
+            camera_ids[i] == camera_ids[j]
+            and start_times[i] <= end_times[j]
+            and start_times[j] <= end_times[i]
+        )
+    ]
+    hard_removed = pre_hard - len(candidate_pairs)
+    if hard_removed > 0:
+        logger.info(
+            f"Hard temporal constraint: removed {hard_removed} same-camera "
+            f"overlapping pairs (impossible same-identity links)"
+        )
 
     # Step 2b: Mutual nearest-neighbour filter
     mutual_nn_cfg = stage_cfg.get("mutual_nn", {})
@@ -186,6 +242,7 @@ def run_stage4(
                     similarity_threshold=stage_cfg.graph.similarity_threshold,
                     algorithm=stage_cfg.graph.algorithm,
                     louvain_resolution=stage_cfg.graph.get("louvain_resolution", 1.0),
+                    louvain_seed=int(stage_cfg.graph.get("louvain_seed", 42)),
                 )
                 tmp_clusters = tmp_solver.solve(combined_sim, n)
                 # Only learn from multi-member clusters
@@ -219,6 +276,7 @@ def run_stage4(
         similarity_threshold=stage_cfg.graph.similarity_threshold,
         algorithm=stage_cfg.graph.algorithm,
         louvain_resolution=stage_cfg.graph.get("louvain_resolution", 1.0),
+        louvain_seed=int(stage_cfg.graph.get("louvain_seed", 42)),
     )
 
     clusters = solver.solve(combined_sim, n)
@@ -244,7 +302,15 @@ def run_stage4(
             n=n,
             threshold=gallery_cfg.get("threshold", 0.5),
             max_rounds=gallery_cfg.get("max_rounds", 2),
+            orphan_match_threshold=float(gallery_cfg.get("orphan_match_threshold", 0.0)),
         )
+
+    # Step 6d: Re-resolve same-camera conflicts introduced by orphan-orphan matching.
+    # Orphan pairs (A→X, B→X) can individually pass the cross-camera check yet
+    # transitively place same-camera tracklets A and B in the same cluster.
+    clusters = _resolve_same_camera_conflicts(
+        clusters, camera_ids, start_times, end_times, combined_sim,
+    )
 
     # Step 7: Build global trajectories
     tracklet_lookup: Dict[Tuple[str, int], Tracklet] = {}
@@ -260,10 +326,38 @@ def run_stage4(
         clusters=clusters,
         feature_to_tracklet_key=feature_to_tracklet_key,
         tracklet_lookup=tracklet_lookup,
+        embeddings=embeddings,
+        combined_sim=combined_sim,
     )
+
+    # Log confidence distribution for diagnostics
+    confidences = [t.confidence for t in trajectories if t.num_cameras > 1]
+    if confidences:
+        import statistics
+        logger.info(
+            f"Cross-camera trajectory confidence: "
+            f"mean={statistics.mean(confidences):.3f}, "
+            f"min={min(confidences):.3f}, "
+            f"high(≥0.7)={sum(1 for c in confidences if c >= 0.7)}/{len(confidences)}"
+        )
 
     # Save
     save_global_trajectories(trajectories, output_dir / "global_trajectories.json")
+
+    # Auto-generate forensic report alongside trajectory JSON
+    try:
+        from src.stage4_association.forensic_search import ForensicSearchEngine
+        from src.core.io_utils import load_embeddings, load_hsv_features
+        engine = ForensicSearchEngine(
+            embeddings=embeddings,
+            index_map=[{"camera_id": f.camera_id, "track_id": f.track_id, "class_id": f.class_id}
+                       for f in features],
+            trajectories=trajectories,
+        )
+        engine.export_forensic_report(output_dir, min_confidence=0.0, min_cameras=1)
+    except Exception as exc:
+        logger.warning(f"Forensic report generation failed (non-fatal): {exc}")
+
     logger.info(
         f"Stage 4 complete: {len(trajectories)} global trajectories, "
         f"covering {sum(len(t.tracklets) for t in trajectories)} tracklets"
@@ -285,9 +379,11 @@ def _build_candidate_pairs(
     class_ids: List[int],
 ) -> List[Tuple[int, int, float]]:
     """Build candidate pairs from FAISS results with cross-camera + same-class filter."""
+    # Use actual result width from FAISS (may be < top_k when corpus is small)
+    actual_k = indices.shape[1]
     candidate_pairs: List[Tuple[int, int, float]] = []
     for i in range(n):
-        for j_idx in range(top_k):
+        for j_idx in range(actual_k):
             j = int(indices[i, j_idx])
             if j < 0 or j >= n or i == j:
                 continue
@@ -296,6 +392,72 @@ def _build_candidate_pairs(
             if class_ids[i] != class_ids[j]:
                 continue
             candidate_pairs.append((i, j, float(distances[i, j_idx])))
+    return candidate_pairs
+
+
+def _build_all_cross_camera_pairs(
+    n: int,
+    embeddings: np.ndarray,
+    camera_ids: List[str],
+    class_ids: List[int],
+    min_similarity: float = 0.0,
+) -> List[Tuple[int, int, float]]:
+    """Exhaustive cross-camera candidate pair generation via brute-force cosine similarity.
+
+    This is SOTA practice for MTMC with ≤2000 tracklets: compute ALL cross-camera
+    pairwise cosine similarities rather than relying on FAISS top-K retrieval.
+    FAISS top-K can miss true matches when many visually-similar vehicles push
+    genuine cross-camera pairs below the top-K cutoff.
+
+    Handles the matrix computation camera-pair-by-camera-pair to keep peak memory
+    usage proportional to the largest camera's tracklet count (not N²).
+
+    Args:
+        n: Total number of tracklets.
+        embeddings: (N, D) L2-normalised embedding matrix.
+        camera_ids: Camera ID for each tracklet.
+        class_ids: Class ID for each tracklet.
+        min_similarity: Pairs below this threshold are discarded (reduces downstream
+            memory; 0.0 keeps everything and lets the mutual-NN filter decide).
+
+    Returns:
+        List of (i, j, similarity) tuples, one per cross-camera same-class pair
+        with similarity ≥ min_similarity.
+    """
+    # Group tracklet indices by camera
+    from collections import defaultdict
+    cam_to_idxs: Dict[str, List[int]] = defaultdict(list)
+    for idx, cam in enumerate(camera_ids):
+        cam_to_idxs[cam].append(idx)
+
+    cameras = sorted(cam_to_idxs.keys())
+    candidate_pairs: List[Tuple[int, int, float]] = []
+
+    # Iterate over all ordered camera pairs (a_cam < b_cam to avoid duplicates)
+    for a_idx, cam_a in enumerate(cameras):
+        a_global = cam_to_idxs[cam_a]
+        a_embs = embeddings[a_global]  # (N_a, D)
+
+        for cam_b in cameras[a_idx + 1:]:
+            b_global = cam_to_idxs[cam_b]
+            b_embs = embeddings[b_global]  # (N_b, D)
+
+            # (N_a, N_b) cosine similarity (embeddings are L2-normalised)
+            sim_mat = a_embs @ b_embs.T
+
+            # Find all pairs above threshold
+            a_local, b_local = np.where(sim_mat >= min_similarity)
+            for al, bl in zip(a_local.tolist(), b_local.tolist()):
+                gi = a_global[al]
+                gj = b_global[bl]
+                if class_ids[gi] != class_ids[gj]:
+                    continue
+                candidate_pairs.append((gi, gj, float(sim_mat[al, bl])))
+
+    logger.info(
+        f"Exhaustive cross-camera pairs: {len(candidate_pairs)} "
+        f"(min_sim={min_similarity:.2f}, {len(cameras)} cameras)"
+    )
     return candidate_pairs
 
 
@@ -319,15 +481,20 @@ def _gallery_expansion(
     n: int,
     threshold: float = 0.5,
     max_rounds: int = 2,
+    orphan_match_threshold: float = 0.0,
 ) -> List[Set[int]]:
     """Iteratively absorb orphan (singleton) tracklets into existing clusters.
 
-    For each orphan, compute average cosine similarity to every cluster's
-    centroid embedding.  If the best match exceeds *threshold* and passes
-    spatio-temporal + same-class + cross-camera checks, merge the orphan.
+    Phase 1 (orphan → cluster): For each orphan, compute average cosine
+    similarity to every cluster centroid.  If the best match exceeds
+    *threshold* and passes spatio-temporal + same-class + cross-camera checks,
+    merge the orphan.  Runs for up to *max_rounds* iterations.
 
-    This runs for up to *max_rounds* iterations so that orphans absorbed in
-    round 1 can shift centroids enough to attract others in round 2.
+    Phase 2 (orphan ↔ orphan): After phase 1, attempt to link remaining orphans
+    *to each other* at the lower *orphan_match_threshold*.  This catches medium-
+    confidence cross-camera pairs whose similarity score fell below the main
+    similarity_threshold (0.45) but still exceed a loose lower bound.
+    Only cross-camera, same-class, ST-valid pairs are accepted.
     """
     for round_idx in range(max_rounds):
         # Identify orphans (singleton clusters)
@@ -427,6 +594,90 @@ def _gallery_expansion(
 
         if merged_count == 0:
             break
+
+    # ── Phase 2: orphan ↔ orphan matching at lower threshold ─────────────────
+    if orphan_match_threshold > 0:
+        # Re-collect current orphans
+        final_multi: List[Set[int]] = []
+        final_orphan_indices: List[int] = []
+        for cluster in clusters:
+            if len(cluster) > 1:
+                final_multi.append(cluster)
+            else:
+                final_orphan_indices.extend(cluster)
+
+        if len(final_orphan_indices) >= 2:
+            orphan_embs = embeddings[final_orphan_indices]  # (O, D)
+            # Pairwise cosine similarity matrix (O × O)
+            pairwise_sim = orphan_embs @ orphan_embs.T  # already normalised from stage2/3
+
+            n_orphans = len(final_orphan_indices)
+            # Union-Find for grouping
+            parent = list(range(n_orphans))
+
+            def find(x: int) -> int:
+                while parent[x] != x:
+                    parent[x] = parent[parent[x]]
+                    x = parent[x]
+                return x
+
+            def union(x: int, y: int) -> None:
+                rx, ry = find(x), find(y)
+                if rx != ry:
+                    parent[rx] = ry
+
+            # Only link cross-camera, same-class, ST-valid orphan pairs
+            pairs_linked = 0
+            for oi in range(n_orphans):
+                gi = final_orphan_indices[oi]
+                for oj in range(oi + 1, n_orphans):
+                    gj = final_orphan_indices[oj]
+                    if pairwise_sim[oi, oj] < orphan_match_threshold:
+                        continue
+                    # Same class
+                    if class_ids[gi] != class_ids[gj]:
+                        continue
+                    # Must be different cameras
+                    if camera_ids[gi] == camera_ids[gj]:
+                        continue
+                    # ST validity (bidirectional)
+                    st_ok = (
+                        st_validator.is_valid_transition(
+                            camera_ids[gi], camera_ids[gj],
+                            end_times[gi], start_times[gj],
+                        ) or st_validator.is_valid_transition(
+                            camera_ids[gj], camera_ids[gi],
+                            end_times[gj], start_times[gi],
+                        )
+                    )
+                    if not st_ok:
+                        continue
+                    # Already same group?
+                    if find(oi) == find(oj):
+                        continue
+                    union(oi, oj)
+                    pairs_linked += 1
+
+            # Build new clusters from union-find groups
+            groups: Dict[int, List[int]] = {}
+            for oi, gi in enumerate(final_orphan_indices):
+                root = find(oi)
+                groups.setdefault(root, []).append(gi)
+
+            new_orphans: List[Set[int]] = []
+            new_multi: List[Set[int]] = []
+            for members in groups.values():
+                if len(members) > 1:
+                    new_multi.append(set(members))
+                else:
+                    new_orphans.append(set(members))
+
+            clusters = final_multi + new_multi + new_orphans
+            logger.info(
+                f"Orphan↔orphan matching (threshold={orphan_match_threshold:.2f}): "
+                f"linked {pairs_linked} pairs → {len(new_multi)} new clusters, "
+                f"{len(new_orphans)} still orphaned"
+            )
 
     return clusters
 

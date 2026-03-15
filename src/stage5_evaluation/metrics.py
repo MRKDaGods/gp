@@ -27,6 +27,125 @@ if not hasattr(np, "asfarray"):
 from src.core.data_models import EvaluationResult
 
 
+def evaluate_mtmc(
+    gt_dir: str,
+    pred_dir: str,
+    iou_threshold: float = 0.5,
+) -> EvaluationResult:
+    """Evaluate **MTMC IDF1** using a single global accumulator.
+
+    Unlike per-camera evaluation, this merges all cameras into one
+    accumulator with globally-unique GT IDs and globally-unique predicted
+    IDs.  A vehicle tracked with the same global_id across cameras is
+    treated as one identity — matching the AI City Challenge protocol.
+
+    IDF1 = 2*IDTP / (2*IDTP + IDFP + IDFN)
+
+    Because the GT only annotates *multi-camera* vehicles, single-camera
+    predictions that don't overlap any GT box in any frame are simply
+    ignored at the IDTP/IDFN level (they score as IDFP only if their
+    predicted ID is later associated with a GT identity in another
+    camera and they mismatch).
+
+    Args:
+        gt_dir: Directory with per-camera GT files (CityFlowV2 format).
+        pred_dir: Directory with per-camera prediction files.
+        iou_threshold: Minimum IoU for a detection to be considered a match.
+
+    Returns:
+        EvaluationResult with globally-computed IDF1 and per-camera details.
+    """
+    import motmetrics as mm
+
+    gt_dir_p = Path(gt_dir)
+    pred_dir_p = Path(pred_dir)
+
+    # Single global accumulator — GT IDs are globally unique per CityFlowV2
+    global_acc = mm.MOTAccumulator(auto_id=True)
+    per_camera: Dict[str, Dict[str, float]] = {}
+
+    pred_files = sorted(
+        f for f in pred_dir_p.glob("*.txt") if f.stem.lower() != "seqmap"
+    )
+
+    for pred_file in pred_files:
+        cam_id = pred_file.stem
+        gt_file = _find_gt_file(gt_dir_p, cam_id)
+        if gt_file is None:
+            logger.warning(f"No GT file found for camera {cam_id}, skipping")
+            continue
+
+        gt_data = _load_mot_file(gt_file)
+        pred_data = _load_mot_file(pred_file)
+
+        # Use camera-namespaced frame IDs so frames from different cameras
+        # are never matched against each other within the global accumulator.
+        # Frame IDs become (cam_id, frame_id) tuples — motmetrics handles
+        # any hashable frame identifier.
+        cam_acc = mm.MOTAccumulator(auto_id=True)
+        frames = sorted(set(list(gt_data.keys()) + list(pred_data.keys())))
+
+        for frame_id in frames:
+            gt_ids = []
+            gt_boxes = []
+            pred_ids = []
+            pred_boxes = []
+
+            for track_id, bbox in gt_data.get(frame_id, []):
+                gt_ids.append(track_id)
+                gt_boxes.append(bbox)
+
+            for track_id, bbox in pred_data.get(frame_id, []):
+                pred_ids.append(track_id)
+                pred_boxes.append(bbox)
+
+            distances = (
+                mm.distances.iou_matrix(gt_boxes, pred_boxes, max_iou=iou_threshold)
+                if gt_boxes and pred_boxes
+                else []
+            )
+
+            cam_acc.update(gt_ids, pred_ids, distances)
+            # Also add to global accumulator with same globally-unique IDs
+            global_acc.update(gt_ids, pred_ids, distances)
+
+        # Per-camera summary for reference
+        mh_cam = mm.metrics.create()
+        cs = mh_cam.compute(cam_acc, metrics=["mota", "idf1", "num_switches"], name=cam_id)
+        per_camera[cam_id] = {
+            "mota": float(cs["mota"].iloc[0]),
+            "idf1": float(cs["idf1"].iloc[0]),
+            "id_switches": int(cs["num_switches"].iloc[0]),
+        }
+
+    if not per_camera:
+        return EvaluationResult()
+
+    # Compute global MTMC IDF1 from the single merged accumulator
+    mh = mm.metrics.create()
+    global_summary = mh.compute(
+        global_acc,
+        metrics=["mota", "idf1", "num_switches"],
+        name="MTMC",
+    )
+    mtmc_idf1 = float(global_summary["idf1"].iloc[0])
+    mtmc_mota = float(global_summary["mota"].iloc[0])
+    mtmc_idsw = int(global_summary["num_switches"].iloc[0])
+
+    logger.info(
+        f"MTMC evaluation: IDF1={mtmc_idf1:.3f}, MOTA={mtmc_mota:.3f}, "
+        f"ID Switches={mtmc_idsw}"
+    )
+
+    result = EvaluationResult(
+        mota=mtmc_mota,
+        idf1=mtmc_idf1,
+        id_switches=mtmc_idsw,
+        details={"per_camera": per_camera, "mtmc_idf1": mtmc_idf1},
+    )
+    return result
+
+
 def evaluate_mot(
     gt_dir: str,
     pred_dir: str,
@@ -52,12 +171,37 @@ def evaluate_mot(
         return _evaluate_with_trackeval(gt_dir, pred_dir, metrics)
     except ImportError:
         logger.warning("TrackEval not installed, falling back to py-motmetrics")
-        return _evaluate_with_motmetrics(gt_dir, pred_dir, iou_threshold=iou_threshold)
+    except Exception as e:
+        logger.warning(f"TrackEval evaluation failed ({type(e).__name__}: {e}), falling back to py-motmetrics")
+    return _evaluate_with_motmetrics(gt_dir, pred_dir, iou_threshold=iou_threshold)
 
 
 # ---------------------------------------------------------------------------
 # TrackEval path
 # ---------------------------------------------------------------------------
+
+def _remap_predictions_class1(src_dir: Path, dst_dir: Path) -> None:
+    """Copy prediction files replacing class field (col 7) with 1 (pedestrian).
+
+    TrackEval's MotChallenge2DBox only evaluates class=1 (pedestrian).
+    Vehicle tracking uses different class IDs (2/5/7), so we remap to 1
+    before passing to TrackEval.  GT files with class=-1 (don't-care) are
+    unaffected and already handled correctly by TrackEval.
+    """
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    for src_file in src_dir.glob("*.txt"):
+        lines = []
+        with open(src_file) as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                parts = line.split(",")
+                if len(parts) >= 8:
+                    parts[7] = "1"  # remap to pedestrian class
+                lines.append(",".join(parts))
+        (dst_dir / src_file.name).write_text("\n".join(lines) + "\n")
+
 
 def _evaluate_with_trackeval(
     gt_dir: str,
@@ -66,9 +210,36 @@ def _evaluate_with_trackeval(
 ) -> EvaluationResult:
     """Evaluate using TrackEval library with proper seqmap generation."""
     import trackeval
+    import tempfile, shutil
 
     gt_path = Path(gt_dir)
     pred_path = Path(pred_dir)
+
+    # TrackEval's MotChallenge2DBox hard-rejects non-pedestrian class IDs.
+    # Remap all prediction class fields to 1 in a temporary copy.
+    tmp_root = Path(tempfile.mkdtemp())
+    try:
+        remapped_name = pred_path.name + "_cls1"
+        remapped_path = tmp_root / remapped_name
+        _remap_predictions_class1(pred_path, remapped_path)
+
+        result = _run_trackeval(gt_path, tmp_root, remapped_name, pred_path, metrics)
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+    return result
+
+
+def _run_trackeval(
+    gt_path: Path,
+    trackers_folder: Path,
+    tracker_name: str,
+    orig_pred_path: Path,
+    metrics: List[str],
+) -> EvaluationResult:
+    """Inner helper: run TrackEval on (possibly remapped) prediction files."""
+    import trackeval
+
+    pred_path = trackers_folder / tracker_name
 
     # Auto-generate seqmap from prediction files so TrackEval knows which
     # sequences to evaluate (avoids "no sequences found" failures).
@@ -87,10 +258,14 @@ def _evaluate_with_trackeval(
 
     dataset_config = trackeval.datasets.MotChallenge2DBox.get_default_dataset_config()
     dataset_config["GT_FOLDER"] = str(gt_path)
-    dataset_config["TRACKERS_FOLDER"] = str(pred_path.parent)
-    dataset_config["TRACKERS_TO_EVAL"] = [pred_path.name]
+    dataset_config["TRACKERS_FOLDER"] = str(trackers_folder)
+    dataset_config["TRACKERS_TO_EVAL"] = [tracker_name]
     dataset_config["SKIP_SPLIT_FOL"] = True
+    dataset_config["TRACKER_SUB_FOLDER"] = ""   # pred files are directly in tracker dir
     dataset_config["SEQMAP_FILE"] = str(seqmap_file) if seqmap_file.exists() else ""
+    # Disable confidence/class preprocessing so all detections are evaluated.
+    dataset_config["DO_PREPROC"] = False
+    # seqinfo.ini is read from {gt_folder}/{seq}/seqinfo.ini automatically
 
     evaluator = trackeval.Evaluator(eval_config)
     dataset = trackeval.datasets.MotChallenge2DBox(dataset_config)
@@ -108,19 +283,23 @@ def _evaluate_with_trackeval(
     result = EvaluationResult()
     per_camera: Dict[str, Dict[str, float]] = {}
 
-    for tracker_name, tracker_results in raw_results.items():
-        for dataset_name, dataset_results in tracker_results.items():
+    for _trk, tracker_results in raw_results.items():
+        for _ds, dataset_results in tracker_results.items():
             for seq_name, seq_results in dataset_results.items():
+                if seq_name == "COMBINED_SEQ":
+                    continue
+                # TrackEval nests results under class name (e.g. 'pedestrian')
+                cls_results = seq_results.get("pedestrian", seq_results)
                 cam_metrics: Dict[str, float] = {}
-                if "HOTA" in seq_results:
-                    cam_metrics["hota"] = float(seq_results["HOTA"]["HOTA"].mean())
-                if "CLEAR" in seq_results:
-                    cam_metrics["mota"] = float(seq_results["CLEAR"]["MOTA"])
-                    cam_metrics["id_switches"] = int(seq_results["CLEAR"]["IDSW"])
-                    cam_metrics["mt"] = float(seq_results["CLEAR"].get("MT", 0))
-                    cam_metrics["ml"] = float(seq_results["CLEAR"].get("ML", 0))
-                if "Identity" in seq_results:
-                    cam_metrics["idf1"] = float(seq_results["Identity"]["IDF1"])
+                if "HOTA" in cls_results:
+                    cam_metrics["hota"] = float(cls_results["HOTA"]["HOTA"].mean())
+                if "CLEAR" in cls_results:
+                    cam_metrics["mota"] = float(cls_results["CLEAR"]["MOTA"])
+                    cam_metrics["id_switches"] = int(cls_results["CLEAR"]["IDSW"])
+                    cam_metrics["mt"] = float(cls_results["CLEAR"].get("MT", 0))
+                    cam_metrics["ml"] = float(cls_results["CLEAR"].get("ML", 0))
+                if "Identity" in cls_results:
+                    cam_metrics["idf1"] = float(cls_results["Identity"]["IDF1"])
                 per_camera[seq_name] = cam_metrics
 
     # Aggregate across cameras (mean for rate metrics, sum for counts)
@@ -189,7 +368,9 @@ def _evaluate_with_motmetrics(
     seq_names: List[str] = []
     per_camera: Dict[str, Dict[str, float]] = {}
 
-    pred_files = sorted(pred_dir_p.glob("*.txt"))
+    pred_files = sorted(
+        f for f in pred_dir_p.glob("*.txt") if f.stem.lower() != "seqmap"
+    )
     for pred_file in pred_files:
         cam_id = pred_file.stem
         gt_file = _find_gt_file(gt_dir_p, cam_id)
@@ -252,7 +433,8 @@ def _evaluate_with_motmetrics(
 
     logger.info(f"Evaluated {len(accumulators)}/{len(pred_files)} cameras against GT")
 
-    # Merge accumulators properly
+    # Merge accumulators: use compute_many with generate_overall to get a
+    # detection-count-weighted aggregate across all cameras.
     mh = mm.metrics.create()
 
     if len(accumulators) == 1:
@@ -275,11 +457,19 @@ def _evaluate_with_motmetrics(
     else:
         overall = merged_summary.iloc[-1]
 
+    # Compute mean-per-camera IDF1 (what we currently report)
+    mean_idf1 = _mean_of(per_camera, "idf1")
+    mean_mota = _mean_of(per_camera, "mota")
+
     return EvaluationResult(
-        mota=float(overall["mota"]),
-        idf1=float(overall["idf1"]),
+        mota=mean_mota,
+        idf1=mean_idf1,
         id_switches=int(overall["num_switches"]),
-        details={"per_camera": per_camera},
+        details={
+            "per_camera": per_camera,
+            "overall_weighted_idf1": float(overall["idf1"]),
+            "overall_weighted_mota": float(overall["mota"]),
+        },
     )
 
 

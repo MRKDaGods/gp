@@ -165,9 +165,28 @@ def trajectories_to_mot_submission(
     # Write per-camera files
     for cam_id, rows in camera_rows.items():
         rows.sort(key=lambda r: (r[0], r[1]))
+        # Deduplicate same (frame, global_id) entries — keep highest confidence.
+        # These can arise when the graph solver incorrectly merges two same-camera
+        # tracklets that share overlapping frames.
+        seen: dict = {}
+        dedup_rows = []
+        dup_count = 0
+        for row in rows:
+            key = (row[0], row[1])  # (frame_id, global_id)
+            if key in seen:
+                dup_count += 1
+                if row[6] > seen[key][6]:  # replace if higher confidence
+                    seen[key] = row
+            else:
+                seen[key] = row
+                dedup_rows.append(row)
+        if dup_count > 0:
+            # Rebuild dedup list preserving insertion order
+            dedup_rows = [seen[k] for k in dict.fromkeys((r[0], r[1]) for r in rows)]
+            logger.warning(f"{cam_id}: removed {dup_count} duplicate (frame,id) rows")
         file_path = output_dir / f"{cam_id}.txt"
         with open(file_path, "w") as f:
-            for row in rows:
+            for row in dedup_rows:
                 f.write(",".join(str(v) for v in row) + "\n")
 
     logger.info(

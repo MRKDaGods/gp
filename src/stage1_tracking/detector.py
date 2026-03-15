@@ -26,6 +26,7 @@ class Detector:
         device: str = "cuda:0",
         half: bool = True,
         img_size: int = 640,
+        agnostic_nms: bool = True,
     ):
         from ultralytics import YOLO
 
@@ -36,10 +37,11 @@ class Detector:
         self.device = device
         self.half = half
         self.img_size = img_size
+        self.agnostic_nms = agnostic_nms
 
         logger.info(
             f"Detector initialized: {model_path}, device={device}, "
-            f"conf={confidence_threshold}, classes={classes}"
+            f"conf={confidence_threshold}, iou={iou_threshold}, agnostic_nms={agnostic_nms}"
         )
 
     def detect(self, frame: np.ndarray) -> List[Detection]:
@@ -59,6 +61,7 @@ class Detector:
             device=self.device,
             half=self.half,
             imgsz=self.img_size,
+            agnostic_nms=self.agnostic_nms,
             verbose=False,
         )
 

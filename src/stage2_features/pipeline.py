@@ -139,6 +139,35 @@ def run_stage2(
         clip_normalization=stage_cfg.reid.vehicle.get("clip_normalization", None),
     )
 
+    # --- Optional second vehicle ReID model for ensemble (concatenated features) ---
+    # SOTA: ensemble of TransReID (domain-specific fine-tuned) + OSNet (general, fast)
+    # produces complementary features → improved recall on hard cases (occlusion, viewpoint).
+    vehicle_reid2: Optional[ReIDModel] = None
+    vehicle2_cfg = stage_cfg.reid.get("vehicle2", {})
+    if vehicle2_cfg.get("enabled", False):
+        weights_path2 = vehicle2_cfg.get("weights_path")
+        if weights_path2 and Path(weights_path2).exists():
+            vehicle_reid2 = ReIDModel(
+                model_name=vehicle2_cfg.get("model_name", "osnet_x1_0"),
+                weights_path=weights_path2,
+                embedding_dim=vehicle2_cfg.get("embedding_dim", 512),
+                input_size=tuple(vehicle2_cfg.get("input_size", [256, 128])),
+                device=stage_cfg.reid.device,
+                half=stage_cfg.reid.half,
+                flip_augment=flip_augment,
+                num_cameras=vehicle2_cfg.get("num_cameras", 0),
+                clip_normalization=vehicle2_cfg.get("clip_normalization", False),
+            )
+            logger.info(
+                f"Ensemble ReID enabled: primary={stage_cfg.reid.vehicle.model_name} "
+                f"+ secondary={vehicle2_cfg.get('model_name', 'osnet_x1_0')}"
+            )
+        else:
+            logger.warning(
+                f"Ensemble vehicle2 weights not found: {weights_path2}. "
+                "Falling back to single-model."
+            )
+
     # --- Resolve stage0 output directory for fast disk-based frame loading ---
     s0_dir: Optional[Path] = None
     if stage0_dir is not None:
@@ -200,13 +229,26 @@ def run_stage2(
             # Select ReID model based on class
             if tracklet.class_id in PERSON_CLASSES:
                 reid = person_reid
+                reid2 = None
             else:
                 reid = vehicle_reid
+                reid2 = vehicle_reid2
 
             # 2 & 3. Flip-augmented extraction + quality-weighted attention pooling
             raw_embedding = reid.get_tracklet_embedding_from_scored_crops(scored_crops)
             if raw_embedding is None:
                 continue
+
+            # Ensemble: extract from second model and concatenate (both L2-normalized)
+            if reid2 is not None:
+                raw_embedding2 = reid2.get_tracklet_embedding_from_scored_crops(scored_crops)
+                if raw_embedding2 is not None:
+                    # L2-normalize each independently before concatenation
+                    norm1 = np.linalg.norm(raw_embedding)
+                    norm2 = np.linalg.norm(raw_embedding2)
+                    e1 = raw_embedding / max(norm1, 1e-8)
+                    e2 = raw_embedding2 / max(norm2, 1e-8)
+                    raw_embedding = np.concatenate([e1, e2], axis=0)
 
             # 4. Spatial HSV histogram with quality weighting
             hsv_hist = hsv_extractor.extract_tracklet_histogram_from_scored_crops(
@@ -249,8 +291,9 @@ def run_stage2(
     if stage_cfg.pca.enabled:
         n_samples, n_features = raw_matrix.shape
         n_components = stage_cfg.pca.n_components
-        # More lenient minimum: allow PCA with as few as 2x target dims
-        min_samples_for_pca = max(50, n_components * 2)
+        # Hard minimum: n_samples must exceed n_components to form a valid covariance.
+        # Use n_components itself (the mathematical minimum), no extra factor.
+        min_samples_for_pca = max(50, n_components)
 
         if n_samples >= min_samples_for_pca:
             whitener = PCAWhitener(n_components=n_components)

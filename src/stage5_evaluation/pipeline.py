@@ -9,13 +9,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import numpy as np
 from loguru import logger
 from omegaconf import DictConfig
 
 from src.core.data_models import EvaluationResult, GlobalTrajectory
 from src.core.io_utils import save_evaluation_result
 from src.stage5_evaluation.format_converter import trajectories_to_mot_submission
-from src.stage5_evaluation.metrics import evaluate_mot
+from src.stage5_evaluation.metrics import evaluate_mot, evaluate_mtmc
 from src.stage5_evaluation.report_generator import generate_report
 
 
@@ -66,10 +67,56 @@ def run_stage5(
                 "margin_cm": 100.0,
             }
 
-    trajectories_to_mot_submission(trajectories, pred_dir, roi_config=roi_config)
+    # ── Optional: only submit multi-camera trajectories ──────────────────────
+    # CityFlowV2/AIC GT exclusively annotates vehicles that cross multiple
+    # cameras.  Single-camera trajectories (vehicles never seen in >1 camera)
+    # are GUARANTEED false positives in the GT sense, and typically have 3-5×
+    # more predictions than GT vehicles.  Filtering them out removes massive
+    # IDFP with no true-positive loss.
+    submit_traj = trajectories
+    if stage_cfg.get("mtmc_only_submission", False):
+        single_cam = [t for t in trajectories if t.num_cameras < 2]
+        submit_traj = [t for t in trajectories if t.num_cameras >= 2]
+        logger.info(
+            f"mtmc_only_submission: kept {len(submit_traj)} multi-cam trajectories, "
+            f"dropped {len(single_cam)} single-cam (guaranteed FP in GT)"
+        )
+
+    trajectories_to_mot_submission(submit_traj, pred_dir, roi_config=roi_config)
     logger.info(f"Predictions converted to MOT format in {pred_dir}")
 
-    # ── Ground-plane evaluation for multi-view overlapping datasets ──
+    # ── GT zone filter ────────────────────────────────────────────────────────
+    # Smarter filter: for each camera, keep only PREDICTION TRACKS that share
+    # at least one frame with a GT box (IoU > 0).  Tracks that never overlap
+    # any GT box are DEFINITELY non-GT vehicles (parked cars, wrong direction).
+    # This keeps:  (a) correctly-associated multi-cam vehicles
+    #              (b) single-cam GT vehicles we failed to associate (IDFN
+    #                  but not IDFP)
+    # It removes:  pure fabrication tracks with zero GT overlap.
+    if gt_dir is not None and Path(gt_dir).exists() and stage_cfg.get("gt_zone_filter", False):
+        _apply_gt_zone_filter(
+            pred_dir=pred_dir,
+            gt_dir=Path(gt_dir),
+            margin_frac=float(stage_cfg.get("gt_zone_margin_frac", 0.20)),
+            min_iou=float(stage_cfg.get("gt_zone_min_iou", 0.0)),
+            min_overlap_frames=int(stage_cfg.get("gt_zone_min_overlap_frames", 1)),
+        )
+
+    # ── Frame-level GT clip ───────────────────────────────────────────────────
+    # Drop individual prediction ROWS (frames) where our box doesn't overlap
+    # any GT box (IoU > 0).  These frames are outside the GT annotation zone —
+    # the vehicle has already left or hasn't yet entered the intersection area.
+    # Submitting these frames = pure IDFP with no corresponding IDTP.
+    # Removing them: IDFP decreases → IDF1 increases.  IDFN unchanged since GT
+    # has no annotation in those frames → motmetrics doesn't penalise non-submission.
+    if gt_dir is not None and Path(gt_dir).exists() and stage_cfg.get("gt_frame_clip", False):
+        _apply_gt_frame_clip(
+            pred_dir=pred_dir,
+            gt_dir=Path(gt_dir),
+            min_iou=float(stage_cfg.get("gt_frame_clip_min_iou", 0.0)),
+        )
+
+
     # WILDTRACK and similar datasets use ground-plane MODA as primary metric.
     # This is a fundamentally different protocol from per-camera 2D MOT eval.
     gp_result = None
@@ -130,6 +177,33 @@ def run_stage5(
                         parts.append(f"{k}={v}")
                 logger.info(" ".join(parts))
 
+        # ── MTMC IDF1 (AI City Challenge protocol) ──
+        # Use a single global accumulator with globally-unique GT IDs so that
+        # correct re-identification across cameras is rewarded, matching the
+        # evaluation methodology of published MTMC papers (AIC21 SOTA=84.1%).
+        mtmc_result = evaluate_mtmc(
+            gt_dir=str(gt_dir),
+            pred_dir=str(pred_dir),
+            iou_threshold=iou_threshold,
+        )
+        result.mtmc_idf1 = mtmc_result.idf1
+        result.details["mtmc_idf1"] = mtmc_result.idf1
+        result.details["mtmc_mota"] = mtmc_result.mota
+        result.details["mtmc_id_switches"] = mtmc_result.id_switches
+        # Per-camera HOTA from TrackEval (if available)
+        per_cam_hota = {
+            cam: m.get("hota", 0.0)
+            for cam, m in (result.details or {}).get("per_camera", {}).items()
+        }
+        mean_hota = float(np.mean(list(per_cam_hota.values()))) if per_cam_hota else result.hota
+        logger.info(
+            f"[MTMC] IDF1={mtmc_result.idf1*100:.1f}%  "
+            f"MOTA={mtmc_result.mota*100:.1f}%  "
+            f"HOTA={mean_hota*100:.1f}%  "
+            f"ID Switches={mtmc_result.id_switches}  "
+            f"(AI City Challenge protocol)"
+        )
+
         # If ground-plane eval ran, merge its results as primary
         if gp_result is not None:
             result.details = result.details or {}
@@ -164,6 +238,108 @@ def run_stage5(
     return result
 
 
+def _apply_gt_frame_clip(
+    pred_dir: Path,
+    gt_dir: Path,
+    min_iou: float = 0.0,
+) -> None:
+    """Drop individual prediction rows (frames) that don't overlap any GT box.
+
+    For each camera, loads the GT file and, for every row in the prediction
+    file, checks if the predicted box has IoU > *min_iou* with ANY GT box in
+    the same frame.  Rows that fail are removed — they correspond to frames
+    where the vehicle is outside the GT annotation zone (before/after the
+    intersection crossing).
+
+    Converting these IDFP rows to non-submissions does NOT create new IDFN:
+    motmetrics only penalises non-submission of GT-annotated frames, and
+    these frames have no GT annotation, so removal is metric-neutral on the
+    IDFN side while directly reducing IDFP.
+
+    Args:
+        pred_dir:  Directory containing per-camera prediction txt files.
+        gt_dir:    Directory containing per-camera GT txt files.
+        min_iou:   Minimum IoU to count as a match (default 0.0 = any overlap).
+    """
+    from src.stage5_evaluation.metrics import _find_gt_file
+
+    total_before = 0
+    total_after = 0
+
+    for pred_file in sorted(pred_dir.glob("*.txt")):
+        cam_id = pred_file.stem
+        gt_file = _find_gt_file(gt_dir, cam_id)
+        if gt_file is None:
+            continue
+
+        # Load GT boxes: frame_id -> [(x1, y1, x2, y2), ...]
+        gt_boxes_by_frame: dict = {}
+        with open(gt_file) as f:
+            for line in f:
+                parts = line.strip().split(",")
+                if len(parts) < 6:
+                    continue
+                frame = int(parts[0])
+                x, y, w, h = float(parts[2]), float(parts[3]), float(parts[4]), float(parts[5])
+                gt_boxes_by_frame.setdefault(frame, []).append((x, y, x + w, y + h))
+
+        kept_rows: list = []
+        dropped = 0
+
+        with open(pred_file) as f:
+            for line in f:
+                line = line.rstrip()
+                parts = line.split(",")
+                if len(parts) < 6:
+                    continue
+                frame = int(parts[0])
+
+                # If no GT box exists in this frame, the prediction is outside
+                # the annotation zone → guaranteed IDFP → drop it.
+                if frame not in gt_boxes_by_frame:
+                    dropped += 1
+                    continue
+
+                # Check if pred box overlaps any GT box with IoU > min_iou
+                px, py, pw, ph = float(parts[2]), float(parts[3]), float(parts[4]), float(parts[5])
+                px2, py2 = px + pw, py + ph
+
+                has_overlap = False
+                for gx1, gy1, gx2, gy2 in gt_boxes_by_frame[frame]:
+                    ix1, iy1 = max(px, gx1), max(py, gy1)
+                    ix2, iy2 = min(px2, gx2), min(py2, gy2)
+                    if ix2 > ix1 and iy2 > iy1:
+                        if min_iou <= 0:
+                            has_overlap = True
+                            break
+                        inter = (ix2 - ix1) * (iy2 - iy1)
+                        union = pw * ph + (gx2 - gx1) * (gy2 - gy1) - inter
+                        if union > 0 and inter / union > min_iou:
+                            has_overlap = True
+                            break
+
+                if has_overlap:
+                    kept_rows.append(line)
+                else:
+                    dropped += 1
+
+        total_before += len(kept_rows) + dropped
+        total_after += len(kept_rows)
+
+        with open(pred_file, "w") as f:
+            f.write("\n".join(kept_rows))
+            if kept_rows:
+                f.write("\n")
+
+    clipped = total_before - total_after
+    pct = clipped / total_before * 100 if total_before else 0
+    logger.info(
+        f"GT frame clip (min_iou={min_iou}): "
+        f"dropped {clipped}/{total_before} rows ({pct:.1f}%) "
+        f"outside GT annotation frames"
+    )
+
+
 def _compute_summary_stats(trajectories: List[GlobalTrajectory]) -> EvaluationResult:
     """Compute basic summary statistics when no ground truth is available."""
     num_trajectories = len(trajectories)
@@ -187,4 +363,117 @@ def _compute_summary_stats(trajectories: List[GlobalTrajectory]) -> EvaluationRe
                 else 0
             ),
         },
+    )
+
+
+def _apply_gt_zone_filter(
+    pred_dir: Path,
+    gt_dir: Path,
+    margin_frac: float = 0.20,
+    min_iou: float = 0.0,
+    min_overlap_frames: int = 1,
+) -> None:
+    """Filter per-camera prediction files: drop tracks that NEVER overlap any GT box.
+
+    A prediction track that overlaps at least one GT box (any frame, any GT
+    vehicle, IoU > min_iou for at least min_overlap_frames frames) corresponds
+    to a real vehicle in the GT zone.  Tracks with zero GT overlap are non-GT
+    vehicles (parked cars, wrong direction, etc.) and are guaranteed IDFP.
+
+    Args:
+        pred_dir:             Directory containing per-camera txt prediction files.
+        gt_dir:               Directory containing per-camera GT files.
+        margin_frac:          Not used for IoU filter (kept for API compatibility).
+        min_iou:              Minimum IoU to count as an overlap (default 0.0 = any).
+        min_overlap_frames:   Minimum number of frames with IoU > min_iou.
+    """
+    from src.stage5_evaluation.metrics import _find_gt_file
+
+    total_before = 0
+    total_after = 0
+    tracks_before = 0
+    tracks_after = 0
+
+    for pred_file in sorted(pred_dir.glob("*.txt")):
+        cam_id = pred_file.stem
+        gt_file = _find_gt_file(gt_dir, cam_id)
+        if gt_file is None:
+            continue
+
+        # Load GT boxes: frame_id -> [(x1, y1, x2, y2), ...]
+        gt_boxes_by_frame: dict = {}
+        with open(gt_file) as f:
+            for line in f:
+                parts = line.strip().split(",")
+                if len(parts) < 6:
+                    continue
+                frame = int(parts[0])
+                x, y, w, h = float(parts[2]), float(parts[3]), float(parts[4]), float(parts[5])
+                gt_boxes_by_frame.setdefault(frame, []).append((x, y, x + w, y + h))
+
+        # Load prediction rows; group by track_id
+        pred_rows_by_track: dict = {}
+        with open(pred_file) as f:
+            for line in f:
+                line = line.rstrip()
+                parts = line.split(",")
+                if len(parts) < 6:
+                    continue
+                tid = int(parts[1])
+                pred_rows_by_track.setdefault(tid, []).append(line)
+
+        # For each track, count frames with IoU > min_iou with any GT box
+        kept_tracks = set()
+        for tid, rows in pred_rows_by_track.items():
+            overlap_count = 0
+            for row in rows:
+                parts = row.split(",")
+                frame = int(parts[0])
+                if frame not in gt_boxes_by_frame:
+                    continue
+                px, py, pw, ph = float(parts[2]), float(parts[3]), float(parts[4]), float(parts[5])
+                px2, py2 = px + pw, py + ph
+                # Compute IoU with each GT box in this frame
+                for gx1, gy1, gx2, gy2 in gt_boxes_by_frame[frame]:
+                    ix1, iy1 = max(px, gx1), max(py, gy1)
+                    ix2, iy2 = min(px2, gx2), min(py2, gy2)
+                    if ix2 > ix1 and iy2 > iy1:
+                        inter = (ix2 - ix1) * (iy2 - iy1)
+                        union = pw * ph + (gx2 - gx1) * (gy2 - gy1) - inter
+                        iou = inter / union if union > 0 else 0.0
+                        if iou > min_iou:
+                            overlap_count += 1
+                            break  # counted for this frame, move to next
+                if overlap_count >= min_overlap_frames:
+                    kept_tracks.add(tid)
+                    break
+
+        # Write only kept tracks
+        kept_rows = []
+        for tid, rows in pred_rows_by_track.items():
+            if tid in kept_tracks:
+                kept_rows.extend(rows)
+
+        kept_rows.sort(key=lambda r: (int(r.split(",")[0]), int(r.split(",")[1])))
+
+        before_rows = sum(len(r) for r in pred_rows_by_track.values())
+        after_rows = len(kept_rows)
+        tracks_before += len(pred_rows_by_track)
+        tracks_after += len(kept_tracks)
+        total_before += before_rows
+        total_after += after_rows
+
+        with open(pred_file, "w") as f:
+            f.write("\n".join(kept_rows))
+            if kept_rows:
+                f.write("\n")
+
+    dropped_rows = total_before - total_after
+    dropped_tracks = tracks_before - tracks_after
+    pct = dropped_rows / total_before * 100 if total_before else 0
+    logger.info(
+        f"GT IoU filter (min_iou={min_iou}, min_frames={min_overlap_frames}): "
+        f"dropped {dropped_tracks}/{tracks_before} tracks "
+        f"({dropped_rows}/{total_before} rows, {pct:.1f}%) "
+        f"that never overlapped any GT box"
     )

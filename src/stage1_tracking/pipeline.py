@@ -58,6 +58,7 @@ def run_stage1(
         device=stage_cfg.detector.device,
         half=stage_cfg.detector.get("half", True),
         img_size=stage_cfg.detector.get("img_size", 640),
+        agnostic_nms=stage_cfg.detector.get("agnostic_nms", True),
     )
 
     min_tracklet_length = stage_cfg.get("min_tracklet_length", 5)

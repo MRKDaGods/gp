@@ -186,26 +186,38 @@ def load_hsv_features(input_dir: str | Path) -> np.ndarray:
 def save_global_trajectories(
     trajectories: List[GlobalTrajectory], path: str | Path
 ) -> None:
-    """Save global trajectories to JSON."""
+    """Save global trajectories to JSON, including forensic metadata."""
     path = Path(path)
     _ensure_dir(path)
     data = []
     for gt in trajectories:
-        data.append({
+        entry = {
             "global_id": gt.global_id,
             "tracklets": [_tracklet_to_dict(t) for t in gt.tracklets],
-        })
+            # Forensic fields (new — zero/empty for legacy trajectories)
+            "confidence": gt.confidence,
+            "evidence": gt.evidence,
+            "timeline": gt.timeline,
+        }
+        data.append(entry)
     path.write_text(json.dumps(data, indent=2, cls=_NumpyEncoder))
 
 
 def load_global_trajectories(path: str | Path) -> List[GlobalTrajectory]:
-    """Load global trajectories from JSON."""
+    """Load global trajectories from JSON (backwards-compatible)."""
     data = json.loads(Path(path).read_text())
     trajectories = []
     for d in data:
         tracklets = [_dict_to_tracklet(t) for t in d["tracklets"]]
         trajectories.append(
-            GlobalTrajectory(global_id=d["global_id"], tracklets=tracklets)
+            GlobalTrajectory(
+                global_id=d["global_id"],
+                tracklets=tracklets,
+                # Forensic fields — default to 0/empty for legacy files
+                confidence=float(d.get("confidence", 0.0)),
+                evidence=d.get("evidence", []),
+                timeline=d.get("timeline", []),
+            )
         )
     return trajectories
 
