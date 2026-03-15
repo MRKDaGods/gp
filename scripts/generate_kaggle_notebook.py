@@ -88,8 +88,6 @@ CELLS.append(cell_md("""## 1. Clone Repo & Install Dependencies""", "aa03"))
 CELLS.append(cell_code("""REPO_URL = "https://github.com/MRKDaGods/gp.git"
 WORK_DIR = Path("/kaggle/working")
 PROJECT  = WORK_DIR / "gp"
-TMP      = Path("/tmp/datasets")
-TMP.mkdir(parents=True, exist_ok=True)
 
 # ── Clone repo ────────────────────────────────────────────────────────────────
 if not PROJECT.exists():
@@ -141,20 +139,20 @@ print("\\n✓ All dependencies installed")""", "aa05"))
 # ──────────────────────────────────────────────────────────────────────────────
 CELLS.append(cell_md("""## 2. Mount Model Weights
 
-The only thing that needs to be uploaded from your laptop.
-Expected dataset slug: `mtmc-weights`""", "aa06"))
+The only thing uploaded from your laptop (dataset slug: `mtmc-weights`).
+The models folder is mounted at `/kaggle/input/datasets/mrkdagods/mtmc-weights/models`.""", "aa06"))
 
-CELLS.append(cell_code("""WEIGHTS_INPUT = Path("/kaggle/input/mtmc-weights")
+CELLS.append(cell_code("""WEIGHTS_INPUT = Path("/kaggle/input/datasets/mrkdagods/mtmc-weights/models")
 
 assert WEIGHTS_INPUT.exists(), (
-    "Dataset 'mtmc-weights' not attached!\\n"
-    "Upload your models/ folder to Kaggle and attach it as 'mtmc-weights'.\\n"
-    "Run locally:  python scripts/prepare_kaggle_uploads.py --weights"
+    "Dataset 'mtmc-weights' not found at expected path:\\n"
+    f"  {WEIGHTS_INPUT}\\n"
+    "Make sure it is attached via Add Data -> Your Datasets -> mtmc-weights"
 )
 
 MODELS_DST = PROJECT / "models"
 
-# Symlink models/ → dataset (avoids copying ~750 MB)
+# Symlink models/ → the mounted dataset folder (avoids copying ~750 MB)
 if MODELS_DST.is_symlink():
     MODELS_DST.unlink()
 elif MODELS_DST.exists():
@@ -179,26 +177,37 @@ else:
     print("✓ All essential v4 weights present")""", "aa07"))
 
 # ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""## 3. Download CityFlowV2 Dataset
+CELLS.append(cell_md("""## 3. Download CityFlowV2 Dataset (~17 GB)
 
-Downloaded from Google Drive (~1.2 GB compressed).
-Uses the project's own `download_datasets.py` script.""", "aa08"))
+Downloaded from Google Drive to `/tmp` (not `/kaggle/working` — working disk is only 20 GB).
+The `data/raw` folder is symlinked to `/tmp/datasets` so the pipeline finds it at the expected path.
 
-CELLS.append(cell_code("""# Point data/raw at /tmp so the 1.2 GB archive doesn't fill /kaggle/working
+Download + extraction peak usage: ~34 GB in `/tmp`. Kaggle `/tmp` is typically 100+ GB on P100/T4.""", "aa08"))
+
+CELLS.append(cell_code("""import shutil as _shutil
+
+# ── Disk space check ─────────────────────────────────────────────────────────
+for mount in ["/tmp", "/kaggle/working"]:
+    total, used, free = _shutil.disk_usage(mount)
+    print(f"{mount:20s}  {free/1024**3:.1f} GB free  /  {total/1024**3:.1f} GB total")
+
+# ── Symlink data/raw → /tmp/datasets so all downloads land on the big disk ───
 DATA_RAW_PARENT = PROJECT / "data" / "raw"
-DATA_RAW_PARENT.mkdir(parents=True, exist_ok=True)
-DATA_RAW = DATA_RAW_PARENT / "cityflowv2"
+TMP_DATA = Path("/tmp/datasets")
+TMP_DATA.mkdir(parents=True, exist_ok=True)
 
-# Symlink data/raw → /tmp/datasets so all downloads land on the bigger /tmp disk
-raw_link = PROJECT / "data" / "raw"
-if not raw_link.is_symlink():
-    if raw_link.exists():
-        shutil.rmtree(raw_link)
-    raw_link.symlink_to(TMP)
-    print(f"data/raw → {TMP}")
+if not DATA_RAW_PARENT.is_symlink():
+    if DATA_RAW_PARENT.exists():
+        shutil.rmtree(DATA_RAW_PARENT)
+    # Ensure parent dir exists before symlinking
+    DATA_RAW_PARENT.parent.mkdir(parents=True, exist_ok=True)
+    DATA_RAW_PARENT.symlink_to(TMP_DATA)
+    print(f"✓ data/raw → {TMP_DATA}")
+else:
+    print(f"data/raw already symlinked → {DATA_RAW_PARENT.resolve()}")
 
-DATA_RAW  = TMP / "cityflowv2"
-DATA_OUT  = PROJECT / "data" / "outputs"
+DATA_RAW = TMP_DATA / "cityflowv2"
+DATA_OUT = PROJECT / "data" / "outputs"
 DATA_OUT.mkdir(parents=True, exist_ok=True)
 
 import re
@@ -207,9 +216,10 @@ CAM_RE = re.compile(r"^S\\d{2}_c\\d{3}$")
 # Download only if not already present
 if DATA_RAW.exists() and any(CAM_RE.match(d.name) for d in DATA_RAW.iterdir() if d.is_dir()):
     cams = [d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name)]
-    print(f"✓ CityFlowV2 already downloaded: {len(cams)} cameras")
+    print(f"\\n✓ CityFlowV2 already downloaded: {len(cams)} cameras")
 else:
-    print("Downloading CityFlowV2 from Google Drive (~1.2 GB, may take 5-15 min)...")
+    print("\\nDownloading CityFlowV2 from Google Drive (~17 GB)...")
+    print("This will take 20-40 minutes. The archive is extracted and deleted to save space.")
     subprocess.check_call(
         [sys.executable, "scripts/download_datasets.py", "--dataset", "cityflowv2"],
         cwd=str(PROJECT),
@@ -220,7 +230,18 @@ else:
 print(f"\\nDataset path: {DATA_RAW}")""", "aa09"))
 
 # ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""## 4. Configure & Run Pipeline""", "aa10"))
+CELLS.append(cell_md("""## 4. Configure & Run Pipeline
+
+Expected GPU times on P100 (16 GB):
+| Stage | Description | Time |
+|---|---|---|
+| 0 | Frame extraction (10fps from ~17GB videos) | ~20 min |
+| 1 | Detection + BotSort (`track_buffer=450`) | ~45 min |
+| 2 | TransReID 768D + OSNet 512D → PCA 256D | ~20 min |
+| 3 | FAISS indexing | ~1 min |
+| 4 | Cross-camera association (AQE + Louvain) | ~5 min |
+| 5 | Evaluation (IDF1, MOTA, HOTA) | ~1 min |
+| **Total** | *(excluding 40-min data download)* | **~90 min** |""", "aa10"))
 
 CELLS.append(cell_code("""from datetime import datetime
 
