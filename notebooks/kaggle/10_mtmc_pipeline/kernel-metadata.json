@@ -9,9 +9,7 @@
   "enable_internet": true,
   "machine_shape": "NvidiaTeslaP100",
   "dataset_sources": [
-    "mrkdagods/mtmc-tracker-source",
-    "mrkdagods/mtmc-weights",
-    "mrkdagods/cityflowv2-mtmc"
+    "mrkdagods/mtmc-weights"
   ],
   "competition_sources": [],
   "kernel_sources": [],
