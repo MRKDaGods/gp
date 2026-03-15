@@ -46,7 +46,7 @@ def cell_code(source: str, cell_id: str) -> dict:
 CELLS = []
 
 # ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""# MTMC Vehicle Tracking — Full Pipeline (v4)
+CELLS.append(cell_md("""# MTMC Vehicle Tracking - Full Pipeline (v4)
 
 **Multi-Camera Multi-Target tracking system on CityFlowV2.**
 
