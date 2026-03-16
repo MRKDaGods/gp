@@ -647,6 +647,13 @@ def _gallery_expansion(
                     continue
 
                 multi_clusters[ci].add(orphan)
+                cluster_cameras[ci].add(camera_ids[orphan])
+                # Update centroid incrementally after absorption
+                old_size = len(multi_clusters[ci]) - 1  # before add
+                centroids[ci] = (centroids[ci] * old_size + embeddings[orphan]) / (old_size + 1)
+                norm = np.linalg.norm(centroids[ci])
+                if norm > 0:
+                    centroids[ci] /= norm
                 merged_count += 1
                 merged = True
                 break
@@ -812,8 +819,14 @@ def _resolve_same_camera_conflicts(
 
         ordered_nodes = sorted(members, key=lambda n: node_strength[n], reverse=True)
 
+        # Use custom strategy that respects our similarity-based ordering:
+        # strongest-linked nodes get colored first, keeping them together
+        def _similarity_order(G, colors):
+            return ordered_nodes
+
         coloring = nx.coloring.greedy_color(
-            conflict_graph, strategy="connected_sequential",
+            conflict_graph,
+            strategy=_similarity_order,
         )
 
         # Group by color
