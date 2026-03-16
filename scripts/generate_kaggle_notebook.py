@@ -628,9 +628,11 @@ LOUVAIN_RES       = 0.8
 APPEARANCE_WEIGHT = 0.6
 
 # ---- Stage 5: Evaluation ----------------------------------------------------
-# Filter to only multi-camera trajectories before submitting to evaluator
-# (single-cam vehicles are guaranteed false positives vs. AIC GT)
-MTMC_ONLY = True
+# CityFlowV2 GT includes BOTH multi-cam (81 in S01, 130 in S02) AND
+# single-cam (14 in S01, 15 in S02) vehicles — total 240 annotated vehicles.
+# Setting True filters single-cam predictions, dropping 29 GT vehicles → lower
+# IDF1.  Keep False for AIC-protocol comparison against published SOTA (84.1%).
+MTMC_ONLY = False
 
 print("Stage 4 params:")
 print(f"  aqe_k={AQE_K}  sim_thresh={SIM_THRESH}  louvain_res={LOUVAIN_RES}  appearance_weight={APPEARANCE_WEIGHT}")

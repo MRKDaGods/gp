@@ -199,13 +199,14 @@ stage5:
   metrics: ["HOTA", "MOTA", "IDF1"]
   generate_report: true
   report_format: "html"
-  # CityFlowV2 GT *only* annotates vehicles that cross between cameras.
-  # Single-camera trajectories are guaranteed FP → drop them before scoring.
-  mtmc_only_submission: false   # keep single-cam tracks that overlap GT
-  # Keep predictions only for tracks that overlap ≥1 GT box (IoU>0, any frame).
-  gt_zone_filter: true
+  # CityFlowV2 GT annotates 240 vehicles total: 81+14=95 in S01, 130+15=145 in S02.
+  # That includes 29 single-camera vehicles. Keep False for AIC-protocol evaluation.
+  mtmc_only_submission: false
+  # --- GT-assisted post-processing (DISABLED for fair SOTA comparison) ---
+  # These use test-time GT to filter predictions, which inflates metrics vs.
+  # a blind AIC server submission (SOTA 84.1% achieved WITHOUT these filters).
+  # Enable only for debugging / upper-bound analysis.
+  gt_zone_filter: false       # was: true — kept pred tracks overlapping ≥1 GT box
   gt_zone_margin_frac: 0.20
-  # Drop individual prediction rows (frames) that don't overlap any GT box.
-  # Removes IDFP from frames outside GT annotation windows (before/after crossing).
-  gt_frame_clip: true
-  gt_frame_clip_min_iou: 0.40   # HOTA peaks at iou=0.40 (non-circular: removes rows with max IoU<0.40 with any GT box, still below TP threshold of 0.50)
+  gt_frame_clip: false        # was: true — dropped pred rows outside GT annotation window
+  gt_frame_clip_min_iou: 0.40

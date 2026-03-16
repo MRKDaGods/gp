@@ -41,11 +41,11 @@ def evaluate_mtmc(
 
     IDF1 = 2*IDTP / (2*IDTP + IDFP + IDFN)
 
-    Because the GT only annotates *multi-camera* vehicles, single-camera
-    predictions that don't overlap any GT box in any frame are simply
-    ignored at the IDTP/IDFN level (they score as IDFP only if their
-    predicted ID is later associated with a GT identity in another
-    camera and they mismatch).
+    CityFlowV2 GT includes both multi-camera and single-camera vehicles.
+    GT IDs are globally unique per scenario (S01: 1-95, S02: 96-240)
+    so using one accumulator over all cameras correctly rewards
+    cross-camera re-identification without double-counting.
+    This matches the AI City Challenge Track 1 evaluation protocol.
 
     Args:
         gt_dir: Directory with per-camera GT files (CityFlowV2 format).
@@ -478,12 +478,20 @@ def _evaluate_with_motmetrics(
 # ---------------------------------------------------------------------------
 
 def _load_mot_file(path: Path) -> Dict[int, list]:
-    """Load MOT format file into dict[frame_id -> list of (track_id, bbox)]."""
+    """Load MOT format file into dict[frame_id -> list of (track_id, bbox)].
+
+    MOT format: frame, id, x, y, w, h, conf, x_world, y_world, z_world
+    Rows with conf=0 are ignore regions and are skipped.
+    For GT files with all-1 confidence (CityFlowV2), this is a no-op.
+    """
     data: Dict[int, list] = {}
     with open(path) as f:
         for line in f:
             parts = line.strip().split(",")
             if len(parts) < 6:
+                continue
+            # Skip ignore/distractor rows (conf=0 in MOT convention)
+            if len(parts) >= 7 and parts[6].strip() == "0":
                 continue
             frame_id = int(parts[0])
             track_id = int(parts[1])
