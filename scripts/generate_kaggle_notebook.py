@@ -746,7 +746,7 @@ if SCAN_ENABLED:
     # When appearance_w changes, spatiotemporal is auto-adjusted: st_w = 1 - app_w - 0.05
     # so the three vehicle weights always sum to 1.0 (hsv fixed at 0.05).
     scan_grid = {
-        "sim_thresh":       [0.45, 0.50, 0.55, 0.60],   # v7: narrowed around best (0.50)
+        "sim_thresh":       [0.40, 0.45, 0.50, 0.55],   # v9: added 0.40 (cleaner tracklets may match at lower thresh)
         "louvain_res":      [0.60, 0.70, 0.80],          # v7: narrowed around best (0.70)
         "aqe_k":            [5, 7, 9],                   # v7: extended to test k=9
         "reranking":        [False],                     # v7: scan showed reranking=False is best
