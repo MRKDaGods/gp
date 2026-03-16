@@ -24,6 +24,15 @@ from loguru import logger
 if not hasattr(np, "asfarray"):
     np.asfarray = lambda a, dtype=np.float64: np.asarray(a, dtype=dtype)  # type: ignore[attr-defined]
 
+# Shim for TrackEval compatibility with NumPy 1.24+ (deprecated type aliases removed).
+# Must be applied BEFORE 'import trackeval' so module-level np.float references work.
+for _np_alias, _builtin in [
+    ("float", float), ("int", int), ("bool", bool),
+    ("complex", complex), ("object", object), ("str", str),
+]:
+    if not hasattr(np, _np_alias):
+        setattr(np, _np_alias, _builtin)
+
 from src.core.data_models import EvaluationResult
 
 
