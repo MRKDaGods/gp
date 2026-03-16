@@ -31,6 +31,7 @@ OWNER = "mrkdagods"
 SLUG_10A = "mtmc-10a-stages-0-2-tracking-reid-features"
 SLUG_10B = "mtmc-10b-stage-3-faiss-indexing"
 SLUG_10C = "mtmc-10c-stages-4-5-association-eval"
+SLUG_GT  = "mtmc-gt-annotations"    # dataset: mrkdagods/mtmc-gt-annotations
 
 NB_ROOT = Path(__file__).parent.parent / "notebooks" / "kaggle"
 
@@ -634,7 +635,15 @@ def build_10c():
         f"RUN_NAME = meta[\"run_name\"]\n"
         f"DATA_OUT = EXTRACT_DIR\n"
         f"RUN_DIR  = EXTRACT_DIR / RUN_NAME\n"
-        f"GT_DIR   = str(EXTRACT_DIR / \"gt_annotations\")\n"
+        f"# GT annotations are mounted from the dedicated GT dataset\n"
+        f"GT_INPUT = Path(\"/kaggle/input/{SLUG_GT}/gt_annotations\")\n"
+        f"if GT_INPUT.exists():\n"
+        f"    GT_DIR = str(GT_INPUT)\n"
+        f"else:\n"
+        f"    # fallback: try from checkpoint (10b forwarded them if 10a captured them)\n"
+        f"    _cp_gt = EXTRACT_DIR / \"gt_annotations\"\n"
+        f"    GT_DIR = str(_cp_gt) if _cp_gt.exists() else \"\"\n"
+        f"    print(f\"WARNING: GT dataset not mounted at {{GT_INPUT}}, falling back to {{GT_DIR}}\")\n"
         f"print(f\"\\u2713 Checkpoint extracted -- run: {{RUN_NAME}}\")\n"
         f"for s in [\"stage1\", \"stage2\", \"stage3\"]:\n"
         f"    d = RUN_DIR / s\n"
@@ -830,6 +839,7 @@ def main():
         slug=SLUG_10C,
         title="MTMC 10c - Stages 4-5 (Association + Eval)",
         kernel_sources=[f"{OWNER}/{SLUG_10B}"],
+        dataset_sources=[f"{OWNER}/{SLUG_GT}"],
     )
     print("\nDone.")
     print("Workflow:")
