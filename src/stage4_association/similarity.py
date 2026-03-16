@@ -170,9 +170,8 @@ def compute_combined_similarity(
         if use_length_weight:
             li = max(float(num_frames[i]), 1.0)
             lj = max(float(num_frames[j]), 1.0)
-            geom_mean = math.pow(li * lj, length_power)
-            max_len = math.pow(max(li, lj), length_power) + 1e-8
-            length_w = geom_mean / max_len  # in (0, 1]
+            ratio = min(li, lj) / (max(li, lj) + 1e-8)  # in (0, 1]
+            length_w = math.pow(ratio, length_power)       # gentle when power < 1
             score *= 0.5 + 0.5 * length_w  # mild penalty range [0.5, 1.0]
 
         combined[(i, j)] = score

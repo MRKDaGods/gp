@@ -110,8 +110,11 @@ class GraphSolver:
                     # Remove weakest edge in any oversized component
                     for comp in oversized:
                         comp_sub = sub.subgraph(comp)
+                        edges = list(comp_sub.edges(data=True))
+                        if not edges:
+                            continue
                         weakest = min(
-                            comp_sub.edges(data=True),
+                            edges,
                             key=lambda e: e[2].get("weight", 1.0),
                         )
                         sub.remove_edge(weakest[0], weakest[1])
