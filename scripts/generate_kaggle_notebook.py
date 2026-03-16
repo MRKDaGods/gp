@@ -779,15 +779,15 @@ if SCAN_ENABLED:
     import itertools
 
     # Grid to search — comment out axes you don't want to vary
-    # v11: Simplified grid after switching to connected_components + bridge pruning.
-    # Key changes: algorithm is now CC (not Louvain), bridge pruning enabled,
-    # HSV lowered to 0.025, length weighting enabled.
-    # Focus scan on: sim_thresh (precision/recall), aqe (augmentation), appearance_w.
+    # v12: Updated after SOTA config optimizations.
+    # Defaults now: min_time_gap=0, louvain_res=1.0, QE alpha=3.0,
+    # bridge_prune=0.08, max_component_size=15, orphan_match=0.45
+    # Focus scan on: sim_thresh, algorithm, appearance_w, bridge_prune
     scan_grid = {
-        "sim_thresh":       [0.45, 0.50, 0.55, 0.60],   # 4: find sweet spot with CC + bridge pruning
-        "aqe_k":            [0, 5, 7],                   # 3: 0=disabled, 5=moderate, 7=default
+        "sim_thresh":       [0.40, 0.45, 0.50, 0.55],   # 4: lower range since overlapping FOV now allowed
+        "algorithm":        ["community_detection", "connected_components"],  # 2: Louvain vs CC
         "appearance_w":     [0.70, 0.80, 0.90],          # 3: how much to trust ReID
-        "bridge_prune":     [0.0, 0.05],                 # 2: bridge pruning on/off
+        "bridge_prune":     [0.0, 0.08],                 # 2: bridge pruning on/off
     }
     HSV_W_FIXED = 0.025  # v11: lowered to match reference
 
@@ -799,9 +799,10 @@ if SCAN_ENABLED:
     for combo in combos:
         params = dict(zip(keys, combo))
         # Build scan run name from all parameters
+        algo_tag = "cd" if params.get("algorithm", "") == "community_detection" else "cc"
         bridge_tag = f"bp{params['bridge_prune']:.2f}".replace(".", "")
         app_tag = f"app{params['appearance_w']:.2f}".replace(".", "")
-        scan_run = f"scan_{params['sim_thresh']}_{params['aqe_k']}_{app_tag}_{bridge_tag}"
+        scan_run = f"scan_{params['sim_thresh']}_{algo_tag}_{app_tag}_{bridge_tag}"
 
         # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
         # Symlink the upstream outputs so the scan sub-dir looks like a full run.
@@ -824,20 +825,16 @@ if SCAN_ENABLED:
             "--stages", "4,5",
             "--override", f"project.run_name={scan_run}",
             "--override", f"project.output_dir={DATA_OUT}",
-            "--override", f"stage4.association.query_expansion.k={params['aqe_k']}",
             "--override", f"stage4.association.graph.similarity_threshold={params['sim_thresh']}",
-            "--override", f"stage4.association.graph.algorithm=connected_components",
+            "--override", f"stage4.association.graph.algorithm={params['algorithm']}",
             "--override", f"stage4.association.graph.bridge_prune_margin={params['bridge_prune']}",
-            "--override", f"stage4.association.graph.max_component_size=12",
+            "--override", f"stage4.association.graph.max_component_size=15",
             "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
             "--override", f"stage4.association.weights.vehicle.hsv={HSV_W_FIXED}",
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
             "--override", "stage4.association.reranking.enabled=false",
             "--override", "stage5.mtmc_only_submission=false",
         ]
-        # When aqe_k=0 explicitly disable AQE so DBA rebuild is also skipped (saves ~2s/combo)
-        if params['aqe_k'] == 0:
-            cmd_scan += ["--override", "stage4.association.query_expansion.enabled=false"]
         if GT_DIR:
             cmd_scan += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
         t0 = time.time()
@@ -865,14 +862,15 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
-    header = f"{'sim':<6} {'aqe':<5} {'app_w':<7} {'bridge':<8} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'algo':<5} {'app_w':<7} {'bridge':<8} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
-        print(f"{r2['sim_thresh']:<6} {r2['aqe_k']:<5} {r2['appearance_w']:<7} "
+        algo_short = "CD" if r2.get("algorithm","") == "community_detection" else "CC"
+        print(f"{r2['sim_thresh']:<6} {algo_short:<5} {r2['appearance_w']:<7} "
               f"{r2['bridge_prune']:<8} {r2.get('st_w',0.25):<7} "
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
-    print(f"\\nBEST: sim={best['sim_thresh']} aqe={best['aqe_k']} app={best['appearance_w']} "
+    print(f"\\nBEST: sim={best['sim_thresh']} algo={best.get('algorithm','?')} app={best['appearance_w']} "
           f"bridge={best['bridge_prune']} -> IDF1={best['IDF1']:.3f} HOTA={best['HOTA']:.3f}")
     # Save results to JSON for offline analysis
     import json as _json
