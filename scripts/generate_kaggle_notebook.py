@@ -762,7 +762,10 @@ if SCAN_ENABLED:
     for combo in combos:
         params = dict(zip(keys, combo))
         rerank_tag = "rr1" if params["reranking"] else "rr0"
-        scan_run = f"scan_{params['sim_thresh']}_{params['louvain_res']}_{params['aqe_k']}_{rerank_tag}"
+        # Include appearance_w in scan_run name to avoid directory collisions
+        # when appearance_w varies (all weights must be in dir name)
+        app_tag = f"app{params['appearance_w']:.2f}".replace(".", "")
+        scan_run = f"scan_{params['sim_thresh']}_{params['louvain_res']}_{params['aqe_k']}_{rerank_tag}_{app_tag}"
 
         # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
         # Symlink the upstream outputs so the scan sub-dir looks like a full run.
