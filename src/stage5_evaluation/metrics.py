@@ -359,12 +359,11 @@ def _run_trackeval(
     # Parse results — collect per-sequence and overall
     result = EvaluationResult()
     per_camera: Dict[str, Dict[str, float]] = {}
+    combined_metrics: Dict[str, float] = {}
 
     for _trk, tracker_results in raw_results.items():
         for _ds, dataset_results in tracker_results.items():
             for seq_name, seq_results in dataset_results.items():
-                if seq_name == "COMBINED_SEQ":
-                    continue
                 # TrackEval nests results under class name (e.g. 'pedestrian')
                 cls_results = seq_results.get("pedestrian", seq_results)
                 cam_metrics: Dict[str, float] = {}
@@ -377,10 +376,22 @@ def _run_trackeval(
                     cam_metrics["ml"] = float(cls_results["CLEAR"].get("ML", 0))
                 if "Identity" in cls_results:
                     cam_metrics["idf1"] = float(cls_results["Identity"]["IDF1"])
-                per_camera[seq_name] = cam_metrics
 
-    # Aggregate across cameras (mean for rate metrics, sum for counts)
-    if per_camera:
+                if seq_name == "COMBINED_SEQ":
+                    combined_metrics = cam_metrics
+                else:
+                    per_camera[seq_name] = cam_metrics
+
+    # Use COMBINED_SEQ (properly weighted global metrics) if available,
+    # otherwise fall back to per-camera mean
+    if combined_metrics:
+        result.hota = combined_metrics.get("hota", _mean_of(per_camera, "hota"))
+        result.mota = combined_metrics.get("mota", _mean_of(per_camera, "mota"))
+        result.idf1 = combined_metrics.get("idf1", _mean_of(per_camera, "idf1"))
+        result.id_switches = int(combined_metrics.get("id_switches", sum(c.get("id_switches", 0) for c in per_camera.values())))
+        result.mostly_tracked = combined_metrics.get("mt", _mean_of(per_camera, "mt"))
+        result.mostly_lost = combined_metrics.get("ml", _mean_of(per_camera, "ml"))
+    elif per_camera:
         result.hota = _mean_of(per_camera, "hota")
         result.mota = _mean_of(per_camera, "mota")
         result.idf1 = _mean_of(per_camera, "idf1")
