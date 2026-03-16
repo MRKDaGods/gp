@@ -199,6 +199,53 @@ def trajectories_to_mot_submission(
             # Rebuild dedup list preserving insertion order
             dedup_rows = [seen[k] for k in dict.fromkeys((r[0], r[1]) for r in rows)]
             logger.warning(f"{cam_id}: removed {dup_count} duplicate (frame,id) rows")
+
+        # Cross-ID NMS: remove overlapping predictions from different global IDs
+        # on the same frame.  This catches same-vehicle fragments assigned to
+        # different trajectories, which produce FP for every overlapping frame.
+        # Only boxes with IoU > 0.5 are suppressed (real different-vehicle
+        # overlaps are rare at IoU > 0.5).
+        nms_removed = 0
+        frame_groups: dict = {}
+        for row in dedup_rows:
+            frame_groups.setdefault(row[0], []).append(row)
+        nms_rows = []
+        for fid in sorted(frame_groups):
+            frows = frame_groups[fid]
+            if len(frows) <= 1:
+                nms_rows.extend(frows)
+                continue
+            # Sort by confidence descending (keep high-conf first)
+            frows.sort(key=lambda r: -r[6])
+            keep = []
+            for row in frows:
+                # row format: (frame_id, global_id, x, y, w, h, conf, class, vis)
+                rx, ry, rw, rh = row[2], row[3], row[4], row[5]
+                suppressed = False
+                for kept in keep:
+                    kx, ky, kw, kh = kept[2], kept[3], kept[4], kept[5]
+                    # Compute IoU (xywh format)
+                    x1 = max(rx, kx)
+                    y1 = max(ry, ky)
+                    x2 = min(rx + rw, kx + kw)
+                    y2 = min(ry + rh, ky + kh)
+                    inter = max(0, x2 - x1) * max(0, y2 - y1)
+                    area_r = rw * rh
+                    area_k = kw * kh
+                    union = area_r + area_k - inter
+                    iou = inter / union if union > 0 else 0
+                    if iou > 0.5:
+                        suppressed = True
+                        break
+                if not suppressed:
+                    keep.append(row)
+                else:
+                    nms_removed += 1
+            nms_rows.extend(keep)
+        if nms_removed > 0:
+            logger.info(f"{cam_id}: cross-ID NMS removed {nms_removed} overlapping predictions")
+        dedup_rows = sorted(nms_rows, key=lambda r: (r[0], r[1]))
+
         file_path = output_dir / f"{cam_id}.txt"
         with open(file_path, "w") as f:
             for row in dedup_rows:

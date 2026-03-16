@@ -61,6 +61,77 @@ class TestMOTFrameNumbering:
         assert int(parts1[0]) == 100, f"Expected 1-based frame 100, got {parts1[0]}"
 
 
+class TestCrossIDNMS:
+    """Verify cross-ID NMS removes overlapping predictions from different trajectories."""
+
+    def test_nms_removes_duplicate_boxes(self, tmp_path: Path):
+        """Two trajectories with nearly-identical boxes on same frame → NMS keeps one."""
+        from src.stage5_evaluation.format_converter import trajectories_to_mot_submission
+
+        # bbox format: (x1, y1, x2, y2) — xyxy
+        # Trajectory A: global_id=1, frames 0-2
+        traj_a = _make_trajectory(
+            global_id=1,
+            camera_id="S01_c001",
+            track_id=10,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 150, 260), confidence=0.9),
+                TrackletFrame(frame_id=1, timestamp=0.1, bbox=(102, 202, 152, 262), confidence=0.88),
+                TrackletFrame(frame_id=2, timestamp=0.2, bbox=(104, 204, 154, 264), confidence=0.85),
+            ],
+        )
+        # Trajectory B: global_id=2, frames 1-2 at nearly identical positions (same vehicle fragment)
+        traj_b = _make_trajectory(
+            global_id=2,
+            camera_id="S01_c001",
+            track_id=20,
+            frames=[
+                TrackletFrame(frame_id=1, timestamp=0.1, bbox=(103, 203, 153, 263), confidence=0.80),
+                TrackletFrame(frame_id=2, timestamp=0.2, bbox=(105, 205, 155, 265), confidence=0.78),
+            ],
+        )
+        trajectories_to_mot_submission([traj_a, traj_b], tmp_path)
+
+        output_file = tmp_path / "S01_c001.txt"
+        lines = output_file.read_text().strip().split("\n")
+
+        # Without NMS: 5 lines (3 from traj_a + 2 from traj_b)
+        # With NMS: 3 lines (traj_b's frames 1&2 are suppressed by traj_a's higher conf)
+        assert len(lines) == 3, f"Expected 3 lines after NMS, got {len(lines)}"
+
+        # All kept predictions should be from traj_a (global_id=1)
+        for line in lines:
+            parts = line.split(",")
+            assert int(parts[1]) == 1, f"Expected global_id 1, got {parts[1]}"
+
+    def test_nms_keeps_non_overlapping_boxes(self, tmp_path: Path):
+        """Two trajectories with non-overlapping boxes on same frame → both kept."""
+        from src.stage5_evaluation.format_converter import trajectories_to_mot_submission
+
+        # Far apart: no IoU
+        traj_a = _make_trajectory(
+            global_id=1,
+            camera_id="S01_c001",
+            track_id=10,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 150, 260), confidence=0.9),
+            ],
+        )
+        traj_b = _make_trajectory(
+            global_id=2,
+            camera_id="S01_c001",
+            track_id=20,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(500, 600, 550, 660), confidence=0.85),
+            ],
+        )
+        trajectories_to_mot_submission([traj_a, traj_b], tmp_path)
+
+        output_file = tmp_path / "S01_c001.txt"
+        lines = output_file.read_text().strip().split("\n")
+        assert len(lines) == 2, f"Expected 2 lines (both kept), got {len(lines)}"
+
+
 class TestAICSubmissionFormat:
     """Verify AIC submission uses correct column order and 1-based frames."""
 
