@@ -296,6 +296,15 @@ def run_stage4(
         logger.info("Zone transition model loaded (integration pending)")
 
     # Step 6: Build graph and solve
+    if combined_sim:
+        sim_vals = list(combined_sim.values())
+        threshold = float(stage_cfg.graph.similarity_threshold)
+        n_above = sum(1 for s in sim_vals if s >= threshold)
+        logger.info(
+            f"Combined sim stats: {len(sim_vals)} pairs, "
+            f"min={min(sim_vals):.3f} median={np.median(sim_vals):.3f} "
+            f"max={max(sim_vals):.3f}, {n_above} above threshold {threshold}"
+        )
     solver = GraphSolver(
         similarity_threshold=stage_cfg.graph.similarity_threshold,
         algorithm=stage_cfg.graph.algorithm,

@@ -712,6 +712,8 @@ LOUVAIN_RES       = 0.70  # v7: 0.70 (best from scan)
 
 # Weight of appearance vs. spatio-temporal score (0.0=ST only, 1.0=appear only)
 APPEARANCE_WEIGHT = 0.70  # v7: 0.70 (best from scan)
+HSV_WEIGHT        = 0.025 # v16: lowered from cityflowv2's 0.30; scan showed minimal impact
+ST_WEIGHT         = round(1.0 - APPEARANCE_WEIGHT - HSV_WEIGHT, 4)  # ensure sum=1.0
 
 # Bridge pruning margin: bridges with weight < sim_thresh + margin are removed
 BRIDGE_PRUNE      = 0.05  # v11: reference value
@@ -728,7 +730,7 @@ MTMC_ONLY = True
 
 print("Stage 4 params:")
 print(f"  aqe_k={AQE_K}  sim_thresh={SIM_THRESH}  algorithm={ALGORITHM}  appearance_weight={APPEARANCE_WEIGHT}")
-print(f"  bridge_prune={BRIDGE_PRUNE}  max_comp_size={MAX_COMP_SIZE}")
+print(f"  hsv_weight={HSV_WEIGHT}  st_weight={ST_WEIGHT}  bridge_prune={BRIDGE_PRUNE}  max_comp_size={MAX_COMP_SIZE}")
 print(f"Stage 5: mtmc_only_submission={MTMC_ONLY}, stationary_filter=True")\
 """, "c10"))
 
@@ -750,6 +752,9 @@ cmd = [
     "--override", f"stage4.association.graph.bridge_prune_margin={BRIDGE_PRUNE}",
     "--override", f"stage4.association.graph.max_component_size={MAX_COMP_SIZE}",
     "--override", f"stage4.association.weights.vehicle.appearance={APPEARANCE_WEIGHT}",
+    "--override", f"stage4.association.weights.vehicle.hsv={HSV_WEIGHT}",
+    "--override", f"stage4.association.weights.vehicle.spatiotemporal={ST_WEIGHT}",
+    "--override", "stage4.association.mutual_nn.top_k_per_query=20",
     "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
     "--override", "stage5.stationary_filter.enabled=true",
     "--override", "stage5.stationary_filter.min_displacement_px=50",
@@ -853,6 +858,7 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.weights.vehicle.hsv={HSV_W_FIXED}",
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
             "--override", f"stage4.association.weights.length_weight_power={params['len_weight']}",
+            "--override", "stage4.association.mutual_nn.top_k_per_query=20",
             "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
             "--override", "stage5.stationary_filter.enabled=true",
             "--override", "stage5.stationary_filter.min_displacement_px=50",

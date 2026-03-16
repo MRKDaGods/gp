@@ -156,7 +156,7 @@ stage4:
       dba: true
     mutual_nn:
       enabled: true
-      top_k_per_query: 10
+      top_k_per_query: 20
     reranking:
       enabled: false    # k-reciprocal reranking amplifies noise with many similar-coloured vehicles; raw TransReID similarity is more discriminative
     weights:
