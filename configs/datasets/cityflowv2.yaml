@@ -161,18 +161,24 @@ stage4:
     spatiotemporal:
       max_time_gap: 300        # vehicles transition within 5 min within a scene
       min_time_gap: 0          # allow overlapping camera views
-      # S01 and S02 are intersection cameras with overlapping FOVs.
-      # Vehicles appear simultaneously in multiple cameras (gap ≈ 0-2s).
-      # mean_time=0, std_time=5: peaks at gap=0 and drops fast for large gaps.
-      # min_time=0, max_time=30: allows same-time appearances up to 30s apart.
-      # Cross-scene pairs (S01↔S02) are blocked (not listed here).
+      # Empirically calibrated from CityFlowV2 GT annotation timing.
+      # All cameras share overlapping FOVs → min_time=0 for all pairs.
+      # max_time = 1.6x observed max (robustness buffer).
+      # mean/std computed from the actual gap distribution (N≥46 shared vehicles per pair).
+      # S01 ↔ S02 cross-scene pairs are intentionally absent (different locations).
       camera_transitions:
-        S01_c001: {S01_c002: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S01_c003: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
-        S01_c002: {S01_c001: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S01_c003: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
-        S01_c003: {S01_c001: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S01_c002: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
-        S02_c006: {S02_c007: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S02_c008: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
-        S02_c007: {S02_c006: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S02_c008: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
-        S02_c008: {S02_c006: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}, S02_c007: {min_time: 0, max_time: 30, mean_time: 0, std_time: 5}}
+        S01_c001: {S01_c002: {min_time: 0, max_time: 20, mean_time: 1.9, std_time: 3.4},
+                   S01_c003: {min_time: 0, max_time:  5, mean_time: 0.5, std_time: 0.9}}
+        S01_c002: {S01_c001: {min_time: 0, max_time: 20, mean_time: 1.9, std_time: 3.4},
+                   S01_c003: {min_time: 0, max_time: 20, mean_time: 1.4, std_time: 3.1}}
+        S01_c003: {S01_c001: {min_time: 0, max_time:  5, mean_time: 0.5, std_time: 0.9},
+                   S01_c002: {min_time: 0, max_time: 20, mean_time: 1.4, std_time: 3.1}}
+        S02_c006: {S02_c007: {min_time: 0, max_time: 25, mean_time: 0.9, std_time: 2.6},
+                   S02_c008: {min_time: 0, max_time: 30, mean_time: 8.1, std_time: 6.2}}
+        S02_c007: {S02_c006: {min_time: 0, max_time: 25, mean_time: 0.9, std_time: 2.6},
+                   S02_c008: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
+        S02_c008: {S02_c006: {min_time: 0, max_time: 30, mean_time: 8.1, std_time: 6.2},
+                   S02_c007: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
     graph:
       similarity_threshold: 0.45  # optimal: lowering to 0.40 increases false merges
       algorithm: "community_detection"

@@ -672,30 +672,84 @@ print(f"\\u2713 Stages 4-5 done in {elapsed/60:.1f} min")\
     cells.append(code(SHOW_RESULTS, "c14"))
 
     cells.append(md(
-        "## 6. Parameter Scan (optional)\n\n"
-        "Sweep multiple values of a Stage 4 param without touching 10a/10b.",
+        "## 6. Automated Parameter Scan (optional)\n\n"
+        "Runs stages 4-5 across a grid of parameter values and reports the best combination.\n"
+        "Each combination takes ~2 min → a 12-point scan takes ~24 min total.\n\n"
+        "**Comment out this cell if you just want the single run above.**",
         "c15"))
 
     cells.append(code("""\
-# Uncomment ONE scan block at a time:
+# ============================================================
+# SET SCAN_ENABLED = True to run the grid search.
+# This will overwrite the single-run results above.
+# ============================================================
+SCAN_ENABLED = False
 
-# for aqe_k in [3, 5, 7, 10, 15]:
-#     print(f"\\n=== aqe_k={aqe_k} ===")
-#     subprocess.run([
-#         sys.executable, "scripts/scan_stage4_params.py",
-#         "--run", RUN_NAME, "--scan", "aqe_k",
-#         "--output-dir", str(DATA_OUT),
-#     ], cwd=str(PROJECT))
+if SCAN_ENABLED:
+    import itertools
 
-# for res in [0.5, 0.7, 0.9, 1.1, 1.3]:
-#     print(f"\\n=== louvain_res={res} ===")
-#     subprocess.run([
-#         sys.executable, "scripts/scan_stage4_params.py",
-#         "--run", RUN_NAME, "--scan", "louvain_res",
-#         "--output-dir", str(DATA_OUT),
-#     ], cwd=str(PROJECT))
+    # Grid to search — comment out axes you don't want to vary
+    scan_grid = {
+        "sim_thresh":    [0.35, 0.40, 0.45, 0.50],
+        "louvain_res":   [0.7, 1.0, 1.3],
+        "aqe_k":         [5, 7],           # keep small to avoid long runtimes
+        "appearance_w":  [0.70],           # fix this axis to reduce combinations
+    }
 
-print("Uncomment a scan loop above and re-run this cell.")\
+    keys   = list(scan_grid.keys())
+    combos = list(itertools.product(*[scan_grid[k] for k in keys]))
+    print(f"Scanning {len(combos)} combinations ...")
+
+    results = []
+    for combo in combos:
+        params = dict(zip(keys, combo))
+        scan_run = f"scan_{params['sim_thresh']}_{params['louvain_res']}_{params['aqe_k']}"
+        cmd_scan = [
+            sys.executable, "scripts/run_pipeline.py",
+            "--config", "configs/default.yaml",
+            "--dataset-config", "configs/datasets/cityflowv2.yaml",
+            "--stages", "4,5",
+            "--override", f"project.run_name={scan_run}",
+            "--override", f"project.output_dir={DATA_OUT}",
+            "--override", f"stage4.association.query_expansion.k={params['aqe_k']}",
+            "--override", f"stage4.association.graph.similarity_threshold={params['sim_thresh']}",
+            "--override", f"stage4.association.graph.louvain_resolution={params['louvain_res']}",
+            "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
+            "--override", f"stage5.ground_truth_dir={GT_DIR}",
+            "--override", "stage5.mtmc_only_submission=false",
+        ]
+        t0 = time.time()
+        r = subprocess.run(cmd_scan, cwd=str(PROJECT), capture_output=True)
+        elapsed = time.time() - t0
+
+        # Read metric from evaluation report
+        report = DATA_OUT / scan_run / "stage5" / "evaluation_report.json"
+        idf1 = mota = hota = 0.0
+        if report.exists():
+            rp = json.loads(report.read_text())
+            m = rp.get("metrics", rp)
+            idf1 = m.get("mtmc_idf1", m.get("IDF1", m.get("idf1", 0.0)))
+            mota = m.get("MOTA", m.get("mota", 0.0))
+            hota = m.get("HOTA", m.get("hota", 0.0))
+
+        results.append({**params, "IDF1": idf1, "MOTA": mota, "HOTA": hota, "time": elapsed})
+        status = "OK" if r.returncode == 0 else "FAIL"
+        print(f"  [{status}] {params} -> IDF1={idf1:.3f} MOTA={mota:.3f} HOTA={hota:.3f} ({elapsed/60:.1f} min)")
+
+    # Sort by MTMC IDF1
+    results.sort(key=lambda x: x["IDF1"], reverse=True)
+    print("\\n" + "=" * 80)
+    print("SCAN RESULTS (sorted by MTMC IDF1)")
+    print("=" * 80)
+    header = f"{'sim':<6} {'res':<6} {'aqe':<5} {'app_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    print(header)
+    for r2 in results:
+        print(f"{r2['sim_thresh']:<6} {r2['louvain_res']:<6} {r2['aqe_k']:<5} "
+              f"{r2['appearance_w']:<7} {r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
+    best = results[0]
+    print(f"\\nBEST: sim={best['sim_thresh']} res={best['louvain_res']} aqe={best['aqe_k']} -> IDF1={best['IDF1']:.3f}")
+else:
+    print("Scan disabled. Set SCAN_ENABLED = True to run grid search.")\
 """, "c16"))
 
     return cells
