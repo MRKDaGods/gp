@@ -157,7 +157,7 @@ def trajectories_to_mot_submission(
                         continue
 
                 row = (
-                    frame.frame_id,
+                    frame.frame_id + 1,  # MOT format: 1-based frame numbering
                     traj.global_id,
                     x1, y1, w, h,
                     frame.confidence,
@@ -216,7 +216,7 @@ def trajectories_to_aic_submission(
 ) -> None:
     """Convert global trajectories to AI City Challenge submission format.
 
-    AIC format: camera_id frame_id global_id x y w h
+    AIC format: camera_id obj_id frame_id x y w h -1 -1
 
     Args:
         trajectories: Global trajectories.
@@ -235,8 +235,8 @@ def trajectories_to_aic_submission(
                 if w <= 0 or h <= 0:
                     continue
                 rows.append(
-                    f"{tracklet.camera_id} {frame.frame_id} {traj.global_id} "
-                    f"{x1:.1f} {y1:.1f} {w:.1f} {h:.1f}"
+                    f"{tracklet.camera_id} {traj.global_id} {frame.frame_id + 1} "
+                    f"{x1:.1f} {y1:.1f} {w:.1f} {h:.1f} -1 -1"
                 )
 
     rows.sort()

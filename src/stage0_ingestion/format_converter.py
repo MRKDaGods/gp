@@ -102,8 +102,7 @@ def load_aic_annotations(
 ) -> List[Tracklet]:
     """Load AI City Challenge format annotations.
 
-    AIC format (per line): camera_id frame_id track_id x y w h
-    Or varies by track — this handles the common format.
+    AIC format (per line): camera_id obj_id frame_id x y w h [-1 -1]
 
     Args:
         gt_path: Path to annotation file.
@@ -127,8 +126,8 @@ def load_aic_annotations(
                 continue
 
             cam_id_raw = parts[0]
-            frame_id = int(parts[1])
-            track_id = int(parts[2])
+            track_id = int(parts[1])
+            frame_id = int(parts[2])
             x, y, w, h = float(parts[3]), float(parts[4]), float(parts[5]), float(parts[6])
 
             bbox = (x, y, x + w, y + h)
