@@ -880,15 +880,17 @@ if SCAN_ENABLED:
 
         # Read metric from evaluation report
         report = DATA_OUT / scan_run / "stage5" / "evaluation_report.json"
-        idf1 = mota = hota = 0.0
+        idf1 = mota = hota = mtmc_mota = 0.0
         if report.exists():
             rp = json.loads(report.read_text())
             m = rp.get("metrics", rp)
             idf1 = m.get("mtmc_idf1", m.get("IDF1", m.get("idf1", 0.0)))
             mota = m.get("MOTA", m.get("mota", 0.0))
             hota = m.get("HOTA", m.get("hota", 0.0))
+            details = rp.get("details", {})
+            mtmc_mota = details.get("mtmc_mota", mota)
 
-        results.append({**params, "st_w": st_w, "IDF1": idf1, "MOTA": mota, "HOTA": hota, "time": elapsed})
+        results.append({**params, "st_w": st_w, "IDF1": idf1, "MOTA": mota, "MTMC_MOTA": mtmc_mota, "HOTA": hota, "time": elapsed})
         status = "OK" if r.returncode == 0 else "FAIL"
         print(f"  [{status}] {params} st_w={st_w:.2f} -> IDF1={idf1:.3f} MOTA={mota:.3f} HOTA={hota:.3f} ({elapsed/60:.1f} min)")
 
