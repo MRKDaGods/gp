@@ -172,6 +172,11 @@ except ImportError:
     try: pip("faiss-gpu")
     except Exception: pip("faiss-cpu")
 
+try:
+    import trackeval; print("trackeval ok")
+except ImportError:
+    pip("git+https://github.com/JonathonLuiten/TrackEval.git")
+
 pip("motmetrics", "loguru", "omegaconf", "rich", "networkx>=3.1", "click",
     "numpy", "scipy", "pandas", "scikit-learn")
 subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "-q"],
@@ -212,6 +217,7 @@ SANITY_LIGHT = _sanity([
     ("faiss", "faiss"), ("motmetrics", "motmetrics"), ("loguru", "loguru"),
     ("omegaconf", "omegaconf"), ("networkx", "networkx"),
     ("sklearn", "sklearn"), ("numpy", "numpy"), ("pandas", "pandas"),
+    ("trackeval", "trackeval"),
 ])
 
 COPY_WEIGHTS = """\
@@ -661,16 +667,16 @@ def build_10c():
     cells.append(code("""\
 # ---- Stage 4: Cross-camera association -------------------------------------
 # AQE: k nearest neighbours for query expansion (higher = smoother features)
-AQE_K             = 5
+AQE_K             = 7     # v7: 7 (best from scan, was 5)
 
 # Minimum cosine similarity to form an edge in the Louvain graph
-SIM_THRESH        = 0.35
+SIM_THRESH        = 0.50  # v7: 0.50 (best from scan, was 0.35)
 
 # Louvain resolution (higher = more, smaller clusters)
-LOUVAIN_RES       = 0.8
+LOUVAIN_RES       = 0.70  # v7: 0.70 (best from scan, was 0.8)
 
 # Weight of appearance vs. spatio-temporal score (0.0=ST only, 1.0=appear only)
-APPEARANCE_WEIGHT = 0.6
+APPEARANCE_WEIGHT = 0.70  # v7: 0.70 (best from scan)
 
 # ---- Stage 5: Evaluation ----------------------------------------------------
 # CityFlowV2 GT includes BOTH multi-cam (81 in S01, 130 in S02) AND
@@ -739,11 +745,11 @@ if SCAN_ENABLED:
     # Grid to search — comment out axes you don't want to vary
     # appearance_w is anchored to the single-run value above; add more values to sweep it
     scan_grid = {
-        "sim_thresh":       [0.35, 0.40, 0.45, 0.50],
-        "louvain_res":      [0.7, 1.0, 1.3],
-        "aqe_k":            [5, 7],         # keep small to avoid long runtimes
-        "reranking":        [True, False],  # ablation: on vs off
-        "appearance_w":     [APPEARANCE_WEIGHT, 0.70],  # test vs dataset-config default (0.70)
+        "sim_thresh":       [0.45, 0.50, 0.55, 0.60],   # v7: narrowed around best (0.50)
+        "louvain_res":      [0.60, 0.70, 0.80],          # v7: narrowed around best (0.70)
+        "aqe_k":            [5, 7, 9],                   # v7: extended to test k=9
+        "reranking":        [False],                     # v7: scan showed reranking=False is best
+        "appearance_w":     [0.65, 0.70, 0.75],          # v7: sweep around best (0.70)
     }
 
     keys   = list(scan_grid.keys())

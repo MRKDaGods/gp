@@ -49,7 +49,7 @@ stage1:
     # detections. Detections below track_high_thresh can only EXTEND existing tracks
     # (secondary matching) — they will NOT start new tracks. Setting confidence_threshold
     # lower than track_high_thresh wastes detections that never help start new tracks.
-    confidence_threshold: 0.30  # v4: 0.30 (was 0.50 → v3 used 0.35 but track_high_thresh was 0.50 = bad)
+    confidence_threshold: 0.50  # v5: 0.50 (was 0.30) — higher precision, fewer FP tracks
     iou_threshold: 0.65        # v4: raised 0.45→0.65 — S02 intersection cameras have dense vehicle overlap;
                                # 0.45 NMS suppresses genuine detections when IoU with neighbours is 0.45-0.65.
     agnostic_nms: true         # class-agnostic NMS: prevents bus/truck from suppressing partially-overlapping cars
@@ -64,15 +64,14 @@ stage1:
                                # to avoid max_obs being auto-bumped incorrectly. BaseTracker does NOT
                                # control the BotSort kill timer (only max_time_lost does).
     max_obs: 460               # Observation history. Must be > max_age + 5 per BaseTracker docs.
-    min_hits: 1                # Confirm track on first detection (default=3 drops brief tracklets).
-                               # False positives handled downstream by min_tracklet_length filter.
-    track_high_thresh: 0.30    # MUST match confidence_threshold so all dets go to primary matching
+    min_hits: 3                # v5: 3 (was 1) — require 3 consecutive detections to confirm track
+    track_high_thresh: 0.50    # MUST match confidence_threshold (v5: raised from 0.30)
     track_low_thresh: 0.05     # accept very weak dets for secondary (lost track) recovery
     match_thresh: 0.85
     appearance_thresh: 0.5
-    new_track_thresh: 0.35     # slightly above track_high_thresh to avoid noise track creation
+    new_track_thresh: 0.55     # v5: 0.55 (was 0.35) — slightly above track_high_thresh
     cmc_method: "sof"          # sparse optical flow CMC (lighter than ECC for mostly-static cameras)
-  min_tracklet_length: 3       # lowered from 5: GT vehicles appear briefly on S02 cameras
+  min_tracklet_length: 10      # v5: 10 (was 3) — filter noise tracks < 1s at 10fps
   min_tracklet_area: 800       # vehicles are large
   interpolation:
     enabled: true
@@ -138,7 +137,7 @@ stage4:
     exhaustive_min_similarity: 0.0
     query_expansion:
       enabled: true
-      k: 5
+      k: 7
       # alpha controls original embedding weight: orig_weight = alpha / (alpha + k_valid)
       # alpha=1.0 → 16.7% original (over-smoothed); alpha=5.0 → 50% (Radenović et al. standard)
       alpha: 5.0
@@ -180,10 +179,10 @@ stage4:
         S02_c008: {S02_c006: {min_time: 0, max_time: 30, mean_time: 8.1, std_time: 6.2},
                    S02_c007: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
     graph:
-      similarity_threshold: 0.45  # optimal: lowering to 0.40 increases false merges
+      similarity_threshold: 0.50  # v5: best from scan (was 0.45) — tighter edges → fewer spurious merges
       algorithm: "community_detection"
-      louvain_resolution: 1.0     # lowered from 2.5: was over-fragmenting vehicle identities
-      louvain_seed: 42            # deterministic community detection
+      louvain_resolution: 0.70     # v5: best from scan (was 1.0) — lower resolution → larger, better clusters
+      louvain_seed: 42             # deterministic community detection
     gallery_expansion:
       enabled: true
       threshold: 0.40             # orphan→cluster threshold
