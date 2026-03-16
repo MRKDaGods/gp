@@ -650,12 +650,12 @@ cmd = [
     "--stages", "4,5",
     "--override", f"project.run_name={RUN_NAME}",
     "--override", f"project.output_dir={DATA_OUT}",
-    "--override", f"stage4.aqe_k={AQE_K}",
-    "--override", f"stage4.sim_thresh={SIM_THRESH}",
-    "--override", f"stage4.louvain_resolution={LOUVAIN_RES}",
-    "--override", f"stage4.appearance_weight={APPEARANCE_WEIGHT}",
+    "--override", f"stage4.association.query_expansion.k={AQE_K}",
+    "--override", f"stage4.association.graph.similarity_threshold={SIM_THRESH}",
+    "--override", f"stage4.association.graph.louvain_resolution={LOUVAIN_RES}",
+    "--override", f"stage4.association.weights.vehicle.appearance={APPEARANCE_WEIGHT}",
     "--override", f"stage5.ground_truth_dir={GT_DIR}",
-    "--override", f"stage5.mtmc_only_submission={MTMC_ONLY}",
+    "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
 ]
 print("CMD:", " ".join(str(c) for c in cmd))
 print("=" * 70)
