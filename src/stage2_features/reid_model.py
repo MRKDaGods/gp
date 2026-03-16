@@ -181,6 +181,51 @@ class ReIDModel:
         return tensor
 
     @torch.no_grad()
+    def _extract_batch(self, batch_crops: List[np.ndarray]) -> np.ndarray:
+        """Extract embeddings for a single batch with optional augmentation.
+
+        Returns:
+            (N, D) float32 numpy array.
+        """
+        batch_tensor = self._preprocess(batch_crops).to(self.device)
+        if self.half:
+            batch_tensor = batch_tensor.half()
+        features = self.model(batch_tensor)
+        if isinstance(features, (tuple, list)):
+            features = features[0]
+        features = features.float().cpu().numpy()
+
+        n_views = 1
+
+        if self.flip_augment:
+            flipped_crops = [cv2.flip(c, 1) for c in batch_crops]
+            flip_tensor = self._preprocess(flipped_crops).to(self.device)
+            if self.half:
+                flip_tensor = flip_tensor.half()
+            flip_features = self.model(flip_tensor)
+            if isinstance(flip_features, (tuple, list)):
+                flip_features = flip_features[0]
+            features = features + flip_features.float().cpu().numpy()
+            n_views += 1
+
+        if self.color_augment:
+            for alpha, beta in [(1.2, 15), (0.8, -10)]:
+                aug_crops = [
+                    cv2.convertScaleAbs(c, alpha=alpha, beta=beta)
+                    for c in batch_crops
+                ]
+                aug_tensor = self._preprocess(aug_crops).to(self.device)
+                if self.half:
+                    aug_tensor = aug_tensor.half()
+                aug_features = self.model(aug_tensor)
+                if isinstance(aug_features, (tuple, list)):
+                    aug_features = aug_features[0]
+                features = features + aug_features.float().cpu().numpy()
+                n_views += 1
+
+        return features / n_views
+
+    @torch.no_grad()
     def extract_features(self, crops: List[np.ndarray], batch_size: int = 64) -> np.ndarray:
         """Extract embeddings from a list of crops with optional flip augmentation.
 
@@ -203,48 +248,25 @@ class ReIDModel:
         for i in range(0, len(crops), batch_size):
             batch_crops = crops[i : i + batch_size]
 
-            # Original features
-            batch_tensor = self._preprocess(batch_crops).to(self.device)
-            if self.half:
-                batch_tensor = batch_tensor.half()
-            features = self.model(batch_tensor)
-            if isinstance(features, (tuple, list)):
-                features = features[0]
-            features = features.float().cpu().numpy()
-
-            n_views = 1  # original
-
-            if self.flip_augment:
-                # Flipped features
-                flipped_crops = [cv2.flip(c, 1) for c in batch_crops]
-                flip_tensor = self._preprocess(flipped_crops).to(self.device)
-                if self.half:
-                    flip_tensor = flip_tensor.half()
-                flip_features = self.model(flip_tensor)
-                if isinstance(flip_features, (tuple, list)):
-                    flip_features = flip_features[0]
-                flip_features = flip_features.float().cpu().numpy()
-                features = features + flip_features
-                n_views += 1
-
-            if self.color_augment:
-                # Brightness/contrast augmented features (2 variants)
-                for alpha, beta in [(1.2, 15), (0.8, -10)]:
-                    aug_crops = [
-                        cv2.convertScaleAbs(c, alpha=alpha, beta=beta)
-                        for c in batch_crops
-                    ]
-                    aug_tensor = self._preprocess(aug_crops).to(self.device)
-                    if self.half:
-                        aug_tensor = aug_tensor.half()
-                    aug_features = self.model(aug_tensor)
-                    if isinstance(aug_features, (tuple, list)):
-                        aug_features = aug_features[0]
-                    features = features + aug_features.float().cpu().numpy()
-                    n_views += 1
-
-            # Average all views
-            features = features / n_views
+            try:
+                features = self._extract_batch(batch_crops)
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    # CUDA OOM — retry with halved batch size
+                    import torch
+                    torch.cuda.empty_cache()
+                    half_bs = max(1, len(batch_crops) // 2)
+                    logger.warning(
+                        f"CUDA OOM with batch_size={len(batch_crops)}, "
+                        f"retrying with batch_size={half_bs}"
+                    )
+                    sub_embeddings = []
+                    for j in range(0, len(batch_crops), half_bs):
+                        sub_batch = batch_crops[j : j + half_bs]
+                        sub_embeddings.append(self._extract_batch(sub_batch))
+                    features = np.concatenate(sub_embeddings, axis=0)
+                else:
+                    raise
 
             all_embeddings.append(features)
 

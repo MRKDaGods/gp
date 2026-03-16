@@ -30,6 +30,11 @@ class FAISSIndex:
             ids: Optional list of integer IDs mapping to each row. If None, uses 0..N-1.
         """
         n, d = embeddings.shape
+        if n == 0:
+            raise ValueError(
+                "Cannot build FAISS index with 0 embeddings — "
+                "check upstream stages for missing tracklet features"
+            )
         embeddings = np.ascontiguousarray(embeddings, dtype=np.float32)
 
         if self.index_type == "flat_ip":

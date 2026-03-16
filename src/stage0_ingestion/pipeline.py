@@ -39,6 +39,12 @@ def run_stage0(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Validate input directory is accessible
+    if not input_dir.exists():
+        raise FileNotFoundError(f"Input directory does not exist: {input_dir}")
+    if not input_dir.is_dir():
+        raise NotADirectoryError(f"Input path is not a directory: {input_dir}")
+
     # Discover videos
     video_extensions = stage_cfg.get("video_extensions", [".mp4", ".avi", ".mkv", ".mov"])
     video_paths = _discover_videos(input_dir, video_extensions)
@@ -66,6 +72,7 @@ def run_stage0(
 
     all_frames: List[FrameInfo] = []
     max_frames = 10 if smoke_test else None
+    failed_videos: List[str] = []
 
     # Load per-camera time offsets for synchronization
     time_offsets = dict(stage_cfg.get("time_offsets", {}))
@@ -81,24 +88,37 @@ def run_stage0(
         if cam_time_offset != 0.0:
             logger.info(f"  Applying time offset: {cam_time_offset:.3f}s")
 
-        frames = extract_frames_from_video(
-            video_path=video_path,
-            output_dir=frames_dir,
-            camera_id=camera_id,
-            target_fps=stage_cfg.get("output_fps", 10),
-            target_size=target_size,
-            normalize=stage_cfg.get("normalize", False),
-            denoise=stage_cfg.get("denoise", False),
-            denoise_strength=stage_cfg.get("denoise_strength", 3),
-            max_frames=max_frames,
-            clahe=stage_cfg.get("clahe", False),
-            clahe_clip_limit=stage_cfg.get("clahe_clip_limit", 2.0),
-            time_offset=cam_time_offset,
-            lossless=stage_cfg.get("lossless", False),
-        )
+        try:
+            frames = extract_frames_from_video(
+                video_path=video_path,
+                output_dir=frames_dir,
+                camera_id=camera_id,
+                target_fps=stage_cfg.get("output_fps", 10),
+                target_size=target_size,
+                normalize=stage_cfg.get("normalize", False),
+                denoise=stage_cfg.get("denoise", False),
+                denoise_strength=stage_cfg.get("denoise_strength", 3),
+                max_frames=max_frames,
+                clahe=stage_cfg.get("clahe", False),
+                clahe_clip_limit=stage_cfg.get("clahe_clip_limit", 2.0),
+                time_offset=cam_time_offset,
+                lossless=stage_cfg.get("lossless", False),
+            )
+        except Exception as exc:
+            logger.error(f"FAILED to process video {video_path}: {exc}")
+            failed_videos.append(str(video_path))
+            continue
 
         logger.info(f"  Extracted {len(frames)} frames from camera {camera_id}")
         all_frames.extend(frames)
+
+    if failed_videos:
+        logger.error(
+            f"{len(failed_videos)}/{len(video_paths)} videos failed: "
+            f"{failed_videos}"
+        )
+        if len(failed_videos) == len(video_paths):
+            raise RuntimeError("All videos failed to process — aborting stage 0")
 
     # Save manifest
     manifest_path = output_dir / FRAME_MANIFEST_FILE

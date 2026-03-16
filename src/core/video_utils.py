@@ -77,8 +77,10 @@ def read_video_frames(
         raise IOError(f"Cannot open video: {video_path}")
 
     native_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    if native_fps <= 0:
+        native_fps = 30.0
     frame_interval = 1
-    if target_fps is not None and target_fps < native_fps:
+    if target_fps is not None and 0 < target_fps < native_fps:
         frame_interval = max(1, round(native_fps / target_fps))
 
     frame_idx = 0

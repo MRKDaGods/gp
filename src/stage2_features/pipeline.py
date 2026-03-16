@@ -226,6 +226,9 @@ def run_stage2(
                 f"  Loaded {len(cam_frame_images)}/{len(needed_ids)} frames from disk for {camera_id}"
             )
 
+        dropped_no_crops = 0
+        dropped_no_embedding = 0
+
         for tracklet in tracklets:
             # 1. Quality-aware crop selection
             if cam_frame_images is not None:
@@ -235,7 +238,7 @@ def run_stage2(
             else:
                 scored_crops = crop_extractor.extract_crops(tracklet, video_path)
             if not scored_crops:
-                logger.debug(f"No valid crops for tracklet {tracklet.track_id}")
+                dropped_no_crops += 1
                 continue
 
             # Select ReID model based on class
@@ -249,6 +252,7 @@ def run_stage2(
             # 2 & 3. Flip-augmented extraction + quality-weighted attention pooling
             raw_embedding = reid.get_tracklet_embedding_from_scored_crops(scored_crops)
             if raw_embedding is None:
+                dropped_no_embedding += 1
                 continue
 
             # Ensemble: extract from second model and concatenate (both L2-normalized)
@@ -284,6 +288,16 @@ def run_stage2(
                     hsv_histogram=hsv_hist,
                     raw_embedding=raw_embedding.copy(),
                 )
+            )
+
+        # Per-camera drop summary for forensic audit trail
+        total_cam = len(tracklets)
+        extracted = total_cam - dropped_no_crops - dropped_no_embedding
+        if dropped_no_crops or dropped_no_embedding:
+            logger.warning(
+                f"  {camera_id}: {extracted}/{total_cam} tracklets extracted, "
+                f"{dropped_no_crops} dropped (no crops), "
+                f"{dropped_no_embedding} dropped (no embedding)"
             )
 
     if not all_features:

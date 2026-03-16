@@ -104,9 +104,12 @@ def run_stage1(
     merge_max_iou_distance = stage_cfg.get("intra_merge", {}).get("max_iou_distance", 0.7)
 
     all_tracklets: Dict[str, List[Tracklet]] = {}
+    failed_frames = 0
+    total_frames = 0
 
     for camera_id, cam_frames in frames_by_camera.items():
         logger.info(f"Processing camera {camera_id}: {len(cam_frames)} frames")
+        total_frames += len(cam_frames)
 
         if smoke_test:
             cam_frames = cam_frames[:10]
@@ -144,6 +147,7 @@ def run_stage1(
             frame = cv2.imread(frame_info.frame_path)
             if frame is None:
                 logger.warning(f"Cannot read frame: {frame_info.frame_path}")
+                failed_frames += 1
                 continue
 
             # Apply ROI mask before detection (mask non-road regions to black).
@@ -170,6 +174,18 @@ def run_stage1(
         tracklets = builder.finalize()
         all_tracklets[camera_id] = tracklets
         logger.info(f"  Camera {camera_id}: {len(tracklets)} tracklets")
+
+    # Check frame failure rate — for forensics, >20% loss is unacceptable
+    if failed_frames > 0:
+        failure_rate = failed_frames / max(total_frames, 1) * 100
+        logger.warning(
+            f"Frame read failures: {failed_frames}/{total_frames} ({failure_rate:.1f}%)"
+        )
+        if failure_rate > 20.0:
+            raise RuntimeError(
+                f"Too many frame read failures: {failed_frames}/{total_frames} "
+                f"({failure_rate:.1f}%) — aborting stage 1 to prevent incomplete evidence"
+            )
 
     # Save
     save_tracklets_by_camera(all_tracklets, output_dir)

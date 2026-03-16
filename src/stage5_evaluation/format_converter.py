@@ -115,6 +115,8 @@ def trajectories_to_mot_submission(
     # Group all detections by camera
     camera_rows = {}
     filtered_count = 0
+    nan_count = 0
+    invalid_bbox_count = 0
     total_count = 0
 
     for traj in trajectories:
@@ -129,6 +131,11 @@ def trajectories_to_mot_submission(
                 h = y2 - y1
                 total_count += 1
 
+                # Skip invalid bounding boxes (negative width/height)
+                if w <= 0 or h <= 0:
+                    invalid_bbox_count += 1
+                    continue
+
                 # ROI filter: check if foot point projects inside GP ROI
                 if roi_bbox is not None and cam_calibs is not None and cam_id in cam_calibs:
                     foot_x = (x1 + x2) / 2.0
@@ -138,9 +145,12 @@ def trajectories_to_mot_submission(
                         foot_x, foot_y,
                         calib["K"], calib["R"], calib["tvec"],
                     )
+                    if np.isnan(gx) or np.isnan(gy):
+                        nan_count += 1
+                        filtered_count += 1
+                        continue
                     if (
-                        np.isnan(gx) or np.isnan(gy)
-                        or gx < roi_bbox[0] or gx > roi_bbox[2]
+                        gx < roi_bbox[0] or gx > roi_bbox[2]
                         or gy < roi_bbox[1] or gy > roi_bbox[3]
                     ):
                         filtered_count += 1
@@ -160,6 +170,11 @@ def trajectories_to_mot_submission(
         logger.info(
             f"ROI filter removed {filtered_count}/{total_count} detections "
             f"({filtered_count / total_count * 100:.1f}%)"
+            + (f", {nan_count} NaN projections" if nan_count else "")
+        )
+    if invalid_bbox_count > 0:
+        logger.warning(
+            f"Skipped {invalid_bbox_count} detections with invalid bounding boxes (w<=0 or h<=0)"
         )
 
     # Write per-camera files

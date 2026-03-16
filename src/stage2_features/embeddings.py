@@ -82,7 +82,12 @@ def camera_aware_batch_normalize(
     for cam in unique_cameras:
         mask = cam_array == cam
         if mask.sum() < 2:
-            continue  # need at least 2 samples for meaningful stats
+            # Single-tracklet camera: apply global mean/std as fallback
+            # to keep the embedding in a compatible space.
+            global_mean = result.mean(axis=0, keepdims=True)
+            global_std = result.std(axis=0, keepdims=True) + epsilon
+            result[mask] = (result[mask] - global_mean) / global_std
+            continue
         cam_embeds = result[mask]
         mean = cam_embeds.mean(axis=0, keepdims=True)
         std = cam_embeds.std(axis=0, keepdims=True) + epsilon

@@ -79,16 +79,31 @@ def run_stage4(
     start_times = []
     end_times = []
     num_frames = []
+    missing_meta_count = 0
     for i in range(n):
         meta = metadata_store.get_tracklet(i)
         if meta:
-            start_times.append(meta["start_time"])
-            end_times.append(meta["end_time"])
+            st = meta["start_time"]
+            et = meta["end_time"]
+            if st > et:
+                logger.warning(
+                    f"Tracklet {i}: start_time ({st:.3f}) > end_time ({et:.3f}) — swapping"
+                )
+                st, et = et, st
+            start_times.append(st)
+            end_times.append(et)
             num_frames.append(meta.get("num_frames", 1))
         else:
+            missing_meta_count += 1
             start_times.append(0.0)
             end_times.append(0.0)
             num_frames.append(1)
+
+    if missing_meta_count > 0:
+        logger.warning(
+            f"Missing metadata for {missing_meta_count}/{n} tracklets — "
+            f"temporal analysis may be degraded"
+        )
 
     # Step 1: FAISS top-K retrieval
     top_k = stage_cfg.top_k
@@ -351,6 +366,8 @@ def run_stage4(
             f"min={min(confidences):.3f}, "
             f"high(≥0.7)={sum(1 for c in confidences if c >= 0.7)}/{len(confidences)}"
         )
+    else:
+        logger.info("No cross-camera trajectories produced (all single-camera)")
 
     # Save
     save_global_trajectories(trajectories, output_dir / "global_trajectories.json")

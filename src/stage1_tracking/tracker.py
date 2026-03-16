@@ -95,6 +95,12 @@ class TrackerWrapper:
                      for d in detections],
                     dtype=np.float32,
                 )
+                # Guard against NaN/inf from detector
+                if not np.isfinite(dets).all():
+                    from loguru import logger
+                    bad_count = (~np.isfinite(dets)).any(axis=1).sum()
+                    logger.warning(f"Dropping {bad_count} non-finite detections")
+                    dets = dets[np.isfinite(dets).all(axis=1)]
         else:
             dets = detections
 
