@@ -266,7 +266,7 @@ for fname in ["summary.json", "evaluation_report.json"]:
     if sf.exists():
         s = json.loads(sf.read_text())
         print("-" * 65 + "\\n  GLOBAL:")
-        for k in ["IDF1","MOTA","HOTA","ID_Sw","idf1","mota","hota","id_switches"]:
+        for k in ["IDF1","MOTA","HOTA","ID_Sw","idf1","mota","hota","id_switches","mtmc_idf1"]:
             v = s.get(k)
             if v is not None: print(f"    {k}: {_pct(v)}")
         break
