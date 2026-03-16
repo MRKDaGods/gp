@@ -707,6 +707,17 @@ if SCAN_ENABLED:
         params = dict(zip(keys, combo))
         rerank_tag = "rr1" if params["reranking"] else "rr0"
         scan_run = f"scan_{params['sim_thresh']}_{params['louvain_res']}_{params['aqe_k']}_{rerank_tag}"
+
+        # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
+        # Symlink the upstream outputs so the scan sub-dir looks like a full run.
+        scan_dir = DATA_OUT / scan_run
+        scan_dir.mkdir(parents=True, exist_ok=True)
+        for stage_sub in ("stage1", "stage2", "stage3"):
+            src = DATA_OUT / RUN_NAME / stage_sub
+            dst = scan_dir / stage_sub
+            if src.exists() and not dst.exists():
+                dst.symlink_to(src)
+
         cmd_scan = [
             sys.executable, "scripts/run_pipeline.py",
             "--config", "configs/default.yaml",
