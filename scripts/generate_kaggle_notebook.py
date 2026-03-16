@@ -155,13 +155,16 @@ assert WEIGHTS_INPUT.exists(), (
 
 MODELS_DST = PROJECT / "models"
 
-# Symlink models/ → the mounted dataset folder (avoids copying ~750 MB)
+# Copy models/ to a writable location.
+# A symlink would point at the read-only Kaggle input mount, and boxmot tries
+# to create .lock files next to the weights (OSError: Read-only file system).
 if MODELS_DST.is_symlink():
     MODELS_DST.unlink()
-elif MODELS_DST.exists():
+if MODELS_DST.exists():
     shutil.rmtree(MODELS_DST)
-MODELS_DST.symlink_to(WEIGHTS_INPUT)
-print(f"✓ models/ → {WEIGHTS_INPUT}")
+print(f"Copying models/ from {WEIGHTS_INPUT} (~750 MB) ...")
+shutil.copytree(str(WEIGHTS_INPUT), str(MODELS_DST))
+print(f"✓ models/ copied to {MODELS_DST}")
 
 # Verify essential v4 weights
 ESSENTIAL = [
