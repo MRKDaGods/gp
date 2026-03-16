@@ -792,12 +792,14 @@ if SCAN_ENABLED:
     # Grid to search — v14: updated after v12 scan analysis.
     # v12 finding: CC and CD produce identical results → removed algorithm axis.
     # Added gallery_expansion.threshold to scan orphan recovery aggressiveness.
-    # Total: 4 × 3 × 2 × 3 = 72 combos (~25 min at ~21s each)
+    # v15: added length_weight_power (0.0=no penalty, 0.5=penalize short tracklets)
+    # Total: 4 × 3 × 2 × 3 × 2 = 144 combos (~50 min at ~21s each)
     scan_grid = {
         "sim_thresh":       [0.35, 0.40, 0.45, 0.50],   # 4: scan showed lower = better
         "appearance_w":     [0.65, 0.70, 0.80],          # 3: how much to trust ReID
         "bridge_prune":     [0.0, 0.05],                 # 2: bridge pruning on/off
         "gallery_thresh":   [0.35, 0.45, 0.55],          # 3: orphan→cluster absorption threshold
+        "len_weight":       [0.0, 0.5],                  # 2: length weighting power (0=off)
     }
     HSV_W_FIXED = 0.025  # v11: lowered to match reference
 
@@ -842,6 +844,7 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
             "--override", f"stage4.association.weights.vehicle.hsv={HSV_W_FIXED}",
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
+            "--override", f"stage4.association.weights.length_weight_power={params['len_weight']}",
             "--override", "stage4.association.reranking.enabled=false",
             "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
             "--override", "stage5.stationary_filter.enabled=true",
@@ -874,15 +877,16 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
-    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'len_w':<6} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
         print(f"{r2['sim_thresh']:<6} {r2['appearance_w']:<7} "
-              f"{r2['bridge_prune']:<8} {r2.get('gallery_thresh','?'):<7} {r2.get('st_w',0.25):<7} "
+              f"{r2['bridge_prune']:<8} {r2.get('gallery_thresh','?'):<7} {r2.get('len_weight',0.5):<6} {r2.get('st_w',0.25):<7} "
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
     print(f"\\nBEST: sim={best['sim_thresh']} app={best['appearance_w']} "
           f"bridge={best['bridge_prune']} gal={best.get('gallery_thresh','?')} "
+          f"len_w={best.get('len_weight',0.5)} "
           f"-> IDF1={best['IDF1']:.3f} MOTA={best['MOTA']:.3f} HOTA={best['HOTA']:.3f}")
     # Save results to JSON for offline analysis
     import json as _json
