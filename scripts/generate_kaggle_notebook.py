@@ -636,7 +636,7 @@ def build_10c():
         f"DATA_OUT = EXTRACT_DIR\n"
         f"RUN_DIR  = EXTRACT_DIR / RUN_NAME\n"
         f"# GT annotations are mounted from the dedicated GT dataset\n"
-        f"GT_INPUT = Path(\"/kaggle/input/{SLUG_GT}/gt_annotations\")\n"
+        f"GT_INPUT = Path(\"/kaggle/input/datasets/{OWNER}/{SLUG_GT}/gt_annotations\")\n"
         f"if GT_INPUT.exists():\n"
         f"    GT_DIR = str(GT_INPUT)\n"
         f"else:\n"
@@ -697,9 +697,12 @@ cmd = [
     "--override", f"stage4.association.graph.similarity_threshold={SIM_THRESH}",
     "--override", f"stage4.association.graph.louvain_resolution={LOUVAIN_RES}",
     "--override", f"stage4.association.weights.vehicle.appearance={APPEARANCE_WEIGHT}",
-    "--override", f"stage5.ground_truth_dir={GT_DIR}",
     "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
 ]
+if GT_DIR:
+    cmd += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
+else:
+    print("WARNING: GT_DIR is empty — eval will skip metric computation")
 print("CMD:", " ".join(str(c) for c in cmd))
 print("=" * 70)
 t0 = time.time()
@@ -773,9 +776,10 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.graph.louvain_resolution={params['louvain_res']}",
             "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
             "--override", f"stage4.association.reranking.enabled={str(params['reranking']).lower()}",
-            "--override", f"stage5.ground_truth_dir={GT_DIR}",
             "--override", "stage5.mtmc_only_submission=false",
         ]
+        if GT_DIR:
+            cmd_scan += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
         t0 = time.time()
         r = subprocess.run(cmd_scan, cwd=str(PROJECT), capture_output=True)
         elapsed = time.time() - t0
