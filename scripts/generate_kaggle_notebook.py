@@ -72,7 +72,7 @@ def make_notebook(cells: list[dict]) -> dict:
     }
 
 
-def make_metadata(slug: str, title: str, kernel_sources=None, dataset_sources=None) -> dict:
+def make_metadata(slug: str, title: str, kernel_sources=None, dataset_sources=None, enable_gpu=True) -> dict:
     return {
         "id": f"{OWNER}/{slug}",
         "title": title,
@@ -80,7 +80,7 @@ def make_metadata(slug: str, title: str, kernel_sources=None, dataset_sources=No
         "language": "python",
         "kernel_type": "notebook",
         "is_private": True,
-        "enable_gpu": True,
+        "enable_gpu": enable_gpu,
         "enable_tpu": False,
         "enable_internet": True,
         "dataset_sources": dataset_sources or [],
@@ -89,7 +89,7 @@ def make_metadata(slug: str, title: str, kernel_sources=None, dataset_sources=No
     }
 
 
-def write_notebook(cells, out_dir, slug, title, kernel_sources=None, dataset_sources=None):
+def write_notebook(cells, out_dir, slug, title, kernel_sources=None, dataset_sources=None, enable_gpu=True):
     out_dir.mkdir(parents=True, exist_ok=True)
     nb_path = out_dir / f"{slug}.ipynb"
     with open(nb_path, "w", encoding="utf-8") as f:
@@ -98,7 +98,7 @@ def write_notebook(cells, out_dir, slug, title, kernel_sources=None, dataset_sou
     meta_path = out_dir / "kernel-metadata.json"
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(make_metadata(slug, title, kernel_sources=kernel_sources,
-                                dataset_sources=dataset_sources), f, indent=2)
+                                dataset_sources=dataset_sources, enable_gpu=enable_gpu), f, indent=2)
 
     print(f"  {slug}: {len(cells)} cells -> {nb_path}")
 
@@ -912,6 +912,7 @@ def main():
         title="MTMC 10c - Stages 4-5 (Association + Eval)",
         kernel_sources=[f"{OWNER}/{SLUG_10B}"],
         dataset_sources=[f"{OWNER}/{SLUG_GT}"],
+        enable_gpu=False,  # Stages 4-5 are CPU-only; save GPU quota
     )
     print("\nDone.")
     print("Workflow:")
