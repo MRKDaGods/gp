@@ -1,7 +1,7 @@
 {
-  "id": "mrkdagods/10b-mtmc-stage3",
+  "id": "mrkdagods/mtmc-10b-stage-3-faiss-indexing",
   "title": "MTMC 10b - Stage 3 (FAISS Indexing)",
-  "code_file": "10b-mtmc-stage3.ipynb",
+  "code_file": "mtmc-10b-stage-3-faiss-indexing.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
@@ -11,6 +11,6 @@
   "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": [
-    "mrkdagods/10a-mtmc-stages012"
+    "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features"
   ]
 }

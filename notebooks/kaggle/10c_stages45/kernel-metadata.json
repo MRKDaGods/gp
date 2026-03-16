@@ -1,7 +1,7 @@
 {
-  "id": "mrkdagods/10c-mtmc-stages45",
+  "id": "mrkdagods/mtmc-10c-stages-4-5-association-eval",
   "title": "MTMC 10c - Stages 4-5 (Association + Eval)",
-  "code_file": "10c-mtmc-stages45.ipynb",
+  "code_file": "mtmc-10c-stages-4-5-association-eval.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
@@ -11,6 +11,6 @@
   "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": [
-    "mrkdagods/10b-mtmc-stage3"
+    "mrkdagods/mtmc-10b-stage-3-faiss-indexing"
   ]
 }

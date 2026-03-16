@@ -1,7 +1,7 @@
 {
-  "id": "mrkdagods/10a-mtmc-stages012",
+  "id": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
   "title": "MTMC 10a - Stages 0-2 (Tracking + ReID Features)",
-  "code_file": "10a-mtmc-stages012.ipynb",
+  "code_file": "mtmc-10a-stages-0-2-tracking-reid-features.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,

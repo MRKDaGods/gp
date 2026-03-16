@@ -23,10 +23,14 @@ from pathlib import Path
 REPO_URL = "https://github.com/MRKDaGods/gp.git"
 OWNER = "mrkdagods"
 
-# Kaggle kernel slugs (what appears in the URL)
-SLUG_10A = "10a-mtmc-stages012"
-SLUG_10B = "10b-mtmc-stage3"
-SLUG_10C = "10c-mtmc-stages45"
+# Kaggle kernel slugs — must match what Kaggle derives from the title
+# Rule: lowercase, replace non-alnum with hyphen, collapse hyphens
+# "MTMC 10a - Stages 0-2 (Tracking + ReID Features)" → mtmc-10a-stages-0-2-tracking-reid-features
+# "MTMC 10b - Stage 3 (FAISS Indexing)"              → mtmc-10b-stage-3-faiss-indexing
+# "MTMC 10c - Stages 4-5 (Association + Eval)"       → mtmc-10c-stages-4-5-association-eval
+SLUG_10A = "mtmc-10a-stages-0-2-tracking-reid-features"
+SLUG_10B = "mtmc-10b-stage-3-faiss-indexing"
+SLUG_10C = "mtmc-10c-stages-4-5-association-eval"
 
 NB_ROOT = Path(__file__).parent.parent / "notebooks" / "kaggle"
 
