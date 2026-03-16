@@ -743,14 +743,17 @@ if SCAN_ENABLED:
     import itertools
 
     # Grid to search — comment out axes you don't want to vary
-    # When appearance_w changes, spatiotemporal is auto-adjusted: st_w = 1 - app_w - 0.05
-    # so the three vehicle weights always sum to 1.0 (hsv fixed at 0.05).
+    # When appearance_w changes, spatiotemporal is auto-adjusted: st_w = 1 - app_w - hsv_w
+    # so the three vehicle weights always sum to 1.0.
+    # aqe_k=0 disables AQE entirely (raw PCA-whitened embeddings used directly).
+    # v10 additions: aqe_k=0 ablation, reranking=True test, appearance_w extended to 0.85,
+    #                louvain_res narrowed to 2 best values from v9 scan.
     scan_grid = {
-        "sim_thresh":       [0.40, 0.45, 0.50, 0.55],   # v9: added 0.40 (cleaner tracklets may match at lower thresh)
-        "louvain_res":      [0.60, 0.70, 0.80],          # v7: narrowed around best (0.70)
-        "aqe_k":            [5, 7, 9],                   # v7: extended to test k=9
-        "reranking":        [False],                     # v7: scan showed reranking=False is best
-        "appearance_w":     [0.65, 0.70, 0.75],          # v7: sweep around best (0.70)
+        "sim_thresh":       [0.40, 0.45, 0.50, 0.55],   # 4: covers the best region + lower for better recall
+        "louvain_res":      [0.60, 0.70],                # 2: dropped 0.80 (no improvement in v9)
+        "aqe_k":            [0, 5, 9],                   # 3: 0=disabled (ablation), 5=default, 9=aggressive
+        "reranking":        [False, True],               # 2: test k-reciprocal reranking (disabled in v9)
+        "appearance_w":     [0.65, 0.75, 0.85],          # 3: extend to 0.85 (trust TransReID more)
     }
     HSV_W_FIXED = 0.05  # fixed hsv weight; spatiotemporal = 1 - appearance - hsv
 
@@ -796,6 +799,9 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.reranking.enabled={str(params['reranking']).lower()}",
             "--override", "stage5.mtmc_only_submission=false",
         ]
+        # When aqe_k=0 explicitly disable AQE so DBA rebuild is also skipped (saves ~2s/combo)
+        if params['aqe_k'] == 0:
+            cmd_scan += ["--override", "stage4.association.query_expansion.enabled=false"]
         if GT_DIR:
             cmd_scan += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
         t0 = time.time()
@@ -816,10 +822,12 @@ if SCAN_ENABLED:
         status = "OK" if r.returncode == 0 else "FAIL"
         print(f"  [{status}] {params} st_w={st_w:.2f} -> IDF1={idf1:.3f} MOTA={mota:.3f} HOTA={hota:.3f} ({elapsed/60:.1f} min)")
 
-    # Sort by MTMC IDF1
-    results.sort(key=lambda x: x["IDF1"], reverse=True)
+    # Sort by HOTA when > 0 (HOTA is more robust), fallback to MTMC IDF1
+    has_hota = any(r2["HOTA"] > 0 for r2 in results)
+    sort_key = "HOTA" if has_hota else "IDF1"
+    results.sort(key=lambda x: x[sort_key], reverse=True)
     print("\\n" + "=" * 80)
-    print("SCAN RESULTS (sorted by MTMC IDF1)")
+    print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
     header = f"{'sim':<6} {'res':<6} {'aqe':<5} {'rerank':<8} {'app_w':<7} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
@@ -829,7 +837,13 @@ if SCAN_ENABLED:
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
     print(f"\\nBEST: sim={best['sim_thresh']} res={best['louvain_res']} aqe={best['aqe_k']} "
-          f"reranking={best['reranking']} -> IDF1={best['IDF1']:.3f}")
+          f"reranking={best['reranking']} -> IDF1={best['IDF1']:.3f} HOTA={best['HOTA']:.3f}")
+    # Save results to JSON for offline analysis
+    import json as _json
+    results_path = DATA_OUT / "scan_results.json"
+    with open(results_path, "w") as _f:
+        _json.dump({"sort_key": sort_key, "results": results}, _f, indent=2)
+    print(f"Scan results saved to {results_path}")
 else:
     print("Scan disabled. Set SCAN_ENABLED = True to run grid search.")\
 """, "c16"))

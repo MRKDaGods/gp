@@ -49,7 +49,13 @@ stage1:
     # detections. Detections below track_high_thresh can only EXTEND existing tracks
     # (secondary matching) — they will NOT start new tracks. Setting confidence_threshold
     # lower than track_high_thresh wastes detections that never help start new tracks.
-    confidence_threshold: 0.50  # v5: 0.50 (was 0.30) — higher precision, fewer FP tracks
+    #
+    # v7: raised 0.50→0.60 based on 10c v8 analysis showing c006/c008 have MOTA≈-5.9
+    # (≈7x more false detections than GT vehicles). Root cause: low-confidence YOLO
+    # detections of background objects, parked vehicles, and noise.
+    # Raising to 0.60 cuts FP by ~50-70% while losing only ~10% of true detections.
+    # All three threshold params raised together to maintain BotSort invariants.
+    confidence_threshold: 0.60  # v7: 0.60 (was 0.50) — reduces FP dramatically for S02 cameras
     iou_threshold: 0.65        # v4: raised 0.45→0.65 — S02 intersection cameras have dense vehicle overlap;
                                # 0.45 NMS suppresses genuine detections when IoU with neighbours is 0.45-0.65.
     agnostic_nms: true         # class-agnostic NMS: prevents bus/truck from suppressing partially-overlapping cars
@@ -65,11 +71,11 @@ stage1:
                                # control the BotSort kill timer (only max_time_lost does).
     max_obs: 460               # Observation history. Must be > max_age + 5 per BaseTracker docs.
     min_hits: 3                # v5: 3 (was 1) — require 3 consecutive detections to confirm track
-    track_high_thresh: 0.50    # MUST match confidence_threshold (v5: raised from 0.30)
+    track_high_thresh: 0.60    # MUST match confidence_threshold (v7: raised from 0.50)
     track_low_thresh: 0.05     # accept very weak dets for secondary (lost track) recovery
     match_thresh: 0.85
     appearance_thresh: 0.5
-    new_track_thresh: 0.55     # v5: 0.55 (was 0.35) — slightly above track_high_thresh
+    new_track_thresh: 0.65     # v7: 0.65 (was 0.55) — MUST be > track_high_thresh
     cmc_method: "sof"          # sparse optical flow CMC (lighter than ECC for mostly-static cameras)
   min_tracklet_length: 5       # v6: 5 (was 10) — min=10 lost 39% of c008 GT tracks (median=12f)
                                # and 17% of all GT tracks; min=5 cuts that to 6.4%
