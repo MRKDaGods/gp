@@ -79,13 +79,17 @@ def camera_aware_batch_normalize(
         return ((result - mean) / std).astype(np.float32)
 
     cam_array = np.array(camera_ids)
+
+    # Pre-compute global statistics from ORIGINAL embeddings before any
+    # per-camera normalization mutates `result`.
+    global_mean = embeddings.mean(axis=0, keepdims=True)
+    global_std = embeddings.std(axis=0, keepdims=True) + epsilon
+
     for cam in unique_cameras:
         mask = cam_array == cam
         if mask.sum() < 5:
             # Few-tracklet camera: apply global mean/std as fallback
             # to keep the embedding in a compatible space.
-            global_mean = result.mean(axis=0, keepdims=True)
-            global_std = result.std(axis=0, keepdims=True) + epsilon
             result[mask] = (result[mask] - global_mean) / global_std
             continue
         cam_embeds = result[mask]
