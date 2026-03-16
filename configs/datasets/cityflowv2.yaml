@@ -222,6 +222,11 @@ stage5:
   # Single-cam singletons are guaranteed FP (3-5x more predictions than GT).
   # Dropping them loses 29/240 = 12% GT vehicles but eliminates massive FP flood.
   mtmc_only_submission: true
+  # --- Trajectory confidence filter ---
+  # Removes multi-cam trajectories with low association confidence.
+  # confidence = mean pairwise appearance similarity between tracklets.
+  # Low-confidence trajectories are likely wrong cross-camera associations.
+  min_trajectory_confidence: 0.0  # 0.0 = disabled; tune based on scan results
   # --- Non-GT stationary vehicle filter ---
   # Removes trajectories where ALL tracklets have near-zero displacement.
   # Parked cars produce long-lived detections → guaranteed FP in MTMC eval.

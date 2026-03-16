@@ -77,6 +77,21 @@ def run_stage5(
         min_displacement = float(static_cfg.get("min_displacement_px", 50.0))
         trajectories = _filter_stationary(trajectories, min_displacement)
 
+    # ── Optional: confidence-based trajectory filter ─────────────────────────
+    # Trajectory confidence = mean pairwise appearance similarity between
+    # tracklets in the cluster.  Low-confidence trajectories are likely wrong
+    # associations (noise from gallery expansion or weak merges).
+    min_traj_conf = float(stage_cfg.get("min_trajectory_confidence", 0.0))
+    if min_traj_conf > 0:
+        before = len(trajectories)
+        trajectories = [t for t in trajectories if t.confidence >= min_traj_conf or t.num_cameras < 2]
+        dropped = before - len(trajectories)
+        if dropped:
+            logger.info(
+                f"Trajectory confidence filter: removed {dropped} trajectories "
+                f"with confidence < {min_traj_conf:.2f}"
+            )
+
     # ── Optional: only submit multi-camera trajectories ──────────────────────
     # CityFlowV2/AIC GT exclusively annotates vehicles that cross multiple
     # cameras.  Single-camera trajectories (vehicles never seen in >1 camera)
