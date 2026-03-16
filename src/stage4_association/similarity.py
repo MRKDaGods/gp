@@ -121,6 +121,14 @@ def compute_combined_similarity(
         "appearance": 0.50, "hsv": 0.25, "spatiotemporal": 0.25,
     })
 
+    # Validate weight sums (off-by-one from rounding ok, >5% drift is a bug)
+    for label, w_dict in [("default", default_w), ("person", person_w), ("vehicle", vehicle_w)]:
+        w_sum = sum(w_dict.get(k, 0) for k in ("appearance", "hsv", "spatiotemporal"))
+        if abs(w_sum - 1.0) > 0.05:
+            logger.warning(
+                f"{label} weights sum to {w_sum:.3f} (expected ~1.0): {w_dict}"
+            )
+
     # Length weighting config
     length_power = float(weights.get("length_weight_power", 0.0))
     use_length_weight = length_power > 0 and num_frames is not None

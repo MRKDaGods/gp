@@ -279,7 +279,16 @@ for fname in ["summary.json", "evaluation_report.json"]:
         break
 
 if not metrics_files:
-    print("No metrics files found -- check stage5 output dir:", stage5_dir)\
+    print("No metrics files found -- check stage5 output dir:", stage5_dir)
+
+# Copy evaluation report to /kaggle/working/ for easy download
+import shutil as _shutil
+for _fname in ["evaluation_report.json", "summary.json"]:
+    _src = stage5_dir / _fname
+    if _src.exists():
+        _shutil.copy2(str(_src), str(Path("/kaggle/working") / _fname))
+        print(f"Copied {_fname} to /kaggle/working/")
+\
 """
 
 
@@ -711,11 +720,11 @@ BRIDGE_PRUNE      = 0.05  # v11: reference value
 MAX_COMP_SIZE     = 12    # v11: reference value
 
 # ---- Stage 5: Evaluation ----------------------------------------------------
-# CityFlowV2 GT includes BOTH multi-cam (81 in S01, 130 in S02) AND
-# single-cam (14 in S01, 15 in S02) vehicles — total 240 annotated vehicles.
-# Setting True filters single-cam predictions, dropping 29 GT vehicles → lower
-# IDF1.  Keep False for AIC-protocol comparison against published SOTA (84.1%).
-MTMC_ONLY = False
+# CityFlowV2 GT: 240 vehicles = 211 multi-cam + 29 single-cam.
+# AIC protocol: only cross-camera trajectories matter for MTMC eval.
+# Single-cam singletons are guaranteed FP (3-5x more preds than GT).
+# Dropping them loses 29/240=12% GT vehicles but eliminates massive FP.
+MTMC_ONLY = True
 
 print("Stage 4 params:")
 print(f"  aqe_k={AQE_K}  sim_thresh={SIM_THRESH}  algorithm={ALGORITHM}  appearance_weight={APPEARANCE_WEIGHT}")
@@ -832,7 +841,7 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.weights.vehicle.hsv={HSV_W_FIXED}",
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
             "--override", "stage4.association.reranking.enabled=false",
-            "--override", "stage5.mtmc_only_submission=false",
+            "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
         ]
         if GT_DIR:
             cmd_scan += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
@@ -861,22 +870,34 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
-    header = f"{'sim':<6} {'algo':<5} {'app_w':<7} {'bridge':<8} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
-        algo_short = "CD" if r2.get("algorithm","") == "community_detection" else "CC"
-        print(f"{r2['sim_thresh']:<6} {algo_short:<5} {r2['appearance_w']:<7} "
-              f"{r2['bridge_prune']:<8} {r2.get('st_w',0.25):<7} "
+        print(f"{r2['sim_thresh']:<6} {r2['appearance_w']:<7} "
+              f"{r2['bridge_prune']:<8} {r2.get('gallery_thresh','?'):<7} {r2.get('st_w',0.25):<7} "
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
-    print(f"\\nBEST: sim={best['sim_thresh']} algo={best.get('algorithm','?')} app={best['appearance_w']} "
-          f"bridge={best['bridge_prune']} -> IDF1={best['IDF1']:.3f} HOTA={best['HOTA']:.3f}")
+    print(f"\\nBEST: sim={best['sim_thresh']} app={best['appearance_w']} "
+          f"bridge={best['bridge_prune']} gal={best.get('gallery_thresh','?')} "
+          f"-> IDF1={best['IDF1']:.3f} MOTA={best['MOTA']:.3f} HOTA={best['HOTA']:.3f}")
     # Save results to JSON for offline analysis
     import json as _json
     results_path = DATA_OUT / "scan_results.json"
     with open(results_path, "w") as _f:
         _json.dump({"sort_key": sort_key, "results": results}, _f, indent=2)
     print(f"Scan results saved to {results_path}")
+
+    # Copy results to /kaggle/working/ so `kaggle kernels output --file` can download them
+    import shutil as _shutil
+    _out = Path("/kaggle/working")
+    _shutil.copy2(str(results_path), str(_out / "scan_results.json"))
+    print(f"Copied scan_results.json to {_out}")
+    # Also copy the best run's evaluation report
+    best_run = f"scan_{best['sim_thresh']}_app{best['appearance_w']:.2f}_bp{best['bridge_prune']:.2f}_gal{best.get('gallery_thresh', 0.45):.2f}".replace(".", "")
+    best_report = DATA_OUT / best_run / "stage5" / "evaluation_report.json"
+    if best_report.exists():
+        _shutil.copy2(str(best_report), str(_out / "evaluation_report_best.json"))
+        print(f"Copied best evaluation report to {_out}")
 else:
     print("Scan disabled. Set SCAN_ENABLED = True to run grid search.")\
 """, "c16"))

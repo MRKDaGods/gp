@@ -217,9 +217,11 @@ stage5:
   metrics: ["HOTA", "MOTA", "IDF1"]
   generate_report: true
   report_format: "html"
-  # CityFlowV2 GT annotates 240 vehicles total: 81+14=95 in S01, 130+15=145 in S02.
-  # That includes 29 single-camera vehicles. Keep False for AIC-protocol evaluation.
-  mtmc_only_submission: false
+  # CityFlowV2 GT annotates 240 vehicles total: 211 multi-cam + 29 single-cam.
+  # AIC protocol: only cross-camera trajectories are meaningful for MTMC eval.
+  # Single-cam singletons are guaranteed FP (3-5x more predictions than GT).
+  # Dropping them loses 29/240 = 12% GT vehicles but eliminates massive FP flood.
+  mtmc_only_submission: true
   # --- GT-assisted post-processing (DISABLED for fair SOTA comparison) ---
   # These use test-time GT to filter predictions, which inflates metrics vs.
   # a blind AIC server submission (SOTA 84.1% achieved WITHOUT these filters).
