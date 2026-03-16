@@ -70,17 +70,27 @@ class GraphSolver:
         # Bridge pruning: remove weak bridges that are the sole connection
         # between two sub-graphs.  These are the most dangerous edges for
         # false transitive merges.
+        # Recompute bridges after each removal since removing one bridge
+        # can expose new bridges in the remaining graph.
         if self.bridge_prune_margin > 0:
             bridge_threshold = self.similarity_threshold + self.bridge_prune_margin
-            bridges = list(nx.bridges(G))
             pruned = 0
-            for u, v in bridges:
-                if G[u][v].get("weight", 1.0) < bridge_threshold:
-                    G.remove_edge(u, v)
-                    pruned += 1
+            total_bridges = 0
+            while True:
+                bridges = [
+                    (u, v) for u, v in nx.bridges(G)
+                    if G[u][v].get("weight", 0.0) < bridge_threshold
+                ]
+                if not bridges:
+                    break
+                total_bridges += len(bridges)
+                for u, v in bridges:
+                    if G.has_edge(u, v):
+                        G.remove_edge(u, v)
+                        pruned += 1
             if pruned > 0:
                 logger.info(
-                    f"Bridge pruning: removed {pruned}/{len(bridges)} weak bridges "
+                    f"Bridge pruning: removed {pruned} weak bridges "
                     f"(threshold={bridge_threshold:.3f})"
                 )
 
@@ -92,7 +102,9 @@ class GraphSolver:
         else:
             raise ValueError(f"Unknown algorithm: {self.algorithm}")
 
-        # Split oversized components by iteratively removing weakest edges
+        # Split oversized components by iteratively removing weakest edges.
+        # Remove only ONE weakest edge per iteration then recheck, since
+        # removing an edge can split a component into valid-sized pieces.
         if self.max_component_size > 0:
             split_count = 0
             final_clusters = []
@@ -107,18 +119,18 @@ class GraphSolver:
                     oversized = [c for c in components if len(c) > self.max_component_size]
                     if not oversized:
                         break
-                    # Remove weakest edge in any oversized component
-                    for comp in oversized:
-                        comp_sub = sub.subgraph(comp)
-                        edges = list(comp_sub.edges(data=True))
-                        if not edges:
-                            continue
-                        weakest = min(
-                            edges,
-                            key=lambda e: e[2].get("weight", 1.0),
-                        )
-                        sub.remove_edge(weakest[0], weakest[1])
-                        split_count += 1
+                    # Pick the largest oversized component and remove its weakest edge
+                    largest = max(oversized, key=len)
+                    comp_sub = sub.subgraph(largest)
+                    edges = list(comp_sub.edges(data=True))
+                    if not edges:
+                        break
+                    weakest = min(
+                        edges,
+                        key=lambda e: e[2].get("weight", 0.0),
+                    )
+                    sub.remove_edge(weakest[0], weakest[1])
+                    split_count += 1
                 final_clusters.extend(list(nx.connected_components(sub)))
             if split_count > 0:
                 logger.info(
