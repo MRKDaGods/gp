@@ -50,13 +50,11 @@ stage1:
     # (secondary matching) — they will NOT start new tracks. Setting confidence_threshold
     # lower than track_high_thresh wastes detections that never help start new tracks.
     #
-    # v7: raised 0.50→0.60 based on 10c v8 analysis showing c006/c008 have MOTA≈-5.9
-    # (≈7x more false detections than GT vehicles). Root cause: low-confidence YOLO
-    # detections of background objects, parked vehicles, and noise.
-    # Raising to 0.60 cuts FP by ~50-70% while losing only ~10% of true detections.
-    # All three threshold params raised together to maintain BotSort invariants.
-    confidence_threshold: 0.60  # v7: 0.60 (was 0.50) — reduces FP dramatically for S02 cameras
-    iou_threshold: 0.65        # v4: raised 0.45→0.65 — S02 intersection cameras have dense vehicle overlap;
+    # v11: lowered 0.60->0.40 now that ROI masks eliminate off-road false positives.
+    # Reference notebooks use 0.25 with ROI masks.  We stay conservative at 0.40
+    # since our auto-generated masks are imperfect.
+    confidence_threshold: 0.40  # v11: 0.40 (was 0.60) — ROI masks handle FP now
+    iou_threshold: 0.65        # v4: raised 0.45->0.65 — S02 intersection cameras have dense vehicle overlap;
                                # 0.45 NMS suppresses genuine detections when IoU with neighbours is 0.45-0.65.
     agnostic_nms: true         # class-agnostic NMS: prevents bus/truck from suppressing partially-overlapping cars
     img_size: 1280             # high-res traffic camera footage
@@ -71,12 +69,14 @@ stage1:
                                # control the BotSort kill timer (only max_time_lost does).
     max_obs: 460               # Observation history. Must be > max_age + 5 per BaseTracker docs.
     min_hits: 3                # v5: 3 (was 1) — require 3 consecutive detections to confirm track
-    track_high_thresh: 0.60    # MUST match confidence_threshold (v7: raised from 0.50)
+    track_high_thresh: 0.40    # v11: lowered from 0.60 to match confidence_threshold
     track_low_thresh: 0.05     # accept very weak dets for secondary (lost track) recovery
     match_thresh: 0.85
     appearance_thresh: 0.5
-    new_track_thresh: 0.65     # v7: 0.65 (was 0.55) — MUST be > track_high_thresh
+    new_track_thresh: 0.45     # v11: lowered from 0.65 to match new confidence_threshold
     cmc_method: "sof"          # sparse optical flow CMC (lighter than ECC for mostly-static cameras)
+  roi:
+    enabled: true              # v11: load roi.jpg masks from camera dirs to eliminate non-road FPs
   min_tracklet_length: 5       # v6: 5 (was 10) — min=10 lost 39% of c008 GT tracks (median=12f)
                                # and 17% of all GT tracks; min=5 cuts that to 6.4%
                                # while still filtering truly ephemeral 1-4f FP tracks
@@ -106,6 +106,7 @@ stage2:
     device: "cuda:0"
     half: true
     flip_augment: true
+    color_augment: true  # v11: brightness/contrast TTA for robustness
     # Ensemble ReID: second model provides complementary features.
     # Both embeddings are L2-normalized then concatenated before PCA whitening.
     # OSNet-x1.0 (VeRi-776): captures fine-grained vehicle color/texture patterns
@@ -161,10 +162,11 @@ stage4:
       appearance: 0.5
       hsv: 0.3
       spatiotemporal: 0.2
+      length_weight_power: 0.5  # v11: length-weighted similarity (SOTA technique)
       vehicle:
         appearance: 0.70       # TransReID has excellent cross-cam discriminability; down-weight noisy cues
-        hsv: 0.05              # HSV causes FP for same-coloured vehicles under different lighting
-        spatiotemporal: 0.25   # transit times are informative at city scale
+        hsv: 0.025             # v11: lowered from 0.05 — HSV causes FP for same-coloured vehicles (reference uses 0.025)
+        spatiotemporal: 0.275  # v11: adjusted to keep sum=1.0 after HSV reduction
     spatiotemporal:
       max_time_gap: 300        # vehicles transition within 5 min within a scene
       min_time_gap: 0          # allow overlapping camera views
@@ -187,10 +189,12 @@ stage4:
         S02_c008: {S02_c006: {min_time: 0, max_time: 30, mean_time: 8.1, std_time: 6.2},
                    S02_c007: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
     graph:
-      similarity_threshold: 0.50  # v5: best from scan (was 0.45) — tighter edges → fewer spurious merges
-      algorithm: "community_detection"
-      louvain_resolution: 0.70     # v5: best from scan (was 1.0) — lower resolution → larger, better clusters
+      similarity_threshold: 0.55  # v11: raised from 0.50 to 0.55 (reference value — higher precision)
+      algorithm: "connected_components"  # v11: switched from community_detection (Louvain) — deterministic, no resolution parameter
+      louvain_resolution: 0.70     # v5: kept for fallback if switching back to Louvain
       louvain_seed: 42             # deterministic community detection
+      bridge_prune_margin: 0.05    # v11: remove weak bridge edges (SOTA technique from reference)
+      max_component_size: 12       # v11: cap cluster size to prevent runaway merges
     gallery_expansion:
       enabled: true
       threshold: 0.40             # orphan→cluster threshold

@@ -350,6 +350,29 @@ else:
 print(f"\\nDataset path: {DATA_RAW}")\
 """, "a10"))
 
+    cells.append(md(
+        "## 3b. Generate ROI Masks\n\n"
+        "Generate per-camera ROI masks from video using background subtraction.\n"
+        "These masks eliminate non-road detections (buildings, parked cars) and are\n"
+        "the single biggest factor in reducing false positives.",
+        "a10b"))
+
+    cells.append(code("""\
+os.chdir(str(PROJECT))
+print("Generating ROI masks ...")
+r = subprocess.run(
+    [sys.executable, "scripts/generate_roi_masks.py",
+     "--data-dir", str(DATA_RAW),
+     "--n-samples", "200"],
+    cwd=str(PROJECT))
+if r.returncode != 0:
+    print("WARNING: ROI mask generation failed (non-fatal, will proceed without masks)")
+else:
+    # Verify masks were created
+    masks = list(DATA_RAW.glob("*/roi.jpg"))
+    print(f"\\u2713 Generated {len(masks)} ROI masks")\
+""", "a10c"))
+
     cells.append(md("## 4. Run Stages 0-2", "a11"))
 
     cam_list = ",".join(BENCHMARK_CAMERAS)
@@ -669,14 +692,23 @@ def build_10c():
 # AQE: k nearest neighbours for query expansion (higher = smoother features)
 AQE_K             = 7     # v7: 7 (best from scan, was 5)
 
-# Minimum cosine similarity to form an edge in the Louvain graph
-SIM_THRESH        = 0.50  # v7: 0.50 (best from scan, was 0.35)
+# Minimum cosine similarity to form an edge in the graph
+SIM_THRESH        = 0.55  # v11: 0.55 (reference value, raised from 0.50)
 
-# Louvain resolution (higher = more, smaller clusters)
-LOUVAIN_RES       = 0.70  # v7: 0.70 (best from scan, was 0.8)
+# Clustering algorithm: connected_components (v11) or community_detection (Louvain)
+ALGORITHM         = "connected_components"
+
+# Louvain resolution (only used if ALGORITHM=community_detection)
+LOUVAIN_RES       = 0.70  # v7: 0.70 (best from scan)
 
 # Weight of appearance vs. spatio-temporal score (0.0=ST only, 1.0=appear only)
 APPEARANCE_WEIGHT = 0.70  # v7: 0.70 (best from scan)
+
+# Bridge pruning margin: bridges with weight < sim_thresh + margin are removed
+BRIDGE_PRUNE      = 0.05  # v11: reference value
+
+# Max cluster size before splitting
+MAX_COMP_SIZE     = 12    # v11: reference value
 
 # ---- Stage 5: Evaluation ----------------------------------------------------
 # CityFlowV2 GT includes BOTH multi-cam (81 in S01, 130 in S02) AND
@@ -686,7 +718,8 @@ APPEARANCE_WEIGHT = 0.70  # v7: 0.70 (best from scan)
 MTMC_ONLY = False
 
 print("Stage 4 params:")
-print(f"  aqe_k={AQE_K}  sim_thresh={SIM_THRESH}  louvain_res={LOUVAIN_RES}  appearance_weight={APPEARANCE_WEIGHT}")
+print(f"  aqe_k={AQE_K}  sim_thresh={SIM_THRESH}  algorithm={ALGORITHM}  appearance_weight={APPEARANCE_WEIGHT}")
+print(f"  bridge_prune={BRIDGE_PRUNE}  max_comp_size={MAX_COMP_SIZE}")
 print(f"Stage 5: mtmc_only_submission={MTMC_ONLY}")\
 """, "c10"))
 
@@ -703,7 +736,10 @@ cmd = [
     "--override", f"project.output_dir={DATA_OUT}",
     "--override", f"stage4.association.query_expansion.k={AQE_K}",
     "--override", f"stage4.association.graph.similarity_threshold={SIM_THRESH}",
+    "--override", f"stage4.association.graph.algorithm={ALGORITHM}",
     "--override", f"stage4.association.graph.louvain_resolution={LOUVAIN_RES}",
+    "--override", f"stage4.association.graph.bridge_prune_margin={BRIDGE_PRUNE}",
+    "--override", f"stage4.association.graph.max_component_size={MAX_COMP_SIZE}",
     "--override", f"stage4.association.weights.vehicle.appearance={APPEARANCE_WEIGHT}",
     "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
 ]
@@ -743,22 +779,17 @@ if SCAN_ENABLED:
     import itertools
 
     # Grid to search — comment out axes you don't want to vary
-    # When appearance_w changes, spatiotemporal is auto-adjusted: st_w = 1 - app_w - hsv_w
-    # so the three vehicle weights always sum to 1.0.
-    # aqe_k=0 disables AQE entirely (raw PCA-whitened embeddings used directly).
-    # v10 additions: aqe_k=0 ablation, reranking=True test, appearance_w=0.85,
-    #                mutual_nn_k varies (suspected bottleneck), louvain_res fixed at best.
-    # Key hypothesis: mutual NN filter (not sim_thresh) is the binding constraint.
-    # Varying mutual_nn_k from 5 to 20 tests if wider neighborhoods help cross-camera recall.
+    # v11: Simplified grid after switching to connected_components + bridge pruning.
+    # Key changes: algorithm is now CC (not Louvain), bridge pruning enabled,
+    # HSV lowered to 0.025, length weighting enabled.
+    # Focus scan on: sim_thresh (precision/recall), aqe (augmentation), appearance_w.
     scan_grid = {
-        "sim_thresh":       [0.40, 0.45, 0.50, 0.55],   # 4: covers best region + lower for recall
-        "louvain_res":      [0.60],                      # 1: fixed at best (no improvement varying in v9)
-        "aqe_k":            [0, 5, 9],                   # 3: 0=disabled (ablation), 5=default, 9=aggressive
-        "reranking":        [False, True],               # 2: test k-reciprocal reranking
-        "appearance_w":     [0.65, 0.75, 0.85],          # 3: extend to 0.85 (trust TransReID more)
-        "mutual_nn_k":      [5, 10, 20],                 # 3: NEW - test if mutual NN threshold is bottleneck
+        "sim_thresh":       [0.45, 0.50, 0.55, 0.60],   # 4: find sweet spot with CC + bridge pruning
+        "aqe_k":            [0, 5, 7],                   # 3: 0=disabled, 5=moderate, 7=default
+        "appearance_w":     [0.70, 0.80, 0.90],          # 3: how much to trust ReID
+        "bridge_prune":     [0.0, 0.05],                 # 2: bridge pruning on/off
     }
-    HSV_W_FIXED = 0.05  # fixed hsv weight; spatiotemporal = 1 - appearance - hsv
+    HSV_W_FIXED = 0.025  # v11: lowered to match reference
 
     keys   = list(scan_grid.keys())
     combos = list(itertools.product(*[scan_grid[k] for k in keys]))
@@ -767,11 +798,10 @@ if SCAN_ENABLED:
     results = []
     for combo in combos:
         params = dict(zip(keys, combo))
-        rerank_tag = "rr1" if params["reranking"] else "rr0"
-        # Include all distinguishing parameters in scan_run name to avoid collisions
+        # Build scan run name from all parameters
+        bridge_tag = f"bp{params['bridge_prune']:.2f}".replace(".", "")
         app_tag = f"app{params['appearance_w']:.2f}".replace(".", "")
-        mnn_tag = f"mnn{params['mutual_nn_k']}"
-        scan_run = f"scan_{params['sim_thresh']}_{params['louvain_res']}_{params['aqe_k']}_{rerank_tag}_{app_tag}_{mnn_tag}"
+        scan_run = f"scan_{params['sim_thresh']}_{params['aqe_k']}_{app_tag}_{bridge_tag}"
 
         # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
         # Symlink the upstream outputs so the scan sub-dir looks like a full run.
@@ -784,7 +814,7 @@ if SCAN_ENABLED:
                 dst.symlink_to(src)
 
         # Compute spatiotemporal weight to maintain sum=1.0
-        # hsv is fixed at 0.05; st = 1 - appearance - hsv
+        # hsv is fixed; st = 1 - appearance - hsv
         st_w = round(1.0 - params["appearance_w"] - HSV_W_FIXED, 4)
 
         cmd_scan = [
@@ -796,11 +826,13 @@ if SCAN_ENABLED:
             "--override", f"project.output_dir={DATA_OUT}",
             "--override", f"stage4.association.query_expansion.k={params['aqe_k']}",
             "--override", f"stage4.association.graph.similarity_threshold={params['sim_thresh']}",
-            "--override", f"stage4.association.graph.louvain_resolution={params['louvain_res']}",
+            "--override", f"stage4.association.graph.algorithm=connected_components",
+            "--override", f"stage4.association.graph.bridge_prune_margin={params['bridge_prune']}",
+            "--override", f"stage4.association.graph.max_component_size=12",
             "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
+            "--override", f"stage4.association.weights.vehicle.hsv={HSV_W_FIXED}",
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
-            "--override", f"stage4.association.reranking.enabled={str(params['reranking']).lower()}",
-            "--override", f"stage4.association.mutual_nn.top_k_per_query={params['mutual_nn_k']}",
+            "--override", "stage4.association.reranking.enabled=false",
             "--override", "stage5.mtmc_only_submission=false",
         ]
         # When aqe_k=0 explicitly disable AQE so DBA rebuild is also skipped (saves ~2s/combo)
@@ -833,15 +865,15 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
-    header = f"{'sim':<6} {'res':<6} {'aqe':<5} {'rerank':<8} {'app_w':<7} {'mnn_k':<6} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'aqe':<5} {'app_w':<7} {'bridge':<8} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
-        print(f"{r2['sim_thresh']:<6} {r2['louvain_res']:<6} {r2['aqe_k']:<5} "
-              f"{str(r2['reranking']):<8} {r2['appearance_w']:<7} {r2.get('mutual_nn_k',10):<6} {r2.get('st_w',0.25):<7} "
+        print(f"{r2['sim_thresh']:<6} {r2['aqe_k']:<5} {r2['appearance_w']:<7} "
+              f"{r2['bridge_prune']:<8} {r2.get('st_w',0.25):<7} "
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
-    print(f"\\nBEST: sim={best['sim_thresh']} res={best['louvain_res']} aqe={best['aqe_k']} "
-          f"reranking={best['reranking']} mnn_k={best.get('mutual_nn_k',10)} -> IDF1={best['IDF1']:.3f} HOTA={best['HOTA']:.3f}")
+    print(f"\\nBEST: sim={best['sim_thresh']} aqe={best['aqe_k']} app={best['appearance_w']} "
+          f"bridge={best['bridge_prune']} -> IDF1={best['IDF1']:.3f} HOTA={best['HOTA']:.3f}")
     # Save results to JSON for offline analysis
     import json as _json
     results_path = DATA_OUT / "scan_results.json"

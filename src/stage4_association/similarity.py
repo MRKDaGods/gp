@@ -6,7 +6,7 @@ nearest-neighbor filtering.
 
 from __future__ import annotations
 
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 from loguru import logger
@@ -75,12 +75,20 @@ def compute_combined_similarity(
     class_ids: List[int],
     st_validator: SpatioTemporalValidator,
     weights: dict,
+    num_frames: Optional[List[int]] = None,
 ) -> Dict[Tuple[int, int], float]:
     """Compute weighted combined similarity with class-adaptive weights.
 
     Uses different weight profiles for persons vs vehicles:
     - **Persons**: Higher appearance weight, lower HSV (clothing vs. lighting).
     - **Vehicles**: Higher HSV weight (more stable colour across cameras).
+
+    Length weighting (when *num_frames* is provided): edges between longer
+    tracklets receive a confidence boost.  The geometric mean of the two
+    tracklet lengths, normalised by the max length, produces a factor in
+    (0, 1] that is mixed 50/50 with 1.0 so short-tracklet pairs are only
+    mildly penalised (factor range [0.5, 1.0]).  This is the same approach
+    used in SOTA MTMC systems (cf. reference Stage 4 pipeline).
 
     Args:
         appearance_sim: Dict[(i, j)] -> appearance similarity score.
@@ -92,10 +100,13 @@ def compute_combined_similarity(
         st_validator: Spatio-temporal validator instance.
         weights: Dict with keys 'appearance', 'hsv', 'spatiotemporal',
                  and optionally 'person' / 'vehicle' sub-dicts.
+        num_frames: Optional frame count per tracklet for length weighting.
 
     Returns:
         Dict[(i, j)] -> combined similarity score.
     """
+    import math
+
     # Default weights
     default_w = {
         "appearance": weights.get("appearance", 0.6),
@@ -109,6 +120,10 @@ def compute_combined_similarity(
     vehicle_w = weights.get("vehicle", {
         "appearance": 0.50, "hsv": 0.25, "spatiotemporal": 0.25,
     })
+
+    # Length weighting config
+    length_power = float(weights.get("length_weight_power", 0.0))
+    use_length_weight = length_power > 0 and num_frames is not None
 
     combined: Dict[Tuple[int, int], float] = {}
 
@@ -150,6 +165,16 @@ def compute_combined_similarity(
 
         # Combined score
         score = w_app * app_sim + w_hsv * hsv_sim + w_st * st_score
+
+        # Length weighting: longer tracklets = more reliable embeddings
+        if use_length_weight:
+            li = max(float(num_frames[i]), 1.0)
+            lj = max(float(num_frames[j]), 1.0)
+            geom_mean = math.pow(li * lj, length_power)
+            max_len = math.pow(max(li, lj), length_power) + 1e-8
+            length_w = geom_mean / max_len  # in (0, 1]
+            score *= 0.5 + 0.5 * length_w  # mild penalty range [0.5, 1.0]
+
         combined[(i, j)] = score
 
     return combined

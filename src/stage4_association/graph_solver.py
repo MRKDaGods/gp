@@ -14,6 +14,11 @@ class GraphSolver:
     Nodes represent tracklets, edges represent plausible same-identity links
     weighted by combined similarity. Connected components or community detection
     identifies global identities.
+
+    Bridge pruning (optional): After building the graph, identifies bridge edges
+    (the sole connection between two sub-graphs).  If a bridge's weight is below
+    ``bridge_prune_threshold``, it is removed.  This prevents false transitive
+    merges (A~B~C where the A-B link is weak but B-C is strong).
     """
 
     def __init__(
@@ -22,11 +27,15 @@ class GraphSolver:
         algorithm: str = "connected_components",
         louvain_resolution: float = 1.0,
         louvain_seed: int = 42,
+        bridge_prune_margin: float = 0.0,
+        max_component_size: int = 0,
     ):
         self.similarity_threshold = similarity_threshold
         self.algorithm = algorithm
         self.louvain_resolution = louvain_resolution
         self.louvain_seed = louvain_seed
+        self.bridge_prune_margin = bridge_prune_margin
+        self.max_component_size = max_component_size
 
     def solve(
         self,
@@ -58,6 +67,23 @@ class GraphSolver:
             f"(threshold={self.similarity_threshold})"
         )
 
+        # Bridge pruning: remove weak bridges that are the sole connection
+        # between two sub-graphs.  These are the most dangerous edges for
+        # false transitive merges.
+        if self.bridge_prune_margin > 0:
+            bridge_threshold = self.similarity_threshold + self.bridge_prune_margin
+            bridges = list(nx.bridges(G))
+            pruned = 0
+            for u, v in bridges:
+                if G[u][v].get("weight", 1.0) < bridge_threshold:
+                    G.remove_edge(u, v)
+                    pruned += 1
+            if pruned > 0:
+                logger.info(
+                    f"Bridge pruning: removed {pruned}/{len(bridges)} weak bridges "
+                    f"(threshold={bridge_threshold:.3f})"
+                )
+
         # Find clusters
         if self.algorithm == "connected_components":
             clusters = list(nx.connected_components(G))
@@ -65,6 +91,38 @@ class GraphSolver:
             clusters = self._community_detection(G, self.louvain_resolution, self.louvain_seed)
         else:
             raise ValueError(f"Unknown algorithm: {self.algorithm}")
+
+        # Split oversized components by iteratively removing weakest edges
+        if self.max_component_size > 0:
+            split_count = 0
+            final_clusters = []
+            for cluster in clusters:
+                if len(cluster) <= self.max_component_size:
+                    final_clusters.append(cluster)
+                    continue
+                # Extract subgraph and iteratively remove weakest edge
+                sub = G.subgraph(cluster).copy()
+                while sub.number_of_edges() > 0:
+                    components = list(nx.connected_components(sub))
+                    oversized = [c for c in components if len(c) > self.max_component_size]
+                    if not oversized:
+                        break
+                    # Remove weakest edge in any oversized component
+                    for comp in oversized:
+                        comp_sub = sub.subgraph(comp)
+                        weakest = min(
+                            comp_sub.edges(data=True),
+                            key=lambda e: e[2].get("weight", 1.0),
+                        )
+                        sub.remove_edge(weakest[0], weakest[1])
+                        split_count += 1
+                final_clusters.extend(list(nx.connected_components(sub)))
+            if split_count > 0:
+                logger.info(
+                    f"Component size cap ({self.max_component_size}): "
+                    f"split {split_count} edges, {len(clusters)} -> {len(final_clusters)} clusters"
+                )
+            clusters = final_clusters
 
         # Filter out single-node clusters (keep them but they represent
         # tracklets seen on only one camera)

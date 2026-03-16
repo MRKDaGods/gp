@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import cv2
+import numpy as np
 from loguru import logger
 from omegaconf import DictConfig
 
@@ -17,6 +19,30 @@ from src.core.io_utils import save_tracklets_by_camera
 from src.stage1_tracking.detector import Detector
 from src.stage1_tracking.tracker import TrackerWrapper
 from src.stage1_tracking.tracklet_builder import TrackletBuilder
+
+
+def _load_roi_mask(cfg: DictConfig, camera_id: str) -> Optional[np.ndarray]:
+    """Load ROI mask for a camera if available.
+
+    Looks for roi.jpg in the camera's data directory.
+    Returns a single-channel binary mask (uint8, 0 or 255), or None.
+    """
+    data_root = Path(cfg.stage0.input_dir)
+    roi_path = data_root / camera_id / "roi.jpg"
+    if not roi_path.exists():
+        return None
+
+    roi = cv2.imread(str(roi_path))
+    if roi is None:
+        return None
+
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(roi_gray, 127, 255, cv2.THRESH_BINARY)
+    logger.info(
+        f"Loaded ROI mask for {camera_id}: "
+        f"{mask.sum() / 255 / mask.size * 100:.1f}% coverage"
+    )
+    return mask
 
 
 def run_stage1(
@@ -79,6 +105,12 @@ def run_stage1(
         if smoke_test:
             cam_frames = cam_frames[:10]
 
+        # Load ROI mask (if available) to mask out non-road regions
+        roi_cfg = stage_cfg.get("roi", {})
+        roi_mask = None
+        if roi_cfg.get("enabled", True):
+            roi_mask = _load_roi_mask(cfg, camera_id)
+
         # Initialize tracker for this camera
         tracker = TrackerWrapper(
             algorithm=stage_cfg.tracker.algorithm,
@@ -108,10 +140,17 @@ def run_stage1(
                 logger.warning(f"Cannot read frame: {frame_info.frame_path}")
                 continue
 
-            # Detect
-            detections = detector.detect(frame)
+            # Apply ROI mask before detection (mask non-road regions to black).
+            # The tracker still receives the original frame for ReID features.
+            if roi_mask is not None:
+                frame_masked = cv2.bitwise_and(frame, frame, mask=roi_mask)
+            else:
+                frame_masked = frame
 
-            # Track
+            # Detect on masked frame (or original if no ROI)
+            detections = detector.detect(frame_masked)
+
+            # Track on original frame (unmasked for ReID appearance)
             tracks = tracker.update(detections, frame)
 
             # Accumulate

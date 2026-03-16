@@ -75,17 +75,20 @@ def run_stage4(
     camera_ids = [f.camera_id for f in features]
     class_ids = [f.class_id for f in features]
 
-    # Get temporal info from metadata store
+    # Get temporal info and frame counts from metadata store
     start_times = []
     end_times = []
+    num_frames = []
     for i in range(n):
         meta = metadata_store.get_tracklet(i)
         if meta:
             start_times.append(meta["start_time"])
             end_times.append(meta["end_time"])
+            num_frames.append(meta.get("num_frames", 1))
         else:
             start_times.append(0.0)
             end_times.append(0.0)
+            num_frames.append(1)
 
     # Step 1: FAISS top-K retrieval
     top_k = stage_cfg.top_k
@@ -220,6 +223,7 @@ def run_stage4(
         st_validator=st_validator,
         weights=stage_cfg.weights,
         class_ids=class_ids,
+        num_frames=num_frames,
     )
 
     logger.info(f"Combined similarity pairs: {len(combined_sim)}")
@@ -246,6 +250,8 @@ def run_stage4(
                     algorithm=stage_cfg.graph.algorithm,
                     louvain_resolution=stage_cfg.graph.get("louvain_resolution", 1.0),
                     louvain_seed=int(stage_cfg.graph.get("louvain_seed", 42)),
+                    bridge_prune_margin=float(stage_cfg.graph.get("bridge_prune_margin", 0.0)),
+                    max_component_size=int(stage_cfg.graph.get("max_component_size", 0)),
                 )
                 tmp_clusters = tmp_solver.solve(combined_sim, n)
                 # Only learn from multi-member clusters
@@ -280,6 +286,8 @@ def run_stage4(
         algorithm=stage_cfg.graph.algorithm,
         louvain_resolution=stage_cfg.graph.get("louvain_resolution", 1.0),
         louvain_seed=int(stage_cfg.graph.get("louvain_seed", 42)),
+        bridge_prune_margin=float(stage_cfg.graph.get("bridge_prune_margin", 0.0)),
+        max_component_size=int(stage_cfg.graph.get("max_component_size", 0)),
     )
 
     clusters = solver.solve(combined_sim, n)
@@ -398,6 +406,19 @@ def _build_candidate_pairs(
     return candidate_pairs
 
 
+def _extract_scene(camera_id: str) -> str:
+    """Extract scene prefix from camera ID.
+
+    E.g. 'S01_c001' -> 'S01', 'cam1' -> '' (no scene prefix).
+    Used for scene blocking: cameras from different scenes should never
+    be linked (they are physically separate locations).
+    """
+    parts = camera_id.split("_")
+    if len(parts) >= 2 and parts[0][:1].upper() == "S" and parts[0][1:].isdigit():
+        return parts[0]
+    return ""  # No scene prefix — treat all cameras as same scene
+
+
 def _build_all_cross_camera_pairs(
     n: int,
     embeddings: np.ndarray,
@@ -411,6 +432,11 @@ def _build_all_cross_camera_pairs(
     pairwise cosine similarities rather than relying on FAISS top-K retrieval.
     FAISS top-K can miss true matches when many visually-similar vehicles push
     genuine cross-camera pairs below the top-K cutoff.
+
+    **Scene blocking**: Camera pairs from different scenes (e.g. S01 vs S02) are
+    skipped entirely.  This prevents cross-scene vehicles from contaminating
+    the mutual-NN neighbourhoods, which would otherwise displace valid same-scene
+    matches from the top-K slots.
 
     Handles the matrix computation camera-pair-by-camera-pair to keep peak memory
     usage proportional to the largest camera's tracklet count (not N²).
@@ -434,14 +460,34 @@ def _build_all_cross_camera_pairs(
         cam_to_idxs[cam].append(idx)
 
     cameras = sorted(cam_to_idxs.keys())
+
+    # Pre-compute scene for each camera for scene blocking
+    cam_scenes = {cam: _extract_scene(cam) for cam in cameras}
+    scene_set = set(cam_scenes.values()) - {""}
+    scene_blocking_active = len(scene_set) > 1
+    if scene_blocking_active:
+        logger.info(
+            f"Scene blocking: {len(scene_set)} scenes detected "
+            f"({', '.join(sorted(scene_set))}). Cross-scene pairs will be skipped."
+        )
+
     candidate_pairs: List[Tuple[int, int, float]] = []
+    skipped_cross_scene = 0
 
     # Iterate over all ordered camera pairs (a_cam < b_cam to avoid duplicates)
     for a_idx, cam_a in enumerate(cameras):
         a_global = cam_to_idxs[cam_a]
         a_embs = embeddings[a_global]  # (N_a, D)
+        scene_a = cam_scenes[cam_a]
 
         for cam_b in cameras[a_idx + 1:]:
+            scene_b = cam_scenes[cam_b]
+
+            # Scene blocking: skip camera pairs from different scenes
+            if scene_blocking_active and scene_a and scene_b and scene_a != scene_b:
+                skipped_cross_scene += len(a_global) * len(cam_to_idxs[cam_b])
+                continue
+
             b_global = cam_to_idxs[cam_b]
             b_embs = embeddings[b_global]  # (N_b, D)
 
@@ -459,7 +505,9 @@ def _build_all_cross_camera_pairs(
 
     logger.info(
         f"Exhaustive cross-camera pairs: {len(candidate_pairs)} "
-        f"(min_sim={min_similarity:.2f}, {len(cameras)} cameras)"
+        f"(min_sim={min_similarity:.2f}, {len(cameras)} cameras"
+        + (f", {skipped_cross_scene:,} cross-scene pairs blocked" if skipped_cross_scene else "")
+        + ")"
     )
     return candidate_pairs
 

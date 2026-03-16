@@ -48,6 +48,7 @@ class ReIDModel:
         device: str = "cuda:0",
         half: bool = True,
         flip_augment: bool = True,
+        color_augment: bool = False,
         num_cameras: int = 0,
         vit_model: str = "vit_base_patch16_clip_224.openai",
         clip_normalization: Optional[bool] = None,
@@ -59,6 +60,7 @@ class ReIDModel:
         self.device = device
         self.half = half and "cuda" in device
         self.flip_augment = flip_augment
+        self.color_augment = color_augment
         self.num_cameras = num_cameras
         self.vit_model = vit_model
 
@@ -210,6 +212,8 @@ class ReIDModel:
                 features = features[0]
             features = features.float().cpu().numpy()
 
+            n_views = 1  # original
+
             if self.flip_augment:
                 # Flipped features
                 flipped_crops = [cv2.flip(c, 1) for c in batch_crops]
@@ -220,8 +224,27 @@ class ReIDModel:
                 if isinstance(flip_features, (tuple, list)):
                     flip_features = flip_features[0]
                 flip_features = flip_features.float().cpu().numpy()
-                # Average original + flipped
-                features = (features + flip_features) / 2.0
+                features = features + flip_features
+                n_views += 1
+
+            if self.color_augment:
+                # Brightness/contrast augmented features (2 variants)
+                for alpha, beta in [(1.2, 15), (0.8, -10)]:
+                    aug_crops = [
+                        cv2.convertScaleAbs(c, alpha=alpha, beta=beta)
+                        for c in batch_crops
+                    ]
+                    aug_tensor = self._preprocess(aug_crops).to(self.device)
+                    if self.half:
+                        aug_tensor = aug_tensor.half()
+                    aug_features = self.model(aug_tensor)
+                    if isinstance(aug_features, (tuple, list)):
+                        aug_features = aug_features[0]
+                    features = features + aug_features.float().cpu().numpy()
+                    n_views += 1
+
+            # Average all views
+            features = features / n_views
 
             all_embeddings.append(features)
 
