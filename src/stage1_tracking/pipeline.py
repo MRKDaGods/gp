@@ -38,9 +38,15 @@ def _load_roi_mask(cfg: DictConfig, camera_id: str) -> Optional[np.ndarray]:
 
     roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     _, mask = cv2.threshold(roi_gray, 127, 255, cv2.THRESH_BINARY)
+    coverage = mask.sum() / 255 / mask.size * 100
+    if coverage < 10.0:
+        logger.warning(
+            f"ROI mask for {camera_id} has only {coverage:.1f}% coverage — "
+            f"skipping (likely bad mask)"
+        )
+        return None
     logger.info(
-        f"Loaded ROI mask for {camera_id}: "
-        f"{mask.sum() / 255 / mask.size * 100:.1f}% coverage"
+        f"Loaded ROI mask for {camera_id}: {coverage:.1f}% coverage"
     )
     return mask
 
