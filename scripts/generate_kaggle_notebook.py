@@ -695,7 +695,7 @@ if SCAN_ENABLED:
         "louvain_res":      [0.7, 1.0, 1.3],
         "aqe_k":            [5, 7],         # keep small to avoid long runtimes
         "reranking":        [True, False],  # ablation: on vs off
-        "appearance_w":     [APPEARANCE_WEIGHT],   # anchor to single-run default; extend to sweep
+        "appearance_w":     [APPEARANCE_WEIGHT, 0.70],  # test vs dataset-config default (0.70)
     }
 
     keys   = list(scan_grid.keys())
