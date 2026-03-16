@@ -209,6 +209,17 @@ def trajectories_to_mot_submission(
         f"{sum(len(r) for r in camera_rows.values())} detection rows"
     )
 
+    # ── Per-camera diagnostic summary ────────────────────────────────────────
+    # Helps diagnose FP ratio issues and detect cameras with anomalous counts.
+    global_ids_per_cam = {}
+    for cam_id, rows in sorted(camera_rows.items()):
+        unique_ids = set(r[1] for r in rows)
+        global_ids_per_cam[cam_id] = unique_ids
+        logger.info(
+            f"  {cam_id}: {len(rows):>6d} rows, "
+            f"{len(unique_ids):>3d} trajectory IDs"
+        )
+
 
 def trajectories_to_aic_submission(
     trajectories: List[GlobalTrajectory],

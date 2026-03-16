@@ -729,7 +729,7 @@ MTMC_ONLY = True
 print("Stage 4 params:")
 print(f"  aqe_k={AQE_K}  sim_thresh={SIM_THRESH}  algorithm={ALGORITHM}  appearance_weight={APPEARANCE_WEIGHT}")
 print(f"  bridge_prune={BRIDGE_PRUNE}  max_comp_size={MAX_COMP_SIZE}")
-print(f"Stage 5: mtmc_only_submission={MTMC_ONLY}")\
+print(f"Stage 5: mtmc_only_submission={MTMC_ONLY}, stationary_filter=True")\
 """, "c10"))
 
     cells.append(md("## 4. Run Stages 4-5", "c11"))
@@ -751,6 +751,8 @@ cmd = [
     "--override", f"stage4.association.graph.max_component_size={MAX_COMP_SIZE}",
     "--override", f"stage4.association.weights.vehicle.appearance={APPEARANCE_WEIGHT}",
     "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
+    "--override", "stage5.stationary_filter.enabled=true",
+    "--override", "stage5.stationary_filter.min_displacement_px=50",
 ]
 if GT_DIR:
     cmd += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
@@ -842,6 +844,8 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
             "--override", "stage4.association.reranking.enabled=false",
             "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
+            "--override", "stage5.stationary_filter.enabled=true",
+            "--override", "stage5.stationary_filter.min_displacement_px=50",
         ]
         if GT_DIR:
             cmd_scan += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]

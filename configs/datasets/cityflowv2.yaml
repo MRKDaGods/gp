@@ -222,6 +222,13 @@ stage5:
   # Single-cam singletons are guaranteed FP (3-5x more predictions than GT).
   # Dropping them loses 29/240 = 12% GT vehicles but eliminates massive FP flood.
   mtmc_only_submission: true
+  # --- Non-GT stationary vehicle filter ---
+  # Removes trajectories where ALL tracklets have near-zero displacement.
+  # Parked cars produce long-lived detections → guaranteed FP in MTMC eval.
+  # No GT information used — purely motion-based.
+  stationary_filter:
+    enabled: true
+    min_displacement_px: 50   # minimum pixel displacement to consider "moving"
   # --- GT-assisted post-processing (DISABLED for fair SOTA comparison) ---
   # These use test-time GT to filter predictions, which inflates metrics vs.
   # a blind AIC server submission (SOTA 84.1% achieved WITHOUT these filters).

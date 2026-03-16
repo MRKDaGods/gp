@@ -67,6 +67,16 @@ def run_stage5(
                 "margin_cm": 100.0,
             }
 
+    # ── Optional: remove stationary vehicles (parked cars) ──────────────────
+    # Detections on parked/stationary vehicles create long-lived tracks with
+    # near-zero displacement.  These are guaranteed FP in MTMC evaluation
+    # (GT only annotates moving, intersection-crossing vehicles).
+    # This is a legitimate non-GT filter: no ground-truth information used.
+    static_cfg = stage_cfg.get("stationary_filter", {})
+    if static_cfg.get("enabled", False):
+        min_displacement = float(static_cfg.get("min_displacement_px", 50.0))
+        trajectories = _filter_stationary(trajectories, min_displacement)
+
     # ── Optional: only submit multi-camera trajectories ──────────────────────
     # CityFlowV2/AIC GT exclusively annotates vehicles that cross multiple
     # cameras.  Single-camera trajectories (vehicles never seen in >1 camera)
@@ -84,6 +94,11 @@ def run_stage5(
 
     trajectories_to_mot_submission(submit_traj, pred_dir, roi_config=roi_config)
     logger.info(f"Predictions converted to MOT format in {pred_dir}")
+
+    # ── Submission quality diagnostic ─────────────────────────────────────────
+    # Compare prediction volume against GT to detect FP flood issues early.
+    if gt_dir is not None and Path(gt_dir).exists():
+        _log_submission_quality(pred_dir, Path(gt_dir))
 
     # ── GT zone filter ────────────────────────────────────────────────────────
     # Smarter filter: for each camera, keep only PREDICTION TRACKS that share
@@ -366,6 +381,45 @@ def _compute_summary_stats(trajectories: List[GlobalTrajectory]) -> EvaluationRe
     )
 
 
+def _log_submission_quality(pred_dir: Path, gt_dir: Path) -> None:
+    """Log per-camera pred/GT row ratios to diagnose FP flood issues."""
+    from src.stage5_evaluation.metrics import _find_gt_file
+
+    total_pred = 0
+    total_gt = 0
+
+    for pred_file in sorted(pred_dir.glob("*.txt")):
+        cam_id = pred_file.stem
+        pred_rows = sum(1 for line in open(pred_file) if line.strip())
+        total_pred += pred_rows
+
+        gt_file = _find_gt_file(gt_dir, cam_id)
+        gt_rows = 0
+        if gt_file is not None:
+            gt_rows = sum(1 for line in open(gt_file) if line.strip())
+        total_gt += gt_rows
+
+        ratio = pred_rows / gt_rows if gt_rows > 0 else float("inf")
+        status = "OK" if 0.5 <= ratio <= 2.0 else "HIGH" if ratio > 2.0 else "LOW"
+        logger.info(
+            f"  Quality {cam_id}: pred={pred_rows:>6d}  gt={gt_rows:>6d}  "
+            f"ratio={ratio:.2f}x  [{status}]"
+        )
+
+    overall_ratio = total_pred / total_gt if total_gt > 0 else float("inf")
+    if overall_ratio > 2.0:
+        logger.warning(
+            f"Submission quality: {total_pred} pred rows vs {total_gt} GT rows "
+            f"({overall_ratio:.1f}x) — HIGH FP ratio detected. "
+            f"Consider raising detection confidence or enabling stationary filter."
+        )
+    else:
+        logger.info(
+            f"Submission quality: {total_pred} pred rows vs {total_gt} GT rows "
+            f"({overall_ratio:.2f}x)"
+        )
+
+
 def _apply_gt_zone_filter(
     pred_dir: Path,
     gt_dir: Path,
@@ -477,3 +531,62 @@ def _apply_gt_zone_filter(
         f"({dropped_rows}/{total_before} rows, {pct:.1f}%) "
         f"that never overlapped any GT box"
     )
+
+
+def _filter_stationary(
+    trajectories: List[GlobalTrajectory],
+    min_displacement_px: float = 50.0,
+) -> List[GlobalTrajectory]:
+    """Remove trajectories where ALL tracklets show near-zero displacement.
+
+    A stationary vehicle (parked car) will have bounding boxes that barely
+    move across its entire track.  We compute displacement as the Euclidean
+    distance between the centre of the first and last bounding box of each
+    tracklet.  If EVERY tracklet in a trajectory has displacement below the
+    threshold, the trajectory is considered stationary and removed.
+
+    This is a **non-GT filter** — no ground truth information is used.
+
+    Args:
+        trajectories: List of global trajectories.
+        min_displacement_px: Minimum displacement (pixels) for a tracklet
+            to be considered "moving".
+
+    Returns:
+        Filtered list with stationary trajectories removed.
+    """
+    import math
+
+    kept = []
+    dropped = 0
+    dropped_tracklets = 0
+
+    for traj in trajectories:
+        has_moving_tracklet = False
+        for tracklet in traj.tracklets:
+            if len(tracklet.frames) < 2:
+                continue
+            first = tracklet.frames[0].bbox
+            last = tracklet.frames[-1].bbox
+            # Centre of first and last bbox
+            cx0 = (first[0] + first[2]) / 2.0
+            cy0 = (first[1] + first[3]) / 2.0
+            cx1 = (last[0] + last[2]) / 2.0
+            cy1 = (last[1] + last[3]) / 2.0
+            disp = math.hypot(cx1 - cx0, cy1 - cy0)
+            if disp >= min_displacement_px:
+                has_moving_tracklet = True
+                break
+
+        if has_moving_tracklet:
+            kept.append(traj)
+        else:
+            dropped += 1
+            dropped_tracklets += sum(1 for _ in traj.tracklets)
+
+    logger.info(
+        f"Stationary filter (min_displacement={min_displacement_px}px): "
+        f"dropped {dropped}/{dropped + len(kept)} trajectories "
+        f"({dropped_tracklets} tracklets) with near-zero displacement"
+    )
+    return kept
