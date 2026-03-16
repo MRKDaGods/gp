@@ -803,13 +803,16 @@ if SCAN_ENABLED:
     # v15: added length_weight_power (0.0=no penalty, 0.5=penalize short tracklets)
     # v16: enabled reranking in scan (was disabled = 2% IDF1 gap vs main run)
     #       extended sim_thresh to include 0.55 (main run's value outperformed grid max)
-    # Total: 5 × 3 × 2 × 3 × 2 = 180 combos (~70 min at ~24s each)
+    # v17: added orphan_match_threshold to test Phase 2 orphan-orphan matching
+    #       (with camera bias fix, initial clusters are better → Phase 2 may hurt)
+    # Total: 5 × 3 × 2 × 3 × 2 × 2 = 360 combos (~150 min at ~24s each)
     scan_grid = {
         "sim_thresh":       [0.35, 0.40, 0.45, 0.50, 0.55],  # 5: v14 showed sim=0.55 (main run) beat grid max
         "appearance_w":     [0.65, 0.70, 0.80],               # 3: how much to trust ReID
         "bridge_prune":     [0.0, 0.05],                      # 2: bridge pruning on/off
         "gallery_thresh":   [0.35, 0.45, 0.55],               # 3: orphan→cluster absorption threshold
         "len_weight":       [0.0, 0.5],                       # 2: length weighting power (0=off)
+        "orphan_thresh":    [0.0, 0.30],                      # 2: Phase 2 orphan-orphan (0=disabled)
     }
     HSV_W_FIXED = 0.025  # v11: lowered to match reference
 
@@ -825,7 +828,8 @@ if SCAN_ENABLED:
         app_tag = f"app{params['appearance_w']:.2f}".replace(".", "")
         gal_tag = f"gal{params['gallery_thresh']:.2f}".replace(".", "")
         lw_tag = f"lw{params['len_weight']:.1f}".replace(".", "")
-        scan_run = f"scan_{params['sim_thresh']}_{app_tag}_{bridge_tag}_{gal_tag}_{lw_tag}"
+        ot_tag = f"ot{params['orphan_thresh']:.2f}".replace(".", "")
+        scan_run = f"scan_{params['sim_thresh']}_{app_tag}_{bridge_tag}_{gal_tag}_{lw_tag}_{ot_tag}"
 
         # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
         # Symlink the upstream outputs so the scan sub-dir looks like a full run.
@@ -859,6 +863,7 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.weights.vehicle.hsv={HSV_W_FIXED}",
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
             "--override", f"stage4.association.weights.length_weight_power={params['len_weight']}",
+            "--override", f"stage4.association.gallery_expansion.orphan_match_threshold={params['orphan_thresh']}",
             "--override", "stage4.association.mutual_nn.top_k_per_query=20",
             "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
             "--override", "stage5.stationary_filter.enabled=true",
@@ -894,16 +899,16 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
-    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'len_w':<6} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'len_w':<6} {'orph':<6} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
         print(f"{r2['sim_thresh']:<6} {r2['appearance_w']:<7} "
-              f"{r2['bridge_prune']:<8} {r2.get('gallery_thresh','?'):<7} {r2.get('len_weight',0.5):<6} {r2.get('st_w',0.25):<7} "
+              f"{r2['bridge_prune']:<8} {r2.get('gallery_thresh','?'):<7} {r2.get('len_weight',0.5):<6} {r2.get('orphan_thresh',0.30):<6} {r2.get('st_w',0.25):<7} "
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
     print(f"\\nBEST: sim={best['sim_thresh']} app={best['appearance_w']} "
           f"bridge={best['bridge_prune']} gal={best.get('gallery_thresh','?')} "
-          f"len_w={best.get('len_weight',0.5)} "
+          f"len_w={best.get('len_weight',0.5)} orph={best.get('orphan_thresh',0.30)} "
           f"-> IDF1={best['IDF1']:.3f} MOTA={best['MOTA']:.3f} HOTA={best['HOTA']:.3f}")
     # Save results to JSON for offline analysis
     import json as _json
