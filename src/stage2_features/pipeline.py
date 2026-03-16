@@ -126,9 +126,17 @@ def run_stage2(
         clip_normalization=stage_cfg.reid.person.get("clip_normalization", None),
     )
 
+    _vehicle_weights = stage_cfg.reid.vehicle.weights_path
+    _vehicle_fallback = stage_cfg.reid.vehicle.get("weights_fallback")
+    if _vehicle_fallback and not Path(_vehicle_weights).exists() and Path(_vehicle_fallback).exists():
+        logger.warning(
+            f"Primary vehicle weights not found: {_vehicle_weights}. "
+            f"Using fallback: {_vehicle_fallback}"
+        )
+        _vehicle_weights = _vehicle_fallback
     vehicle_reid = ReIDModel(
         model_name=stage_cfg.reid.vehicle.model_name,
-        weights_path=stage_cfg.reid.vehicle.weights_path,
+        weights_path=_vehicle_weights,
         embedding_dim=stage_cfg.reid.vehicle.embedding_dim,
         input_size=tuple(stage_cfg.reid.vehicle.input_size),
         device=stage_cfg.reid.device,

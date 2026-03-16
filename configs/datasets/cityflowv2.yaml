@@ -71,7 +71,9 @@ stage1:
     appearance_thresh: 0.5
     new_track_thresh: 0.55     # v5: 0.55 (was 0.35) — slightly above track_high_thresh
     cmc_method: "sof"          # sparse optical flow CMC (lighter than ECC for mostly-static cameras)
-  min_tracklet_length: 10      # v5: 10 (was 3) — filter noise tracks < 1s at 10fps
+  min_tracklet_length: 5       # v6: 5 (was 10) — min=10 lost 39% of c008 GT tracks (median=12f)
+                               # and 17% of all GT tracks; min=5 cuts that to 6.4%
+                               # while still filtering truly ephemeral 1-4f FP tracks
   min_tracklet_area: 800       # vehicles are large
   interpolation:
     enabled: true
