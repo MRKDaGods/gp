@@ -131,6 +131,10 @@ def trajectories_to_mot_submission(
                 h = y2 - y1
                 total_count += 1
 
+                # Skip interpolated detections (confidence=0)
+                if frame.confidence == 0:
+                    continue
+
                 # Skip invalid bounding boxes (negative width/height)
                 if w <= 0 or h <= 0:
                     invalid_bbox_count += 1
