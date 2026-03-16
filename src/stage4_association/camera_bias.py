@@ -130,9 +130,15 @@ class CameraDistanceBias:
         if not self._bias:
             return similarities
 
-        # Compute global mean
-        all_sims = list(similarities.values())
-        global_mean = float(np.median(all_sims)) if all_sims else 0.5
+        # Use mean of per-pair biases as target center, NOT median of all raw
+        # similarities.  The raw median is very low (most pairs are unrelated)
+        # and would drag every matched-pair score below the graph threshold.
+        global_mean = float(np.mean(list(self._bias.values())))
+        logger.info(
+            f"Camera bias adjustment: {len(self._bias)} pairs, "
+            f"global_mean={global_mean:.3f}, "
+            f"per-pair biases={{{', '.join(f'{k[0]}-{k[1]}:{v:.3f}' for k, v in self._bias.items())}}}"
+        )
 
         adjusted = {}
         for (i, j), sim in similarities.items():
