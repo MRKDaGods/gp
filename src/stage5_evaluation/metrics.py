@@ -180,16 +180,17 @@ def evaluate_mot(
 # TrackEval path
 # ---------------------------------------------------------------------------
 
-def _remap_predictions_class1(src_dir: Path, dst_dir: Path) -> None:
-    """Copy prediction files replacing class field (col 7) with 1 (pedestrian).
+def _remap_class1_in_dir(src_dir: Path, dst_dir: Path, glob: str = "*.txt") -> None:
+    """Copy tracking files replacing class field (col 7) with 1 (pedestrian).
 
-    TrackEval's MotChallenge2DBox only evaluates class=1 (pedestrian).
-    Vehicle tracking uses different class IDs (2/5/7), so we remap to 1
-    before passing to TrackEval.  GT files with class=-1 (don't-care) are
-    unaffected and already handled correctly by TrackEval.
+    TrackEval's MotChallenge2DBox evaluates class=1 (pedestrian) only.
+    CityFlowV2 uses class=-1 in GT (unclassified vehicle) and class 2/5/7 in
+    predictions.  Remapping both GT and predictions to class=1 ensures TrackEval
+    places them in the same "pedestrian" bucket and can compute HOTA correctly.
+    Without this fix GT class=-1 ends up in a separate bucket → HOTA=0.
     """
     dst_dir.mkdir(parents=True, exist_ok=True)
-    for src_file in src_dir.glob("*.txt"):
+    for src_file in src_dir.glob(glob):
         lines = []
         with open(src_file) as f:
             for line in f:
@@ -201,6 +202,10 @@ def _remap_predictions_class1(src_dir: Path, dst_dir: Path) -> None:
                     parts[7] = "1"  # remap to pedestrian class
                 lines.append(",".join(parts))
         (dst_dir / src_file.name).write_text("\n".join(lines) + "\n")
+
+
+# Keep legacy name for compatibility
+_remap_predictions_class1 = _remap_class1_in_dir
 
 
 def _evaluate_with_trackeval(
@@ -215,18 +220,81 @@ def _evaluate_with_trackeval(
     gt_path = Path(gt_dir)
     pred_path = Path(pred_dir)
 
-    # TrackEval's MotChallenge2DBox hard-rejects non-pedestrian class IDs.
-    # Remap all prediction class fields to 1 in a temporary copy.
+    # TrackEval's MotChallenge2DBox evaluates class=1 (pedestrian) only.
+    # CityFlowV2 GT uses class=-1 (unclassified), predictions use class 2/5/7.
+    # Remap BOTH to class=1 in temporary copies so TrackEval can match them.
     tmp_root = Path(tempfile.mkdtemp())
     try:
-        remapped_name = pred_path.name + "_cls1"
-        remapped_path = tmp_root / remapped_name
-        _remap_predictions_class1(pred_path, remapped_path)
+        # Remap predictions (2/5/7 → 1)
+        remapped_pred_name = pred_path.name + "_cls1"
+        remapped_pred_path = tmp_root / remapped_pred_name
+        _remap_class1_in_dir(pred_path, remapped_pred_path)
 
-        result = _run_trackeval(gt_path, tmp_root, remapped_name, pred_path, metrics)
+        # Remap GT (-1 → 1): build a parallel GT directory with updated class fields
+        gt_remapped_root = tmp_root / "gt_cls1"
+        gt_remapped_path = _remap_gt_class1(gt_path, gt_remapped_root)
+
+        result = _run_trackeval(gt_remapped_path, tmp_root, remapped_pred_name, pred_path, metrics)
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
     return result
+
+
+def _remap_gt_class1(gt_path: Path, dst_root: Path) -> Path:
+    """Build a lightweight GT directory tree with class column remapped to 1.
+
+    Copies only what TrackEval needs (``gt/gt.txt`` and ``seqinfo.ini``),
+    avoiding copying large video files.  Remaps class=-1 (CityFlowV2
+    unclassified vehicle) to class=1 so TrackEval can match them against
+    the remapped pedestrian predictions.
+
+    TrackEval expects:
+        {gt_folder}/{seq}/gt/gt.txt
+        {gt_folder}/{seq}/seqinfo.ini   (optional but needed for HOTA)
+
+    Returns:
+        Path to the remapped GT root directory.
+    """
+    dst_root.mkdir(parents=True, exist_ok=True)
+
+    for seq_dir in sorted(gt_path.iterdir()):
+        if not seq_dir.is_dir():
+            continue
+
+        dst_seq = dst_root / seq_dir.name
+        dst_seq.mkdir(exist_ok=True)
+
+        # Copy seqinfo.ini if present
+        src_seqinfo = seq_dir / "seqinfo.ini"
+        if src_seqinfo.exists():
+            import shutil
+            shutil.copy2(str(src_seqinfo), str(dst_seq / "seqinfo.ini"))
+
+        # Find gt.txt — CityFlowV2 places it at either gt/gt.txt or gt.txt
+        src_gt_candidates = [
+            seq_dir / "gt" / "gt.txt",
+            seq_dir / "gt.txt",
+        ]
+        src_gt = next((p for p in src_gt_candidates if p.exists()), None)
+        if src_gt is None:
+            continue
+
+        # Write remapped copy at canonical location: {seq}/gt/gt.txt
+        dst_gt_dir = dst_seq / "gt"
+        dst_gt_dir.mkdir(exist_ok=True)
+        lines = []
+        with open(src_gt) as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                parts = line.split(",")
+                if len(parts) >= 8:
+                    parts[7] = "1"  # remap from -1 (unclassified) to pedestrian
+                lines.append(",".join(parts))
+        (dst_gt_dir / "gt.txt").write_text("\n".join(lines) + "\n")
+
+    return dst_root
 
 
 def _run_trackeval(
