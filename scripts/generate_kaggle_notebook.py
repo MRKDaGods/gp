@@ -104,6 +104,9 @@ print(f"\\n✓ Repo ready at {PROJECT}")""", "aa04"))
 CELLS.append(cell_code("""def pip(*args):
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", *args])
 
+# ── ultralytics (YOLO detector) ──────────────────────────────────────────────
+pip("ultralytics")
+
 # ── boxmot (BotSort tracker) ──────────────────────────────────────────────────
 pip("boxmot")
 
