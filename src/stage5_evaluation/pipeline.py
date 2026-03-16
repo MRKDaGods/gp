@@ -95,6 +95,18 @@ def run_stage5(
     trajectories_to_mot_submission(submit_traj, pred_dir, roi_config=roi_config)
     logger.info(f"Predictions converted to MOT format in {pred_dir}")
 
+    # ── Track smoothing ──────────────────────────────────────────────────────
+    # Smooth bounding box trajectories to reduce detection jitter.
+    # Improves IoU with GT boxes → better MOTA/IDF1.  Uses Savitzky-Golay
+    # filter on bbox (cx, cy, w, h) to preserve trends while removing noise.
+    smooth_cfg = stage_cfg.get("track_smoothing", {})
+    if smooth_cfg.get("enabled", False):
+        _smooth_prediction_tracks(
+            pred_dir,
+            window=int(smooth_cfg.get("window", 7)),
+            polyorder=int(smooth_cfg.get("polyorder", 2)),
+        )
+
     # ── Submission quality diagnostic ─────────────────────────────────────────
     # Compare prediction volume against GT to detect FP flood issues early.
     if gt_dir is not None and Path(gt_dir).exists():
@@ -418,6 +430,89 @@ def _log_submission_quality(pred_dir: Path, gt_dir: Path) -> None:
             f"Submission quality: {total_pred} pred rows vs {total_gt} GT rows "
             f"({overall_ratio:.2f}x)"
         )
+
+
+def _smooth_prediction_tracks(
+    pred_dir: Path,
+    window: int = 7,
+    polyorder: int = 2,
+) -> None:
+    """Apply Savitzky-Golay smoothing to per-track bounding box trajectories.
+
+    For each camera prediction file, groups rows by track ID, sorts by frame,
+    and smooths (cx, cy, w, h) using scipy's Savitzky-Golay filter.  Short
+    tracks (< window) are left unchanged.
+
+    This reduces detection jitter → better IoU with GT → improved MOTA/IDF1.
+    """
+    try:
+        from scipy.signal import savgol_filter
+    except ImportError:
+        logger.warning("scipy not available — skipping track smoothing")
+        return
+
+    total_smoothed = 0
+    total_skipped = 0
+
+    for pred_file in sorted(pred_dir.glob("*.txt")):
+        # Load all rows
+        rows_by_track: dict = {}
+        all_lines: list = []
+        with open(pred_file) as f:
+            for line in f:
+                line = line.rstrip()
+                if not line:
+                    continue
+                parts = line.split(",")
+                if len(parts) < 6:
+                    continue
+                tid = int(parts[1])
+                rows_by_track.setdefault(tid, []).append(parts)
+                all_lines.append(parts)
+
+        # Smooth each track independently
+        for tid, rows in rows_by_track.items():
+            if len(rows) < window:
+                total_skipped += 1
+                continue
+
+            # Sort by frame
+            rows.sort(key=lambda p: int(p[0]))
+
+            # Extract bbox as (cx, cy, w, h) for better smoothing
+            coords = np.array([
+                [float(p[2]) + float(p[4]) / 2,  # cx
+                 float(p[3]) + float(p[5]) / 2,  # cy
+                 float(p[4]),                      # w
+                 float(p[5])]                      # h
+                for p in rows
+            ])
+
+            # Apply Savitzky-Golay filter to each dimension
+            for dim in range(4):
+                coords[:, dim] = savgol_filter(coords[:, dim], window, polyorder)
+
+            # Write back as (x, y, w, h) — ensure non-negative w, h
+            for k, parts in enumerate(rows):
+                cx, cy = coords[k, 0], coords[k, 1]
+                w = max(coords[k, 2], 1.0)
+                h = max(coords[k, 3], 1.0)
+                parts[2] = f"{cx - w / 2:.1f}"
+                parts[3] = f"{cy - h / 2:.1f}"
+                parts[4] = f"{w:.1f}"
+                parts[5] = f"{h:.1f}"
+
+            total_smoothed += 1
+
+        # Write back all rows (preserving original order)
+        with open(pred_file, "w") as f:
+            for parts in all_lines:
+                f.write(",".join(parts) + "\n")
+
+    logger.info(
+        f"Track smoothing (window={window}, poly={polyorder}): "
+        f"smoothed {total_smoothed} tracks, skipped {total_skipped} (too short)"
+    )
 
 
 def _apply_gt_zone_filter(

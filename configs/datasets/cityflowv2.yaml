@@ -229,6 +229,13 @@ stage5:
   stationary_filter:
     enabled: true
     min_displacement_px: 50   # minimum pixel displacement to consider "moving"
+  # --- Track smoothing (Savitzky-Golay) ---
+  # Smooths bbox trajectories to reduce detection jitter → better IoU with GT.
+  # AIC21 1st place used post-trajectory smoothing for +1-2% IDF1.
+  track_smoothing:
+    enabled: true
+    window: 7        # Savitzky-Golay window (must be odd, ≥ polyorder+2)
+    polyorder: 2     # polynomial order (2=quadratic, smooth but preserves turns)
   # --- GT-assisted post-processing (DISABLED for fair SOTA comparison) ---
   # These use test-time GT to filter predictions, which inflates metrics vs.
   # a blind AIC server submission (SOTA 84.1% achieved WITHOUT these filters).

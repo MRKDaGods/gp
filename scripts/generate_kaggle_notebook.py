@@ -753,6 +753,9 @@ cmd = [
     "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
     "--override", "stage5.stationary_filter.enabled=true",
     "--override", "stage5.stationary_filter.min_displacement_px=50",
+    "--override", "stage5.track_smoothing.enabled=true",
+    "--override", "stage5.track_smoothing.window=7",
+    "--override", "stage5.track_smoothing.polyorder=2",
 ]
 if GT_DIR:
     cmd += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
@@ -849,6 +852,9 @@ if SCAN_ENABLED:
             "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
             "--override", "stage5.stationary_filter.enabled=true",
             "--override", "stage5.stationary_filter.min_displacement_px=50",
+            "--override", "stage5.track_smoothing.enabled=true",
+            "--override", "stage5.track_smoothing.window=7",
+            "--override", "stage5.track_smoothing.polyorder=2",
         ]
         if GT_DIR:
             cmd_scan += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
