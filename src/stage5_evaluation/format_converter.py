@@ -232,6 +232,8 @@ def trajectories_to_aic_submission(
                 x1, y1, x2, y2 = frame.bbox
                 w = x2 - x1
                 h = y2 - y1
+                if w <= 0 or h <= 0:
+                    continue
                 rows.append(
                     f"{tracklet.camera_id} {frame.frame_id} {traj.global_id} "
                     f"{x1:.1f} {y1:.1f} {w:.1f} {h:.1f}"
