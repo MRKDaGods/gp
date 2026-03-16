@@ -110,3 +110,38 @@ def test_max_component_size_no_split_needed():
     assert len(multi) == 2
     assert multi[0] == {0, 1}
     assert multi[1] == {2, 3}
+
+
+def test_bridge_pruning_cascading():
+    """Removing one bridge can expose another; both should be pruned."""
+    solver = GraphSolver(
+        similarity_threshold=0.3,
+        algorithm="connected_components",
+        bridge_prune_margin=0.15,  # prune bridges < 0.3 + 0.15 = 0.45
+    )
+    # Chain: 0-1 (0.8), 1-2 (0.4 bridge), 2-3 (0.7), 3-4 (0.35 bridge), 4-5 (0.9)
+    # After pruning 1-2 (0.4 < 0.45), node 2-3-4-5 remain.
+    # Then 3-4 (0.35 < 0.45) is now a bridge in 2-3-4-5, should also be pruned.
+    similarities = {(0, 1): 0.8, (1, 2): 0.4, (2, 3): 0.7, (3, 4): 0.35, (4, 5): 0.9}
+    clusters = solver.solve(similarities, num_nodes=6)
+    multi = sorted([c for c in clusters if len(c) > 1], key=lambda c: min(c))
+    assert len(multi) == 3
+    assert multi[0] == {0, 1}
+    assert multi[1] == {2, 3}
+    assert multi[2] == {4, 5}
+
+
+def test_max_component_size_large_cluster():
+    """Large cluster should be properly split into valid-sized pieces."""
+    solver = GraphSolver(
+        similarity_threshold=0.3,
+        algorithm="connected_components",
+        max_component_size=3,
+    )
+    # 5-node linear chain: weakest edge should be cut first
+    similarities = {
+        (0, 1): 0.9, (1, 2): 0.5, (2, 3): 0.8, (3, 4): 0.4,
+    }
+    clusters = solver.solve(similarities, num_nodes=5)
+    for c in clusters:
+        assert len(c) <= 3, f"Cluster {c} exceeds max_component_size=3"
