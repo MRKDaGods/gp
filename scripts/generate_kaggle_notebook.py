@@ -743,7 +743,8 @@ if SCAN_ENABLED:
     import itertools
 
     # Grid to search — comment out axes you don't want to vary
-    # appearance_w is anchored to the single-run value above; add more values to sweep it
+    # When appearance_w changes, spatiotemporal is auto-adjusted: st_w = 1 - app_w - 0.05
+    # so the three vehicle weights always sum to 1.0 (hsv fixed at 0.05).
     scan_grid = {
         "sim_thresh":       [0.45, 0.50, 0.55, 0.60],   # v7: narrowed around best (0.50)
         "louvain_res":      [0.60, 0.70, 0.80],          # v7: narrowed around best (0.70)
@@ -751,6 +752,7 @@ if SCAN_ENABLED:
         "reranking":        [False],                     # v7: scan showed reranking=False is best
         "appearance_w":     [0.65, 0.70, 0.75],          # v7: sweep around best (0.70)
     }
+    HSV_W_FIXED = 0.05  # fixed hsv weight; spatiotemporal = 1 - appearance - hsv
 
     keys   = list(scan_grid.keys())
     combos = list(itertools.product(*[scan_grid[k] for k in keys]))
@@ -772,6 +774,10 @@ if SCAN_ENABLED:
             if src.exists() and not dst.exists():
                 dst.symlink_to(src)
 
+        # Compute spatiotemporal weight to maintain sum=1.0
+        # hsv is fixed at 0.05; st = 1 - appearance - hsv
+        st_w = round(1.0 - params["appearance_w"] - HSV_W_FIXED, 4)
+
         cmd_scan = [
             sys.executable, "scripts/run_pipeline.py",
             "--config", "configs/default.yaml",
@@ -783,6 +789,7 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.graph.similarity_threshold={params['sim_thresh']}",
             "--override", f"stage4.association.graph.louvain_resolution={params['louvain_res']}",
             "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
+            "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
             "--override", f"stage4.association.reranking.enabled={str(params['reranking']).lower()}",
             "--override", "stage5.mtmc_only_submission=false",
         ]
@@ -802,20 +809,20 @@ if SCAN_ENABLED:
             mota = m.get("MOTA", m.get("mota", 0.0))
             hota = m.get("HOTA", m.get("hota", 0.0))
 
-        results.append({**params, "IDF1": idf1, "MOTA": mota, "HOTA": hota, "time": elapsed})
+        results.append({**params, "st_w": st_w, "IDF1": idf1, "MOTA": mota, "HOTA": hota, "time": elapsed})
         status = "OK" if r.returncode == 0 else "FAIL"
-        print(f"  [{status}] {params} -> IDF1={idf1:.3f} MOTA={mota:.3f} HOTA={hota:.3f} ({elapsed/60:.1f} min)")
+        print(f"  [{status}] {params} st_w={st_w:.2f} -> IDF1={idf1:.3f} MOTA={mota:.3f} HOTA={hota:.3f} ({elapsed/60:.1f} min)")
 
     # Sort by MTMC IDF1
     results.sort(key=lambda x: x["IDF1"], reverse=True)
     print("\\n" + "=" * 80)
     print("SCAN RESULTS (sorted by MTMC IDF1)")
     print("=" * 80)
-    header = f"{'sim':<6} {'res':<6} {'aqe':<5} {'rerank':<8} {'app_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'res':<6} {'aqe':<5} {'rerank':<8} {'app_w':<7} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
         print(f"{r2['sim_thresh']:<6} {r2['louvain_res']:<6} {r2['aqe_k']:<5} "
-              f"{str(r2['reranking']):<8} {r2['appearance_w']:<7} "
+              f"{str(r2['reranking']):<8} {r2['appearance_w']:<7} {r2.get('st_w',0.25):<7} "
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
     print(f"\\nBEST: sim={best['sim_thresh']} res={best['louvain_res']} aqe={best['aqe_k']} "
