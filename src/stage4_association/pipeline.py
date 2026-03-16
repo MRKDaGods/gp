@@ -117,6 +117,9 @@ def run_stage4(
             dba_index = FAISSIndex(index_type="flat_ip")
             dba_index.build(embeddings.astype(np.float32))
             distances, indices = dba_index.search(embeddings, top_k)
+            # Update faiss_index reference so reranking uses the DBA index
+            # (AQE-expanded embeddings, consistent with the modified embeddings)
+            faiss_index = dba_index
             logger.info(
                 f"QE+DBA: rebuilt FAISS with expanded embeddings "
                 f"(alpha={qe_alpha}, k={qe_k})"

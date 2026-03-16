@@ -746,14 +746,17 @@ if SCAN_ENABLED:
     # When appearance_w changes, spatiotemporal is auto-adjusted: st_w = 1 - app_w - hsv_w
     # so the three vehicle weights always sum to 1.0.
     # aqe_k=0 disables AQE entirely (raw PCA-whitened embeddings used directly).
-    # v10 additions: aqe_k=0 ablation, reranking=True test, appearance_w extended to 0.85,
-    #                louvain_res narrowed to 2 best values from v9 scan.
+    # v10 additions: aqe_k=0 ablation, reranking=True test, appearance_w=0.85,
+    #                mutual_nn_k varies (suspected bottleneck), louvain_res fixed at best.
+    # Key hypothesis: mutual NN filter (not sim_thresh) is the binding constraint.
+    # Varying mutual_nn_k from 5 to 20 tests if wider neighborhoods help cross-camera recall.
     scan_grid = {
-        "sim_thresh":       [0.40, 0.45, 0.50, 0.55],   # 4: covers the best region + lower for better recall
-        "louvain_res":      [0.60, 0.70],                # 2: dropped 0.80 (no improvement in v9)
+        "sim_thresh":       [0.40, 0.45, 0.50, 0.55],   # 4: covers best region + lower for recall
+        "louvain_res":      [0.60],                      # 1: fixed at best (no improvement varying in v9)
         "aqe_k":            [0, 5, 9],                   # 3: 0=disabled (ablation), 5=default, 9=aggressive
-        "reranking":        [False, True],               # 2: test k-reciprocal reranking (disabled in v9)
+        "reranking":        [False, True],               # 2: test k-reciprocal reranking
         "appearance_w":     [0.65, 0.75, 0.85],          # 3: extend to 0.85 (trust TransReID more)
+        "mutual_nn_k":      [5, 10, 20],                 # 3: NEW - test if mutual NN threshold is bottleneck
     }
     HSV_W_FIXED = 0.05  # fixed hsv weight; spatiotemporal = 1 - appearance - hsv
 
@@ -765,10 +768,10 @@ if SCAN_ENABLED:
     for combo in combos:
         params = dict(zip(keys, combo))
         rerank_tag = "rr1" if params["reranking"] else "rr0"
-        # Include appearance_w in scan_run name to avoid directory collisions
-        # when appearance_w varies (all weights must be in dir name)
+        # Include all distinguishing parameters in scan_run name to avoid collisions
         app_tag = f"app{params['appearance_w']:.2f}".replace(".", "")
-        scan_run = f"scan_{params['sim_thresh']}_{params['louvain_res']}_{params['aqe_k']}_{rerank_tag}_{app_tag}"
+        mnn_tag = f"mnn{params['mutual_nn_k']}"
+        scan_run = f"scan_{params['sim_thresh']}_{params['louvain_res']}_{params['aqe_k']}_{rerank_tag}_{app_tag}_{mnn_tag}"
 
         # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
         # Symlink the upstream outputs so the scan sub-dir looks like a full run.
@@ -797,6 +800,7 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
             "--override", f"stage4.association.reranking.enabled={str(params['reranking']).lower()}",
+            "--override", f"stage4.association.mutual_nn.top_k_per_query={params['mutual_nn_k']}",
             "--override", "stage5.mtmc_only_submission=false",
         ]
         # When aqe_k=0 explicitly disable AQE so DBA rebuild is also skipped (saves ~2s/combo)
@@ -829,15 +833,15 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
-    header = f"{'sim':<6} {'res':<6} {'aqe':<5} {'rerank':<8} {'app_w':<7} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'res':<6} {'aqe':<5} {'rerank':<8} {'app_w':<7} {'mnn_k':<6} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
         print(f"{r2['sim_thresh']:<6} {r2['louvain_res']:<6} {r2['aqe_k']:<5} "
-              f"{str(r2['reranking']):<8} {r2['appearance_w']:<7} {r2.get('st_w',0.25):<7} "
+              f"{str(r2['reranking']):<8} {r2['appearance_w']:<7} {r2.get('mutual_nn_k',10):<6} {r2.get('st_w',0.25):<7} "
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
     print(f"\\nBEST: sim={best['sim_thresh']} res={best['louvain_res']} aqe={best['aqe_k']} "
-          f"reranking={best['reranking']} -> IDF1={best['IDF1']:.3f} HOTA={best['HOTA']:.3f}")
+          f"reranking={best['reranking']} mnn_k={best.get('mutual_nn_k',10)} -> IDF1={best['IDF1']:.3f} HOTA={best['HOTA']:.3f}")
     # Save results to JSON for offline analysis
     import json as _json
     results_path = DATA_OUT / "scan_results.json"
