@@ -130,19 +130,18 @@ def k_reciprocal_rerank(
         if not union:
             jaccard_sim = 0.0
         else:
-            # Weighted Jaccard: weight each shared neighbour by the minimum
-            # of its similarity to both i and j. Using min (not mean) better
-            # captures discriminative neighbours — a node close to i but far
-            # from j gets low weight, matching k-reciprocal encoding intent.
+            # Weighted Jaccard (min-max formulation): for each neighbour k,
+            # intersection weight = min(sim_ik, sim_jk),
+            # union weight = max(sim_ik, sim_jk).
+            # This is the standard generalized Jaccard (Zhong et al., 2017).
             w_inter = 0.0
             w_union = 0.0
             for k in union:
                 si = _pairwise_sim(embeddings, i, k)
                 sj = _pairwise_sim(embeddings, j, k)
-                w = min(si, sj)
-                w_union += w
+                w_union += max(si, sj)
                 if k in intersection:
-                    w_inter += w
+                    w_inter += min(si, sj)
             jaccard_sim = w_inter / max(w_union, 1e-8)
 
         reranked_sim = (1 - lambda_value) * jaccard_sim + lambda_value * original_sim

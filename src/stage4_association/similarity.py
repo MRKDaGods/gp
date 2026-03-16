@@ -166,13 +166,17 @@ def compute_combined_similarity(
         # Combined score
         score = w_app * app_sim + w_hsv * hsv_sim + w_st * st_score
 
-        # Length weighting: longer tracklets = more reliable embeddings
+        # Length weighting: shorter tracklets have less reliable embeddings
+        # Uses the minimum length (weakest link) with hyperbolic saturation.
+        # Unlike the ratio min/max, this doesn't over-penalize asymmetric pairs
+        # (e.g. S02 c008 short tracklet matching a longer c006 tracklet).
         if use_length_weight:
             li = max(float(num_frames[i]), 1.0)
             lj = max(float(num_frames[j]), 1.0)
-            ratio = min(li, lj) / (max(li, lj) + 1e-8)  # in (0, 1]
-            length_w = math.pow(ratio, length_power)       # gentle when power < 1
-            score *= 0.5 + 0.5 * length_w  # mild penalty range [0.5, 1.0]
+            min_len = min(li, lj)
+            confidence = min_len / (min_len + 10.0)  # saturates: 5f→0.33, 10f→0.5, 20f→0.67, 50f→0.83
+            length_w = math.pow(confidence, length_power)
+            score *= 0.5 + 0.5 * length_w  # penalty range [0.5, 1.0]
 
         combined[(i, j)] = score
 
