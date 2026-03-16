@@ -731,7 +731,7 @@ print(f"\\u2713 Stages 4-5 done in {elapsed/60:.1f} min")\
 # SET SCAN_ENABLED = True to run the grid search.
 # This will overwrite the single-run results above.
 # ============================================================
-SCAN_ENABLED = False
+SCAN_ENABLED = True
 
 if SCAN_ENABLED:
     import itertools
