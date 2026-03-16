@@ -1,0 +1,16 @@
+{
+  "id": "mrkdagods/10b-mtmc-stage3",
+  "title": "MTMC 10b - Stage 3 (FAISS Indexing)",
+  "code_file": "10b-mtmc-stage3.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [
+    "mrkdagods/10a-mtmc-stages012"
+  ]
+}

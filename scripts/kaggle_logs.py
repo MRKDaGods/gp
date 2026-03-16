@@ -81,10 +81,19 @@ def main():
     )
     parser.add_argument("--tail", type=int, default=0, help="Show last N lines only")
     parser.add_argument("--raw", action="store_true", help="Print raw JSON log without parsing")
+    parser.add_argument("--out", default=None, help="Write output to this file instead of stdout")
     args = parser.parse_args()
 
     log = fetch_logs(args.kernel, tail=args.tail, raw=args.raw)
-    print(log)
+
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(log)
+        print(f"Logs written to {args.out}")
+    else:
+        # Use utf-8 writer to avoid cp1252 issues on Windows
+        sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1, closefd=False)
+        print(log)
 
 
 if __name__ == "__main__":

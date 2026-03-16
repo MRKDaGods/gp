@@ -1,0 +1,16 @@
+{
+  "id": "mrkdagods/10c-mtmc-stages45",
+  "title": "MTMC 10c - Stages 4-5 (Association + Eval)",
+  "code_file": "10c-mtmc-stages45.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [
+    "mrkdagods/10b-mtmc-stage3"
+  ]
+}

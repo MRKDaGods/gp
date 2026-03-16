@@ -1,0 +1,16 @@
+{
+  "id": "mrkdagods/10a-mtmc-stages012",
+  "title": "MTMC 10a - Stages 0-2 (Tracking + ReID Features)",
+  "code_file": "10a-mtmc-stages012.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

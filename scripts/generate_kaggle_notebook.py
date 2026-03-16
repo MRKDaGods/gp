@@ -1,74 +1,107 @@
-"""Generate the Kaggle notebook for running the MTMC pipeline end-to-end.
+"""Generates 3 chained Kaggle notebooks for the MTMC pipeline.
 
-Strategy:
-  - Repo cloned from GitHub (no source upload needed)
-  - CityFlowV2 downloaded from Google Drive via download_datasets.py
-  - Only model weights need to be uploaded as a Kaggle dataset
+  10a  →  stages 0-2  (heavy GPU work, ~90 min)  →  saves checkpoint.tar.gz
+  10b  →  stage 3     (FAISS indexing, ~1 min)   →  mounts 10a output
+  10c  →  stages 4-5  (association + eval, ~6 min)→  mounts 10b output (iteration loop)
+
+Each notebook is self-contained: clones repo, installs deps, then picks up from
+the previous notebook's /kaggle/working/checkpoint.tar.gz.
 
 Usage:
     python scripts/generate_kaggle_notebook.py
 
-Produces:
-    notebooks/kaggle/10_mtmc_pipeline/10_mtmc_pipeline.ipynb
+Produces (one folder per notebook, each with .ipynb + kernel-metadata.json):
+    notebooks/kaggle/10a_stages012/
+    notebooks/kaggle/10b_stage3/
+    notebooks/kaggle/10c_stages45/
 """
-
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
-OUTPUT_DIR = Path(__file__).parent.parent / "notebooks/kaggle/10_mtmc_pipeline"
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
 REPO_URL = "https://github.com/MRKDaGods/gp.git"
+OWNER = "mrkdagods"
+
+# Kaggle kernel slugs (what appears in the URL)
+SLUG_10A = "10a-mtmc-stages012"
+SLUG_10B = "10b-mtmc-stage3"
+SLUG_10C = "10c-mtmc-stages45"
+
+NB_ROOT = Path(__file__).parent.parent / "notebooks" / "kaggle"
+
+BENCHMARK_CAMERAS = ["S01_c001", "S01_c002", "S01_c003", "S02_c006", "S02_c007", "S02_c008"]
 
 
-def cell_md(source: str, cell_id: str) -> dict:
-    lines = source.split("\n")
-    src = [line + "\n" for line in lines[:-1]] + [lines[-1]]
-    return {"cell_type": "markdown", "id": cell_id, "metadata": {}, "source": src}
+# ---- notebook / cell helpers ------------------------------------------------
+
+def _src(code: str) -> list[str]:
+    lines = code.split("\n")
+    return [line + "\n" for line in lines[:-1]] + [lines[-1]]
 
 
-def cell_code(source: str, cell_id: str) -> dict:
-    lines = source.split("\n")
-    src = [line + "\n" for line in lines[:-1]] + [lines[-1]]
+def md(source: str, cid: str) -> dict:
+    return {"cell_type": "markdown", "id": cid, "metadata": {}, "source": _src(source)}
+
+
+def code(source: str, cid: str) -> dict:
     return {
         "cell_type": "code",
         "execution_count": None,
-        "id": cell_id,
+        "id": cid,
         "metadata": {},
         "outputs": [],
-        "source": src,
+        "source": _src(source),
     }
 
 
-CELLS = []
+def make_notebook(cells: list[dict]) -> dict:
+    return {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "metadata": {
+            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            "language_info": {"name": "python", "version": "3.10.0"},
+        },
+        "cells": cells,
+    }
 
-# ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""# MTMC Vehicle Tracking - Full Pipeline (v4)
 
-**Multi-Camera Multi-Target tracking system on CityFlowV2.**
+def make_metadata(slug: str, title: str, kernel_sources=None, dataset_sources=None) -> dict:
+    return {
+        "id": f"{OWNER}/{slug}",
+        "title": title,
+        "code_file": f"{slug}.ipynb",
+        "language": "python",
+        "kernel_type": "notebook",
+        "is_private": True,
+        "enable_gpu": True,
+        "enable_tpu": False,
+        "enable_internet": True,
+        "dataset_sources": dataset_sources or [],
+        "competition_sources": [],
+        "kernel_sources": kernel_sources or [],
+    }
 
-Pipeline stages:
-- **Stage 0** — Frame extraction from CityFlowV2 videos
-- **Stage 1** — Vehicle detection + BotSort tracking (per camera, `track_buffer=450`)
-- **Stage 2** — ReID feature extraction (TransReID 768D + OSNet 512D → PCA 256D ensemble)
-- **Stage 3** — FAISS indexing
-- **Stage 4** — Cross-camera association (AQE + Louvain graph + forensic report)
-- **Stage 5** — Evaluation (IDF1, MOTA, HOTA)
 
-### Setup (only one Kaggle dataset needed)
-| What | How |
-|---|---|
-| **Source code** | Cloned from GitHub automatically |
-| **CityFlowV2 dataset** | Downloaded from Google Drive automatically |
-| **Model weights** | Attach dataset `mtmc-weights` (upload once from laptop) |
+def write_notebook(cells, out_dir, slug, title, kernel_sources=None, dataset_sources=None):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    nb_path = out_dir / f"{slug}.ipynb"
+    with open(nb_path, "w", encoding="utf-8") as f:
+        json.dump(make_notebook(cells), f, indent=1, ensure_ascii=True)
 
-Attach `mtmc-weights` via **Add Data → Your Datasets → mtmc-weights** before running.""", "aa01"))
+    meta_path = out_dir / "kernel-metadata.json"
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(make_metadata(slug, title, kernel_sources=kernel_sources,
+                                dataset_sources=dataset_sources), f, indent=2)
 
-# ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_code("""import os, sys, subprocess, shutil, json, time
+    print(f"  {slug}: {len(cells)} cells -> {nb_path}")
+
+
+# ---- shared code blocks -----------------------------------------------------
+
+SETUP_ENV = """\
+import os, sys, subprocess, shutil, json, time, tarfile
 from pathlib import Path
 import torch
 
@@ -78,95 +111,118 @@ print(f"CUDA   : {torch.cuda.is_available()}")
 for i in range(torch.cuda.device_count()):
     p = torch.cuda.get_device_properties(i)
     print(f"  GPU {i}: {torch.cuda.get_device_name(i)}  ({p.total_memory/1024**3:.1f} GB)")
-
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"\\nUsing device: {DEVICE}")""", "aa02"))
+print(f"\\nUsing device: {DEVICE}")\
+"""
 
-# ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""## 1. Clone Repo & Install Dependencies""", "aa03"))
-
-CELLS.append(cell_code("""REPO_URL = "https://github.com/MRKDaGods/gp.git"
+CLONE_REPO = f"""\
+REPO_URL = "{REPO_URL}"
 WORK_DIR = Path("/kaggle/working")
 PROJECT  = WORK_DIR / "gp"
 
-# ── Clone repo ────────────────────────────────────────────────────────────────
 if not PROJECT.exists():
-    print(f"Cloning {REPO_URL} ...")
+    print(f"Cloning {{REPO_URL}} ...")
     subprocess.check_call(["git", "clone", "--depth", "1", REPO_URL, str(PROJECT)])
 else:
-    print("Repo already cloned, pulling latest ...")
+    print("Repo already present, pulling latest ...")
     subprocess.check_call(["git", "-C", str(PROJECT), "pull", "--ff-only"])
 
 os.chdir(str(PROJECT))
 sys.path.insert(0, str(PROJECT))
-print(f"\\n✓ Repo ready at {PROJECT}")""", "aa04"))
+print(f"\\n\\u2713 Repo ready at {{PROJECT}}")\
+"""
 
-CELLS.append(cell_code("""def pip(*args):
+INSTALL_FULL = """\
+def pip(*args):
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", *args])
 
-# ── ultralytics (YOLO detector) ──────────────────────────────────────────────
 pip("ultralytics")
-
-# ── boxmot (BotSort tracker) ──────────────────────────────────────────────────
 pip("boxmot")
 
-# ── torchreid (OSNet / ResNet-IBN) ────────────────────────────────────────────
 try:
-    import torchreid
-    print("torchreid already available")
+    import torchreid; print("torchreid ok")
 except ImportError:
-    print("Installing torchreid...")
     pip("git+https://github.com/KaiyangZhou/deep-person-reid.git")
 
-# ── FAISS (GPU preferred) ─────────────────────────────────────────────────────
 try:
-    import faiss
-    print(f"faiss already available ({faiss.__version__})")
+    import faiss; print(f"faiss ok ({faiss.__version__})")
 except ImportError:
-    try:
-        pip("faiss-gpu")
-    except Exception:
-        pip("faiss-cpu")
+    try: pip("faiss-gpu")
+    except Exception: pip("faiss-cpu")
 
-# ── Other utilities ───────────────────────────────────────────────────────────
+pip("timm", "motmetrics")
 pip("gdown", "loguru", "omegaconf", "rich", "networkx>=3.1", "click")
+subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "-q"],
+                      cwd=str(PROJECT))
+print("\\n\\u2713 All dependencies installed")\
+"""
 
-# ── Install package itself (no extra dep fetch) ───────────────────────────────
-subprocess.check_call(
-    [sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "-q"],
-    cwd=str(PROJECT),
-)
+INSTALL_LIGHT = """\
+def pip(*args):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", *args])
 
-print("\\n✓ All dependencies installed")""", "aa05"))
+try:
+    import faiss; print(f"faiss ok ({faiss.__version__})")
+except ImportError:
+    try: pip("faiss-gpu")
+    except Exception: pip("faiss-cpu")
 
-# ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""## 2. Mount Model Weights
+pip("motmetrics", "loguru", "omegaconf", "rich", "networkx>=3.1", "click",
+    "numpy", "scipy", "pandas", "scikit-learn")
+subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "-q"],
+                      cwd=str(PROJECT))
+print("\\n\\u2713 Dependencies installed")\
+"""
 
-The only thing uploaded from your laptop (dataset slug: `mtmc-weights`).
-The models folder is mounted at `/kaggle/input/datasets/mrkdagods/mtmc-weights/models`.""", "aa06"))
 
-CELLS.append(cell_code("""WEIGHTS_INPUT = Path("/kaggle/input/datasets/mrkdagods/mtmc-weights/models")
+def _sanity(checks):
+    lines = ["FAILED = []", "_checks = ["]
+    for label, mod in checks:
+        lines.append(f'    ("{label}", "{mod}"),')
+    lines += [
+        "]",
+        "for label, mod in _checks:",
+        "    try:",
+        "        __import__(mod)",
+        '        print(f"  \\u2713 {label}")',
+        "    except ImportError as e:",
+        '        print(f"  \\u2717 {label}: {e}")',
+        "        FAILED.append(label)",
+        "if FAILED:",
+        '    raise RuntimeError(f"Missing modules: {FAILED} -- fix pip installs above")',
+        'print("\\n\\u2713 All required modules importable")',
+    ]
+    return "\n".join(lines)
 
+
+SANITY_FULL = _sanity([
+    ("ultralytics", "ultralytics"), ("boxmot", "boxmot"), ("torch", "torch"),
+    ("torchreid", "torchreid"), ("timm", "timm"), ("faiss", "faiss"),
+    ("motmetrics", "motmetrics"), ("cv2", "cv2"), ("loguru", "loguru"),
+    ("omegaconf", "omegaconf"), ("networkx", "networkx"),
+    ("sklearn", "sklearn"), ("numpy", "numpy"), ("pandas", "pandas"),
+])
+
+SANITY_LIGHT = _sanity([
+    ("faiss", "faiss"), ("motmetrics", "motmetrics"), ("loguru", "loguru"),
+    ("omegaconf", "omegaconf"), ("networkx", "networkx"),
+    ("sklearn", "sklearn"), ("numpy", "numpy"), ("pandas", "pandas"),
+])
+
+COPY_WEIGHTS = """\
+WEIGHTS_INPUT = Path("/kaggle/input/datasets/mrkdagods/mtmc-weights/models")
 assert WEIGHTS_INPUT.exists(), (
-    "Dataset 'mtmc-weights' not found at expected path:\\n"
-    f"  {WEIGHTS_INPUT}\\n"
-    "Make sure it is attached via Add Data -> Your Datasets -> mtmc-weights"
+    "Dataset 'mtmc-weights' not found.\\n"
+    f"  Expected: {WEIGHTS_INPUT}\\n"
+    "  Attach via: Add Data -> Your Datasets -> mtmc-weights"
 )
 
 MODELS_DST = PROJECT / "models"
-
-# Copy models/ to a writable location.
-# A symlink would point at the read-only Kaggle input mount, and boxmot tries
-# to create .lock files next to the weights (OSError: Read-only file system).
-if MODELS_DST.is_symlink():
-    MODELS_DST.unlink()
-if MODELS_DST.exists():
-    shutil.rmtree(MODELS_DST)
+if MODELS_DST.is_symlink(): MODELS_DST.unlink()
+if MODELS_DST.exists(): shutil.rmtree(MODELS_DST)
 print(f"Copying models/ from {WEIGHTS_INPUT} (~750 MB) ...")
 shutil.copytree(str(WEIGHTS_INPUT), str(MODELS_DST))
-print(f"✓ models/ copied to {MODELS_DST}")
 
-# Verify essential v4 weights
 ESSENTIAL = [
     "models/detection/yolo26m.pt",
     "models/reid/transreid_cityflowv2_best.pth",
@@ -175,204 +231,502 @@ ESSENTIAL = [
 ]
 missing = [p for p in ESSENTIAL if not (PROJECT / p).exists()]
 if missing:
-    print("\\n⚠  Missing essential weights:")
-    for m in missing:
-        print(f"   {m}")
+    for m in missing: print(f"  MISSING: {m}")
     raise FileNotFoundError("Fix missing weights before continuing.")
-else:
-    print("✓ All essential v4 weights present")""", "aa07"))
+print("\\u2713 All essential v4 weights present")\
+"""
 
-# ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""## 3. Download CityFlowV2 Dataset (~17 GB)
-
-Downloaded from Google Drive to `/tmp` (not `/kaggle/working` — working disk is only 20 GB).
-The `data/raw` folder is symlinked to `/tmp/datasets` so the pipeline finds it at the expected path.
-
-Download + extraction peak usage: ~34 GB in `/tmp`. Kaggle `/tmp` is typically 100+ GB on P100/T4.""", "aa08"))
-
-CELLS.append(cell_code("""import shutil as _shutil, re
-
-# ── Disk space check ─────────────────────────────────────────────────────────
-for mount in ["/tmp", "/kaggle/working"]:
-    total, used, free = _shutil.disk_usage(mount)
-    print(f"{mount:20s}  {free/1024**3:.1f} GB free  /  {total/1024**3:.1f} GB total")
-# /tmp needs: ~17GB download + ~17GB extracted + ~9.6GB stage0 frames ≈ 44 GB peak
-# /kaggle/working only needs: repo clone + pip cache ≈ 3-4 GB
-
-CAM_RE = re.compile(r"^S\\d{2}_c\\d{3}$")
-
-# ── Symlink data/raw → /tmp/datasets (download + raw videos stay in /tmp) ────
-TMP_DATA = Path("/tmp/datasets")
-TMP_DATA.mkdir(parents=True, exist_ok=True)
-DATA_RAW_PARENT = PROJECT / "data" / "raw"
-if not DATA_RAW_PARENT.is_symlink():
-    if DATA_RAW_PARENT.exists():
-        shutil.rmtree(DATA_RAW_PARENT)
-    DATA_RAW_PARENT.parent.mkdir(parents=True, exist_ok=True)
-    DATA_RAW_PARENT.symlink_to(TMP_DATA)
-    print(f"✓ data/raw → {TMP_DATA}")
-else:
-    print(f"data/raw already symlinked → {DATA_RAW_PARENT.resolve()}")
-
-# ── Redirect ALL pipeline outputs to /tmp (stage0 frames alone = ~9.6 GB) ────
-DATA_OUT = Path("/tmp/pipeline_outputs")
-DATA_OUT.mkdir(parents=True, exist_ok=True)
-print(f"✓ pipeline outputs → {DATA_OUT}")
-
-DATA_RAW = TMP_DATA / "cityflowv2"
-
-# Download only if not already present
-if DATA_RAW.exists() and any(CAM_RE.match(d.name) for d in DATA_RAW.iterdir() if d.is_dir()):
-    cams = [d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name)]
-    print(f"\\n✓ CityFlowV2 already downloaded: {len(cams)} cameras")
-else:
-    print("\\nDownloading CityFlowV2 from Google Drive (~17 GB)...")
-    print("This will take 20-40 minutes. Archive is deleted after extraction to save space.")
-    subprocess.check_call(
-        [sys.executable, "scripts/download_datasets.py", "--dataset", "cityflowv2"],
-        cwd=str(PROJECT),
-    )
-    cams = [d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name)]
-    print(f"\\n✓ CityFlowV2 ready: {sorted(cams)}")
-
-print(f"\\nDataset path: {DATA_RAW}")""", "aa09"))
-
-# ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""## 4. Configure & Run Pipeline
-
-Expected GPU times on P100 (16 GB):
-| Stage | Description | Time |
-|---|---|---|
-| 0 | Frame extraction (10fps from ~17GB videos) | ~20 min |
-| 1 | Detection + BotSort (`track_buffer=450`) | ~45 min |
-| 2 | TransReID 768D + OSNet 512D → PCA 256D | ~20 min |
-| 3 | FAISS indexing | ~1 min |
-| 4 | Cross-camera association (AQE + Louvain) | ~5 min |
-| 5 | Evaluation (IDF1, MOTA, HOTA) | ~1 min |
-| **Total** | *(excluding 40-min data download)* | **~90 min** |""", "aa10"))
-
-CELLS.append(cell_code("""from datetime import datetime
-
-RUN_NAME = f"run_kaggle_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-RUN_DIR  = DATA_OUT / RUN_NAME
-RUN_DIR.mkdir(parents=True, exist_ok=True)
-STAGES = "0,1,2,3,4,5"
-
-# Restrict to the 6 benchmark cameras that have GT annotations.
-# This prevents processing all 46 cameras in the full AIC22 dataset
-# which would require ~70 GB for stage0 frames alone.
-BENCHMARK_CAMERAS = ["S01_c001", "S01_c002", "S01_c003", "S02_c006", "S02_c007", "S02_c008"]
-
-print(f"Run name : {RUN_NAME}")
-print(f"Run dir  : {RUN_DIR}")
-print(f"Stages   : {STAGES}")
-print(f"Cameras  : {BENCHMARK_CAMERAS}")
-print(f"Device   : {DEVICE}")""", "aa11"))
-
-CELLS.append(cell_code("""os.chdir(str(PROJECT))
-
-cam_list = ",".join(BENCHMARK_CAMERAS)
-
-cmd = [
-    sys.executable, "scripts/run_pipeline.py",
-    "--config", "configs/default.yaml",
-    "--dataset-config", "configs/datasets/cityflowv2.yaml",
-    "--stages", STAGES,
-    "--override", f"project.run_name={RUN_NAME}",
-    "--override", f"project.output_dir={DATA_OUT}",
-    "--override", f"stage0.cameras=[{cam_list}]",
-]
-
-print("Command:", " ".join(str(c) for c in cmd))
-print("=" * 70)
-
-t0 = time.time()
-result = subprocess.run(cmd, cwd=str(PROJECT))
-elapsed = time.time() - t0
-
-print("=" * 70)
-if result.returncode == 0:
-    print(f"✓ Pipeline completed in {elapsed/60:.1f} min")
-else:
-    print(f"✗ Pipeline FAILED (code {result.returncode}) after {elapsed/60:.1f} min")
-    sys.exit(result.returncode)""", "aa12"))
-
-# ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""## 5. Results""", "aa13"))
-
-CELLS.append(cell_code("""run_dir   = DATA_OUT / RUN_NAME
-stage5_dir = run_dir / "stage5"
+SHOW_RESULTS = """\
+stage5_dir = RUN_DIR / "stage5"
 
 def _pct(v):
     return f"{v:.1%}" if isinstance(v, float) else str(v)
 
-# Per-camera metrics
-metrics_files = list(stage5_dir.glob("metrics_*.json")) if stage5_dir.exists() else []
+metrics_files = sorted(stage5_dir.glob("metrics_*.json")) if stage5_dir.exists() else []
 if metrics_files:
     print("=" * 65)
     print("EVALUATION RESULTS")
     print("=" * 65)
-    for mf in sorted(metrics_files):
+    for mf in metrics_files:
         m = json.loads(mf.read_text())
         m = m.get("metrics", m)
         cam = mf.stem.replace("metrics_", "")
-        print(f"  {cam:12s}  IDF1={_pct(m.get('IDF1',m.get('idf1','?')))}"
-              f"  MOTA={_pct(m.get('MOTA',m.get('mota','?')))}"
-              f"  HOTA={_pct(m.get('HOTA',m.get('hota','?')))}"
-              f"  IDsw={m.get('ID_Sw',m.get('id_switches','?'))}")
+        idf1 = _pct(m.get("IDF1", m.get("idf1", "?")))
+        mota = _pct(m.get("MOTA", m.get("mota", "?")))
+        hota = _pct(m.get("HOTA", m.get("hota", "?")))
+        idsw = m.get("ID_Sw", m.get("id_switches", "?"))
+        print(f"  {cam:12s}  IDF1={idf1}  MOTA={mota}  HOTA={hota}  IDsw={idsw}")
 
-# Global summary
 for fname in ["summary.json", "evaluation_report.json"]:
     sf = stage5_dir / fname
     if sf.exists():
         s = json.loads(sf.read_text())
-        print("-" * 65)
-        print("  GLOBAL:")
-        for k in ["IDF1", "MOTA", "HOTA", "ID_Sw", "idf1", "mota", "hota", "id_switches"]:
+        print("-" * 65 + "\\n  GLOBAL:")
+        for k in ["IDF1","MOTA","HOTA","ID_Sw","idf1","mota","hota","id_switches"]:
             v = s.get(k)
-            if v is not None:
-                print(f"    {k}: {_pct(v)}")
+            if v is not None: print(f"    {k}: {_pct(v)}")
         break
 
-# Forensic report
-fr_path = run_dir / "stage4" / "forensic_report.json"
-if fr_path.exists():
-    fr = json.loads(fr_path.read_text())
-    print(f"\\nForensic report: {len(fr.get('trajectories', []))} global trajectories")""", "aa14"))
+if not metrics_files:
+    print("No metrics files found -- check stage5 output dir:", stage5_dir)\
+"""
 
-# ──────────────────────────────────────────────────────────────────────────────
-CELLS.append(cell_md("""## 6. Hyperparameter Scan (optional)
 
-Sweep Stage 4 parameters on the completed run without repeating Stages 0–3.""", "aa15"))
+# ---- 10a: stages 0-2 --------------------------------------------------------
 
-CELLS.append(cell_code("""# Uncomment to run a sweep after Stage 4 completes
+def build_10a():
+    cells = []
 
-# for scan in ["aqe_k", "sim_thresh", "louvain_res"]:
-#     print(f"\\n{'='*50}\\nScanning: {scan}")
+    cells.append(md(
+        "# 10a -- MTMC Stages 0-2: Frame Extraction + Detection + ReID Features\n\n"
+        "**Run once (or when tracking/ReID config changes). ~90 min on P100.**\n\n"
+        "| Stage | What | Time |\n|---|---|---|\n"
+        "| 0 | Frame extraction (10 fps, 6 cameras) | ~20 min |\n"
+        "| 1 | YOLO detection + BotSort tracking | ~45 min |\n"
+        "| 2 | TransReID 768D + OSNet 512D -> PCA 256D features | ~20 min |\n\n"
+        "After this runs, its output (`checkpoint.tar.gz`) is used by **10b** -> **10c**.\n"
+        f"Attach `mtmc-weights` via **Add Data -> Your Datasets -> mtmc-weights**.",
+        "a01"))
+
+    cells.append(code(SETUP_ENV, "a02"))
+    cells.append(md("## 1. Clone Repo & Install Dependencies", "a03"))
+    cells.append(code(CLONE_REPO, "a04"))
+    cells.append(code(INSTALL_FULL, "a05"))
+    cells.append(code(SANITY_FULL, "a06"))
+    cells.append(md("## 2. Mount Model Weights\nModel weights dataset (`mtmc-weights`) must be attached.", "a07"))
+    cells.append(code(COPY_WEIGHTS, "a08"))
+
+    cells.append(md(
+        "## 3. Download CityFlowV2 (~17 GB)\n\n"
+        "Downloaded from Google Drive to `/tmp` (not `/kaggle/working` -- only 20 GB).\n"
+        "Peak disk in `/tmp`: ~44 GB (download + extraction + stage0 frames).",
+        "a09"))
+
+    cells.append(code("""\
+import re as _re, shutil as _shutil
+
+for mount in ["/tmp", "/kaggle/working"]:
+    total, used, free = _shutil.disk_usage(mount)
+    print(f"{mount:20s}  {free/1024**3:.1f} GB free / {total/1024**3:.1f} GB total")
+
+CAM_RE = _re.compile(r"^S\\d{2}_c\\d{3}$")
+TMP_DATA = Path("/tmp/datasets")
+TMP_DATA.mkdir(parents=True, exist_ok=True)
+
+DATA_RAW_PARENT = PROJECT / "data" / "raw"
+if not DATA_RAW_PARENT.is_symlink():
+    if DATA_RAW_PARENT.exists(): shutil.rmtree(DATA_RAW_PARENT)
+    DATA_RAW_PARENT.parent.mkdir(parents=True, exist_ok=True)
+    DATA_RAW_PARENT.symlink_to(TMP_DATA)
+    print(f"\\u2713 data/raw \\u2192 {TMP_DATA}")
+else:
+    print(f"data/raw already symlinked -> {DATA_RAW_PARENT.resolve()}")
+
+DATA_OUT = Path("/tmp/pipeline_outputs")
+DATA_OUT.mkdir(parents=True, exist_ok=True)
+DATA_RAW = TMP_DATA / "cityflowv2"
+
+if DATA_RAW.exists() and any(CAM_RE.match(d.name) for d in DATA_RAW.iterdir() if d.is_dir()):
+    cams = [d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name)]
+    print(f"\\u2713 CityFlowV2 already present: {len(cams)} cameras")
+else:
+    print("Downloading CityFlowV2 from Google Drive (~17 GB) ...")
+    subprocess.check_call(
+        [sys.executable, "scripts/download_datasets.py", "--dataset", "cityflowv2"],
+        cwd=str(PROJECT))
+    cams = [d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name)]
+    print(f"\\u2713 CityFlowV2 ready: {sorted(cams)}")
+print(f"\\nDataset path: {DATA_RAW}")\
+""", "a10"))
+
+    cells.append(md("## 4. Run Stages 0-2", "a11"))
+
+    cam_list = ",".join(BENCHMARK_CAMERAS)
+    cells.append(code(
+        f"from datetime import datetime\n"
+        f"RUN_NAME = f\"run_kaggle_{{datetime.now().strftime('%Y%m%d_%H%M%S')}}\"\n"
+        f"RUN_DIR  = DATA_OUT / RUN_NAME\n"
+        f"RUN_DIR.mkdir(parents=True, exist_ok=True)\n"
+        f"BENCHMARK_CAMERAS = {BENCHMARK_CAMERAS!r}\n"
+        f"print(f\"Run  : {{RUN_NAME}}\")\n"
+        f"print(f\"Cams : {{BENCHMARK_CAMERAS}}\")",
+        "a12"))
+
+    cells.append(code(
+        f"os.chdir(str(PROJECT))\n"
+        f"cmd = [\n"
+        f"    sys.executable, \"scripts/run_pipeline.py\",\n"
+        f"    \"--config\", \"configs/default.yaml\",\n"
+        f"    \"--dataset-config\", \"configs/datasets/cityflowv2.yaml\",\n"
+        f"    \"--stages\", \"0,1,2\",\n"
+        f"    \"--override\", f\"project.run_name={{RUN_NAME}}\",\n"
+        f"    \"--override\", f\"project.output_dir={{DATA_OUT}}\",\n"
+        f"    \"--override\", \"stage0.cameras=[{cam_list}]\",\n"
+        f"]\n"
+        f"print(\"CMD:\", \" \".join(str(c) for c in cmd))\n"
+        f"print(\"=\" * 70)\n"
+        f"t0 = time.time()\n"
+        f"r = subprocess.run(cmd, cwd=str(PROJECT))\n"
+        f"print(\"=\" * 70)\n"
+        f"elapsed = time.time() - t0\n"
+        f"if r.returncode != 0:\n"
+        f"    print(f\"\\u2717 FAILED after {{elapsed/60:.1f}} min\"); sys.exit(r.returncode)\n"
+        f"print(f\"\\u2713 Stages 0-2 done in {{elapsed/60:.1f}} min\")",
+        "a13"))
+
+    cells.append(md(
+        "## 5. Save Checkpoint\n\n"
+        "Saves stage1 + stage2 outputs + GT annotations to `/kaggle/working/checkpoint.tar.gz`.\n"
+        "This file becomes the input for **10b**.\n"
+        "Stage0 frame images (~9.6 GB) are **not** included -- downstream stages do not need them.",
+        "a14"))
+
+    cells.append(code("""\
+import re as _re2
+
+CAM_RE2 = _re2.compile(r"^S\\d{2}_c\\d{3}$")
+checkpoint_path = Path("/kaggle/working/checkpoint.tar.gz")
+metadata_path   = Path("/kaggle/working/run_metadata.json")
+
+with open(metadata_path, "w") as f:
+    json.dump({"run_name": RUN_NAME}, f)
+
+print(f"Building checkpoint for run: {RUN_NAME}")
+with tarfile.open(str(checkpoint_path), "w:gz") as tar:
+    tar.add(str(metadata_path), arcname="run_metadata.json")
+
+    manifest = RUN_DIR / "stage0" / "frames_manifest.json"
+    if manifest.exists():
+        tar.add(str(manifest), arcname=f"{RUN_NAME}/stage0/frames_manifest.json")
+        print("  + stage0/frames_manifest.json")
+
+    for stage in ["stage1", "stage2"]:
+        stage_dir = RUN_DIR / stage
+        if stage_dir.exists():
+            n = 0
+            for fpath in stage_dir.rglob("*"):
+                if fpath.is_file():
+                    tar.add(str(fpath), arcname=f"{RUN_NAME}/{stage}/{fpath.relative_to(stage_dir)}")
+                    n += 1
+            print(f"  + {stage}/ ({n} files)")
+
+    # GT annotation txt files needed by stage5 eval (small text files, not videos)
+    gt_count = 0
+    for cam_dir in DATA_RAW.iterdir():
+        if cam_dir.is_dir() and CAM_RE2.match(cam_dir.name):
+            gt_file = cam_dir / "gt" / "gt.txt"
+            if gt_file.exists():
+                tar.add(str(gt_file), arcname=f"gt_annotations/{cam_dir.name}/gt/gt.txt")
+                gt_count += 1
+    print(f"  + gt_annotations/ ({gt_count} GT files)")
+
+size_mb = checkpoint_path.stat().st_size / 1024**2
+print(f"\\n\\u2713 Checkpoint: {checkpoint_path}  ({size_mb:.1f} MB)")
+print("  Next: attach this notebook's output to 10b, then push 10b.")\
+""", "a15"))
+
+    return cells
+
+
+# ---- 10b: stage 3 -----------------------------------------------------------
+
+def build_10b():
+    cells = []
+
+    cells.append(md(
+        f"# 10b -- MTMC Stage 3: FAISS Indexing\n\n"
+        f"**Prerequisite**: attach **10a's output** as a data source:\n"
+        f"`Add Data -> Kernel Output -> search \"{SLUG_10A}\" -> add`\n\n"
+        f"This mounts the checkpoint at `/kaggle/input/{SLUG_10A}/`.\n\n"
+        f"| Stage | What | Time |\n|---|---|---|\n"
+        f"| 3 | Build FAISS similarity index over ReID features | ~1 min |\n\n"
+        f"After this runs, attach **this** notebook's output to **10c**.",
+        "b01"))
+
+    cells.append(code(SETUP_ENV, "b02"))
+    cells.append(md("## 1. Clone Repo & Install Dependencies\n(No GPU models needed -- much faster than 10a)", "b03"))
+    cells.append(code(CLONE_REPO, "b04"))
+    cells.append(code(INSTALL_LIGHT, "b05"))
+    cells.append(code(SANITY_LIGHT, "b06"))
+
+    cells.append(md(
+        f"## 2. Load Checkpoint from 10a\n\n"
+        f"Finds `checkpoint.tar.gz` in `/kaggle/input/{SLUG_10A}/` and extracts to `/tmp/pipeline_run/`.",
+        "b07"))
+
+    cells.append(code(
+        f"PREV_SLUG = \"{SLUG_10A}\"\n"
+        f"PREV_INPUT = Path(\"/kaggle/input\") / PREV_SLUG\n"
+        f"\n"
+        f"# Robust path discovery in case Kaggle changes the mount format\n"
+        f"if not PREV_INPUT.exists():\n"
+        f"    for p in Path(\"/kaggle/input\").iterdir():\n"
+        f"        if PREV_SLUG in p.name or \"stages012\" in p.name or \"10a\" in p.name:\n"
+        f"            PREV_INPUT = p; break\n"
+        f"\n"
+        f"cp = PREV_INPUT / \"checkpoint.tar.gz\"\n"
+        f"assert cp.exists(), f\"checkpoint.tar.gz not found at {{cp}}\"\n"
+        f"\n"
+        f"EXTRACT_DIR = Path(\"/tmp/pipeline_run\")\n"
+        f"EXTRACT_DIR.mkdir(parents=True, exist_ok=True)\n"
+        f"print(f\"Extracting {{cp.stat().st_size/1024**2:.1f}} MB ...\")\n"
+        f"with tarfile.open(str(cp), \"r:gz\") as tar:\n"
+        f"    tar.extractall(str(EXTRACT_DIR))\n"
+        f"\n"
+        f"with open(EXTRACT_DIR / \"run_metadata.json\") as f:\n"
+        f"    meta = json.load(f)\n"
+        f"RUN_NAME = meta[\"run_name\"]\n"
+        f"DATA_OUT = EXTRACT_DIR\n"
+        f"RUN_DIR  = EXTRACT_DIR / RUN_NAME\n"
+        f"print(f\"\\u2713 Checkpoint extracted -- run: {{RUN_NAME}}\")\n"
+        f"for s in [\"stage1\", \"stage2\"]:\n"
+        f"    d = RUN_DIR / s\n"
+        f"    if d.exists(): print(f\"  {{s}}: {{len(list(d.rglob('*')))}} files\")",
+        "b08"))
+
+    cells.append(md("## 3. Run Stage 3 (FAISS Indexing)", "b09"))
+
+    cells.append(code("""\
+os.chdir(str(PROJECT))
+cmd = [
+    sys.executable, "scripts/run_pipeline.py",
+    "--config", "configs/default.yaml",
+    "--dataset-config", "configs/datasets/cityflowv2.yaml",
+    "--stages", "3",
+    "--override", f"project.run_name={RUN_NAME}",
+    "--override", f"project.output_dir={DATA_OUT}",
+]
+print("CMD:", " ".join(str(c) for c in cmd))
+print("=" * 70)
+t0 = time.time()
+r = subprocess.run(cmd, cwd=str(PROJECT))
+print("=" * 70)
+elapsed = time.time() - t0
+if r.returncode != 0:
+    print(f"\\u2717 FAILED after {elapsed/60:.1f} min"); sys.exit(r.returncode)
+print(f"\\u2713 Stage 3 done in {elapsed/60:.1f} min")\
+""", "b10"))
+
+    cells.append(md("## 4. Save Checkpoint for 10c", "b11"))
+
+    cells.append(code("""\
+checkpoint_path_out = Path("/kaggle/working/checkpoint.tar.gz")
+metadata_path_out   = Path("/kaggle/working/run_metadata.json")
+with open(metadata_path_out, "w") as f:
+    json.dump({"run_name": RUN_NAME}, f)
+
+with tarfile.open(str(checkpoint_path_out), "w:gz") as tar:
+    tar.add(str(metadata_path_out), arcname="run_metadata.json")
+
+    for stage in ["stage1", "stage2", "stage3"]:
+        stage_dir = RUN_DIR / stage
+        if stage_dir.exists():
+            n = 0
+            for fpath in stage_dir.rglob("*"):
+                if fpath.is_file():
+                    tar.add(str(fpath), arcname=f"{RUN_NAME}/{stage}/{fpath.relative_to(stage_dir)}")
+                    n += 1
+            print(f"  + {stage}/ ({n} files)")
+
+    # Forward GT annotations from 10a's checkpoint
+    gt_dir = EXTRACT_DIR / "gt_annotations"
+    if gt_dir.exists():
+        n = 0
+        for fpath in gt_dir.rglob("*"):
+            if fpath.is_file():
+                tar.add(str(fpath), arcname=f"gt_annotations/{fpath.relative_to(gt_dir)}")
+                n += 1
+        print(f"  + gt_annotations/ ({n} files forwarded)")
+
+size_mb = checkpoint_path_out.stat().st_size / 1024**2
+print(f"\\n\\u2713 Checkpoint: {checkpoint_path_out}  ({size_mb:.1f} MB)")
+print("  Next: attach this notebook's output to 10c, then push 10c.")\
+""", "b12"))
+
+    return cells
+
+
+# ---- 10c: stages 4+5 --------------------------------------------------------
+
+def build_10c():
+    cells = []
+
+    cells.append(md(
+        f"# 10c -- MTMC Stages 4-5: Association + Evaluation\n\n"
+        f"**Prerequisite**: attach **10b's output** as a data source:\n"
+        f"`Add Data -> Kernel Output -> search \"{SLUG_10B}\" -> add`\n\n"
+        f"**This is the iteration loop** -- edit the tuning params cell and re-run in ~6 min.\n"
+        f"No GPU needed, no data download, no model inference.\n\n"
+        f"| Stage | What | Time |\n|---|---|---|\n"
+        f"| 4 | Cross-camera association (AQE + Louvain graph clustering) | ~5 min |\n"
+        f"| 5 | Evaluation: IDF1, MOTA, HOTA | ~1 min |",
+        "c01"))
+
+    cells.append(code(SETUP_ENV, "c02"))
+    cells.append(md("## 1. Clone Repo & Install Dependencies", "c03"))
+    cells.append(code(CLONE_REPO, "c04"))
+    cells.append(code(INSTALL_LIGHT, "c05"))
+    cells.append(code(SANITY_LIGHT, "c06"))
+
+    cells.append(md(
+        f"## 2. Load Checkpoint from 10b\n\n"
+        f"Finds `checkpoint.tar.gz` in `/kaggle/input/{SLUG_10B}/` and extracts it.",
+        "c07"))
+
+    cells.append(code(
+        f"PREV_SLUG = \"{SLUG_10B}\"\n"
+        f"PREV_INPUT = Path(\"/kaggle/input\") / PREV_SLUG\n"
+        f"\n"
+        f"if not PREV_INPUT.exists():\n"
+        f"    for p in Path(\"/kaggle/input\").iterdir():\n"
+        f"        if PREV_SLUG in p.name or \"stage3\" in p.name or \"10b\" in p.name:\n"
+        f"            PREV_INPUT = p; break\n"
+        f"\n"
+        f"cp = PREV_INPUT / \"checkpoint.tar.gz\"\n"
+        f"assert cp.exists(), f\"checkpoint.tar.gz not found at {{cp}}\"\n"
+        f"\n"
+        f"EXTRACT_DIR = Path(\"/tmp/pipeline_run\")\n"
+        f"EXTRACT_DIR.mkdir(parents=True, exist_ok=True)\n"
+        f"print(f\"Extracting {{cp.stat().st_size/1024**2:.1f}} MB ...\")\n"
+        f"with tarfile.open(str(cp), \"r:gz\") as tar:\n"
+        f"    tar.extractall(str(EXTRACT_DIR))\n"
+        f"\n"
+        f"with open(EXTRACT_DIR / \"run_metadata.json\") as f:\n"
+        f"    meta = json.load(f)\n"
+        f"RUN_NAME = meta[\"run_name\"]\n"
+        f"DATA_OUT = EXTRACT_DIR\n"
+        f"RUN_DIR  = EXTRACT_DIR / RUN_NAME\n"
+        f"GT_DIR   = str(EXTRACT_DIR / \"gt_annotations\")\n"
+        f"print(f\"\\u2713 Checkpoint extracted -- run: {{RUN_NAME}}\")\n"
+        f"for s in [\"stage1\", \"stage2\", \"stage3\"]:\n"
+        f"    d = RUN_DIR / s\n"
+        f"    if d.exists(): print(f\"  {{s}}: {{len(list(d.rglob('*')))}} files\")\n"
+        f"print(f\"  GT dir: {{GT_DIR}}\")",
+        "c08"))
+
+    cells.append(md(
+        "## 3. Tuning Parameters\n\n"
+        "**Edit these values** then re-run the cells below (~6 min). No need to re-run 10a or 10b.",
+        "c09"))
+
+    cells.append(code("""\
+# ---- Stage 4: Cross-camera association -------------------------------------
+# AQE: k nearest neighbours for query expansion (higher = smoother features)
+AQE_K             = 5
+
+# Minimum cosine similarity to form an edge in the Louvain graph
+SIM_THRESH        = 0.35
+
+# Louvain resolution (higher = more, smaller clusters)
+LOUVAIN_RES       = 0.8
+
+# Weight of appearance vs. spatio-temporal score (0.0=ST only, 1.0=appear only)
+APPEARANCE_WEIGHT = 0.6
+
+# ---- Stage 5: Evaluation ----------------------------------------------------
+# Filter to only multi-camera trajectories before submitting to evaluator
+# (single-cam vehicles are guaranteed false positives vs. AIC GT)
+MTMC_ONLY = True
+
+print("Stage 4 params:")
+print(f"  aqe_k={AQE_K}  sim_thresh={SIM_THRESH}  louvain_res={LOUVAIN_RES}  appearance_weight={APPEARANCE_WEIGHT}")
+print(f"Stage 5: mtmc_only_submission={MTMC_ONLY}")\
+""", "c10"))
+
+    cells.append(md("## 4. Run Stages 4-5", "c11"))
+
+    cells.append(code("""\
+os.chdir(str(PROJECT))
+cmd = [
+    sys.executable, "scripts/run_pipeline.py",
+    "--config", "configs/default.yaml",
+    "--dataset-config", "configs/datasets/cityflowv2.yaml",
+    "--stages", "4,5",
+    "--override", f"project.run_name={RUN_NAME}",
+    "--override", f"project.output_dir={DATA_OUT}",
+    "--override", f"stage4.aqe_k={AQE_K}",
+    "--override", f"stage4.sim_thresh={SIM_THRESH}",
+    "--override", f"stage4.louvain_resolution={LOUVAIN_RES}",
+    "--override", f"stage4.appearance_weight={APPEARANCE_WEIGHT}",
+    "--override", f"stage5.ground_truth_dir={GT_DIR}",
+    "--override", f"stage5.mtmc_only_submission={MTMC_ONLY}",
+]
+print("CMD:", " ".join(str(c) for c in cmd))
+print("=" * 70)
+t0 = time.time()
+r = subprocess.run(cmd, cwd=str(PROJECT))
+print("=" * 70)
+elapsed = time.time() - t0
+if r.returncode != 0:
+    print(f"\\u2717 FAILED after {elapsed/60:.1f} min"); sys.exit(r.returncode)
+print(f"\\u2713 Stages 4-5 done in {elapsed/60:.1f} min")\
+""", "c12"))
+
+    cells.append(md("## 5. Results", "c13"))
+    cells.append(code(SHOW_RESULTS, "c14"))
+
+    cells.append(md(
+        "## 6. Parameter Scan (optional)\n\n"
+        "Sweep multiple values of a Stage 4 param without touching 10a/10b.",
+        "c15"))
+
+    cells.append(code("""\
+# Uncomment ONE scan block at a time:
+
+# for aqe_k in [3, 5, 7, 10, 15]:
+#     print(f"\\n=== aqe_k={aqe_k} ===")
 #     subprocess.run([
 #         sys.executable, "scripts/scan_stage4_params.py",
-#         "--run", RUN_NAME,
-#         "--scan", scan,
+#         "--run", RUN_NAME, "--scan", "aqe_k",
 #         "--output-dir", str(DATA_OUT),
 #     ], cwd=str(PROJECT))
 
-print("Uncomment the scan loop above to sweep Stage 4 parameters.")
-print(f"Current run: {RUN_NAME}")""", "aa16"))
+# for res in [0.5, 0.7, 0.9, 1.1, 1.3]:
+#     print(f"\\n=== louvain_res={res} ===")
+#     subprocess.run([
+#         sys.executable, "scripts/scan_stage4_params.py",
+#         "--run", RUN_NAME, "--scan", "louvain_res",
+#         "--output-dir", str(DATA_OUT),
+#     ], cwd=str(PROJECT))
 
-# ──────────────────────────────────────────────────────────────────────────────
-notebook = {
-    "nbformat": 4,
-    "nbformat_minor": 5,
-    "metadata": {
-        "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
-        "language_info": {"name": "python", "version": "3.10.0"},
-    },
-    "cells": CELLS,
-}
+print("Uncomment a scan loop above and re-run this cell.")\
+""", "c16"))
 
-out_path = OUTPUT_DIR / "10_mtmc_pipeline.ipynb"
-with open(out_path, "w", encoding="utf-8") as f:
-    json.dump(notebook, f, indent=1, ensure_ascii=True)
+    return cells
 
-print(f"✓ Notebook written to: {out_path}")
-print(f"  Cells: {len(CELLS)}")
+
+# ---- main -------------------------------------------------------------------
+
+def main():
+    print("Generating chained Kaggle notebooks ...")
+    write_notebook(
+        cells=build_10a(),
+        out_dir=NB_ROOT / "10a_stages012",
+        slug=SLUG_10A,
+        title="MTMC 10a - Stages 0-2 (Tracking + ReID Features)",
+        dataset_sources=[f"{OWNER}/mtmc-weights"],
+    )
+    write_notebook(
+        cells=build_10b(),
+        out_dir=NB_ROOT / "10b_stage3",
+        slug=SLUG_10B,
+        title="MTMC 10b - Stage 3 (FAISS Indexing)",
+        kernel_sources=[f"{OWNER}/{SLUG_10A}"],
+    )
+    write_notebook(
+        cells=build_10c(),
+        out_dir=NB_ROOT / "10c_stages45",
+        slug=SLUG_10C,
+        title="MTMC 10c - Stages 4-5 (Association + Eval)",
+        kernel_sources=[f"{OWNER}/{SLUG_10B}"],
+    )
+    print("\nDone.")
+    print("Workflow:")
+    print("  1. Push 10a, run it, wait ~90 min")
+    print("  2. On 10b Kaggle page: Add Data -> Kernel Output -> 10a -> push 10b -> run ~1 min")
+    print("  3. On 10c Kaggle page: Add Data -> Kernel Output -> 10b -> push 10c -> run ~6 min")
+    print("  4. To iterate: edit params in 10c, re-push, re-run in ~6 min")
+
+
+if __name__ == "__main__":
+    main()
