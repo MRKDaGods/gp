@@ -689,11 +689,13 @@ if SCAN_ENABLED:
     import itertools
 
     # Grid to search — comment out axes you don't want to vary
+    # appearance_w is anchored to the single-run value above; add more values to sweep it
     scan_grid = {
-        "sim_thresh":    [0.35, 0.40, 0.45, 0.50],
-        "louvain_res":   [0.7, 1.0, 1.3],
-        "aqe_k":         [5, 7],           # keep small to avoid long runtimes
-        "appearance_w":  [0.70],           # fix this axis to reduce combinations
+        "sim_thresh":       [0.35, 0.40, 0.45, 0.50],
+        "louvain_res":      [0.7, 1.0, 1.3],
+        "aqe_k":            [5, 7],         # keep small to avoid long runtimes
+        "reranking":        [True, False],  # ablation: on vs off
+        "appearance_w":     [APPEARANCE_WEIGHT],   # anchor to single-run default; extend to sweep
     }
 
     keys   = list(scan_grid.keys())
@@ -703,7 +705,8 @@ if SCAN_ENABLED:
     results = []
     for combo in combos:
         params = dict(zip(keys, combo))
-        scan_run = f"scan_{params['sim_thresh']}_{params['louvain_res']}_{params['aqe_k']}"
+        rerank_tag = "rr1" if params["reranking"] else "rr0"
+        scan_run = f"scan_{params['sim_thresh']}_{params['louvain_res']}_{params['aqe_k']}_{rerank_tag}"
         cmd_scan = [
             sys.executable, "scripts/run_pipeline.py",
             "--config", "configs/default.yaml",
@@ -715,6 +718,7 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.graph.similarity_threshold={params['sim_thresh']}",
             "--override", f"stage4.association.graph.louvain_resolution={params['louvain_res']}",
             "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
+            "--override", f"stage4.association.reranking.enabled={str(params['reranking']).lower()}",
             "--override", f"stage5.ground_truth_dir={GT_DIR}",
             "--override", "stage5.mtmc_only_submission=false",
         ]
@@ -741,13 +745,15 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print("SCAN RESULTS (sorted by MTMC IDF1)")
     print("=" * 80)
-    header = f"{'sim':<6} {'res':<6} {'aqe':<5} {'app_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'res':<6} {'aqe':<5} {'rerank':<8} {'app_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
         print(f"{r2['sim_thresh']:<6} {r2['louvain_res']:<6} {r2['aqe_k']:<5} "
-              f"{r2['appearance_w']:<7} {r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
+              f"{str(r2['reranking']):<8} {r2['appearance_w']:<7} "
+              f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
-    print(f"\\nBEST: sim={best['sim_thresh']} res={best['louvain_res']} aqe={best['aqe_k']} -> IDF1={best['IDF1']:.3f}")
+    print(f"\\nBEST: sim={best['sim_thresh']} res={best['louvain_res']} aqe={best['aqe_k']} "
+          f"reranking={best['reranking']} -> IDF1={best['IDF1']:.3f}")
 else:
     print("Scan disabled. Set SCAN_ENABLED = True to run grid search.")\
 """, "c16"))
