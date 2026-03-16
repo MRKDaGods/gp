@@ -778,16 +778,15 @@ SCAN_ENABLED = True
 if SCAN_ENABLED:
     import itertools
 
-    # Grid to search — comment out axes you don't want to vary
-    # v12: Updated after SOTA config optimizations.
-    # Defaults now: min_time_gap=0, louvain_res=1.0, QE alpha=3.0,
-    # bridge_prune=0.08, max_component_size=15, orphan_match=0.45
-    # Focus scan on: sim_thresh, algorithm, appearance_w, bridge_prune
+    # Grid to search — v14: updated after v12 scan analysis.
+    # v12 finding: CC and CD produce identical results → removed algorithm axis.
+    # Added gallery_expansion.threshold to scan orphan recovery aggressiveness.
+    # Total: 4 × 3 × 2 × 3 = 72 combos (~25 min at ~21s each)
     scan_grid = {
-        "sim_thresh":       [0.40, 0.45, 0.50, 0.55],   # 4: lower range since overlapping FOV now allowed
-        "algorithm":        ["community_detection", "connected_components"],  # 2: Louvain vs CC
-        "appearance_w":     [0.70, 0.80, 0.90],          # 3: how much to trust ReID
-        "bridge_prune":     [0.0, 0.08],                 # 2: bridge pruning on/off
+        "sim_thresh":       [0.35, 0.40, 0.45, 0.50],   # 4: scan showed lower = better
+        "appearance_w":     [0.65, 0.70, 0.80],          # 3: how much to trust ReID
+        "bridge_prune":     [0.0, 0.05],                 # 2: bridge pruning on/off
+        "gallery_thresh":   [0.35, 0.45, 0.55],          # 3: orphan→cluster absorption threshold
     }
     HSV_W_FIXED = 0.025  # v11: lowered to match reference
 
@@ -799,10 +798,10 @@ if SCAN_ENABLED:
     for combo in combos:
         params = dict(zip(keys, combo))
         # Build scan run name from all parameters
-        algo_tag = "cd" if params.get("algorithm", "") == "community_detection" else "cc"
         bridge_tag = f"bp{params['bridge_prune']:.2f}".replace(".", "")
         app_tag = f"app{params['appearance_w']:.2f}".replace(".", "")
-        scan_run = f"scan_{params['sim_thresh']}_{algo_tag}_{app_tag}_{bridge_tag}"
+        gal_tag = f"gal{params['gallery_thresh']:.2f}".replace(".", "")
+        scan_run = f"scan_{params['sim_thresh']}_{app_tag}_{bridge_tag}_{gal_tag}"
 
         # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
         # Symlink the upstream outputs so the scan sub-dir looks like a full run.
@@ -826,9 +825,9 @@ if SCAN_ENABLED:
             "--override", f"project.run_name={scan_run}",
             "--override", f"project.output_dir={DATA_OUT}",
             "--override", f"stage4.association.graph.similarity_threshold={params['sim_thresh']}",
-            "--override", f"stage4.association.graph.algorithm={params['algorithm']}",
             "--override", f"stage4.association.graph.bridge_prune_margin={params['bridge_prune']}",
             "--override", f"stage4.association.graph.max_component_size=15",
+            "--override", f"stage4.association.gallery_expansion.threshold={params['gallery_thresh']}",
             "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
             "--override", f"stage4.association.weights.vehicle.hsv={HSV_W_FIXED}",
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
