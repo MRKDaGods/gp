@@ -801,18 +801,18 @@ if SCAN_ENABLED:
     # v12 finding: CC and CD produce identical results → removed algorithm axis.
     # Added gallery_expansion.threshold to scan orphan recovery aggressiveness.
     # v15: added length_weight_power (0.0=no penalty, 0.5=penalize short tracklets)
-    # v16: enabled reranking in scan (was disabled = 2% IDF1 gap vs main run)
-    #       extended sim_thresh to include 0.55 (main run's value outperformed grid max)
-    # v17: added orphan_match_threshold to test Phase 2 orphan-orphan matching
-    #       (with camera bias fix, initial clusters are better → Phase 2 may hurt)
+    # v16: added orphan_match_threshold to test Phase 2 orphan-orphan matching
+    # v18: added reranking lambda (0=disabled, >0=enabled with that lambda).
+    #       Dropped len_weight axis (fix at 0.5) to keep grid <400.
+    #       Added cross-ID NMS in format_converter.
     # Total: 5 × 3 × 2 × 3 × 2 × 2 = 360 combos (~150 min at ~24s each)
     scan_grid = {
         "sim_thresh":       [0.35, 0.40, 0.45, 0.50, 0.55],  # 5: v14 showed sim=0.55 (main run) beat grid max
         "appearance_w":     [0.65, 0.70, 0.80],               # 3: how much to trust ReID
         "bridge_prune":     [0.0, 0.05],                      # 2: bridge pruning on/off
         "gallery_thresh":   [0.35, 0.45, 0.55],               # 3: orphan→cluster absorption threshold
-        "len_weight":       [0.0, 0.5],                       # 2: length weighting power (0=off)
         "orphan_thresh":    [0.0, 0.30],                      # 2: Phase 2 orphan-orphan (0=disabled)
+        "rerank_lambda":    [0.0, 0.4],                       # 2: 0=off, 0.4=k-reciprocal blending
     }
     HSV_W_FIXED = 0.025  # v11: lowered to match reference
 
@@ -827,9 +827,9 @@ if SCAN_ENABLED:
         bridge_tag = f"bp{params['bridge_prune']:.2f}".replace(".", "")
         app_tag = f"app{params['appearance_w']:.2f}".replace(".", "")
         gal_tag = f"gal{params['gallery_thresh']:.2f}".replace(".", "")
-        lw_tag = f"lw{params['len_weight']:.1f}".replace(".", "")
         ot_tag = f"ot{params['orphan_thresh']:.2f}".replace(".", "")
-        scan_run = f"scan_{params['sim_thresh']}_{app_tag}_{bridge_tag}_{gal_tag}_{lw_tag}_{ot_tag}"
+        rr_tag = f"rr{params['rerank_lambda']:.1f}".replace(".", "")
+        scan_run = f"scan_{params['sim_thresh']}_{app_tag}_{bridge_tag}_{gal_tag}_{ot_tag}_{rr_tag}"
 
         # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
         # Symlink the upstream outputs so the scan sub-dir looks like a full run.
@@ -844,6 +844,9 @@ if SCAN_ENABLED:
         # Compute spatiotemporal weight to maintain sum=1.0
         # hsv is fixed; st = 1 - appearance - hsv
         st_w = round(1.0 - params["appearance_w"] - HSV_W_FIXED, 4)
+
+        # Determine reranking enabled state from lambda value
+        rerank_enabled = params["rerank_lambda"] > 0
 
         cmd_scan = [
             sys.executable, "scripts/run_pipeline.py",
@@ -862,9 +865,11 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.weights.vehicle.appearance={params['appearance_w']}",
             "--override", f"stage4.association.weights.vehicle.hsv={HSV_W_FIXED}",
             "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
-            "--override", f"stage4.association.weights.length_weight_power={params['len_weight']}",
+            "--override", "stage4.association.weights.length_weight_power=0.5",
             "--override", f"stage4.association.gallery_expansion.orphan_match_threshold={params['orphan_thresh']}",
             "--override", "stage4.association.mutual_nn.top_k_per_query=20",
+            "--override", f"stage4.association.reranking.enabled={str(rerank_enabled).lower()}",
+            "--override", f"stage4.association.reranking.lambda_value={params['rerank_lambda']}",
             "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
             "--override", "stage5.stationary_filter.enabled=true",
             "--override", "stage5.stationary_filter.min_displacement_px=50",
@@ -901,16 +906,16 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
-    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'len_w':<6} {'orph':<6} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'orph':<6} {'rr_λ':<6} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
         print(f"{r2['sim_thresh']:<6} {r2['appearance_w']:<7} "
-              f"{r2['bridge_prune']:<8} {r2.get('gallery_thresh','?'):<7} {r2.get('len_weight',0.5):<6} {r2.get('orphan_thresh',0.30):<6} {r2.get('st_w',0.25):<7} "
+              f"{r2['bridge_prune']:<8} {r2.get('gallery_thresh','?'):<7} {r2.get('orphan_thresh',0.30):<6} {r2.get('rerank_lambda',0.0):<6} {r2.get('st_w',0.25):<7} "
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
     print(f"\\nBEST: sim={best['sim_thresh']} app={best['appearance_w']} "
           f"bridge={best['bridge_prune']} gal={best.get('gallery_thresh','?')} "
-          f"len_w={best.get('len_weight',0.5)} orph={best.get('orphan_thresh',0.30)} "
+          f"orph={best.get('orphan_thresh',0.30)} rr_lambda={best.get('rerank_lambda',0.0)} "
           f"-> IDF1={best['IDF1']:.3f} MOTA={best['MOTA']:.3f} HOTA={best['HOTA']:.3f}")
     # Save results to JSON for offline analysis
     import json as _json
@@ -925,7 +930,12 @@ if SCAN_ENABLED:
     _shutil.copy2(str(results_path), str(_out / "scan_results.json"))
     print(f"Copied scan_results.json to {_out}")
     # Also copy the best run's evaluation report
-    best_run = f"scan_{best['sim_thresh']}_app{best['appearance_w']:.2f}_bp{best['bridge_prune']:.2f}_gal{best.get('gallery_thresh', 0.45):.2f}".replace(".", "")
+    best_bridge_tag = f"bp{best['bridge_prune']:.2f}".replace(".", "")
+    best_app_tag = f"app{best['appearance_w']:.2f}".replace(".", "")
+    best_gal_tag = f"gal{best.get('gallery_thresh', 0.45):.2f}".replace(".", "")
+    best_ot_tag = f"ot{best.get('orphan_thresh', 0.30):.2f}".replace(".", "")
+    best_rr_tag = f"rr{best.get('rerank_lambda', 0.0):.1f}".replace(".", "")
+    best_run = f"scan_{best['sim_thresh']}_{best_app_tag}_{best_bridge_tag}_{best_gal_tag}_{best_ot_tag}_{best_rr_tag}"
     best_report = DATA_OUT / best_run / "stage5" / "evaluation_report.json"
     if best_report.exists():
         _shutil.copy2(str(best_report), str(_out / "evaluation_report_best.json"))
