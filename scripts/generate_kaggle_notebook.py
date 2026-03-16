@@ -824,7 +824,8 @@ if SCAN_ENABLED:
         bridge_tag = f"bp{params['bridge_prune']:.2f}".replace(".", "")
         app_tag = f"app{params['appearance_w']:.2f}".replace(".", "")
         gal_tag = f"gal{params['gallery_thresh']:.2f}".replace(".", "")
-        scan_run = f"scan_{params['sim_thresh']}_{app_tag}_{bridge_tag}_{gal_tag}"
+        lw_tag = f"lw{params['len_weight']:.1f}".replace(".", "")
+        scan_run = f"scan_{params['sim_thresh']}_{app_tag}_{bridge_tag}_{gal_tag}_{lw_tag}"
 
         # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
         # Symlink the upstream outputs so the scan sub-dir looks like a full run.
