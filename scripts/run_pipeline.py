@@ -107,15 +107,32 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
         console.print("\n[bold cyan]Stage 3: Indexing & Storage[/bold cyan]")
         from src.stage3_indexing import run_stage3
 
+        # Load stage 2 features from disk if not already in memory
+        if features is None:
+            stage2_dir = output_base / "stage2"
+            if (stage2_dir / "embeddings.npy").exists():
+                from src.core.io_utils import load_embeddings, load_hsv_features
+                from src.core.data_models import TrackletFeatures
+                embeddings, index_map = load_embeddings(stage2_dir)
+                hsv_matrix = load_hsv_features(stage2_dir)
+                features = [
+                    TrackletFeatures(
+                        track_id=m["track_id"],
+                        camera_id=m["camera_id"],
+                        class_id=m["class_id"],
+                        embedding=embeddings[i],
+                        hsv_histogram=hsv_matrix[i],
+                    )
+                    for i, m in enumerate(index_map)
+                ]
+                console.print(f"  Loaded {len(features)} features from disk")
+
         if features is None:
             console.print("[yellow]Stage 3 requires features from Stage 2. Skipping.[/yellow]")
-        elif tracklets_by_camera is None:
-            from src.core.io_utils import load_tracklets_by_camera
-            tracklets_by_camera = load_tracklets_by_camera(output_base / "stage1")
-            faiss_index, metadata_store = run_stage3(
-                cfg, features, tracklets_by_camera, output_dir=output_base / "stage3"
-            )
         else:
+            if tracklets_by_camera is None:
+                from src.core.io_utils import load_tracklets_by_camera
+                tracklets_by_camera = load_tracklets_by_camera(output_base / "stage1")
             faiss_index, metadata_store = run_stage3(
                 cfg, features, tracklets_by_camera, output_dir=output_base / "stage3"
             )
