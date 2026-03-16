@@ -47,7 +47,17 @@ def run_stage0(
         logger.warning(f"No videos found in {input_dir}")
         return []
 
-    logger.info(f"Found {len(video_paths)} videos in {input_dir}")
+    # Apply camera filter if specified (cameras: [S01_c001, S01_c002, ...])
+    camera_filter = stage_cfg.get("cameras", None)
+    if camera_filter:
+        allowed = set(camera_filter)
+        video_paths = [
+            v for v in video_paths
+            if _camera_id_from_path(v, input_dir) in allowed
+        ]
+        logger.info(f"Camera filter active — keeping {len(video_paths)} cameras: {sorted(allowed)}")
+
+    logger.info(f"Processing {len(video_paths)} videos from {input_dir}")
 
     # Parse target size
     target_size = stage_cfg.get("target_size")

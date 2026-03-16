@@ -184,34 +184,36 @@ The `data/raw` folder is symlinked to `/tmp/datasets` so the pipeline finds it a
 
 Download + extraction peak usage: ~34 GB in `/tmp`. Kaggle `/tmp` is typically 100+ GB on P100/T4.""", "aa08"))
 
-CELLS.append(cell_code("""import shutil as _shutil
+CELLS.append(cell_code("""import shutil as _shutil, re
 
 # ── Disk space check ─────────────────────────────────────────────────────────
 for mount in ["/tmp", "/kaggle/working"]:
     total, used, free = _shutil.disk_usage(mount)
     print(f"{mount:20s}  {free/1024**3:.1f} GB free  /  {total/1024**3:.1f} GB total")
+# /tmp needs: ~17GB download + ~17GB extracted + ~9.6GB stage0 frames ≈ 44 GB peak
+# /kaggle/working only needs: repo clone + pip cache ≈ 3-4 GB
 
-# ── Symlink data/raw → /tmp/datasets so all downloads land on the big disk ───
-DATA_RAW_PARENT = PROJECT / "data" / "raw"
+CAM_RE = re.compile(r"^S\\d{2}_c\\d{3}$")
+
+# ── Symlink data/raw → /tmp/datasets (download + raw videos stay in /tmp) ────
 TMP_DATA = Path("/tmp/datasets")
 TMP_DATA.mkdir(parents=True, exist_ok=True)
-
+DATA_RAW_PARENT = PROJECT / "data" / "raw"
 if not DATA_RAW_PARENT.is_symlink():
     if DATA_RAW_PARENT.exists():
         shutil.rmtree(DATA_RAW_PARENT)
-    # Ensure parent dir exists before symlinking
     DATA_RAW_PARENT.parent.mkdir(parents=True, exist_ok=True)
     DATA_RAW_PARENT.symlink_to(TMP_DATA)
     print(f"✓ data/raw → {TMP_DATA}")
 else:
     print(f"data/raw already symlinked → {DATA_RAW_PARENT.resolve()}")
 
-DATA_RAW = TMP_DATA / "cityflowv2"
-DATA_OUT = PROJECT / "data" / "outputs"
+# ── Redirect ALL pipeline outputs to /tmp (stage0 frames alone = ~9.6 GB) ────
+DATA_OUT = Path("/tmp/pipeline_outputs")
 DATA_OUT.mkdir(parents=True, exist_ok=True)
+print(f"✓ pipeline outputs → {DATA_OUT}")
 
-import re
-CAM_RE = re.compile(r"^S\\d{2}_c\\d{3}$")
+DATA_RAW = TMP_DATA / "cityflowv2"
 
 # Download only if not already present
 if DATA_RAW.exists() and any(CAM_RE.match(d.name) for d in DATA_RAW.iterdir() if d.is_dir()):
@@ -219,7 +221,7 @@ if DATA_RAW.exists() and any(CAM_RE.match(d.name) for d in DATA_RAW.iterdir() if
     print(f"\\n✓ CityFlowV2 already downloaded: {len(cams)} cameras")
 else:
     print("\\nDownloading CityFlowV2 from Google Drive (~17 GB)...")
-    print("This will take 20-40 minutes. The archive is extracted and deleted to save space.")
+    print("This will take 20-40 minutes. Archive is deleted after extraction to save space.")
     subprocess.check_call(
         [sys.executable, "scripts/download_datasets.py", "--dataset", "cityflowv2"],
         cwd=str(PROJECT),
@@ -250,12 +252,20 @@ RUN_DIR  = DATA_OUT / RUN_NAME
 RUN_DIR.mkdir(parents=True, exist_ok=True)
 STAGES = "0,1,2,3,4,5"
 
+# Restrict to the 6 benchmark cameras that have GT annotations.
+# This prevents processing all 46 cameras in the full AIC22 dataset
+# which would require ~70 GB for stage0 frames alone.
+BENCHMARK_CAMERAS = ["S01_c001", "S01_c002", "S01_c003", "S02_c006", "S02_c007", "S02_c008"]
+
 print(f"Run name : {RUN_NAME}")
 print(f"Run dir  : {RUN_DIR}")
 print(f"Stages   : {STAGES}")
+print(f"Cameras  : {BENCHMARK_CAMERAS}")
 print(f"Device   : {DEVICE}")""", "aa11"))
 
 CELLS.append(cell_code("""os.chdir(str(PROJECT))
+
+cam_list = ",".join(BENCHMARK_CAMERAS)
 
 cmd = [
     sys.executable, "scripts/run_pipeline.py",
@@ -264,6 +274,7 @@ cmd = [
     "--stages", STAGES,
     "--override", f"project.run_name={RUN_NAME}",
     "--override", f"project.output_dir={DATA_OUT}",
+    "--override", f"stage0.cameras=[{cam_list}]",
 ]
 
 print("Command:", " ".join(str(c) for c in cmd))
