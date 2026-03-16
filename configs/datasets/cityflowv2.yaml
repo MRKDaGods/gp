@@ -51,9 +51,10 @@ stage1:
     # lower than track_high_thresh wastes detections that never help start new tracks.
     #
     # v11: lowered 0.60->0.40 now that ROI masks eliminate off-road false positives.
-    # Reference notebooks use 0.25 with ROI masks.  We stay conservative at 0.40
-    # since our auto-generated masks are imperfect.
-    confidence_threshold: 0.40  # v11: 0.40 (was 0.60) — ROI masks handle FP now
+    # Reference notebooks use 0.25 with ROI masks.
+    # v14: lowered 0.40->0.25 — ROI masks are active and working; S02 cameras
+    #   lose ~30% of GT vehicles at 0.40 (small/distant vehicles at intersections).
+    confidence_threshold: 0.25  # v14: 0.25 (was 0.40) — matches reference; ROI masks handle FP
     iou_threshold: 0.65        # v4: raised 0.45->0.65 — S02 intersection cameras have dense vehicle overlap;
                                # 0.45 NMS suppresses genuine detections when IoU with neighbours is 0.45-0.65.
     agnostic_nms: true         # class-agnostic NMS: prevents bus/truck from suppressing partially-overlapping cars
@@ -69,17 +70,17 @@ stage1:
                                # control the BotSort kill timer (only max_time_lost does).
     max_obs: 460               # Observation history. Must be > max_age + 5 per BaseTracker docs.
     min_hits: 3                # v5: 3 (was 1) — require 3 consecutive detections to confirm track
-    track_high_thresh: 0.40    # v11: lowered from 0.60 to match confidence_threshold
+    track_high_thresh: 0.25    # v14: lowered from 0.40 to match confidence_threshold=0.25
     track_low_thresh: 0.05     # accept very weak dets for secondary (lost track) recovery
     match_thresh: 0.85
     appearance_thresh: 0.5
-    new_track_thresh: 0.40     # v12: fixed 0.45→0.40 to match confidence_threshold (was a bug)
+    new_track_thresh: 0.25     # v14: lowered from 0.40 to match confidence_threshold=0.25
     cmc_method: "sof"          # sparse optical flow CMC (lighter than ECC for mostly-static cameras)
   roi:
     enabled: true              # v11: load roi.jpg masks from camera dirs to eliminate non-road FPs
-  min_tracklet_length: 5       # v6: 5 (was 10) — min=10 lost 39% of c008 GT tracks (median=12f)
-                               # and 17% of all GT tracks; min=5 cuts that to 6.4%
-                               # while still filtering truly ephemeral 1-4f FP tracks
+  min_tracklet_length: 3       # v14: 3 (was 5) — min_hits=3 in tracker already ensures 3 consecutive
+                               #   detections before confirm; keeping length >= min_hits recovers
+                               #   short GT tracks on S02 cameras (c008 median=12f, many 3-5f tracks)
   min_tracklet_area: 800       # vehicles are large
   interpolation:
     enabled: true

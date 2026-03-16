@@ -580,19 +580,19 @@ def _gallery_expansion(
         if not orphan_indices or not multi_clusters:
             break
 
-        # Build cluster centroids
-        centroids = np.zeros((len(multi_clusters), embeddings.shape[1]), dtype=np.float32)
+        # Build cluster member embeddings for max-member similarity matching.
+        # Max-member is more robust than centroid when cluster members span
+        # diverse viewpoints — an orphan matching one member strongly should
+        # be absorbed even if the centroid (averaged over all viewpoints) is
+        # only moderately similar.
+        cluster_member_embs: List[np.ndarray] = []
         cluster_class_ids: List[int] = []
         cluster_cameras: List[Set[str]] = []
         cluster_time_ranges: List[Tuple[float, float]] = []
 
         for ci, cluster in enumerate(multi_clusters):
             members = list(cluster)
-            centroids[ci] = embeddings[members].mean(axis=0)
-            # Normalise centroid to unit length
-            norm = np.linalg.norm(centroids[ci])
-            if norm > 0:
-                centroids[ci] /= norm
+            cluster_member_embs.append(embeddings[members])  # (N_i, D)
             # Majority class
             cls_counts: Dict[int, int] = {}
             for m in members:
@@ -608,12 +608,16 @@ def _gallery_expansion(
 
         for orphan in orphan_indices:
             orphan_emb = embeddings[orphan]
-            sims = centroids @ orphan_emb  # (C,)
-            order = np.argsort(-sims)
+            # Max-member similarity: highest cosine sim with any member
+            max_sims = np.array([
+                float((embs @ orphan_emb).max()) if len(embs) > 0 else -1.0
+                for embs in cluster_member_embs
+            ])
+            order = np.argsort(-max_sims)
 
             merged = False
             for ci in order:
-                if sims[ci] < threshold:
+                if max_sims[ci] < threshold:
                     break
                 # Same class check
                 if class_ids[orphan] != cluster_class_ids[ci]:
@@ -648,12 +652,11 @@ def _gallery_expansion(
 
                 multi_clusters[ci].add(orphan)
                 cluster_cameras[ci].add(camera_ids[orphan])
-                # Update centroid incrementally after absorption
-                old_size = len(multi_clusters[ci]) - 1  # before add
-                centroids[ci] = (centroids[ci] * old_size + embeddings[orphan]) / (old_size + 1)
-                norm = np.linalg.norm(centroids[ci])
-                if norm > 0:
-                    centroids[ci] /= norm
+                # Add orphan embedding to cluster member list
+                cluster_member_embs[ci] = np.vstack([
+                    cluster_member_embs[ci],
+                    embeddings[orphan].reshape(1, -1),
+                ])
                 merged_count += 1
                 merged = True
                 break
