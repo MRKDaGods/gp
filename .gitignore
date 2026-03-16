@@ -3,6 +3,10 @@ data/
 models/
 outputs/
 
+# Accidentally-downloaded artifacts from kaggle kernels output
+checkpoint.tar.gz
+gp/
+
 # Python
 __pycache__/
 .pycache/
