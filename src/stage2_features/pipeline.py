@@ -327,7 +327,18 @@ def run_stage2(
 
             if Path(pca_path).exists():
                 whitener.load(pca_path)
-                logger.info(f"Loaded PCA model from {pca_path}")
+                # Validate loaded PCA matches requested n_components
+                if whitener.n_components != n_components:
+                    logger.warning(
+                        f"PCA model has {whitener.n_components} components "
+                        f"but config requests {n_components}. Refitting."
+                    )
+                    whitener = PCAWhitener(n_components=n_components)
+                    whitener.fit(raw_matrix)
+                    whitener.save(pca_path)
+                    logger.info(f"Refitted and saved PCA model to {pca_path}")
+                else:
+                    logger.info(f"Loaded PCA model from {pca_path}")
             else:
                 whitener.fit(raw_matrix)
                 whitener.save(pca_path)

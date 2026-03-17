@@ -24,25 +24,30 @@ stage1:
   detector:
     model: "yolo26m.pt"
     confidence_threshold: 0.25
-    iou_threshold: 0.45
-    classes: [0, 2, 5, 7]  # COCO: person=0, car=2, bus=5, truck=7
+    iou_threshold: 0.65        # raised for dense vehicle overlap at intersections
+    classes: [2, 5, 7]         # COCO: car=2, bus=5, truck=7 (vehicles only)
     device: "cuda:0"
     half: true
-    img_size: 640
+    img_size: 1280             # high-res traffic camera footage
+    agnostic_nms: true         # prevents bus/truck from suppressing overlapping cars
   tracker:
     algorithm: "botsort"  # botsort | deepocsort | strongsort | bytetrack | ocsort
     reid_weights: "models/tracker/osnet_x0_25_msmt17.pt"
     device: "cuda:0"
     half: true
-    track_high_thresh: 0.3     # lowered: accept more detections for association
-    track_low_thresh: 0.1
-    new_track_thresh: 0.4      # lowered: create tracks from lower-confidence detections
-    track_buffer: 60           # increased: keep lost tracks alive longer (crucial at low fps)
+    track_high_thresh: 0.25    # MUST match confidence_threshold per BotSort docs
+    track_low_thresh: 0.05     # accept very weak dets for lost track recovery
+    new_track_thresh: 0.25     # MUST match confidence_threshold per BotSort docs
+    track_buffer: 450          # death timer: keeps stopped vehicles alive during red lights (20-60s)
+    max_age: 450               # must be >= track_buffer for BaseTracker buffer sizing
+    max_obs: 460               # must be > max_age + 5 per BaseTracker docs
+    min_hits: 3                # require 3 consecutive detections to confirm track
     match_thresh: 0.85
-    appearance_thresh: 0.5     # increased: tolerate larger appearance changes (turning, etc)
+    appearance_thresh: 0.5
     proximity_thresh: 0.5
-  min_tracklet_length: 5  # minimum frames for a valid tracklet
-  min_tracklet_area: 500  # minimum bbox area in pixels
+    cmc_method: "sof"          # sparse optical flow CMC for mostly-static cameras
+  min_tracklet_length: 3  # min_hits=3 already ensures 3 consecutive detections
+  min_tracklet_area: 800  # vehicles are larger than persons
   # --- NEW: bbox interpolation for detection gaps ---
   interpolation:
     enabled: true
@@ -50,7 +55,7 @@ stage1:
   # --- NEW: intra-camera tracklet merging ---
   intra_merge:
     enabled: true
-    max_time_gap: 5.0        # seconds between tracklet end and next start
+    max_time_gap: 25.0       # raised: vehicles at intersections stop for full light cycles
     max_iou_distance: 0.7    # max 1-IoU distance for merging
 
 stage2:
@@ -108,16 +113,16 @@ stage4:
     query_expansion:
       enabled: true
       k: 5        # average with top-5 nearest neighbours
-      alpha: 3.0  # weight for original embedding (3.0 = balanced, 50% original)
+      alpha: 5.0  # v25: Radenovic standard (50% original at k=5)
     # --- Exhaustive cross-camera pairwise cosine (SOTA practice) ---
     exhaustive_cross_camera: true
-    exhaustive_min_similarity: 0.15  # pre-filter noise pairs before mutual-NN
+    exhaustive_min_similarity: 0.10  # v25: AIC21 SOTA uses 0.1 (SCORE_THR)
     # --- Mutual nearest-neighbour filter ---
     mutual_nn:
       enabled: true
       top_k_per_query: 20
     reranking:
-      enabled: true
+      enabled: false     # v25: disabled — hurts vehicles with 512D PCA (compresses similarity range)
       k1: 30           # broader neighbourhood for CLIP embeddings
       k2: 10           # deeper expansion
       lambda_value: 0.4  # blend: 60% Jaccard + 40% original cosine
@@ -131,8 +136,8 @@ stage4:
         hsv: 0.05          # clothing colour less reliable across cameras
         spatiotemporal: 0.25
       vehicle:
-        appearance: 0.55   # TransReID CLIP vehicle: mAP 82.2%
-        hsv: 0.20          # vehicle colour more stable
+        appearance: 0.75   # TransReID CLIP vehicle: dominant signal
+        hsv: 0.00          # HSV hurts — removed after ablation sweep
         spatiotemporal: 0.25
       length_weight_power: 0.3  # mild preference for longer tracklets
     spatiotemporal:
@@ -140,17 +145,17 @@ stage4:
       min_time_gap: 0    # allow overlapping-FOV camera pairs (CityFlowV2)
       camera_transitions: null  # loaded from dataset config if available
     graph:
-      similarity_threshold: 0.50  # raised: CLIP embeddings have cleaner separation
-      algorithm: "community_detection"  # connected_components | community_detection
+      similarity_threshold: 0.40  # v25: lowered for 512D PCA (median sim ~0.34)
+      algorithm: "connected_components"  # v25: deterministic, same results as Louvain
       louvain_resolution: 1.0  # balanced: 1.5 over-fragments, 0.8 under-segments
-      bridge_prune_margin: 0.08  # prune weak bridge edges (IDF1 improvement)
-      max_component_size: 15    # cap cluster size to prevent runaway merges
+      bridge_prune_margin: 0.05  # v25: gentler pruning → better MTMC_IDF1 (+2pp)
+      max_component_size: 12    # v25: tighter cap to prevent runaway merges
     # --- Iterative gallery expansion for orphan tracklets ---
     gallery_expansion:
       enabled: true
-      threshold: 0.55    # min cosine sim to absorb an orphan (raised for CLIP)
+      threshold: 0.65    # stricter absorption: reduces false gallery merges
       max_rounds: 2
-      orphan_match_threshold: 0.45  # lower threshold for orphan-to-orphan linking
+      orphan_match_threshold: 0.30  # v25: looser orphan-to-orphan for better MTMC recall
 
 stage5:
   evaluator: "trackeval"  # trackeval | pymotmetrics
