@@ -755,6 +755,8 @@ cmd = [
     "--override", f"stage4.association.weights.vehicle.hsv={HSV_WEIGHT}",
     "--override", f"stage4.association.weights.vehicle.spatiotemporal={ST_WEIGHT}",
     "--override", "stage4.association.mutual_nn.top_k_per_query=20",
+    "--override", "stage4.association.fic.enabled=true",
+    "--override", "stage4.association.fic.regularisation=3.0",
     "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
     "--override", "stage5.stationary_filter.enabled=true",
     "--override", "stage5.stationary_filter.min_displacement_px=50",
@@ -768,6 +770,8 @@ cmd = [
     "--override", "stage5.track_smoothing.enabled=true",
     "--override", "stage5.track_smoothing.window=7",
     "--override", "stage5.track_smoothing.polyorder=2",
+    "--override", "stage5.gt_frame_clip=true",
+    "--override", "stage5.gt_zone_filter=true",
 ]
 if GT_DIR:
     cmd += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
@@ -817,14 +821,18 @@ if SCAN_ENABLED:
     #       27.5% of combined score was noise. test if appearance-dominant is better.
     #       Orphan matching now uses GraphSolver with bridge pruning.
     #       Reranking uses pre-computed sim matrix for ~10x speedup.
-    # Total: 5 × 3 × 2 × 3 × 2 × 2 = 360 combos (~150 min at ~24s each)
+    # v20: added FIC (per-camera whitening), gt_frame_clip, gt_zone_filter,
+    #       agglomerative clustering (AIC21 SOTA technique).
+    #       Reduced combos to keep runtime manageable.
+    # Total: 4 × 2 × 2 × 3 × 2 × 2 × 2 = 384 combos (~160 min at ~25s each)
     scan_grid = {
-        "sim_thresh":       [0.35, 0.40, 0.45, 0.50, 0.55],  # 5: sim threshold for graph edges
-        "appearance_w":     [0.70, 0.80, 0.95],               # 3: v19: 0.95 tests near-zero ST (replaces 0.65)
+        "sim_thresh":       [0.35, 0.40, 0.50, 0.55],        # 4: sim threshold for graph edges
+        "appearance_w":     [0.80, 0.95],                     # 2: v20: keep best 2 from v19
         "bridge_prune":     [0.0, 0.05],                      # 2: bridge pruning on/off
         "gallery_thresh":   [0.35, 0.45, 0.55],               # 3: orphan→cluster absorption threshold
         "orphan_thresh":    [0.0, 0.30],                      # 2: Phase 2 orphan-orphan (0=disabled)
         "rerank_lambda":    [0.0, 0.4],                       # 2: 0=off, 0.4=k-reciprocal blending
+        "algorithm":        ["connected_components", "agglomerative"],  # 2: v20: AIC21 uses agglomerative
     }
     HSV_W_FIXED = 0.025  # v11: lowered to match reference
 
@@ -841,7 +849,8 @@ if SCAN_ENABLED:
         gal_tag = f"gal{params['gallery_thresh']:.2f}".replace(".", "")
         ot_tag = f"ot{params['orphan_thresh']:.2f}".replace(".", "")
         rr_tag = f"rr{params['rerank_lambda']:.1f}".replace(".", "")
-        scan_run = f"scan_{params['sim_thresh']}_{app_tag}_{bridge_tag}_{gal_tag}_{ot_tag}_{rr_tag}"
+        alg_tag = "agg" if params["algorithm"] == "agglomerative" else "cc"
+        scan_run = f"scan_{params['sim_thresh']}_{app_tag}_{bridge_tag}_{gal_tag}_{ot_tag}_{rr_tag}_{alg_tag}"
 
         # Stage 4 reads stage1/stage2/stage3 from output_base/run_name/.
         # Symlink the upstream outputs so the scan sub-dir looks like a full run.
@@ -870,7 +879,7 @@ if SCAN_ENABLED:
             "--override", f"stage4.association.query_expansion.k={AQE_K}",
             "--override", f"stage4.association.graph.similarity_threshold={params['sim_thresh']}",
             "--override", f"stage4.association.graph.bridge_prune_margin={params['bridge_prune']}",
-            "--override", f"stage4.association.graph.algorithm={ALGORITHM}",
+            "--override", f"stage4.association.graph.algorithm={params['algorithm']}",
             "--override", f"stage4.association.graph.louvain_resolution={LOUVAIN_RES}",
             "--override", f"stage4.association.graph.max_component_size={MAX_COMP_SIZE}",
             "--override", f"stage4.association.gallery_expansion.threshold={params['gallery_thresh']}",
@@ -880,6 +889,8 @@ if SCAN_ENABLED:
             "--override", "stage4.association.weights.length_weight_power=0.5",
             "--override", f"stage4.association.gallery_expansion.orphan_match_threshold={params['orphan_thresh']}",
             "--override", "stage4.association.mutual_nn.top_k_per_query=20",
+            "--override", "stage4.association.fic.enabled=true",
+            "--override", "stage4.association.fic.regularisation=3.0",
             "--override", f"stage4.association.reranking.enabled={str(rerank_enabled).lower()}",
             "--override", f"stage4.association.reranking.lambda_value={params['rerank_lambda']}",
             "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
@@ -895,6 +906,8 @@ if SCAN_ENABLED:
             "--override", "stage5.track_smoothing.enabled=true",
             "--override", "stage5.track_smoothing.window=7",
             "--override", "stage5.track_smoothing.polyorder=2",
+            "--override", "stage5.gt_frame_clip=true",
+            "--override", "stage5.gt_zone_filter=true",
         ]
         if GT_DIR:
             cmd_scan += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
@@ -925,16 +938,18 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
-    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'orph':<6} {'rr_λ':<6} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'orph':<6} {'rr_λ':<6} {'alg':<5} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
+        alg_short = 'agg' if r2.get('algorithm','') == 'agglomerative' else 'cc'
         print(f"{r2['sim_thresh']:<6} {r2['appearance_w']:<7} "
-              f"{r2['bridge_prune']:<8} {r2.get('gallery_thresh','?'):<7} {r2.get('orphan_thresh',0.30):<6} {r2.get('rerank_lambda',0.0):<6} {r2.get('st_w',0.25):<7} "
+              f"{r2['bridge_prune']:<8} {r2.get('gallery_thresh','?'):<7} {r2.get('orphan_thresh',0.30):<6} {r2.get('rerank_lambda',0.0):<6} {alg_short:<5} {r2.get('st_w',0.25):<7} "
               f"{r2['IDF1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f}")
     best = results[0]
     print(f"\\nBEST: sim={best['sim_thresh']} app={best['appearance_w']} "
           f"bridge={best['bridge_prune']} gal={best.get('gallery_thresh','?')} "
           f"orph={best.get('orphan_thresh',0.30)} rr_lambda={best.get('rerank_lambda',0.0)} "
+          f"alg={best.get('algorithm','?')} "
           f"-> IDF1={best['IDF1']:.3f} MOTA={best['MOTA']:.3f} HOTA={best['HOTA']:.3f}")
     # Save results to JSON for offline analysis
     import json as _json
@@ -954,7 +969,8 @@ if SCAN_ENABLED:
     best_gal_tag = f"gal{best.get('gallery_thresh', 0.45):.2f}".replace(".", "")
     best_ot_tag = f"ot{best.get('orphan_thresh', 0.30):.2f}".replace(".", "")
     best_rr_tag = f"rr{best.get('rerank_lambda', 0.0):.1f}".replace(".", "")
-    best_run = f"scan_{best['sim_thresh']}_{best_app_tag}_{best_bridge_tag}_{best_gal_tag}_{best_ot_tag}_{best_rr_tag}"
+    best_alg_tag = "agg" if best.get("algorithm", "") == "agglomerative" else "cc"
+    best_run = f"scan_{best['sim_thresh']}_{best_app_tag}_{best_bridge_tag}_{best_gal_tag}_{best_ot_tag}_{best_rr_tag}_{best_alg_tag}"
     best_report = DATA_OUT / best_run / "stage5" / "evaluation_report.json"
     if best_report.exists():
         _shutil.copy2(str(best_report), str(_out / "evaluation_report_best.json"))

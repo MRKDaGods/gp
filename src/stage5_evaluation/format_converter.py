@@ -79,6 +79,7 @@ def trajectories_to_mot_submission(
     roi_config: Optional[Dict] = None,
     min_submission_confidence: float = 0.0,
     cross_id_nms_iou: float = 0.5,
+    max_detections_per_frame: int = 0,
 ) -> None:
     """Convert global trajectories to MOTChallenge submission format.
 
@@ -95,6 +96,8 @@ def trajectories_to_mot_submission(
         min_submission_confidence: Drop detections below this confidence.
             Targets weak detections at temporal track edges (approaching/leaving).
         cross_id_nms_iou: IoU threshold for cross-ID NMS suppression.
+        max_detections_per_frame: Keep only top-K highest-confidence predictions
+            per frame (0 = disabled).  Reduces FP from over-detection.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -208,6 +211,25 @@ def trajectories_to_mot_submission(
             # Rebuild dedup list preserving insertion order
             dedup_rows = [seen[k] for k in dict.fromkeys((r[0], r[1]) for r in rows)]
             logger.warning(f"{cam_id}: removed {dup_count} duplicate (frame,id) rows")
+
+        # Top-K detections per frame: cut the lowest-confidence predictions
+        if max_detections_per_frame > 0:
+            topk_removed = 0
+            frame_groups_topk: dict = {}
+            for row in dedup_rows:
+                frame_groups_topk.setdefault(row[0], []).append(row)
+            topk_rows = []
+            for fid in sorted(frame_groups_topk):
+                frows = frame_groups_topk[fid]
+                if len(frows) <= max_detections_per_frame:
+                    topk_rows.extend(frows)
+                else:
+                    frows.sort(key=lambda r: -r[6])  # highest confidence first
+                    topk_rows.extend(frows[:max_detections_per_frame])
+                    topk_removed += len(frows) - max_detections_per_frame
+            if topk_removed > 0:
+                logger.info(f"{cam_id}: top-K filter removed {topk_removed} low-conf detections (K={max_detections_per_frame})")
+            dedup_rows = topk_rows
 
         # Cross-ID NMS: remove overlapping predictions from different global IDs
         # on the same frame.  This catches same-vehicle fragments assigned to

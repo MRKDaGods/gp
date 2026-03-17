@@ -140,6 +140,12 @@ stage2:
 stage4:
   association:
     top_k: 100
+    # FIC: per-camera feature whitening (AIC21 1st-place technique)
+    # Removes camera-specific bias from embeddings before association.
+    fic:
+      enabled: false  # overridden to true in scan
+      regularisation: 3.0
+      min_samples: 5
     # Exhaustive cross-camera pair generation: compute ALL cross-camera pairwise
     # cosine similarities instead of relying on FAISS top-K retrieval.
     # SOTA practice for MTMC with <2000 tracklets — no missed matches from top-K truncation.

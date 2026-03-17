@@ -99,6 +99,8 @@ class GraphSolver:
             clusters = list(nx.connected_components(G))
         elif self.algorithm == "community_detection":
             clusters = self._community_detection(G, self.louvain_resolution, self.louvain_seed)
+        elif self.algorithm == "agglomerative":
+            clusters = self._agglomerative_clustering(G, num_nodes, self.similarity_threshold)
         else:
             raise ValueError(f"Unknown algorithm: {self.algorithm}")
 
@@ -156,6 +158,71 @@ class GraphSolver:
 
         communities = louvain_communities(G, weight="weight", resolution=resolution, seed=seed)
         return [set(c) for c in communities]
+
+    @staticmethod
+    def _agglomerative_clustering(
+        G: nx.Graph, num_nodes: int, sim_threshold: float,
+    ) -> List[Set[int]]:
+        """Agglomerative clustering with complete linkage on precomputed distance.
+
+        This is the approach used by the AIC21 1st-place MTMC solution.
+        Complete linkage means two clusters merge only when ALL inter-cluster
+        distances are below the threshold — conservative and avoids runaway
+        transitive merges.
+
+        For nodes not connected by edges, distance is set to 1.0 (maximum
+        dissimilarity for cosine-based features).
+        """
+        import numpy as np
+
+        # Get only nodes that participate in at least one edge
+        active_nodes = sorted(set(u for u, v in G.edges()) | set(v for u, v in G.edges()))
+        if len(active_nodes) < 2:
+            # No edges or only one node with edges — return connected components
+            return list(nx.connected_components(G))
+
+        # Build node index mapping
+        node_to_idx = {n: i for i, n in enumerate(active_nodes)}
+        m = len(active_nodes)
+
+        # Build distance matrix: distance = 1 - similarity
+        dist_matrix = np.ones((m, m), dtype=np.float32)
+        np.fill_diagonal(dist_matrix, 0.0)
+        for u, v, data in G.edges(data=True):
+            if u in node_to_idx and v in node_to_idx:
+                d = 1.0 - data.get("weight", 0.0)
+                dist_matrix[node_to_idx[u], node_to_idx[v]] = d
+                dist_matrix[node_to_idx[v], node_to_idx[u]] = d
+
+        from sklearn.cluster import AgglomerativeClustering
+
+        clustering = AgglomerativeClustering(
+            n_clusters=None,
+            distance_threshold=1.0 - sim_threshold,
+            metric="precomputed",
+            linkage="complete",
+        )
+        labels = clustering.fit_predict(dist_matrix)
+
+        # Group by label
+        clusters_dict: dict = {}
+        for i, label in enumerate(labels):
+            clusters_dict.setdefault(label, set()).add(active_nodes[i])
+
+        clusters = list(clusters_dict.values())
+
+        # Add isolated nodes (no edges) as singletons
+        active_set = set(active_nodes)
+        for node in range(num_nodes):
+            if node not in active_set:
+                clusters.append({node})
+
+        logger.info(
+            f"Agglomerative clustering (complete linkage): "
+            f"{m} active nodes → {len(clusters_dict)} clusters "
+            f"+ {num_nodes - m} singletons"
+        )
+        return clusters
 
     def get_graph_stats(
         self,

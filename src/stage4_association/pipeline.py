@@ -25,6 +25,7 @@ from src.core.io_utils import save_global_trajectories
 from src.stage3_indexing.faiss_index import FAISSIndex
 from src.stage3_indexing.metadata_store import MetadataStore
 from src.stage4_association.camera_bias import CameraDistanceBias, ZoneTransitionModel
+from src.stage4_association.fic import per_camera_whiten
 from src.stage4_association.global_trajectories import merge_tracklets_to_trajectories
 from src.stage4_association.graph_solver import GraphSolver
 from src.stage4_association.query_expansion import average_query_expansion_batched
@@ -74,6 +75,17 @@ def run_stage4(
 
     camera_ids = [f.camera_id for f in features]
     class_ids = [f.class_id for f in features]
+
+    # Step 0: Per-camera feature whitening (FIC) — AIC21 1st-place technique.
+    # Removes camera-specific bias (lighting, viewpoint) from embeddings.
+    fic_cfg = stage_cfg.get("fic", {})
+    if fic_cfg.get("enabled", False):
+        embeddings = per_camera_whiten(
+            embeddings,
+            camera_ids,
+            regularisation=float(fic_cfg.get("regularisation", 3.0)),
+            min_samples=int(fic_cfg.get("min_samples", 5)),
+        )
 
     # Get temporal info and frame counts from metadata store
     start_times = []
