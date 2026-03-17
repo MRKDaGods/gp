@@ -76,6 +76,13 @@ stage2:
       vit_model: "vit_base_patch16_clip_224.openai"
       num_cameras: 20
       clip_normalization: true
+    vehicle2:
+      enabled: false  # v26: tested ensemble TransReID+OSNet, hurt MTMC -1.6pp (0.685->0.669)
+      model_name: "osnet_x1_0"
+      weights_path: "models/reid/vehicle_osnet_veri776.pth"
+      embedding_dim: 512
+      input_size: [256, 128]
+      clip_normalization: false
     batch_size: 64
     device: "cuda:0"
     half: true
@@ -88,7 +95,7 @@ stage2:
     n_stripes: 3       # spatial: 3 horizontal stripes (head/torso/legs)
   pca:
     enabled: true
-    n_components: 512  # 768 → 512 via PCA whitening
+    n_components: 512  # 768 → 512 via PCA whitening (TransReID single-model)
     pca_model_path: "models/reid/pca_transform.pkl"
   crop:
     min_area: 500
@@ -109,6 +116,17 @@ stage3:
 stage4:
   association:
     top_k: 100
+    # --- FIC: per-camera feature whitening (AIC21 1st-place technique) ---
+    fic:
+      enabled: true
+      regularisation: 3.0
+      min_samples: 5
+    # --- FAC: cross-camera feature augmentation (AIC21 technique) ---
+    fac:
+      enabled: false  # v26: harmful with 512D PCA (-2.5pp IDF1, -2.3pp MTMC)
+      knn: 20
+      learning_rate: 0.5
+      beta: 0.08
     # --- Average Query Expansion (from gp-stage-2 analysis) ---
     query_expansion:
       enabled: true
@@ -156,6 +174,10 @@ stage4:
       threshold: 0.65    # stricter absorption: reduces false gallery merges
       max_rounds: 2
       orphan_match_threshold: 0.30  # v25: looser orphan-to-orphan for better MTMC recall
+    # --- Camera-aware distance bias (AIC21 technique) ---
+    camera_bias:
+      enabled: true
+      iterations: 1
 
 stage5:
   evaluator: "trackeval"  # trackeval | pymotmetrics
