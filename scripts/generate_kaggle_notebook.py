@@ -812,10 +812,15 @@ if SCAN_ENABLED:
     # v18: added reranking lambda (0=disabled, >0=enabled with that lambda).
     #       Dropped len_weight axis (fix at 0.5) to keep grid <400.
     #       Added cross-ID NMS in format_converter.
+    # v19: replaced appearance_w=0.65 with 0.95 (near-zero ST) because
+    #       ST score is near-constant for CityFlowV2 (all pairs 0.7-1.0) →
+    #       27.5% of combined score was noise. test if appearance-dominant is better.
+    #       Orphan matching now uses GraphSolver with bridge pruning.
+    #       Reranking uses pre-computed sim matrix for ~10x speedup.
     # Total: 5 × 3 × 2 × 3 × 2 × 2 = 360 combos (~150 min at ~24s each)
     scan_grid = {
-        "sim_thresh":       [0.35, 0.40, 0.45, 0.50, 0.55],  # 5: v14 showed sim=0.55 (main run) beat grid max
-        "appearance_w":     [0.65, 0.70, 0.80],               # 3: how much to trust ReID
+        "sim_thresh":       [0.35, 0.40, 0.45, 0.50, 0.55],  # 5: sim threshold for graph edges
+        "appearance_w":     [0.70, 0.80, 0.95],               # 3: v19: 0.95 tests near-zero ST (replaces 0.65)
         "bridge_prune":     [0.0, 0.05],                      # 2: bridge pruning on/off
         "gallery_thresh":   [0.35, 0.45, 0.55],               # 3: orphan→cluster absorption threshold
         "orphan_thresh":    [0.0, 0.30],                      # 2: Phase 2 orphan-orphan (0=disabled)

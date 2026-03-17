@@ -335,6 +335,7 @@ def run_stage4(
             end_times=end_times,
             st_validator=st_validator,
             n=n,
+            stage_cfg=stage_cfg,
             threshold=gallery_cfg.get("threshold", 0.5),
             max_rounds=gallery_cfg.get("max_rounds", 2),
             orphan_match_threshold=float(gallery_cfg.get("orphan_match_threshold", 0.0)),
@@ -556,6 +557,7 @@ def _gallery_expansion(
     end_times: List[float],
     st_validator: SpatioTemporalValidator,
     n: int,
+    stage_cfg: DictConfig = None,
     threshold: float = 0.5,
     max_rounds: int = 2,
     orphan_match_threshold: float = 0.0,
@@ -617,6 +619,7 @@ def _gallery_expansion(
 
         for orphan in orphan_indices:
             orphan_emb = embeddings[orphan]
+            orphan_hsv = hsv_features[orphan]
             # Max-member similarity: highest cosine sim with any member
             max_sims = np.array([
                 float((embs @ orphan_emb).max()) if len(embs) > 0 else -1.0
@@ -630,6 +633,11 @@ def _gallery_expansion(
                     break
                 # Same class check
                 if class_ids[orphan] != cluster_class_ids[ci]:
+                    continue
+                # HSV consistency gate: reject if color is too different
+                members = list(multi_clusters[ci])
+                hsv_sims = hsv_features[members] @ orphan_hsv
+                if float(hsv_sims.max()) < 0.3:
                     continue
                 # Cross-camera check (orphan must come from a different camera
                 # than at least one cluster member, but must not violate
@@ -699,35 +707,19 @@ def _gallery_expansion(
             pairwise_sim = orphan_embs @ orphan_embs.T  # already normalised from stage2/3
 
             n_orphans = len(final_orphan_indices)
-            # Union-Find for grouping
-            parent = list(range(n_orphans))
 
-            def find(x: int) -> int:
-                while parent[x] != x:
-                    parent[x] = parent[parent[x]]
-                    x = parent[x]
-                return x
-
-            def union(x: int, y: int) -> None:
-                rx, ry = find(x), find(y)
-                if rx != ry:
-                    parent[rx] = ry
-
-            # Only link cross-camera, same-class, ST-valid orphan pairs
-            pairs_linked = 0
+            # Build similarity dict for valid cross-camera, same-class, ST-valid pairs
+            orphan_sims: Dict[Tuple[int, int], float] = {}
             for oi in range(n_orphans):
                 gi = final_orphan_indices[oi]
                 for oj in range(oi + 1, n_orphans):
                     gj = final_orphan_indices[oj]
                     if pairwise_sim[oi, oj] < orphan_match_threshold:
                         continue
-                    # Same class
                     if class_ids[gi] != class_ids[gj]:
                         continue
-                    # Must be different cameras
                     if camera_ids[gi] == camera_ids[gj]:
                         continue
-                    # ST validity (bidirectional)
                     st_ok = (
                         st_validator.is_valid_transition(
                             camera_ids[gi], camera_ids[gj],
@@ -739,32 +731,54 @@ def _gallery_expansion(
                     )
                     if not st_ok:
                         continue
-                    # Already same group?
-                    if find(oi) == find(oj):
+                    orphan_sims[(gi, gj)] = float(pairwise_sim[oi, oj])
+
+            if orphan_sims:
+                # Use GraphSolver with bridge pruning + component cap
+                # to prevent false transitive chains among orphans.
+                orphan_solver = GraphSolver(
+                    similarity_threshold=orphan_match_threshold,
+                    algorithm="connected_components",
+                    bridge_prune_margin=float(stage_cfg.get("graph", {}).get("bridge_prune_margin", 0.0)),
+                    max_component_size=int(stage_cfg.get("graph", {}).get("max_component_size", 0)),
+                )
+                orphan_node_ids = set()
+                for (i, j) in orphan_sims:
+                    orphan_node_ids.add(i)
+                    orphan_node_ids.add(j)
+                # Include all orphans as nodes (even those with no valid edges)
+                all_orphan_set = set(final_orphan_indices)
+                orphan_clusters_raw = orphan_solver.solve(orphan_sims, max(all_orphan_set) + 1)
+
+                # Filter to only include actual orphan tracklets
+                new_orphans: List[Set[int]] = []
+                new_multi: List[Set[int]] = []
+                pairs_linked = sum(1 for c in orphan_clusters_raw if len(c & all_orphan_set) > 1)
+                for cluster in orphan_clusters_raw:
+                    members = cluster & all_orphan_set
+                    if not members:
                         continue
-                    union(oi, oj)
-                    pairs_linked += 1
+                    if len(members) > 1:
+                        new_multi.append(members)
+                    else:
+                        new_orphans.append(members)
+                # Include orphans that had no valid edges
+                linked_orphans = set()
+                for c in new_multi + new_orphans:
+                    linked_orphans |= c
+                for gi in final_orphan_indices:
+                    if gi not in linked_orphans:
+                        new_orphans.append({gi})
 
-            # Build new clusters from union-find groups
-            groups: Dict[int, List[int]] = {}
-            for oi, gi in enumerate(final_orphan_indices):
-                root = find(oi)
-                groups.setdefault(root, []).append(gi)
-
-            new_orphans: List[Set[int]] = []
-            new_multi: List[Set[int]] = []
-            for members in groups.values():
-                if len(members) > 1:
-                    new_multi.append(set(members))
-                else:
-                    new_orphans.append(set(members))
-
-            clusters = final_multi + new_multi + new_orphans
-            logger.info(
-                f"Orphan↔orphan matching (threshold={orphan_match_threshold:.2f}): "
-                f"linked {pairs_linked} pairs → {len(new_multi)} new clusters, "
-                f"{len(new_orphans)} still orphaned"
-            )
+                clusters = final_multi + new_multi + new_orphans
+                logger.info(
+                    f"Orphan↔orphan matching (threshold={orphan_match_threshold:.2f}): "
+                    f"{len(orphan_sims)} candidate pairs → {len(new_multi)} new clusters, "
+                    f"{len(new_orphans)} still orphaned"
+                )
+            else:
+                clusters = final_multi + [set(f) for f in [[gi] for gi in final_orphan_indices]]
+                logger.info("Orphan↔orphan matching: no valid pairs found")
 
     return clusters
 

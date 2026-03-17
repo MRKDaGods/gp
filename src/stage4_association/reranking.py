@@ -119,25 +119,39 @@ def k_reciprocal_rerank(
     # ------------------------------------------------------------------
     # Compute weighted Jaccard for each candidate pair
     # ------------------------------------------------------------------
+    # Pre-compute similarity lookup for all nodes referenced in expanded sets.
+    # This avoids O(|union| × D) dot products per pair → massive speedup.
+    all_expanded_nodes: Set[int] = set()
+    for node in active_nodes:
+        all_expanded_nodes |= expanded_sets.get(node, set())
+    all_expanded_nodes |= active_nodes
+    expanded_list = sorted(all_expanded_nodes)
+    expanded_idx = {n: idx for idx, n in enumerate(expanded_list)}
+    expanded_embs = embeddings[expanded_list]  # (M, D)
+    # Pre-compute M×M similarity matrix (all L2-normed → dot product = cosine)
+    sim_matrix = expanded_embs @ expanded_embs.T  # (M, M)
+
     result: Dict[Tuple[int, int], float] = {}
     for i, j, original_sim in candidate_pairs:
         set_i = expanded_sets.get(i, set())
         set_j = expanded_sets.get(j, set())
 
-        intersection = set_i & set_j
         union = set_i | set_j
 
         if not union:
             jaccard_sim = 0.0
         else:
-            # Weighted Jaccard (min-max formulation): for each neighbour k in
-            # the union, use the actual similarity if k is in that node's
-            # expanded set, otherwise treat the weight as 0.
+            # Weighted Jaccard (min-max formulation)
             w_inter = 0.0
             w_union = 0.0
+            ii = expanded_idx.get(i)
+            ji = expanded_idx.get(j)
             for k in union:
-                si = _pairwise_sim(embeddings, i, k) if k in set_i else 0.0
-                sj = _pairwise_sim(embeddings, j, k) if k in set_j else 0.0
+                ki = expanded_idx.get(k)
+                if ki is None:
+                    continue
+                si = float(sim_matrix[ii, ki]) if (k in set_i and ii is not None) else 0.0
+                sj = float(sim_matrix[ji, ki]) if (k in set_j and ji is not None) else 0.0
                 w_inter += min(si, sj)
                 w_union += max(si, sj)
             jaccard_sim = w_inter / max(w_union, 1e-8)
