@@ -822,17 +822,18 @@ if SCAN_ENABLED:
     #       27.5% of combined score was noise. test if appearance-dominant is better.
     #       Orphan matching now uses GraphSolver with bridge pruning.
     #       Reranking uses pre-computed sim matrix for ~10x speedup.
-    # v20: added FIC (per-camera whitening), gt_frame_clip, gt_zone_filter,
-    #       agglomerative clustering (AIC21 SOTA technique).
-    #       Reduced combos to keep runtime manageable.
-    # Total: 4 × 2 × 2 × 3 × 2 × 2 × 2 = 384 combos (~160 min at ~25s each)
+    # v22: AIC21 SOTA uses very strict thresholds for sub-clustering.
+    #      Added 0.60 and 0.65 to explore more conservative matching.
+    #      FIC+FAC enabled, reranking lambda from SOTA.
+    #      Reduced other axes to keep combos manageable.
+    # Total: 6 × 2 × 2 × 2 × 2 × 2 × 2 = 384 combos (~160 min at ~25s each)
     scan_grid = {
-        "sim_thresh":       [0.35, 0.40, 0.50, 0.55],        # 4: sim threshold for graph edges
-        "appearance_w":     [0.80, 0.95],                     # 2: v20: keep best 2 from v19
+        "sim_thresh":       [0.35, 0.40, 0.50, 0.55, 0.60, 0.65],  # 6: wider range incl. conservative
+        "appearance_w":     [0.80, 0.95],                     # 2
         "bridge_prune":     [0.0, 0.05],                      # 2: bridge pruning on/off
-        "gallery_thresh":   [0.35, 0.45, 0.55],               # 3: orphan→cluster absorption threshold
+        "gallery_thresh":   [0.40, 0.55],                     # 2: reduced from 3 (0.35 was rarely best)
         "orphan_thresh":    [0.0, 0.30],                      # 2: Phase 2 orphan-orphan (0=disabled)
-        "rerank_lambda":    [0.0, 0.4],                       # 2: 0=off, 0.4=k-reciprocal blending
+        "rerank_lambda":    [0.0, 0.3],                       # 2: 0=off, 0.3=AIC21 SOTA k-reciprocal blending
         "algorithm":        ["connected_components", "agglomerative"],  # 2: v20: AIC21 uses agglomerative
     }
     HSV_W_FIXED = 0.025  # v11: lowered to match reference

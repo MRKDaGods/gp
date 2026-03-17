@@ -157,7 +157,7 @@ stage4:
     # cosine similarities instead of relying on FAISS top-K retrieval.
     # SOTA practice for MTMC with <2000 tracklets — no missed matches from top-K truncation.
     exhaustive_cross_camera: true
-    exhaustive_min_similarity: 0.0
+    exhaustive_min_similarity: 0.1  # v22: SOTA uses 0.1 (SCORE_THR); drop weak pairs early
     query_expansion:
       enabled: true
       k: 7
@@ -172,6 +172,9 @@ stage4:
       top_k_per_query: 20
     reranking:
       enabled: false    # k-reciprocal reranking amplifies noise with many similar-coloured vehicles; raw TransReID similarity is more discriminative
+      k1: 20            # v22: AIC21 SOTA value (default 30 is too broad)
+      k2: 3             # v22: AIC21 SOTA value (default 10 is too deep for exhaustive pairs)
+      lambda_value: 0.3 # v22: AIC21 SOTA value (70% Jaccard + 30% cosine)
     weights:
       appearance: 0.5
       hsv: 0.3
