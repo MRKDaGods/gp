@@ -130,6 +130,12 @@ def run_stage4(
         )
 
     # Step 1: FAISS top-K retrieval
+    # If FIC/FAC modified embeddings, rebuild FAISS from the updated features
+    # so KNN retrieval (used by QE and reranking) is consistent.
+    if fic_cfg.get("enabled", False) or fac_cfg.get("enabled", False):
+        faiss_index = FAISSIndex(index_type="flat_ip")
+        faiss_index.build(embeddings.astype(np.float32))
+        logger.info("Rebuilt FAISS index from FIC/FAC-transformed embeddings")
     top_k = stage_cfg.top_k
     distances, indices = faiss_index.search(embeddings, top_k)
     logger.info(f"FAISS retrieval: top-{top_k} candidates per tracklet")
