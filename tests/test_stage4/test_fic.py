@@ -1,9 +1,9 @@
-"""Tests for per-camera whitening (FIC)."""
+"""Tests for per-camera whitening (FIC) and cross-camera augmentation (FAC)."""
 
 import numpy as np
 import pytest
 
-from src.stage4_association.fic import per_camera_whiten
+from src.stage4_association.fic import per_camera_whiten, cross_camera_augment
 
 
 class TestPerCameraWhiten:
@@ -62,3 +62,47 @@ class TestPerCameraWhiten:
         cams = ["cam1"] * 10
         out = per_camera_whiten(emb, cams)
         assert out.shape == emb.shape
+
+
+class TestCrossCameraAugment:
+    """Tests for FAC cross-camera feature augmentation."""
+
+    def test_output_shape_unchanged(self):
+        emb = np.random.randn(20, 64).astype(np.float32)
+        emb /= np.linalg.norm(emb, axis=1, keepdims=True)
+        cams = ["cam1"] * 10 + ["cam2"] * 10
+        out = cross_camera_augment(emb, cams)
+        assert out.shape == emb.shape
+
+    def test_output_l2_normalized(self):
+        emb = np.random.randn(30, 64).astype(np.float32)
+        emb /= np.linalg.norm(emb, axis=1, keepdims=True)
+        cams = ["cam1"] * 15 + ["cam2"] * 15
+        out = cross_camera_augment(emb, cams)
+        norms = np.linalg.norm(out, axis=1)
+        np.testing.assert_allclose(norms, 1.0, atol=1e-5)
+
+    def test_single_camera_unchanged(self):
+        """With only one camera, no cross-camera neighbours exist → unchanged."""
+        emb = np.random.randn(10, 32).astype(np.float32)
+        emb /= np.linalg.norm(emb, axis=1, keepdims=True)
+        cams = ["cam1"] * 10
+        out = cross_camera_augment(emb, cams)
+        np.testing.assert_allclose(out, emb, atol=1e-6)
+
+    def test_features_change_with_multiple_cameras(self):
+        rng = np.random.RandomState(42)
+        emb = rng.randn(20, 64).astype(np.float32)
+        emb /= np.linalg.norm(emb, axis=1, keepdims=True)
+        cams = ["cam1"] * 10 + ["cam2"] * 10
+        out = cross_camera_augment(emb, cams, learning_rate=0.5)
+        # Features should change
+        assert not np.allclose(out, emb, atol=1e-3)
+
+    def test_learning_rate_zero_no_change(self):
+        """lr=0 means no blending → output should equal input."""
+        emb = np.random.randn(20, 32).astype(np.float32)
+        emb /= np.linalg.norm(emb, axis=1, keepdims=True)
+        cams = ["cam1"] * 10 + ["cam2"] * 10
+        out = cross_camera_augment(emb, cams, learning_rate=0.0)
+        np.testing.assert_allclose(out, emb, atol=1e-6)

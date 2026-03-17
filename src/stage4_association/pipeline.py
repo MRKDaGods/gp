@@ -25,7 +25,7 @@ from src.core.io_utils import save_global_trajectories
 from src.stage3_indexing.faiss_index import FAISSIndex
 from src.stage3_indexing.metadata_store import MetadataStore
 from src.stage4_association.camera_bias import CameraDistanceBias, ZoneTransitionModel
-from src.stage4_association.fic import per_camera_whiten
+from src.stage4_association.fic import per_camera_whiten, cross_camera_augment
 from src.stage4_association.global_trajectories import merge_tracklets_to_trajectories
 from src.stage4_association.graph_solver import GraphSolver
 from src.stage4_association.query_expansion import average_query_expansion_batched
@@ -85,6 +85,18 @@ def run_stage4(
             camera_ids,
             regularisation=float(fic_cfg.get("regularisation", 3.0)),
             min_samples=int(fic_cfg.get("min_samples", 5)),
+        )
+
+    # Step 0b: Cross-camera feature augmentation (FAC) — AIC21 technique.
+    # Pulls each feature toward its cross-camera KNN consensus.
+    fac_cfg = stage_cfg.get("fac", {})
+    if fac_cfg.get("enabled", False):
+        embeddings = cross_camera_augment(
+            embeddings,
+            camera_ids,
+            knn=int(fac_cfg.get("knn", 20)),
+            learning_rate=float(fac_cfg.get("learning_rate", 0.5)),
+            beta=float(fac_cfg.get("beta", 0.08)),
         )
 
     # Get temporal info and frame counts from metadata store

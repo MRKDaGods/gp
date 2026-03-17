@@ -146,6 +146,13 @@ stage4:
       enabled: false  # overridden to true in scan
       regularisation: 3.0
       min_samples: 5
+    # FAC: cross-camera feature augmentation (AIC21 1st-place technique)
+    # Pulls each embedding toward its cross-camera KNN neighbourhood consensus.
+    fac:
+      enabled: false  # overridden to true in scan
+      knn: 20
+      learning_rate: 0.5
+      beta: 0.08
     # Exhaustive cross-camera pair generation: compute ALL cross-camera pairwise
     # cosine similarities instead of relying on FAISS top-K retrieval.
     # SOTA practice for MTMC with <2000 tracklets — no missed matches from top-K truncation.

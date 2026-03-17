@@ -86,3 +86,96 @@ def per_camera_whiten(
     )
 
     return out
+
+
+def cross_camera_augment(
+    embeddings: np.ndarray,
+    camera_ids: List[str],
+    knn: int = 20,
+    learning_rate: float = 0.5,
+    beta: float = 0.08,
+) -> np.ndarray:
+    """Feature Augmentation with Cross-camera (FAC).
+
+    For each embedding, find its knn nearest neighbours from *other* cameras
+    and blend the feature toward those neighbours.  This makes cross-camera
+    features more comparable by pulling each vector toward its cross-camera
+    consensus neighbourhood.
+
+    From AIC21 1st-place solution (ficfac.py).
+
+    Args:
+        embeddings: (N, D) L2-normalised embedding matrix (ideally after FIC).
+        camera_ids: Camera ID for each of the N tracklets.
+        knn: Number of cross-camera nearest neighbours.
+        learning_rate: Weight of the neighbour aggregation (0-1).
+            0 = no change, 1 = replace with neighbour mean.
+        beta: Softmax temperature for neighbour weighting.
+            Lower = more uniform weights, higher = sharper (top-1 dominated).
+
+    Returns:
+        (N, D) L2-normalised augmented embeddings.
+    """
+    N, D = embeddings.shape
+    if N < 2:
+        return embeddings.copy()
+
+    out = embeddings.copy()
+
+    # Precompute similarity matrix
+    sim_matrix = embeddings @ embeddings.T  # (N, N) cosine similarity
+
+    # Group indices by camera
+    cam_indices: dict[str, list[int]] = defaultdict(list)
+    for idx, cam in enumerate(camera_ids):
+        cam_indices[cam].append(idx)
+
+    # Build set of cross-camera indices for each tracklet
+    all_indices = set(range(N))
+    cam_set: dict[str, set[int]] = {
+        cam: set(idxs) for cam, idxs in cam_indices.items()
+    }
+
+    augmented = 0
+    for i in range(N):
+        cam_i = camera_ids[i]
+        # Cross-camera indices: all indices NOT in the same camera
+        cross_idxs = sorted(all_indices - cam_set[cam_i])
+        if len(cross_idxs) < 1:
+            continue
+
+        # Get similarities to cross-camera features
+        sims = sim_matrix[i, cross_idxs]
+
+        # Take top-knn
+        k = min(knn, len(cross_idxs))
+        if k < len(cross_idxs):
+            top_k_local = np.argpartition(-sims, k)[:k]
+        else:
+            top_k_local = np.arange(k)
+        top_k_sims = sims[top_k_local]
+
+        # Softmax weights with temperature beta
+        exp_sims = np.exp(top_k_sims / max(beta, 1e-8))
+        weights = exp_sims / (exp_sims.sum() + 1e-12)
+
+        # Weighted mean of cross-camera neighbours
+        neighbour_indices = [cross_idxs[j] for j in top_k_local]
+        neighbour_feats = embeddings[neighbour_indices]  # (k, D)
+        aggregated = weights @ neighbour_feats  # (D,)
+
+        # Blend: new = (1 - lr) * original + lr * aggregated
+        blended = (1.0 - learning_rate) * embeddings[i] + learning_rate * aggregated
+
+        # L2-normalise
+        norm = np.linalg.norm(blended)
+        if norm > 1e-8:
+            out[i] = blended / norm
+        augmented += 1
+
+    logger.info(
+        f"FAC cross-camera augmentation: {augmented}/{N} tracklets "
+        f"(knn={knn}, lr={learning_rate}, beta={beta})"
+    )
+
+    return out
