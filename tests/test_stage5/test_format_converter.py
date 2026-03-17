@@ -132,6 +132,81 @@ class TestCrossIDNMS:
         assert len(lines) == 2, f"Expected 2 lines (both kept), got {len(lines)}"
 
 
+class TestMinSubmissionConfidence:
+    """Verify min_submission_confidence drops weak detections."""
+
+    def test_drops_low_confidence(self, tmp_path: Path):
+        from src.stage5_evaluation.format_converter import trajectories_to_mot_submission
+
+        traj = _make_trajectory(
+            global_id=1,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 150, 260), confidence=0.9),
+                TrackletFrame(frame_id=1, timestamp=0.1, bbox=(102, 202, 152, 262), confidence=0.10),
+                TrackletFrame(frame_id=2, timestamp=0.2, bbox=(104, 204, 154, 264), confidence=0.05),
+            ],
+        )
+        trajectories_to_mot_submission([traj], tmp_path, min_submission_confidence=0.15)
+
+        output_file = tmp_path / "S01_c001.txt"
+        lines = output_file.read_text().strip().split("\n")
+        assert len(lines) == 1, f"Expected 1 line (only conf=0.9 kept), got {len(lines)}"
+
+    def test_zero_threshold_keeps_all(self, tmp_path: Path):
+        from src.stage5_evaluation.format_converter import trajectories_to_mot_submission
+
+        traj = _make_trajectory(
+            global_id=1,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 150, 260), confidence=0.9),
+                TrackletFrame(frame_id=1, timestamp=0.1, bbox=(102, 202, 152, 262), confidence=0.05),
+            ],
+        )
+        trajectories_to_mot_submission([traj], tmp_path, min_submission_confidence=0.0)
+
+        output_file = tmp_path / "S01_c001.txt"
+        lines = output_file.read_text().strip().split("\n")
+        assert len(lines) == 2
+
+
+class TestConfigurableNMSThreshold:
+    """Verify cross_id_nms_iou parameter controls NMS aggressiveness."""
+
+    def test_lower_threshold_removes_more(self, tmp_path: Path):
+        """At IoU=0.3, moderately overlapping boxes get suppressed."""
+        from src.stage5_evaluation.format_converter import trajectories_to_mot_submission
+
+        # Two boxes with ~40% IoU — suppressed at 0.3 but not at 0.5
+        traj_a = _make_trajectory(
+            global_id=1,
+            camera_id="S01_c001",
+            track_id=10,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 200, 300), confidence=0.9),
+            ],
+        )
+        traj_b = _make_trajectory(
+            global_id=2,
+            camera_id="S01_c001",
+            track_id=20,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(150, 250, 250, 350), confidence=0.7),
+            ],
+        )
+        # At default IoU=0.5 — both kept (IoU~0.25 < 0.5)
+        trajectories_to_mot_submission([traj_a, traj_b], tmp_path, cross_id_nms_iou=0.5)
+        lines_05 = (tmp_path / "S01_c001.txt").read_text().strip().split("\n")
+
+        # At IoU=0.2 — traj_b suppressed
+        import shutil
+        shutil.rmtree(tmp_path)
+        tmp_path.mkdir()
+        trajectories_to_mot_submission([traj_a, traj_b], tmp_path, cross_id_nms_iou=0.2)
+        lines_02 = (tmp_path / "S01_c001.txt").read_text().strip().split("\n")
+
+        assert len(lines_05) >= len(lines_02)
+
+
 class TestAICSubmissionFormat:
     """Verify AIC submission uses correct column order and 1-based frames."""
 

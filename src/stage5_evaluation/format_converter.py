@@ -77,6 +77,8 @@ def trajectories_to_mot_submission(
     trajectories: List[GlobalTrajectory],
     output_dir: str | Path,
     roi_config: Optional[Dict] = None,
+    min_submission_confidence: float = 0.0,
+    cross_id_nms_iou: float = 0.5,
 ) -> None:
     """Convert global trajectories to MOTChallenge submission format.
 
@@ -90,6 +92,9 @@ def trajectories_to_mot_submission(
             - annotations_dir: path to WILDTRACK annotations_positions
             - calibrations_dir: path to WILDTRACK calibrations
             - margin_cm: ground-plane ROI margin (default 100)
+        min_submission_confidence: Drop detections below this confidence.
+            Targets weak detections at temporal track edges (approaching/leaving).
+        cross_id_nms_iou: IoU threshold for cross-ID NMS suppression.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -131,8 +136,8 @@ def trajectories_to_mot_submission(
                 h = y2 - y1
                 total_count += 1
 
-                # Skip interpolated detections (confidence=0)
-                if frame.confidence == 0:
+                # Skip interpolated detections (confidence=0) and weak detections
+                if frame.confidence <= min_submission_confidence:
                     continue
 
                 # Skip invalid bounding boxes (negative width/height)
@@ -207,8 +212,6 @@ def trajectories_to_mot_submission(
         # Cross-ID NMS: remove overlapping predictions from different global IDs
         # on the same frame.  This catches same-vehicle fragments assigned to
         # different trajectories, which produce FP for every overlapping frame.
-        # Only boxes with IoU > 0.5 are suppressed (real different-vehicle
-        # overlaps are rare at IoU > 0.5).
         nms_removed = 0
         frame_groups: dict = {}
         for row in dedup_rows:
@@ -238,7 +241,7 @@ def trajectories_to_mot_submission(
                     area_k = kw * kh
                     union = area_r + area_k - inter
                     iou = inter / union if union > 0 else 0
-                    if iou > 0.5:
+                    if iou > cross_id_nms_iou:
                         suppressed = True
                         break
                 if not suppressed:

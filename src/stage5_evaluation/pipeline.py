@@ -75,7 +75,10 @@ def run_stage5(
     static_cfg = stage_cfg.get("stationary_filter", {})
     if static_cfg.get("enabled", False):
         min_displacement = float(static_cfg.get("min_displacement_px", 50.0))
-        trajectories = _filter_stationary(trajectories, min_displacement)
+        max_mean_velocity = float(static_cfg.get("max_mean_velocity_px", 0.0))
+        trajectories = _filter_stationary(
+            trajectories, min_displacement, max_mean_velocity
+        )
 
     # ── Optional: confidence-based trajectory filter ─────────────────────────
     # Trajectory confidence = mean pairwise appearance similarity between
@@ -90,6 +93,23 @@ def run_stage5(
             logger.info(
                 f"Trajectory confidence filter: removed {dropped} trajectories "
                 f"with confidence < {min_traj_conf:.2f}"
+            )
+
+    # ── Optional: minimum total frames per trajectory ────────────────────────
+    # Trajectories with very few total frames across all cameras are likely
+    # noise — brief detections wrongly linked cross-camera.
+    min_traj_frames = int(stage_cfg.get("min_trajectory_frames", 0))
+    if min_traj_frames > 0:
+        before = len(trajectories)
+        trajectories = [
+            t for t in trajectories
+            if sum(len(tk.frames) for tk in t.tracklets) >= min_traj_frames
+        ]
+        dropped = before - len(trajectories)
+        if dropped:
+            logger.info(
+                f"Min trajectory frames filter: removed {dropped} trajectories "
+                f"with < {min_traj_frames} total frames"
             )
 
     # ── Optional: only submit multi-camera trajectories ──────────────────────
@@ -107,8 +127,27 @@ def run_stage5(
             f"dropped {len(single_cam)} single-cam (guaranteed FP in GT)"
         )
 
-    trajectories_to_mot_submission(submit_traj, pred_dir, roi_config=roi_config)
+    trajectories_to_mot_submission(
+        submit_traj,
+        pred_dir,
+        roi_config=roi_config,
+        min_submission_confidence=float(stage_cfg.get("min_submission_confidence", 0.0)),
+        cross_id_nms_iou=float(stage_cfg.get("cross_id_nms_iou", 0.5)),
+    )
     logger.info(f"Predictions converted to MOT format in {pred_dir}")
+
+    # ── Track edge trimming ──────────────────────────────────────────────────
+    # CityFlowV2 GT only annotates vehicles inside the intersection zone.
+    # Track "tails" (first/last N frames) correspond to approach/departure
+    # and are pure FP.  Trim frames at track edges with below-median confidence
+    # as a GT-free proxy for the annotation window boundary.
+    trim_cfg = stage_cfg.get("track_edge_trim", {})
+    if trim_cfg.get("enabled", False):
+        _trim_track_edges(
+            pred_dir,
+            mode=str(trim_cfg.get("mode", "confidence")),
+            trim_fraction=float(trim_cfg.get("trim_fraction", 0.10)),
+        )
 
     # ── Track smoothing ──────────────────────────────────────────────────────
     # Smooth bounding box trajectories to reduce detection jitter.
@@ -646,24 +685,17 @@ def _apply_gt_zone_filter(
 def _filter_stationary(
     trajectories: List[GlobalTrajectory],
     min_displacement_px: float = 50.0,
+    max_mean_velocity_px: float = 0.0,
 ) -> List[GlobalTrajectory]:
     """Remove trajectories where ALL tracklets show near-zero displacement.
 
     A stationary vehicle (parked car) will have bounding boxes that barely
-    move across its entire track.  We compute displacement as the Euclidean
-    distance between the centre of the first and last bounding box of each
-    tracklet.  If EVERY tracklet in a trajectory has displacement below the
-    threshold, the trajectory is considered stationary and removed.
+    move across its entire track.  We check:
+      1. Endpoint displacement: Euclidean distance between first/last bbox centre.
+      2. Mean per-frame velocity (if max_mean_velocity_px > 0): catches parked
+         cars that oscillate enough for endpoint displacement > threshold.
 
     This is a **non-GT filter** — no ground truth information is used.
-
-    Args:
-        trajectories: List of global trajectories.
-        min_displacement_px: Minimum displacement (pixels) for a tracklet
-            to be considered "moving".
-
-    Returns:
-        Filtered list with stationary trajectories removed.
     """
     import math
 
@@ -678,13 +710,26 @@ def _filter_stationary(
                 continue
             first = tracklet.frames[0].bbox
             last = tracklet.frames[-1].bbox
-            # Centre of first and last bbox
             cx0 = (first[0] + first[2]) / 2.0
             cy0 = (first[1] + first[3]) / 2.0
             cx1 = (last[0] + last[2]) / 2.0
             cy1 = (last[1] + last[3]) / 2.0
             disp = math.hypot(cx1 - cx0, cy1 - cy0)
+
+            # Check endpoint displacement
             if disp >= min_displacement_px:
+                # If velocity check is enabled, also verify mean velocity
+                if max_mean_velocity_px > 0 and len(tracklet.frames) >= 3:
+                    total_disp = 0.0
+                    for i in range(len(tracklet.frames) - 1):
+                        b0 = tracklet.frames[i].bbox
+                        b1 = tracklet.frames[i + 1].bbox
+                        dx = (b1[0] + b1[2]) / 2.0 - (b0[0] + b0[2]) / 2.0
+                        dy = (b1[1] + b1[3]) / 2.0 - (b0[1] + b0[3]) / 2.0
+                        total_disp += math.hypot(dx, dy)
+                    mean_vel = total_disp / (len(tracklet.frames) - 1)
+                    if mean_vel < max_mean_velocity_px:
+                        continue  # stationary despite endpoint displacement
                 has_moving_tracklet = True
                 break
 
@@ -695,8 +740,86 @@ def _filter_stationary(
             dropped_tracklets += sum(1 for _ in traj.tracklets)
 
     logger.info(
-        f"Stationary filter (min_displacement={min_displacement_px}px): "
-        f"dropped {dropped}/{dropped + len(kept)} trajectories "
+        f"Stationary filter (min_displacement={min_displacement_px}px"
+        + (f", max_mean_velocity={max_mean_velocity_px}px/frame" if max_mean_velocity_px > 0 else "")
+        + f"): dropped {dropped}/{dropped + len(kept)} trajectories "
         f"({dropped_tracklets} tracklets) with near-zero displacement"
     )
     return kept
+
+
+def _trim_track_edges(
+    pred_dir: Path,
+    mode: str = "confidence",
+    trim_fraction: float = 0.10,
+) -> None:
+    """Trim low-confidence frames at the start/end of each per-camera track.
+
+    CityFlowV2 GT only annotates vehicles in the intersection zone.  Track
+    "tails" (approach/departure) are pure FP.  This trims frames at track
+    edges where the detector was least confident — a GT-free proxy for the
+    annotation boundary.
+
+    Modes:
+        confidence: For each track, compute median confidence.  Remove frames
+            at the leading/trailing edges that are below median confidence.
+        fraction: Remove a fixed fraction from each end of the track.
+    """
+    total_trimmed = 0
+    total_rows = 0
+
+    for pred_file in sorted(pred_dir.glob("*.txt")):
+        rows_by_track: dict = {}
+        with open(pred_file) as f:
+            for line in f:
+                line = line.rstrip()
+                if not line:
+                    continue
+                parts = line.split(",")
+                if len(parts) < 7:
+                    continue
+                tid = int(parts[1])
+                rows_by_track.setdefault(tid, []).append(parts)
+
+        kept_rows = []
+        for tid, rows in rows_by_track.items():
+            total_rows += len(rows)
+            if len(rows) < 5:
+                # Too short to trim meaningfully
+                kept_rows.extend(rows)
+                continue
+
+            # Sort by frame
+            rows.sort(key=lambda p: int(p[0]))
+
+            if mode == "confidence":
+                confs = [float(p[6]) for p in rows]
+                median_conf = sorted(confs)[len(confs) // 2]
+                # Trim leading low-conf frames
+                start = 0
+                while start < len(rows) and float(rows[start][6]) < median_conf:
+                    start += 1
+                # Trim trailing low-conf frames
+                end = len(rows) - 1
+                while end > start and float(rows[end][6]) < median_conf:
+                    end -= 1
+                trimmed = rows[start:end + 1]
+            else:  # fraction mode
+                n_trim = max(1, int(len(rows) * trim_fraction))
+                trimmed = rows[n_trim:-n_trim] if len(rows) > 2 * n_trim else rows
+
+            total_trimmed += len(rows) - len(trimmed)
+            kept_rows.extend(trimmed)
+
+        # Write back
+        kept_rows.sort(key=lambda p: (int(p[0]), int(p[1])))
+        with open(pred_file, "w") as f:
+            for parts in kept_rows:
+                f.write(",".join(parts) + "\n")
+
+    if total_rows > 0:
+        pct = total_trimmed / total_rows * 100
+        logger.info(
+            f"Track edge trim (mode={mode}): removed {total_trimmed}/{total_rows} "
+            f"rows ({pct:.1f}%) from track edges"
+        )

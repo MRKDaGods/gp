@@ -227,6 +227,15 @@ stage5:
   # confidence = mean pairwise appearance similarity between tracklets.
   # Low-confidence trajectories are likely wrong cross-camera associations.
   min_trajectory_confidence: 0.0  # 0.0 = disabled; tune based on scan results
+  # --- Minimum total frames per trajectory ---
+  # Trajectories with very few frames across all cameras are likely noise.
+  min_trajectory_frames: 0  # 0 = disabled
+  # --- Per-detection confidence filter ---
+  # Drop submitted detections below this confidence. Targets weak detections
+  # at temporal track edges (approaching/leaving intersection).
+  min_submission_confidence: 0.0  # 0.0 = disabled
+  # --- Cross-ID NMS IoU threshold ---
+  cross_id_nms_iou: 0.5
   # --- Non-GT stationary vehicle filter ---
   # Removes trajectories where ALL tracklets have near-zero displacement.
   # Parked cars produce long-lived detections → guaranteed FP in MTMC eval.
@@ -234,6 +243,13 @@ stage5:
   stationary_filter:
     enabled: true
     min_displacement_px: 50   # minimum pixel displacement to consider "moving"
+    max_mean_velocity_px: 0   # 0 = disabled; set to ~2.0 to catch oscillating parked cars
+  # --- Track edge trimming ---
+  # Trim low-confidence frames at track start/end (proxy for GT annotation boundary).
+  track_edge_trim:
+    enabled: false
+    mode: "confidence"  # "confidence" = trim below-median edges; "fraction" = fixed %
+    trim_fraction: 0.10
   # --- Track smoothing (Savitzky-Golay) ---
   # Smooths bbox trajectories to reduce detection jitter → better IoU with GT.
   # AIC21 1st place used post-trajectory smoothing for +1-2% IDF1.
