@@ -631,6 +631,7 @@ def _gallery_expansion(
         cluster_member_embs: List[np.ndarray] = []
         cluster_class_ids: List[int] = []
         cluster_cameras: List[Set[str]] = []
+        cluster_scenes: List[Set[str]] = []
         cluster_time_ranges: List[Tuple[float, float]] = []
 
         for ci, cluster in enumerate(multi_clusters):
@@ -642,6 +643,7 @@ def _gallery_expansion(
                 cls_counts[class_ids[m]] = cls_counts.get(class_ids[m], 0) + 1
             cluster_class_ids.append(max(cls_counts, key=cls_counts.get))
             cluster_cameras.append({camera_ids[m] for m in members})
+            cluster_scenes.append({_extract_scene(camera_ids[m]) for m in members} - {""})
             cluster_time_ranges.append(
                 (min(start_times[m] for m in members), max(end_times[m] for m in members))
             )
@@ -683,6 +685,10 @@ def _gallery_expansion(
                 # Same class check
                 if class_ids[orphan] != cluster_class_ids[ci]:
                     continue
+                # Scene blocking: orphan must belong to same scene as cluster
+                orphan_scene = _extract_scene(camera_ids[orphan])
+                if orphan_scene and cluster_scenes[ci] and orphan_scene not in cluster_scenes[ci]:
+                    continue
                 # HSV consistency gate: reject if color is too different
                 members = list(multi_clusters[ci])
                 hsv_sims = hsv_features[members] @ orphan_hsv
@@ -718,6 +724,9 @@ def _gallery_expansion(
 
                 multi_clusters[ci].add(orphan)
                 cluster_cameras[ci].add(camera_ids[orphan])
+                orphan_scene_val = _extract_scene(camera_ids[orphan])
+                if orphan_scene_val:
+                    cluster_scenes[ci].add(orphan_scene_val)
                 # Add orphan embedding to cluster member list
                 cluster_member_embs[ci] = np.vstack([
                     cluster_member_embs[ci],
@@ -768,6 +777,11 @@ def _gallery_expansion(
                     if class_ids[gi] != class_ids[gj]:
                         continue
                     if camera_ids[gi] == camera_ids[gj]:
+                        continue
+                    # Scene blocking: different scenes should never be linked
+                    scene_gi = _extract_scene(camera_ids[gi])
+                    scene_gj = _extract_scene(camera_ids[gj])
+                    if scene_gi and scene_gj and scene_gi != scene_gj:
                         continue
                     st_ok = (
                         st_validator.is_valid_transition(
