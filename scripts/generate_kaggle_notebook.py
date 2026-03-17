@@ -954,6 +954,35 @@ if SCAN_ENABLED:
           f"orph={best.get('orphan_thresh',0.30)} rr_lambda={best.get('rerank_lambda',0.0)} "
           f"alg={best.get('algorithm','?')} "
           f"-> IDF1={best['IDF1']:.3f} MOTA={best['MOTA']:.3f} HOTA={best['HOTA']:.3f}")
+
+    # ── Parameter sensitivity analysis ──
+    print("\\n" + "=" * 80)
+    print("PARAMETER SENSITIVITY ANALYSIS")
+    print("=" * 80)
+    for param_name in scan_grid:
+        param_vals = sorted(set(r2[param_name] for r2 in results))
+        if len(param_vals) < 2:
+            continue
+        print(f"\\n--- {param_name} ---")
+        for pval in param_vals:
+            subset = [r2 for r2 in results if r2[param_name] == pval]
+            avg_hota = sum(r2["HOTA"] for r2 in subset) / len(subset) if subset else 0
+            avg_idf1 = sum(r2["IDF1"] for r2 in subset) / len(subset) if subset else 0
+            avg_mota = sum(r2["MOTA"] for r2 in subset) / len(subset) if subset else 0
+            best_hota = max(r2["HOTA"] for r2 in subset) if subset else 0
+            print(f"  {param_name}={pval:<10} avg HOTA={avg_hota:.3f} avg IDF1={avg_idf1:.3f} "
+                  f"avg MOTA={avg_mota:.3f} best HOTA={best_hota:.3f} (n={len(subset)})")
+
+    # ── MTMC MOTA breakdown ──
+    if any(r2.get("MTMC_MOTA", 0) != 0 for r2 in results):
+        print("\\n" + "=" * 80)
+        print("TOP 10 by MTMC_MOTA:")
+        by_mtmc = sorted(results, key=lambda x: x.get("MTMC_MOTA", 0), reverse=True)
+        for r2 in by_mtmc[:10]:
+            alg_short = 'agg' if r2.get('algorithm','') == 'agglomerative' else 'cc'
+            print(f"  sim={r2['sim_thresh']} app={r2['appearance_w']} alg={alg_short} "
+                  f"rr={r2.get('rerank_lambda',0)} -> MTMC_MOTA={r2.get('MTMC_MOTA',0):.3f} "
+                  f"IDF1={r2['IDF1']:.3f} HOTA={r2['HOTA']:.3f}")
     # Save results to JSON for offline analysis
     import json as _json
     results_path = DATA_OUT / "scan_results.json"
