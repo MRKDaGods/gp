@@ -87,10 +87,6 @@ def evaluate_mtmc(
         gt_data = _load_mot_file(gt_file)
         pred_data = _load_mot_file(pred_file)
 
-        # Use camera-namespaced frame IDs so frames from different cameras
-        # are never matched against each other within the global accumulator.
-        # Frame IDs become (cam_id, frame_id) tuples — motmetrics handles
-        # any hashable frame identifier.
         cam_acc = mm.MOTAccumulator(auto_id=True)
         frames = sorted(set(list(gt_data.keys()) + list(pred_data.keys())))
 
@@ -115,13 +111,7 @@ def evaluate_mtmc(
             )
 
             cam_acc.update(gt_ids, pred_ids, distances)
-            # Also add to global accumulator with camera-namespaced frame IDs
-            # so that frames from different cameras are never adjacent.
-            # This prevents spurious ID switches at camera boundaries.
-            global_acc.update(
-                gt_ids, pred_ids, distances,
-                frameid=(cam_id, frame_id),
-            )
+            global_acc.update(gt_ids, pred_ids, distances)
 
         # Per-camera summary for reference
         mh_cam = mm.metrics.create()
