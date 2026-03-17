@@ -369,6 +369,7 @@ def run_stage4(
             threshold=gallery_cfg.get("threshold", 0.5),
             max_rounds=gallery_cfg.get("max_rounds", 2),
             orphan_match_threshold=float(gallery_cfg.get("orphan_match_threshold", 0.0)),
+            combined_sim=combined_sim,
         )
 
     # Step 6d: Re-resolve same-camera conflicts introduced by orphan-orphan matching.
@@ -591,6 +592,7 @@ def _gallery_expansion(
     threshold: float = 0.5,
     max_rounds: int = 2,
     orphan_match_threshold: float = 0.0,
+    combined_sim: Dict[Tuple[int, int], float] | None = None,
 ) -> List[Set[int]]:
     """Iteratively absorb orphan (singleton) tracklets into existing clusters.
 
@@ -650,11 +652,28 @@ def _gallery_expansion(
         for orphan in orphan_indices:
             orphan_emb = embeddings[orphan]
             orphan_hsv = hsv_features[orphan]
-            # Max-member similarity: highest cosine sim with any member
-            max_sims = np.array([
-                float((embs @ orphan_emb).max()) if len(embs) > 0 else -1.0
-                for embs in cluster_member_embs
-            ])
+            # Max-member similarity: highest cosine sim with any member.
+            # If combined_sim (reranked + weighted) is available, prefer it
+            # for pairs that were already scored in the main pipeline.
+            max_sims_list = []
+            for ci_idx, embs in enumerate(cluster_member_embs):
+                if len(embs) == 0:
+                    max_sims_list.append(-1.0)
+                    continue
+                # Raw cosine sim with all members
+                raw_sim = float((embs @ orphan_emb).max())
+                # Check combined_sim for refined scores
+                if combined_sim:
+                    members = list(multi_clusters[ci_idx])
+                    cs_vals = []
+                    for m in members:
+                        cs_val = combined_sim.get((orphan, m)) or combined_sim.get((m, orphan))
+                        if cs_val is not None:
+                            cs_vals.append(cs_val)
+                    if cs_vals:
+                        raw_sim = max(raw_sim, max(cs_vals))
+                max_sims_list.append(raw_sim)
+            max_sims = np.array(max_sims_list)
             order = np.argsort(-max_sims)
 
             merged = False

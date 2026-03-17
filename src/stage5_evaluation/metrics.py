@@ -115,8 +115,13 @@ def evaluate_mtmc(
             )
 
             cam_acc.update(gt_ids, pred_ids, distances)
-            # Also add to global accumulator with same globally-unique IDs
-            global_acc.update(gt_ids, pred_ids, distances)
+            # Also add to global accumulator with camera-namespaced frame IDs
+            # so that frames from different cameras are never adjacent.
+            # This prevents spurious ID switches at camera boundaries.
+            global_acc.update(
+                gt_ids, pred_ids, distances,
+                frameid=(cam_id, frame_id),
+            )
 
         # Per-camera summary for reference
         mh_cam = mm.metrics.create()
