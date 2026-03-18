@@ -169,15 +169,16 @@ class CropExtractor:
                 confidence=tf.confidence,
             ))
 
-        # Sort by quality and keep top-N
+        # Sort by quality and keep top-N with temporal stratification
         if not candidates and len(selected_indices) > 0:
             logger.debug(
                 f"Tracklet {tracklet.track_id}: 0/{len(selected_indices)} crops survived filtering "
                 f"(area={skipped_area}, conf={skipped_conf}, read={skipped_read}, "
                 f"crop={skipped_crop}, blur={skipped_blur}, quality={skipped_quality})"
             )
-        candidates.sort(key=lambda c: c.quality, reverse=True)
-        return candidates[: self.samples_per_tracklet]
+        return self._select_temporally_stratified(
+            candidates, self.samples_per_tracklet, n_frames,
+        )
 
     def extract_crops_from_frames(
         self,
@@ -238,8 +239,64 @@ class CropExtractor:
                 confidence=tf.confidence,
             ))
 
-        candidates.sort(key=lambda c: c.quality, reverse=True)
-        return candidates[: self.samples_per_tracklet]
+        return self._select_temporally_stratified(
+            candidates, self.samples_per_tracklet, n_frames,
+        )
+
+    @staticmethod
+    def _select_temporally_stratified(
+        candidates: List[QualityScoredCrop],
+        max_crops: int,
+        total_frames: int,
+    ) -> List[QualityScoredCrop]:
+        """Select crops with temporal diversity guarantee.
+
+        Divides the tracklet timeline into temporal strata and picks the
+        best-quality crop from each stratum first, then fills remaining
+        slots with the globally best remaining crops.  This ensures
+        viewpoint diversity — vehicles changing angle/size across a
+        long tracklet will be represented throughout.
+        """
+        if len(candidates) <= max_crops:
+            candidates.sort(key=lambda c: c.quality, reverse=True)
+            return candidates
+
+        # Number of strata = half of max_crops (at least 2),
+        # so ~50% of budget guarantees temporal spread.
+        n_strata = max(2, max_crops // 2)
+        if total_frames <= 1:
+            candidates.sort(key=lambda c: c.quality, reverse=True)
+            return candidates[:max_crops]
+
+        # Assign each candidate to a stratum based on its frame_id
+        strata: List[List[QualityScoredCrop]] = [[] for _ in range(n_strata)]
+        for c in candidates:
+            s = min(int(c.frame_id / total_frames * n_strata), n_strata - 1)
+            strata[s].append(c)
+
+        # Sort each stratum by quality descending
+        for s in strata:
+            s.sort(key=lambda c: c.quality, reverse=True)
+
+        # Phase 1: pick best crop from each non-empty stratum
+        selected: List[QualityScoredCrop] = []
+        selected_ids: set = set()
+        for s in strata:
+            if s and len(selected) < max_crops:
+                selected.append(s[0])
+                selected_ids.add(id(s[0]))
+
+        # Phase 2: fill remaining slots with globally best remaining crops
+        if len(selected) < max_crops:
+            remaining = [c for c in candidates if id(c) not in selected_ids]
+            remaining.sort(key=lambda c: c.quality, reverse=True)
+            for c in remaining:
+                if len(selected) >= max_crops:
+                    break
+                selected.append(c)
+
+        selected.sort(key=lambda c: c.quality, reverse=True)
+        return selected
 
     def _extract_padded_crop(
         self,
