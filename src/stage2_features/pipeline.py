@@ -112,6 +112,8 @@ def run_stage2(
 
     flip_augment = stage_cfg.reid.get("flip_augment", True)
     color_augment = stage_cfg.reid.get("color_augment", False)
+    multiscale_raw = stage_cfg.reid.get("multiscale_sizes", [])
+    multiscale_sizes = [tuple(s) for s in multiscale_raw] if multiscale_raw else []
 
     # --- Load ReID models (person and vehicle) ---
     person_reid = ReIDModel(
@@ -123,6 +125,7 @@ def run_stage2(
         half=stage_cfg.reid.half,
         flip_augment=flip_augment,
         color_augment=color_augment,
+        multiscale_sizes=multiscale_sizes,
         num_cameras=stage_cfg.reid.person.get("num_cameras", 0),
         vit_model=stage_cfg.reid.person.get("vit_model", "vit_base_patch16_clip_224.openai"),
         clip_normalization=stage_cfg.reid.person.get("clip_normalization", None),
@@ -145,6 +148,7 @@ def run_stage2(
         half=stage_cfg.reid.half,
         flip_augment=flip_augment,
         color_augment=color_augment,
+        multiscale_sizes=multiscale_sizes,
         num_cameras=stage_cfg.reid.vehicle.get("num_cameras", 0),
         vit_model=stage_cfg.reid.vehicle.get("vit_model", "vit_base_patch16_clip_224.openai"),
         clip_normalization=stage_cfg.reid.vehicle.get("clip_normalization", None),

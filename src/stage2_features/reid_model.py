@@ -49,6 +49,7 @@ class ReIDModel:
         half: bool = True,
         flip_augment: bool = True,
         color_augment: bool = False,
+        multiscale_sizes: Optional[List[Tuple[int, int]]] = None,
         num_cameras: int = 0,
         vit_model: str = "vit_base_patch16_clip_224.openai",
         clip_normalization: Optional[bool] = None,
@@ -62,6 +63,7 @@ class ReIDModel:
         self.half = half and "cuda" in device
         self.flip_augment = flip_augment
         self.color_augment = color_augment
+        self.multiscale_sizes = multiscale_sizes or []  # additional (H,W) sizes for TTA
         self.num_cameras = num_cameras
         self.vit_model = vit_model
 
@@ -99,6 +101,7 @@ class ReIDModel:
             f"ReID model loaded: {model_name}, dim={embedding_dim}, "
             f"input={self.input_size}, norm={norm_tag}, interp={interp_tag}, "
             f"device={device}"
+            + (f", multiscale={self.multiscale_sizes}" if self.multiscale_sizes else "")
         )
 
     def _build_model(self, model_name: str, weights_path: Optional[str]):
@@ -247,6 +250,28 @@ class ReIDModel:
                 if isinstance(aug_features, (tuple, list)):
                     aug_features = aug_features[0]
                 features = features + aug_features.float().cpu().numpy()
+                n_views += 1
+
+        # Multi-scale TTA: extract at additional sizes, average features
+        if self.multiscale_sizes:
+            for ms_size in self.multiscale_sizes:
+                ms_h, ms_w = ms_size
+                # Resize crops to the alternate scale
+                ms_crops = [cv2.resize(c, (ms_w, ms_h), interpolation=self._interp) for c in batch_crops]
+                # Preprocess using original pipeline (normalize, etc.)
+                old_size = self.input_size
+                self.input_size = ms_size
+                ms_tensor = self._preprocess(ms_crops).to(self.device)
+                self.input_size = old_size  # restore
+                if self.half:
+                    ms_tensor = ms_tensor.half()
+                if cam_tensor is not None:
+                    ms_features = self.model(ms_tensor, cam_ids=cam_tensor)
+                else:
+                    ms_features = self.model(ms_tensor)
+                if isinstance(ms_features, (tuple, list)):
+                    ms_features = ms_features[0]
+                features = features + ms_features.float().cpu().numpy()
                 n_views += 1
 
         return features / n_views
