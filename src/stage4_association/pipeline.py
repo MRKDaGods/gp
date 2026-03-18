@@ -13,7 +13,7 @@ Improvements over baseline:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import networkx as nx
 import numpy as np
@@ -78,30 +78,41 @@ def run_stage4(
     camera_ids = [f.camera_id for f in features]
     class_ids = [f.class_id for f in features]
 
-    # Optional: fuse with secondary embedding file (e.g., OSNet features)
+    # FIC config (used by both primary and secondary embeddings)
+    fic_cfg = stage_cfg.get("fic", {})
+
+    # Optional: load secondary embeddings for score-level fusion.
+    # Instead of concatenating features (which mixes uncalibrated spaces),
+    # we compute separate appearance similarities and blend them later.
     sec_cfg = stage_cfg.get("secondary_embeddings", {})
     sec_path = sec_cfg.get("path", "")
+    sec_embeddings: Optional[np.ndarray] = None
+    sec_weight = 0.0
     if sec_path and Path(sec_path).exists():
-        sec_emb = np.load(sec_path).astype(np.float32)
-        if sec_emb.shape[0] == n:
-            alpha = float(sec_cfg.get("weight", 0.5))
-            sec_emb = sec_emb / np.linalg.norm(sec_emb, axis=1, keepdims=True)
-            emb_norm = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
-            fused = np.concatenate([
-                emb_norm * np.sqrt(alpha),
-                sec_emb * np.sqrt(1.0 - alpha),
-            ], axis=1)
-            embeddings = fused / np.linalg.norm(fused, axis=1, keepdims=True)
+        sec_raw = np.load(sec_path).astype(np.float32)
+        if sec_raw.shape[0] == n:
+            sec_weight = float(sec_cfg.get("weight", 0.3))
+            # L2-normalize
+            sec_norms = np.linalg.norm(sec_raw, axis=1, keepdims=True)
+            sec_embeddings = sec_raw / np.maximum(sec_norms, 1e-8)
             logger.info(
-                f"Fused secondary embeddings ({sec_emb.shape[1]}D, weight={1-alpha:.2f}) "
-                f"→ {embeddings.shape[1]}D combined"
+                f"Secondary embeddings loaded: {sec_embeddings.shape[1]}D, "
+                f"weight={sec_weight:.2f} (score-level fusion)"
             )
+            # Apply FIC whitening to secondary embeddings separately
+            if fic_cfg.get("enabled", False):
+                sec_embeddings = per_camera_whiten(
+                    sec_embeddings,
+                    camera_ids,
+                    regularisation=float(fic_cfg.get("regularisation", 3.0)),
+                    min_samples=int(fic_cfg.get("min_samples", 5)),
+                )
+                logger.info("Applied FIC whitening to secondary embeddings")
         else:
-            logger.warning(f"Secondary embeddings shape mismatch: {sec_emb.shape[0]} vs {n}")
+            logger.warning(f"Secondary embeddings shape mismatch: {sec_raw.shape[0]} vs {n}")
 
     # Step 0: Per-camera feature whitening (FIC) — AIC21 1st-place technique.
     # Removes camera-specific bias (lighting, viewpoint) from embeddings.
-    fic_cfg = stage_cfg.get("fic", {})
     if fic_cfg.get("enabled", False):
         embeddings = per_camera_whiten(
             embeddings,
@@ -273,6 +284,18 @@ def run_stage4(
         )
     else:
         appearance_sim = {(i, j): sim for i, j, sim in candidate_pairs}
+
+    # Step 3b: Score-level fusion with secondary embeddings
+    if sec_embeddings is not None and sec_weight > 0:
+        logger.info(f"Blending secondary appearance sim (weight={sec_weight:.2f})...")
+        blended = 0
+        for (i, j) in appearance_sim:
+            sec_sim = float(np.dot(sec_embeddings[i], sec_embeddings[j]))
+            appearance_sim[(i, j)] = (
+                (1 - sec_weight) * appearance_sim[(i, j)] + sec_weight * sec_sim
+            )
+            blended += 1
+        logger.info(f"Blended {blended} pairs with secondary embeddings")
 
     # Step 4: Spatio-temporal validation
     st_validator = SpatioTemporalValidator(
