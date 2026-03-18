@@ -252,17 +252,24 @@ class ReIDModel:
                 features = features + aug_features.float().cpu().numpy()
                 n_views += 1
 
-        # Multi-scale TTA: extract at additional sizes, average features
+        # Multi-scale TTA: resize crops to intermediate size, then back to
+        # model input size.  This lets the model see "zoomed" content without
+        # changing the input tensor dimensions (critical for ViT positional
+        # embeddings which are fixed-size).
         if self.multiscale_sizes:
+            h, w = self.input_size
             for ms_size in self.multiscale_sizes:
                 ms_h, ms_w = ms_size
-                # Resize crops to the alternate scale
-                ms_crops = [cv2.resize(c, (ms_w, ms_h), interpolation=self._interp) for c in batch_crops]
-                # Preprocess using original pipeline (normalize, etc.)
-                old_size = self.input_size
-                self.input_size = ms_size
+                # Step 1: resize to intermediate scale
+                # Step 2: resize back to model input size
+                ms_crops = [
+                    cv2.resize(
+                        cv2.resize(c, (ms_w, ms_h), interpolation=self._interp),
+                        (w, h), interpolation=self._interp,
+                    )
+                    for c in batch_crops
+                ]
                 ms_tensor = self._preprocess(ms_crops).to(self.device)
-                self.input_size = old_size  # restore
                 if self.half:
                     ms_tensor = ms_tensor.half()
                 if cam_tensor is not None:
