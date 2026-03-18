@@ -114,6 +114,7 @@ def run_stage2(
     color_augment = stage_cfg.reid.get("color_augment", False)
     multiscale_raw = stage_cfg.reid.get("multiscale_sizes", [])
     multiscale_sizes = [tuple(s) for s in multiscale_raw] if multiscale_raw else []
+    quality_temperature = float(stage_cfg.reid.get("quality_temperature", 3.0))
 
     # --- Load ReID models (person and vehicle) ---
     person_reid = ReIDModel(
@@ -264,14 +265,14 @@ def run_stage2(
                 sie_cam_id = sie_camera_map.get(camera_id)
 
             # 2 & 3. Flip-augmented extraction + quality-weighted attention pooling
-            raw_embedding = reid.get_tracklet_embedding_from_scored_crops(scored_crops, cam_id=sie_cam_id)
+            raw_embedding = reid.get_tracklet_embedding_from_scored_crops(scored_crops, cam_id=sie_cam_id, quality_temperature=quality_temperature)
             if raw_embedding is None:
                 dropped_no_embedding += 1
                 continue
 
             # Ensemble: extract from second model
             if reid2 is not None:
-                raw_embedding2 = reid2.get_tracklet_embedding_from_scored_crops(scored_crops, cam_id=sie_cam_id)
+                raw_embedding2 = reid2.get_tracklet_embedding_from_scored_crops(scored_crops, cam_id=sie_cam_id, quality_temperature=quality_temperature)
                 if raw_embedding2 is not None:
                     if vehicle2_separate:
                         # Save separately for stage4 fusion

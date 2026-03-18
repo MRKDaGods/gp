@@ -93,6 +93,9 @@ stage2:
     half: true
     # --- NEW: flip augmentation at inference ---
     flip_augment: true
+    # --- Quality-weighted attention temperature for crop aggregation ---
+    # Higher = sharper (more weight on best crops). 0 = uniform averaging.
+    quality_temperature: 3.0
     # --- Color brightness augmentation (inference TTA) ---
     color_augment: false  # v27: tested, neutral-to-harmful
     # --- Multi-scale TTA: extract at multiple input sizes and average ---

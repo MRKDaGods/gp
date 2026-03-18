@@ -337,6 +337,7 @@ class ReIDModel:
         crops: List[np.ndarray],
         quality_scores: Optional[List[float]] = None,
         cam_id: Optional[int] = None,
+        quality_temperature: float = 3.0,
     ) -> Optional[np.ndarray]:
         """Extract a single embedding for a tracklet using quality-weighted attention.
 
@@ -349,6 +350,8 @@ class ReIDModel:
             quality_scores: Per-crop quality scores in [0, 1]. If None,
                 falls back to uniform weighting (simple average).
             cam_id: Optional integer camera ID for SIE (TransReID).
+            quality_temperature: Exponent for softmax quality weighting.
+                Higher = sharper (more weight on best crops). 0 = uniform.
 
         Returns:
             (D,) embedding vector, or None if no valid crops.
@@ -363,7 +366,7 @@ class ReIDModel:
         if quality_scores is not None and len(quality_scores) == embeddings.shape[0]:
             weights = np.array(quality_scores, dtype=np.float32)
             # Softmax-style temperature scaling to sharpen attention
-            weights = np.exp(weights * 3.0)  # temperature = 1/3
+            weights = np.exp(weights * quality_temperature)
             weights = weights / weights.sum()
             weighted_embedding = (embeddings * weights[:, np.newaxis]).sum(axis=0)
             return weighted_embedding
@@ -374,12 +377,14 @@ class ReIDModel:
         self,
         scored_crops: List["QualityScoredCrop"],
         cam_id: Optional[int] = None,
+        quality_temperature: float = 3.0,
     ) -> Optional[np.ndarray]:
         """Convenience wrapper that accepts QualityScoredCrop objects directly.
 
         Args:
             scored_crops: List of QualityScoredCrop from CropExtractor.
             cam_id: Optional integer camera ID for SIE (TransReID).
+            quality_temperature: Exponent for softmax quality weighting.
 
         Returns:
             (D,) quality-weighted embedding, or None.
@@ -388,4 +393,4 @@ class ReIDModel:
             return None
         crops = [sc.image for sc in scored_crops]
         qualities = [sc.quality for sc in scored_crops]
-        return self.get_tracklet_embedding(crops, quality_scores=qualities, cam_id=cam_id)
+        return self.get_tracklet_embedding(crops, quality_scores=qualities, cam_id=cam_id, quality_temperature=quality_temperature)
