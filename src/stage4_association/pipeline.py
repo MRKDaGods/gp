@@ -78,6 +78,27 @@ def run_stage4(
     camera_ids = [f.camera_id for f in features]
     class_ids = [f.class_id for f in features]
 
+    # Optional: fuse with secondary embedding file (e.g., OSNet features)
+    sec_cfg = stage_cfg.get("secondary_embeddings", {})
+    sec_path = sec_cfg.get("path", "")
+    if sec_path and Path(sec_path).exists():
+        sec_emb = np.load(sec_path).astype(np.float32)
+        if sec_emb.shape[0] == n:
+            alpha = float(sec_cfg.get("weight", 0.5))
+            sec_emb = sec_emb / np.linalg.norm(sec_emb, axis=1, keepdims=True)
+            emb_norm = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
+            fused = np.concatenate([
+                emb_norm * np.sqrt(alpha),
+                sec_emb * np.sqrt(1.0 - alpha),
+            ], axis=1)
+            embeddings = fused / np.linalg.norm(fused, axis=1, keepdims=True)
+            logger.info(
+                f"Fused secondary embeddings ({sec_emb.shape[1]}D, weight={1-alpha:.2f}) "
+                f"→ {embeddings.shape[1]}D combined"
+            )
+        else:
+            logger.warning(f"Secondary embeddings shape mismatch: {sec_emb.shape[0]} vs {n}")
+
     # Step 0: Per-camera feature whitening (FIC) — AIC21 1st-place technique.
     # Removes camera-specific bias (lighting, viewpoint) from embeddings.
     fic_cfg = stage_cfg.get("fic", {})
@@ -408,6 +429,32 @@ def run_stage4(
             f"Combined sim stats: {len(sim_vals)} pairs, "
             f"min={min(sim_vals):.3f} median={np.median(sim_vals):.3f} "
             f"max={max(sim_vals):.3f}, {n_above} above threshold {threshold}"
+        )
+
+    # CSLS hubness reduction: penalize vectors with high average similarity
+    # to their neighbors (reduces "universal hub" false positives)
+    csls_cfg = stage_cfg.get("csls", {})
+    if csls_cfg.get("enabled", False) and combined_sim:
+        csls_k = int(csls_cfg.get("k", 10))
+        # Collect top-K similarities per tracklet
+        from collections import defaultdict
+        per_node_sims: Dict[int, List[float]] = defaultdict(list)
+        for (i, j), s in combined_sim.items():
+            per_node_sims[i].append(s)
+            per_node_sims[j].append(s)
+        # Compute mean of top-K for each node
+        hub_penalty: Dict[int, float] = {}
+        for node, sims in per_node_sims.items():
+            topk = sorted(sims, reverse=True)[:csls_k]
+            hub_penalty[node] = np.mean(topk) if topk else 0.0
+        # Apply CSLS: sim_adj = 2*sim - penalty_i - penalty_j
+        adjusted = {}
+        for (i, j), s in combined_sim.items():
+            adjusted[(i, j)] = 2.0 * s - hub_penalty.get(i, 0.0) - hub_penalty.get(j, 0.0)
+        combined_sim = adjusted
+        logger.info(
+            f"CSLS hubness reduction (k={csls_k}): "
+            f"adjusted {len(combined_sim)} pairs"
         )
 
     # Phase 2: Graph solving. RBM edges that are below the normal threshold

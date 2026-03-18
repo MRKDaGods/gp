@@ -82,6 +82,7 @@ stage2:
       sie_camera_map: {}
     vehicle2:
       enabled: false  # v26: tested ensemble TransReID+OSNet, hurt MTMC -1.6pp (0.685->0.669)
+      save_separate: true  # Save to embeddings_secondary.npy for stage4 fusion (preferred)
       model_name: "osnet_x1_0"
       weights_path: "models/reid/vehicle_osnet_veri776.pth"
       embedding_dim: 512
@@ -120,6 +121,10 @@ stage3:
 stage4:
   association:
     top_k: 100
+    # --- Secondary embedding fusion (e.g., OSNet + TransReID ensemble) ---
+    secondary_embeddings:
+      path: ""       # path to secondary .npy file; empty = disabled
+      weight: 0.5    # weight for primary embeddings (0.5 = equal fusion)
     # --- FIC: per-camera feature whitening (AIC21 1st-place technique) ---
     fic:
       enabled: true

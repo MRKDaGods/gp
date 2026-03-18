@@ -200,8 +200,10 @@ def run_stage2(
     # --- Process all tracklets ---
     all_features: List[TrackletFeatures] = []
     all_raw_embeddings: List[np.ndarray] = []
+    all_secondary_embeddings: List[Optional[np.ndarray]] = []
     all_camera_ids: List[str] = []
     index_map: List[dict] = []
+    vehicle2_separate = vehicle2_cfg.get("save_separate", False) and vehicle_reid2 is not None
 
     # --- SIE camera ID mapping for TransReID models ---
     sie_camera_map: Dict[str, int] = stage_cfg.reid.vehicle.get("sie_camera_map", {}) or {}
@@ -263,16 +265,22 @@ def run_stage2(
                 dropped_no_embedding += 1
                 continue
 
-            # Ensemble: extract from second model and concatenate (both L2-normalized)
+            # Ensemble: extract from second model
             if reid2 is not None:
                 raw_embedding2 = reid2.get_tracklet_embedding_from_scored_crops(scored_crops, cam_id=sie_cam_id)
                 if raw_embedding2 is not None:
-                    # L2-normalize each independently before concatenation
-                    norm1 = np.linalg.norm(raw_embedding)
-                    norm2 = np.linalg.norm(raw_embedding2)
-                    e1 = raw_embedding / max(norm1, 1e-8)
-                    e2 = raw_embedding2 / max(norm2, 1e-8)
-                    raw_embedding = np.concatenate([e1, e2], axis=0)
+                    if vehicle2_separate:
+                        # Save separately for stage4 fusion
+                        all_secondary_embeddings.append(raw_embedding2)
+                    else:
+                        # Legacy: concatenate into single vector
+                        norm1 = np.linalg.norm(raw_embedding)
+                        norm2 = np.linalg.norm(raw_embedding2)
+                        e1 = raw_embedding / max(norm1, 1e-8)
+                        e2 = raw_embedding2 / max(norm2, 1e-8)
+                        raw_embedding = np.concatenate([e1, e2], axis=0)
+                elif vehicle2_separate:
+                    all_secondary_embeddings.append(None)
 
             # 4. Spatial HSV histogram with quality weighting
             hsv_hist = hsv_extractor.extract_tracklet_histogram_from_scored_crops(
@@ -374,6 +382,22 @@ def run_stage2(
     hsv_matrix = np.stack([f.hsv_histogram for f in all_features], axis=0)
     save_embeddings(embeddings, index_map, output_dir)
     save_hsv_features(hsv_matrix, output_dir)
+
+    # Save secondary model embeddings separately (for stage4 fusion)
+    if vehicle2_separate and all_secondary_embeddings:
+        valid_sec = [e for e in all_secondary_embeddings if e is not None]
+        if len(valid_sec) == len(all_features):
+            sec_matrix = np.stack(valid_sec, axis=0)
+            sec_matrix = l2_normalize(sec_matrix)
+            sec_path = output_dir / "embeddings_secondary.npy"
+            np.save(sec_path, sec_matrix.astype(np.float32))
+            logger.info(
+                f"Secondary embeddings saved: {sec_matrix.shape} → {sec_path}"
+            )
+        else:
+            logger.warning(
+                f"Secondary embeddings incomplete: {len(valid_sec)}/{len(all_features)}"
+            )
 
     logger.info(
         f"Stage 2 complete: {len(all_features)} tracklet features, "
