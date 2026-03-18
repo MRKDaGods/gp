@@ -130,7 +130,7 @@ stage4:
     # --- Secondary embedding fusion (e.g., OSNet + TransReID ensemble) ---
     secondary_embeddings:
       path: ""       # path to secondary .npy file; empty = disabled
-      weight: 0.5    # weight for primary embeddings (0.5 = equal fusion)
+      weight: 0.3    # blending weight for secondary model (0.3 = 30% secondary, 70% primary)
     # --- FIC: per-camera feature whitening (AIC21 1st-place technique) ---
     fic:
       enabled: true
