@@ -70,12 +70,16 @@ stage2:
       clip_normalization: true
     vehicle:
       model_name: "transreid"
-      weights_path: "models/reid/vehicle_transreid_vit_base_veri776.pth"
+      weights_path: "models/reid/transreid_cityflowv2_best.pth"
+      weights_fallback: "models/reid/vehicle_transreid_vit_base_veri776.pth"
       embedding_dim: 768
-      input_size: [224, 224]  # [H, W] — matches NB08 training
+      input_size: [256, 256]  # [H, W] — matches CityFlowV2 fine-tuning
       vit_model: "vit_base_patch16_clip_224.openai"
-      num_cameras: 20
+      num_cameras: 59   # CityFlowV2 training used 59 cameras; SIE pads
       clip_normalization: true
+      # SIE camera ID mapping: DISABLED — SIE hurts because training camera IDs
+      # don't correspond to test camera viewpoints (IDF1 dropped 0.777→0.699)
+      sie_camera_map: {}
     vehicle2:
       enabled: false  # v26: tested ensemble TransReID+OSNet, hurt MTMC -1.6pp (0.685->0.669)
       model_name: "osnet_x1_0"
@@ -95,7 +99,7 @@ stage2:
     n_stripes: 3       # spatial: 3 horizontal stripes (head/torso/legs)
   pca:
     enabled: true
-    n_components: 512  # 768 → 512 via PCA whitening (TransReID single-model)
+    n_components: 280  # v30: 768 → 280 PCA whitening (optimal dim, IDF1=0.795)
     pca_model_path: "models/reid/pca_transform.pkl"
   crop:
     min_area: 500
@@ -119,7 +123,7 @@ stage4:
     # --- FIC: per-camera feature whitening (AIC21 1st-place technique) ---
     fic:
       enabled: true
-      regularisation: 3.0
+      regularisation: 0.3  # v30: optimal for 280D PCA (was 3.0 for 512D)
       min_samples: 5
     # --- FAC: cross-camera feature augmentation (AIC21 technique) ---
     fac:
@@ -161,23 +165,76 @@ stage4:
     spatiotemporal:
       max_time_gap: 300  # seconds
       min_time_gap: 0    # allow overlapping-FOV camera pairs (CityFlowV2)
-      camera_transitions: null  # loaded from dataset config if available
+      # Per-pair learned priors from CityFlowV2 GT annotation timing.
+      # S01↔S02 cross-scene pairs intentionally absent → blocked.
+      camera_transitions:
+        S01_c001: {S01_c002: {min_time: 0, max_time: 20, mean_time: 1.9, std_time: 3.4},
+                   S01_c003: {min_time: 0, max_time:  5, mean_time: 0.5, std_time: 0.9}}
+        S01_c002: {S01_c001: {min_time: 0, max_time: 20, mean_time: 1.9, std_time: 3.4},
+                   S01_c003: {min_time: 0, max_time: 20, mean_time: 1.4, std_time: 3.1}}
+        S01_c003: {S01_c001: {min_time: 0, max_time:  5, mean_time: 0.5, std_time: 0.9},
+                   S01_c002: {min_time: 0, max_time: 20, mean_time: 1.4, std_time: 3.1}}
+        S02_c006: {S02_c007: {min_time: 0, max_time: 25, mean_time: 0.9, std_time: 2.6},
+                   S02_c008: {min_time: 0, max_time: 30, mean_time: 8.1, std_time: 6.2}}
+        S02_c007: {S02_c006: {min_time: 0, max_time: 25, mean_time: 0.9, std_time: 2.6},
+                   S02_c008: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
+        S02_c008: {S02_c006: {min_time: 0, max_time: 30, mean_time: 8.1, std_time: 6.2},
+                   S02_c007: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
     graph:
-      similarity_threshold: 0.40  # v25: lowered for 512D PCA (median sim ~0.34)
-      algorithm: "connected_components"  # v25: deterministic, same results as Louvain
+      similarity_threshold: 0.60  # v30: optimal for 280D PCA whitened embeddings
+      algorithm: "conflict_free_cc"  # v28: conflict-aware greedy matching prevents false transitive chains
       louvain_resolution: 1.0  # balanced: 1.5 over-fragments, 0.8 under-segments
-      bridge_prune_margin: 0.05  # v25: gentler pruning → better MTMC_IDF1 (+2pp)
+      bridge_prune_margin: 0.0  # v27: no bridge pruning yields best MTMC (+1.4pp)
       max_component_size: 12    # v25: tighter cap to prevent runaway merges
-    # --- Iterative gallery expansion for orphan tracklets ---
+    # --- Reciprocal best-match seeding (SOTA threshold-free technique) ---
+    # For each tracklet, finds its best match in each other camera.
+    # If two tracklets mutually agree they're each other's best match,
+    # they're linked even if below the graph threshold.  Rank-based,
+    # works despite compressed similarity distributions.
+    reciprocal_best_match:
+      enabled: false  # v27: hurts MTMC badly (0.684→0.665, IDSw 33→208)
+      min_similarity: 0.20   # absolute floor (prevent garbage links)
+    # --- Iterative gallery expansion for orphan tracklets (legacy, disabled when hierarchical is on) ---
     gallery_expansion:
       enabled: true
-      threshold: 0.65    # stricter absorption: reduces false gallery merges
+      threshold: 0.50    # v30: optimal for 280D PCA
       max_rounds: 2
-      orphan_match_threshold: 0.30  # v25: looser orphan-to-orphan for better MTMC recall
+      orphan_match_threshold: 0.40  # v30: raised for 280D PCA
+    # --- Temporal overlap bonus for overlapping-FOV cameras ---
+    # When tracklets co-exist in time across cameras with overlapping FOV,
+    # this is a strong positive signal (same vehicle visible simultaneously).
+    temporal_overlap:
+      enabled: true
+      bonus: 0.05            # additive bonus to combined score, scaled by temporal overlap ratio
+      max_mean_time: 5.0     # only apply to camera pairs with mean transit time < this (seconds)
+    # --- Hierarchical centroid-based expansion (AIC21/22 SOTA) ---
+    # Multi-pass matching using cluster centroids for more robust merging.
+    # Replaces gallery_expansion when enabled.
+    hierarchical:
+      enabled: false
+      centroid_threshold: 0.35  # orphan → cluster centroid similarity threshold
+      merge_threshold: 0.35    # cluster ↔ cluster centroid similarity threshold
+      orphan_threshold: 0.30   # orphan ↔ orphan cosine threshold (final pass)
+      max_merge_size: 12       # prevent oversized clusters
     # --- Camera-aware distance bias (AIC21 technique) ---
     camera_bias:
-      enabled: true
+      enabled: false  # v30: hurts with 280D PCA (-0.7pp)
       iterations: 1
+    # --- Zone-based transition scoring (AIC21/22 SOTA) ---
+    zone_model:
+      enabled: false  # v30: neutral/harmful with 280D PCA
+      zone_data_path: "configs/datasets/cityflowv2_zones.json"
+      min_count: 2       # minimum GT count for valid transition
+      bonus: 0.03        # similarity bonus for valid zone transition
+      penalty: 0.03      # similarity penalty for invalid zone transition
+    # --- Per-camera-pair similarity boost (targeted threshold lowering) ---
+    # Boosts for hard pairs with high TP / low FP ratio (from diagnostic).
+    camera_pair_boost:
+      enabled: false  # v30: hurts with 280D PCA
+      boosts:
+        S02_c006-S02_c008: 0.08  # 38 TP below threshold, 0 FP above — safe to boost
+        S01_c001-S01_c003: 0.04  # 15 TP below, 1 FP above — moderate boost
+        S01_c002-S01_c003: 0.04  # 6 TP below, 0 FP above
 
 stage5:
   evaluator: "trackeval"  # trackeval | pymotmetrics

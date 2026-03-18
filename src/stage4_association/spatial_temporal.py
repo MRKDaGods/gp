@@ -126,7 +126,14 @@ class SpatioTemporalValidator:
 
     @staticmethod
     def _score_with_prior(abs_diff: float, prior: Dict) -> float:
-        """Score using a per-pair learned prior."""
+        """Score using a per-pair learned prior.
+
+        Uses Gaussian centered on mean_time with sigma = max(learned_std,
+        (max_time - min_time) / 3) to ensure wide coverage of the valid
+        time range — overlapping-FOV cameras have very low mean_time but
+        legitimate transitions can be much longer (vehicles re-entering
+        the FOV after a red light, etc.).
+        """
         min_t = prior["min_time"]
         max_t = prior["max_time"]
         mean_t = prior.get("mean_time", (min_t + max_t) / 2)
@@ -135,11 +142,11 @@ class SpatioTemporalValidator:
         if abs_diff < min_t or abs_diff > max_t:
             return 0.0
 
-        # If std was learned, use it directly; else heuristic
+        # Use the wider of learned std vs. range/3 to avoid over-narrow Gaussian
         if std_t is not None and std_t > 0:
-            sigma = std_t
+            sigma = max(std_t, (max_t - min_t) / 3.0)
         else:
-            sigma = max((max_t - min_t) / 4.0, 1.0)
+            sigma = max((max_t - min_t) / 3.0, 1.0)
 
         return math.exp(-0.5 * ((abs_diff - mean_t) / sigma) ** 2)
 

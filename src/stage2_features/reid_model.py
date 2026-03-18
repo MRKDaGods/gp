@@ -52,6 +52,7 @@ class ReIDModel:
         num_cameras: int = 0,
         vit_model: str = "vit_base_patch16_clip_224.openai",
         clip_normalization: Optional[bool] = None,
+        concat_patch: bool = False,
     ):
         self.model_name = model_name
         self.is_transreid = model_name.lower() in self._TRANSREID_NAMES
@@ -86,6 +87,11 @@ class ReIDModel:
         self.model.to(device)
         if self.half:
             self.model.half()
+
+        # Enable CLS+GeM(patches) concatenation for TransReID
+        if concat_patch and self.is_transreid:
+            self.model._concat_patch = True
+            self.embedding_dim = embedding_dim * 2  # 768 → 1536
 
         norm_tag = "CLIP" if self.clip_normalization else "ImageNet"
         interp_tag = "BICUBIC" if self._interp == cv2.INTER_CUBIC else "BILINEAR"
@@ -180,9 +186,19 @@ class ReIDModel:
         tensor = torch.from_numpy(np.stack(processed, axis=0))
         return tensor
 
+    def _make_cam_tensor(self, batch_size: int, cam_id: Optional[int]) -> Optional[torch.Tensor]:
+        """Create a camera ID tensor for SIE if cam_id is provided and model supports it."""
+        if cam_id is not None and self.is_transreid:
+            return torch.full((batch_size,), cam_id, dtype=torch.long, device=self.device)
+        return None
+
     @torch.no_grad()
-    def _extract_batch(self, batch_crops: List[np.ndarray]) -> np.ndarray:
+    def _extract_batch(self, batch_crops: List[np.ndarray], cam_id: Optional[int] = None) -> np.ndarray:
         """Extract embeddings for a single batch with optional augmentation.
+
+        Args:
+            batch_crops: List of BGR uint8 crops.
+            cam_id: Optional integer camera ID for SIE (TransReID).
 
         Returns:
             (N, D) float32 numpy array.
@@ -190,7 +206,11 @@ class ReIDModel:
         batch_tensor = self._preprocess(batch_crops).to(self.device)
         if self.half:
             batch_tensor = batch_tensor.half()
-        features = self.model(batch_tensor)
+        cam_tensor = self._make_cam_tensor(len(batch_crops), cam_id)
+        if cam_tensor is not None:
+            features = self.model(batch_tensor, cam_ids=cam_tensor)
+        else:
+            features = self.model(batch_tensor)
         if isinstance(features, (tuple, list)):
             features = features[0]
         features = features.float().cpu().numpy()
@@ -202,7 +222,10 @@ class ReIDModel:
             flip_tensor = self._preprocess(flipped_crops).to(self.device)
             if self.half:
                 flip_tensor = flip_tensor.half()
-            flip_features = self.model(flip_tensor)
+            if cam_tensor is not None:
+                flip_features = self.model(flip_tensor, cam_ids=cam_tensor)
+            else:
+                flip_features = self.model(flip_tensor)
             if isinstance(flip_features, (tuple, list)):
                 flip_features = flip_features[0]
             features = features + flip_features.float().cpu().numpy()
@@ -217,7 +240,10 @@ class ReIDModel:
                 aug_tensor = self._preprocess(aug_crops).to(self.device)
                 if self.half:
                     aug_tensor = aug_tensor.half()
-                aug_features = self.model(aug_tensor)
+                if cam_tensor is not None:
+                    aug_features = self.model(aug_tensor, cam_ids=cam_tensor)
+                else:
+                    aug_features = self.model(aug_tensor)
                 if isinstance(aug_features, (tuple, list)):
                     aug_features = aug_features[0]
                 features = features + aug_features.float().cpu().numpy()
@@ -226,7 +252,7 @@ class ReIDModel:
         return features / n_views
 
     @torch.no_grad()
-    def extract_features(self, crops: List[np.ndarray], batch_size: int = 64) -> np.ndarray:
+    def extract_features(self, crops: List[np.ndarray], batch_size: int = 64, cam_id: Optional[int] = None) -> np.ndarray:
         """Extract embeddings from a list of crops with optional flip augmentation.
 
         When ``flip_augment`` is True, each crop is processed twice (original +
@@ -236,6 +262,7 @@ class ReIDModel:
         Args:
             crops: List of BGR uint8 crops.
             batch_size: Batch size for inference.
+            cam_id: Optional integer camera ID for SIE (TransReID).
 
         Returns:
             (N, D) float32 numpy array of embeddings.
@@ -249,7 +276,7 @@ class ReIDModel:
             batch_crops = crops[i : i + batch_size]
 
             try:
-                features = self._extract_batch(batch_crops)
+                features = self._extract_batch(batch_crops, cam_id=cam_id)
             except RuntimeError as e:
                 if "out of memory" in str(e).lower():
                     # CUDA OOM — retry with halved batch size
@@ -263,7 +290,7 @@ class ReIDModel:
                     sub_embeddings = []
                     for j in range(0, len(batch_crops), half_bs):
                         sub_batch = batch_crops[j : j + half_bs]
-                        sub_embeddings.append(self._extract_batch(sub_batch))
+                        sub_embeddings.append(self._extract_batch(sub_batch, cam_id=cam_id))
                     features = np.concatenate(sub_embeddings, axis=0)
                 else:
                     raise
@@ -277,6 +304,7 @@ class ReIDModel:
         self,
         crops: List[np.ndarray],
         quality_scores: Optional[List[float]] = None,
+        cam_id: Optional[int] = None,
     ) -> Optional[np.ndarray]:
         """Extract a single embedding for a tracklet using quality-weighted attention.
 
@@ -288,6 +316,7 @@ class ReIDModel:
             crops: List of BGR uint8 crops from the tracklet.
             quality_scores: Per-crop quality scores in [0, 1]. If None,
                 falls back to uniform weighting (simple average).
+            cam_id: Optional integer camera ID for SIE (TransReID).
 
         Returns:
             (D,) embedding vector, or None if no valid crops.
@@ -295,7 +324,7 @@ class ReIDModel:
         if not crops:
             return None
 
-        embeddings = self.extract_features(crops)
+        embeddings = self.extract_features(crops, cam_id=cam_id)
         if embeddings.shape[0] == 0:
             return None
 
@@ -312,11 +341,13 @@ class ReIDModel:
     def get_tracklet_embedding_from_scored_crops(
         self,
         scored_crops: List["QualityScoredCrop"],
+        cam_id: Optional[int] = None,
     ) -> Optional[np.ndarray]:
         """Convenience wrapper that accepts QualityScoredCrop objects directly.
 
         Args:
             scored_crops: List of QualityScoredCrop from CropExtractor.
+            cam_id: Optional integer camera ID for SIE (TransReID).
 
         Returns:
             (D,) quality-weighted embedding, or None.
@@ -325,4 +356,4 @@ class ReIDModel:
             return None
         crops = [sc.image for sc in scored_crops]
         qualities = [sc.quality for sc in scored_crops]
-        return self.get_tracklet_embedding(crops, quality_scores=qualities)
+        return self.get_tracklet_embedding(crops, quality_scores=qualities, cam_id=cam_id)

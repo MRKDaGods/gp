@@ -155,7 +155,16 @@ class TransReID(nn.Module):
             return cls, proj
 
         # Inference: L2-normalized embedding
-        return F.normalize(proj, p=2, dim=1)
+        # If concat_patch is set, concatenate CLS with GeM-pooled patches
+        proj_normed = F.normalize(proj, p=2, dim=1)
+        if getattr(self, "_concat_patch", False):
+            patches = x[:, 1:]  # (B, N, D) — patch tokens
+            # GeM pooling: generalized mean with p=3 (more discriminative than avg)
+            gem_p = getattr(self, "_gem_p", 3.0)
+            patch_gem = (patches.clamp(min=1e-6) ** gem_p).mean(dim=1) ** (1.0 / gem_p)
+            patch_normed = F.normalize(patch_gem, p=2, dim=1)
+            return torch.cat([proj_normed, patch_normed], dim=1)
+        return proj_normed
 
 
 def build_transreid(

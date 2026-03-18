@@ -32,9 +32,11 @@ from src.stage4_association.query_expansion import average_query_expansion_batch
 from src.stage4_association.reranking import k_reciprocal_rerank
 from src.stage4_association.similarity import (
     compute_combined_similarity,
+    compute_temporal_overlap_ratio,
     mutual_nearest_neighbor_filter,
 )
 from src.stage4_association.spatial_temporal import SpatioTemporalValidator
+from src.stage4_association.zone_scoring import ZoneScorer
 
 
 def run_stage4(
@@ -269,6 +271,7 @@ def run_stage4(
         weights=stage_cfg.weights,
         class_ids=class_ids,
         num_frames=num_frames,
+        temporal_overlap_cfg=stage_cfg.get("temporal_overlap"),
     )
 
     logger.info(f"Combined similarity pairs: {len(combined_sim)}")
@@ -298,7 +301,7 @@ def run_stage4(
                     bridge_prune_margin=float(stage_cfg.graph.get("bridge_prune_margin", 0.0)),
                     max_component_size=int(stage_cfg.graph.get("max_component_size", 0)),
                 )
-                tmp_clusters = tmp_solver.solve(combined_sim, n)
+                tmp_clusters = tmp_solver.solve(combined_sim, n, camera_ids, start_times, end_times)
                 # Only learn from multi-member clusters
                 multi_clusters = [c for c in tmp_clusters if len(c) >= 2]
                 if not multi_clusters:
@@ -319,13 +322,84 @@ def run_stage4(
     # Step 5c: Zone-based transition scoring (for CityFlow-style datasets)
     zone_cfg = stage_cfg.get("zone_model", {})
     if zone_cfg.get("enabled", False):
-        zone_model = ZoneTransitionModel()
-        zone_model.load_from_config(zone_cfg)
-        # TODO: integrate zone scores into combined_sim
-        # This requires tracklet entry/exit positions which are dataset-specific
-        logger.info("Zone transition model loaded (integration pending)")
+        zone_data_path = zone_cfg.get("zone_data_path")
+        if zone_data_path and Path(zone_data_path).exists():
+            zone_scorer = ZoneScorer(
+                zone_data_path,
+                min_count=int(zone_cfg.get("min_count", 2)),
+            )
+            # Extract entry/exit positions from Stage 1 tracklets
+            tracklet_lookup = {}
+            for cam_id, tracklets in tracklets_by_camera.items():
+                for t in tracklets:
+                    tracklet_lookup[(t.camera_id, t.track_id)] = t
+            entry_positions = []
+            exit_positions = []
+            for feat in features:
+                t = tracklet_lookup.get((feat.camera_id, feat.track_id))
+                if t and t.frames:
+                    fb = t.frames[0].bbox  # (x1, y1, x2, y2)
+                    entry_positions.append(((fb[0] + fb[2]) / 2, (fb[1] + fb[3]) / 2))
+                    lb = t.frames[-1].bbox
+                    exit_positions.append(((lb[0] + lb[2]) / 2, (lb[1] + lb[3]) / 2))
+                else:
+                    entry_positions.append(None)
+                    exit_positions.append(None)
+            entry_zones, exit_zones = zone_scorer.assign_zones(
+                entry_positions, exit_positions, camera_ids,
+            )
+            combined_sim = zone_scorer.apply_to_similarities(
+                combined_sim, camera_ids, entry_zones, exit_zones,
+                bonus=float(zone_cfg.get("bonus", 0.03)),
+                penalty=float(zone_cfg.get("penalty", 0.03)),
+            )
+        else:
+            logger.warning(f"Zone data file not found: {zone_data_path}")
+
+    # Step 5d: Per-camera-pair similarity boost (targeted threshold lowering)
+    # Instead of a single global threshold, boost similarities for specific
+    # camera pairs that have high true-match rate but low raw similarity.
+    # This effectively lowers the threshold for those pairs while keeping
+    # the global threshold conservative for well-connected pairs.
+    pair_boost_cfg = stage_cfg.get("camera_pair_boost", {})
+    if pair_boost_cfg.get("enabled", False):
+        boosts = pair_boost_cfg.get("boosts", {})
+        boost_count = 0
+        for (i, j), sim in list(combined_sim.items()):
+            cam_i, cam_j = camera_ids[i], camera_ids[j]
+            key = f"{cam_i}-{cam_j}"
+            key_rev = f"{cam_j}-{cam_i}"
+            boost_val = boosts.get(key, boosts.get(key_rev, 0.0))
+            if boost_val != 0.0:
+                combined_sim[(i, j)] = sim + boost_val
+                boost_count += 1
+        if boost_count > 0:
+            logger.info(f"Camera pair boost: adjusted {boost_count} pairs")
 
     # Step 6: Build graph and solve
+    # Phase 1: Reciprocal best-match seeding (SOTA technique, threshold-free).
+    # For each tracklet, find its best match in each other camera.  If two
+    # tracklets are each other's best cross-camera match AND their similarity
+    # exceeds a loose floor, seed them as an initial pair.  This is robust
+    # because it's rank-based — works regardless of absolute similarity scale.
+    rbm_cfg = stage_cfg.get("reciprocal_best_match", {})
+    rbm_edges: Dict[Tuple[int, int], float] = {}
+    if rbm_cfg.get("enabled", False):
+        rbm_floor = float(rbm_cfg.get("min_similarity", 0.20))
+        rbm_edges = _reciprocal_best_match(
+            combined_sim, camera_ids, class_ids,
+            start_times, end_times, st_validator,
+            min_similarity=rbm_floor,
+        )
+        # Inject RBM edges into combined_sim (they bypass threshold)
+        for (i, j), sim in rbm_edges.items():
+            if (i, j) not in combined_sim:
+                combined_sim[(i, j)] = sim
+        logger.info(
+            f"Reciprocal best-match: {len(rbm_edges)} seed pairs "
+            f"(floor={rbm_floor:.2f})"
+        )
+
     if combined_sim:
         sim_vals = list(combined_sim.values())
         threshold = float(stage_cfg.graph.similarity_threshold)
@@ -335,8 +409,96 @@ def run_stage4(
             f"min={min(sim_vals):.3f} median={np.median(sim_vals):.3f} "
             f"max={max(sim_vals):.3f}, {n_above} above threshold {threshold}"
         )
+
+    # Phase 2: Graph solving. RBM edges that are below the normal threshold
+    # get boosted above the bridge pruning threshold so they survive as
+    # anchor connections.  Without this, bridge pruning (threshold + margin)
+    # would remove the very edges RBM identified as high-confidence.
+    graph_threshold = float(stage_cfg.graph.similarity_threshold)
+    bridge_margin = float(stage_cfg.graph.get("bridge_prune_margin", 0.0))
+    bridge_threshold = graph_threshold + bridge_margin
+    solve_sim = dict(combined_sim)
+    if rbm_edges:
+        boosted = 0
+        for (i, j), sim in rbm_edges.items():
+            if sim < bridge_threshold:
+                # Boost above bridge prune threshold so RBM links survive
+                solve_sim[(i, j)] = bridge_threshold + 0.01
+                boosted += 1
+        if boosted > 0:
+            logger.info(
+                f"RBM boost: {boosted} seed edges boosted above bridge threshold "
+                f"({bridge_threshold:.3f})"
+            )
+
+    # Step 5e: Per-camera-pair adaptive thresholds.
+    # Different camera pairs have different similarity distributions.
+    # Apply pair-specific thresholds to reduce fragmentation on hard pairs
+    # while maintaining precision on easy pairs.
+    pair_thresholds_cfg = stage_cfg.get("pair_thresholds", {})
+    if pair_thresholds_cfg.get("enabled", False):
+        pair_thresh_map = pair_thresholds_cfg.get("thresholds", {})
+        if pair_thresh_map:
+            removed = 0
+            keys_to_remove = []
+            for (i, j), sim in solve_sim.items():
+                cam_pair = tuple(sorted([camera_ids[i], camera_ids[j]]))
+                pair_key = f"{cam_pair[0]}-{cam_pair[1]}"
+                pair_thresh = pair_thresh_map.get(pair_key, graph_threshold)
+                if sim < pair_thresh:
+                    keys_to_remove.append((i, j))
+            for key in keys_to_remove:
+                del solve_sim[key]
+                removed += 1
+            # Set graph threshold to minimum pair threshold so pre-filtered
+            # edges are not double-filtered by the graph solver.
+            min_pair_thresh = min(pair_thresh_map.values()) if pair_thresh_map else graph_threshold
+            graph_threshold = min(graph_threshold, min_pair_thresh)
+            logger.info(
+                f"Per-pair thresholds: removed {removed} sub-threshold edges, "
+                f"effective graph threshold={graph_threshold:.3f}"
+            )
+
+    # Step 5f: Intra-camera ReID merge — add same-camera, non-overlapping
+    # tracklet pairs with high cosine similarity to the graph.  This catches
+    # vehicles that exit and re-enter a camera (occlusion, stop, or tracking
+    # loss) which stage 1 IoU-based merge can't handle.
+    intra_merge_cfg = stage_cfg.get("intra_camera_merge", {})
+    if intra_merge_cfg.get("enabled", False):
+        intra_threshold = float(intra_merge_cfg.get("threshold", 0.70))
+        max_time_gap = float(intra_merge_cfg.get("max_time_gap", 120.0))
+        # Group tracklets by camera
+        cam_to_indices: Dict[str, List[int]] = {}
+        for idx in range(n):
+            cam_to_indices.setdefault(camera_ids[idx], []).append(idx)
+        intra_added = 0
+        for cam, indices_list in cam_to_indices.items():
+            for ii in range(len(indices_list)):
+                for jj in range(ii + 1, len(indices_list)):
+                    a, b = indices_list[ii], indices_list[jj]
+                    # Skip if temporally overlapping (different identities)
+                    if start_times[a] <= end_times[b] and start_times[b] <= end_times[a]:
+                        continue
+                    # Skip if time gap is too large
+                    time_gap = max(start_times[a] - end_times[b],
+                                   start_times[b] - end_times[a])
+                    if time_gap > max_time_gap:
+                        continue
+                    # Cosine similarity from FIC+QE embeddings
+                    sim = float(embeddings[a] @ embeddings[b])
+                    if sim >= intra_threshold:
+                        key = (min(a, b), max(a, b))
+                        if key not in solve_sim or solve_sim[key] < sim:
+                            solve_sim[key] = sim
+                            intra_added += 1
+        if intra_added > 0:
+            logger.info(
+                f"Intra-camera ReID merge: added {intra_added} same-camera pairs "
+                f"(threshold={intra_threshold:.2f}, max_gap={max_time_gap:.0f}s)"
+            )
+
     solver = GraphSolver(
-        similarity_threshold=stage_cfg.graph.similarity_threshold,
+        similarity_threshold=graph_threshold,
         algorithm=stage_cfg.graph.algorithm,
         louvain_resolution=stage_cfg.graph.get("louvain_resolution", 1.0),
         louvain_seed=int(stage_cfg.graph.get("louvain_seed", 42)),
@@ -344,7 +506,7 @@ def run_stage4(
         max_component_size=int(stage_cfg.graph.get("max_component_size", 0)),
     )
 
-    clusters = solver.solve(combined_sim, n)
+    clusters = solver.solve(solve_sim, n, camera_ids, start_times, end_times)
     logger.info(f"Graph solver found {len(clusters)} identity clusters")
 
     # Step 6b: Resolve same-camera conflicts
@@ -352,9 +514,37 @@ def run_stage4(
         clusters, camera_ids, start_times, end_times, combined_sim,
     )
 
-    # Step 6c: Gallery expansion — attempt to recover orphan tracklets
+    # Step 6c: Hierarchical centroid-based expansion (SOTA technique).
+    # After initial clustering, compute cluster centroids (averaged + L2-normed
+    # embeddings) which are more robust than individual embeddings because noise
+    # averages out. Then try to merge orphans at a lower threshold.
+    hierarch_cfg = stage_cfg.get("hierarchical", {})
+    if hierarch_cfg.get("enabled", False):
+        clusters = _hierarchical_centroid_expansion(
+            clusters=clusters,
+            embeddings=embeddings,
+            hsv_features=hsv_features,
+            camera_ids=camera_ids,
+            class_ids=class_ids,
+            start_times=start_times,
+            end_times=end_times,
+            st_validator=st_validator,
+            n=n,
+            stage_cfg=stage_cfg,
+            combined_sim=combined_sim,
+            hierarch_cfg=hierarch_cfg,
+        )
+
+        # Re-resolve same-camera conflicts after hierarchical expansion
+        clusters = _resolve_same_camera_conflicts(
+            clusters, camera_ids, start_times, end_times, combined_sim,
+        )
+
+    # Step 6c-legacy: Gallery expansion (if hierarchical is disabled, use legacy)
+    # Also run after hierarchical as a second absorption pass with max-member sim
     gallery_cfg = stage_cfg.get("gallery_expansion", {})
-    if gallery_cfg.get("enabled", False):
+    run_gallery = gallery_cfg.get("enabled", False)
+    if run_gallery:
         clusters = _gallery_expansion(
             clusters=clusters,
             embeddings=embeddings,
@@ -372,12 +562,58 @@ def run_stage4(
             combined_sim=combined_sim,
         )
 
-    # Step 6d: Re-resolve same-camera conflicts introduced by orphan-orphan matching.
-    # Orphan pairs (A→X, B→X) can individually pass the cross-camera check yet
-    # transitively place same-camera tracklets A and B in the same cluster.
-    clusters = _resolve_same_camera_conflicts(
-        clusters, camera_ids, start_times, end_times, combined_sim,
-    )
+    # Step 6d: Re-resolve same-camera conflicts introduced by orphan-orphan matching
+    # or gallery expansion.  Cross-camera merges can transitively place
+    # same-camera tracklets in the same cluster.
+    if run_gallery or not hierarch_cfg.get("enabled", False):
+        clusters = _resolve_same_camera_conflicts(
+            clusters, camera_ids, start_times, end_times, combined_sim,
+        )
+
+    # Step 6e: Post-cluster verification — check internal connectivity and
+    # eject members whose maximum cosine similarity to any other cluster member
+    # is below a minimum threshold.  This catches false transitive merges where
+    # A→B→C but A-C similarity is very low.
+    verify_cfg = stage_cfg.get("cluster_verify", {})
+    if verify_cfg.get("enabled", False):
+        min_connectivity = float(verify_cfg.get("min_connectivity", 0.30))
+        ejected_total = 0
+        new_clusters = []
+        for cluster in clusters:
+            if len(cluster) <= 2:
+                new_clusters.append(cluster)
+                continue
+            members = list(cluster)
+            eject = set()
+            for m in members:
+                # Check max cosine sim to any other member
+                max_sim = -1.0
+                for m2 in members:
+                    if m2 == m:
+                        continue
+                    sim = float(embeddings[m] @ embeddings[m2])
+                    if sim > max_sim:
+                        max_sim = sim
+                if max_sim < min_connectivity:
+                    eject.add(m)
+            if eject:
+                remaining = cluster - eject
+                if len(remaining) >= 2:
+                    new_clusters.append(remaining)
+                else:
+                    for m in remaining:
+                        new_clusters.append({m})
+                for m in eject:
+                    new_clusters.append({m})
+                ejected_total += len(eject)
+            else:
+                new_clusters.append(cluster)
+        if ejected_total > 0:
+            logger.info(
+                f"Cluster verification: ejected {ejected_total} weakly-connected "
+                f"members (min_connectivity={min_connectivity:.2f})"
+            )
+        clusters = new_clusters
 
     # Step 7: Build global trajectories
     tracklet_lookup: Dict[Tuple[str, int], Tracklet] = {}
@@ -578,6 +814,504 @@ def _assign_individual_ids(tracklets: List[Tracklet]) -> List[GlobalTrajectory]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Reciprocal best-match seeding (SOTA threshold-free matching)
+# ---------------------------------------------------------------------------
+
+def _reciprocal_best_match(
+    combined_sim: Dict[Tuple[int, int], float],
+    camera_ids: List[str],
+    class_ids: List[int],
+    start_times: List[float],
+    end_times: List[float],
+    st_validator: SpatioTemporalValidator,
+    min_similarity: float = 0.20,
+) -> Dict[Tuple[int, int], float]:
+    """Find reciprocal best-match pairs across cameras (threshold-free).
+
+    For each tracklet i, find its highest-similarity match j in each other
+    camera.  If j's best match in camera(i) is also i, and the similarity
+    exceeds a loose floor, they form a reciprocal best-match pair.
+
+    This is robust to absolute similarity compression because it's rank-based:
+    even if max cross-camera similarity is only 0.35, that's still good enough
+    if it's the BEST match on both sides.
+
+    Args:
+        combined_sim: Pairwise combined similarity scores.
+        camera_ids: Camera ID for each tracklet.
+        class_ids: Class ID for each tracklet.
+        start_times, end_times: Temporal bounds per tracklet.
+        st_validator: Spatio-temporal validator.
+        min_similarity: Absolute floor — pairs below this are never linked.
+
+    Returns:
+        Dict of reciprocal best-match pairs and their similarities.
+    """
+    from collections import defaultdict
+
+    # Build per-tracklet best match in each other camera
+    # best_match[i][cam_j] = (j, similarity)
+    best_match: Dict[int, Dict[str, Tuple[int, float]]] = defaultdict(dict)
+
+    for (i, j), sim in combined_sim.items():
+        if sim < min_similarity:
+            continue
+        cam_j = camera_ids[j]
+        cam_i = camera_ids[i]
+        if cam_i == cam_j:
+            continue
+
+        # Update best match for i in cam_j's direction
+        if cam_j not in best_match[i] or sim > best_match[i][cam_j][1]:
+            best_match[i][cam_j] = (j, sim)
+        # Update best match for j in cam_i's direction
+        if cam_i not in best_match[j] or sim > best_match[j][cam_i][1]:
+            best_match[j][cam_i] = (i, sim)
+
+    # Find reciprocal pairs
+    rbm_pairs: Dict[Tuple[int, int], float] = {}
+
+    seen = set()
+    for i, per_cam in best_match.items():
+        for cam_j, (j, sim_ij) in per_cam.items():
+            if (i, j) in seen or (j, i) in seen:
+                continue
+            # Check reciprocity: j's best match in camera(i) must be i
+            cam_i = camera_ids[i]
+            if cam_i in best_match.get(j, {}):
+                best_from_j, sim_ji = best_match[j][cam_i]
+                if best_from_j == i:
+                    # Reciprocal! Use the minimum similarity as the edge weight
+                    pair_sim = min(sim_ij, sim_ji)
+                    if pair_sim >= min_similarity:
+                        # Same-camera temporal overlap check (should be cross-cam but verify)
+                        if camera_ids[i] != camera_ids[j]:
+                            key = (min(i, j), max(i, j))
+                            rbm_pairs[key] = pair_sim
+                            seen.add(key)
+
+    return rbm_pairs
+
+
+# ---------------------------------------------------------------------------
+# Hierarchical centroid-based expansion (SOTA multi-pass matching)
+# ---------------------------------------------------------------------------
+
+def _compute_cluster_centroids(
+    clusters: List[Set[int]],
+    embeddings: np.ndarray,
+) -> np.ndarray:
+    """Compute L2-normalised centroid for each cluster.
+
+    Centroids average out viewpoint-specific noise, making them more
+    discriminative than individual embeddings for cross-camera matching.
+
+    Returns:
+        (C, D) matrix of cluster centroids, one per cluster.
+    """
+    centroids = np.zeros((len(clusters), embeddings.shape[1]), dtype=np.float32)
+    for ci, cluster in enumerate(clusters):
+        members = list(cluster)
+        centroid = embeddings[members].mean(axis=0)
+        norm = np.linalg.norm(centroid)
+        if norm > 1e-8:
+            centroid /= norm
+        centroids[ci] = centroid
+    return centroids
+
+
+def _hierarchical_centroid_expansion(
+    clusters: List[Set[int]],
+    embeddings: np.ndarray,
+    hsv_features: np.ndarray,
+    camera_ids: List[str],
+    class_ids: List[int],
+    start_times: List[float],
+    end_times: List[float],
+    st_validator: SpatioTemporalValidator,
+    n: int,
+    stage_cfg: DictConfig,
+    combined_sim: Dict[Tuple[int, int], float],
+    hierarch_cfg: dict,
+) -> List[Set[int]]:
+    """Hierarchical multi-pass association (AIC21/22 SOTA technique).
+
+    After initial graph clustering:
+    1. **Centroid expansion**: Compute cluster centroids (averaged embeddings),
+       then absorb orphans whose centroid similarity exceeds a lower threshold.
+       Centroids are more robust because noise averages out across viewpoints.
+    2. **Cluster-to-cluster merging**: Try to merge small clusters together
+       using centroid-to-centroid cosine similarity.
+    3. **Orphan-to-orphan recovery**: Link remaining orphans at the loosest
+       threshold with strict constraints.
+
+    Each pass resolves same-camera conflicts before proceeding to the next.
+    """
+    centroid_threshold = float(hierarch_cfg.get("centroid_threshold", 0.35))
+    merge_threshold = float(hierarch_cfg.get("merge_threshold", 0.35))
+    orphan_threshold = float(hierarch_cfg.get("orphan_threshold", 0.30))
+    max_merge_size = int(hierarch_cfg.get("max_merge_size", 12))
+
+    total_absorbed = 0
+    total_merged = 0
+
+    # ── Pass 1: Centroid-based orphan absorption ────────────────────────
+    for round_idx in range(3):  # Up to 3 rounds of centroid expansion
+        multi_clusters = [c for c in clusters if len(c) > 1]
+        orphan_sets = [c for c in clusters if len(c) == 1]
+        orphan_indices = [list(c)[0] for c in orphan_sets]
+
+        if not orphan_indices or not multi_clusters:
+            break
+
+        # Compute cluster centroids
+        centroids = _compute_cluster_centroids(multi_clusters, embeddings)
+
+        # Compute cluster metadata
+        cluster_meta = []
+        for ci, cluster in enumerate(multi_clusters):
+            members = list(cluster)
+            cls_counts: Dict[int, int] = {}
+            for m in members:
+                cls_counts[class_ids[m]] = cls_counts.get(class_ids[m], 0) + 1
+            majority_class = max(cls_counts, key=cls_counts.get)
+            cams = {camera_ids[m] for m in members}
+            scenes = {_extract_scene(camera_ids[m]) for m in members} - {""}
+            cluster_meta.append({
+                "class": majority_class,
+                "cameras": cams,
+                "scenes": scenes,
+                "members": members,
+            })
+
+        # For each orphan, find best matching cluster via centroid similarity
+        # Enhanced: also compute max-member similarity to handle viewpoint diversity.
+        # An orphan matching ANY cluster member strongly should be absorbed even if
+        # the centroid (averaged over all viewpoints) is only moderately similar.
+        orphan_embs = embeddings[orphan_indices]  # (O, D)
+        # Centroid similarities: (O, C)
+        centroid_sims = orphan_embs @ centroids.T
+
+        merged_this_round = 0
+        remaining_orphans = []
+
+        for oi, orphan_idx in enumerate(orphan_indices):
+            best_ci = -1
+            best_sim = -1.0
+
+            # Sort cluster candidates by centroid similarity; check top candidates
+            order = np.argsort(-centroid_sims[oi])
+            # Check top 20 candidates (by centroid) — some may have low centroid
+            # but high max-member similarity due to viewpoint diversity
+            for rank, ci in enumerate(order[:20]):
+                c_sim = float(centroid_sims[oi, ci])
+                # Skip if centroid sim is too low (won't have good member sim either)
+                if c_sim < centroid_threshold - 0.15:
+                    break
+                # Compute max-member similarity for this cluster
+                member_embs = embeddings[cluster_meta[ci]["members"]]
+                max_member_sim = float((orphan_embs[oi] @ member_embs.T).max())
+                # Also check combined_sim scores (include ST weighting)
+                max_combined = max(
+                    combined_sim.get((orphan_idx, m), combined_sim.get((m, orphan_idx), 0.0))
+                    for m in cluster_meta[ci]["members"]
+                )
+                # Use the best of centroid, max-member, and combined similarity
+                sim = max(c_sim, max_member_sim, max_combined)
+                if sim < centroid_threshold:
+                    continue
+
+                meta = cluster_meta[ci]
+
+                # Same class check
+                if class_ids[orphan_idx] != meta["class"]:
+                    continue
+
+                # Scene blocking
+                orphan_scene = _extract_scene(camera_ids[orphan_idx])
+                if orphan_scene and meta["scenes"] and orphan_scene not in meta["scenes"]:
+                    continue
+
+                # Size cap
+                if len(multi_clusters[ci]) >= max_merge_size:
+                    continue
+
+                # Same-camera temporal overlap check
+                if camera_ids[orphan_idx] in meta["cameras"]:
+                    conflict = False
+                    for m in meta["members"]:
+                        if camera_ids[m] == camera_ids[orphan_idx]:
+                            if (start_times[orphan_idx] <= end_times[m] and
+                                    start_times[m] <= end_times[orphan_idx]):
+                                conflict = True
+                                break
+                    if conflict:
+                        continue
+
+                # Spatio-temporal check with at least one cluster member
+                st_ok = any(
+                    st_validator.is_valid_transition(
+                        camera_ids[m], camera_ids[orphan_idx],
+                        end_times[m], start_times[orphan_idx],
+                    ) or st_validator.is_valid_transition(
+                        camera_ids[orphan_idx], camera_ids[m],
+                        end_times[orphan_idx], start_times[m],
+                    )
+                    for m in meta["members"]
+                    if camera_ids[m] != camera_ids[orphan_idx]
+                )
+                if not st_ok:
+                    continue
+
+                # HSV consistency: orphan's HSV must be plausible
+                member_hsv = hsv_features[meta["members"]]
+                hsv_sims = member_hsv @ hsv_features[orphan_idx]
+                if float(hsv_sims.max()) < 0.2:
+                    continue
+
+                best_ci = ci
+                best_sim = sim
+                break
+
+            if best_ci >= 0:
+                multi_clusters[best_ci].add(orphan_idx)
+                meta = cluster_meta[best_ci]
+                meta["cameras"].add(camera_ids[orphan_idx])
+                orphan_scene = _extract_scene(camera_ids[orphan_idx])
+                if orphan_scene:
+                    meta["scenes"].add(orphan_scene)
+                meta["members"].append(orphan_idx)
+                merged_this_round += 1
+            else:
+                remaining_orphans.append({orphan_idx})
+
+        total_absorbed += merged_this_round
+        clusters = multi_clusters + remaining_orphans
+
+        # Resolve same-camera conflicts after each round
+        clusters = _resolve_same_camera_conflicts(
+            clusters, camera_ids, start_times, end_times, combined_sim,
+        )
+
+        logger.info(
+            f"Hierarchical pass 1 round {round_idx + 1}: "
+            f"absorbed {merged_this_round} orphans via centroids "
+            f"(threshold={centroid_threshold:.2f})"
+        )
+        if merged_this_round == 0:
+            break
+
+    # ── Pass 2: Cluster-to-cluster merging via centroids ───────────────
+    multi_clusters = [c for c in clusters if len(c) > 1]
+    orphan_sets = [c for c in clusters if len(c) == 1]
+
+    if len(multi_clusters) >= 2:
+        nc = len(multi_clusters)
+        centroids = _compute_cluster_centroids(multi_clusters, embeddings)
+
+        # Cluster metadata
+        c_classes = []
+        c_scenes = []
+        c_cameras = []
+        for cluster in multi_clusters:
+            members = list(cluster)
+            cls_counts: Dict[int, int] = {}
+            for m in members:
+                cls_counts[class_ids[m]] = cls_counts.get(class_ids[m], 0) + 1
+            c_classes.append(max(cls_counts, key=cls_counts.get))
+            c_scenes.append({_extract_scene(camera_ids[m]) for m in members} - {""})
+            c_cameras.append({camera_ids[m] for m in members})
+
+        # Centroid-to-centroid similarity matrix
+        cc_sim = centroids @ centroids.T
+
+        # Build merge candidate pairs (use max of centroid-centroid, max member-member, and combined_sim)
+        merge_pairs = []
+        for ci in range(nc):
+            for cj in range(ci + 1, nc):
+                cc = float(cc_sim[ci, cj])
+                # Max member-to-member cosine similarity
+                embs_i = embeddings[list(multi_clusters[ci])]
+                embs_j = embeddings[list(multi_clusters[cj])]
+                max_mm = float((embs_i @ embs_j.T).max())
+                # Max combined_sim (includes ST weighting)
+                max_cs = 0.0
+                for mi in multi_clusters[ci]:
+                    for mj in multi_clusters[cj]:
+                        cs = combined_sim.get((mi, mj), combined_sim.get((mj, mi), 0.0))
+                        if cs > max_cs:
+                            max_cs = cs
+                sim = max(cc, max_mm, max_cs)
+                if sim < merge_threshold:
+                    continue
+                # Same class
+                if c_classes[ci] != c_classes[cj]:
+                    continue
+                # Scene compatibility
+                if c_scenes[ci] and c_scenes[cj]:
+                    if not c_scenes[ci] & c_scenes[cj]:
+                        continue
+                # Size cap
+                if len(multi_clusters[ci]) + len(multi_clusters[cj]) > max_merge_size:
+                    continue
+                # Same-camera temporal overlap: check ALL pairs would be valid
+                conflict = False
+                for mi in multi_clusters[ci]:
+                    for mj in multi_clusters[cj]:
+                        if camera_ids[mi] == camera_ids[mj]:
+                            if (start_times[mi] <= end_times[mj] and
+                                    start_times[mj] <= end_times[mi]):
+                                conflict = True
+                                break
+                    if conflict:
+                        break
+                if conflict:
+                    continue
+                merge_pairs.append((ci, cj, sim))
+
+        # Greedily merge highest-similarity pairs
+        merge_pairs.sort(key=lambda x: x[2], reverse=True)
+        merged_into: Dict[int, int] = {}  # ci -> canonical ci
+
+        def _find_canonical(ci: int) -> int:
+            while ci in merged_into:
+                ci = merged_into[ci]
+            return ci
+
+        for ci, cj, sim in merge_pairs:
+            ci_canon = _find_canonical(ci)
+            cj_canon = _find_canonical(cj)
+            if ci_canon == cj_canon:
+                continue
+            # Verify size cap after transitive merges
+            merged_size = len(multi_clusters[ci_canon]) + len(multi_clusters[cj_canon])
+            if merged_size > max_merge_size:
+                continue
+            # Re-check same-camera temporal overlap after transitive merges
+            conflict = False
+            for mi in multi_clusters[ci_canon]:
+                for mj in multi_clusters[cj_canon]:
+                    if camera_ids[mi] == camera_ids[mj]:
+                        if (start_times[mi] <= end_times[mj] and
+                                start_times[mj] <= end_times[mi]):
+                            conflict = True
+                            break
+                if conflict:
+                    break
+            if conflict:
+                continue
+            # Merge cj into ci
+            multi_clusters[ci_canon].update(multi_clusters[cj_canon])
+            merged_into[cj_canon] = ci_canon
+            total_merged += 1
+
+        # Collect surviving clusters
+        surviving = [multi_clusters[i] for i in range(nc) if i not in merged_into]
+        clusters = surviving + orphan_sets
+
+        if total_merged > 0:
+            logger.info(
+                f"Hierarchical pass 2: merged {total_merged} cluster pairs "
+                f"(threshold={merge_threshold:.2f})"
+            )
+
+    # ── Pass 3: Orphan-to-orphan recovery at loose threshold ───────────
+    if orphan_threshold > 0:
+        final_multi = [c for c in clusters if len(c) > 1]
+        final_orphan_indices = []
+        for c in clusters:
+            if len(c) == 1:
+                final_orphan_indices.extend(c)
+
+        if len(final_orphan_indices) >= 2:
+            orphan_embs = embeddings[final_orphan_indices]
+            pairwise_sim = orphan_embs @ orphan_embs.T
+
+            n_orphans = len(final_orphan_indices)
+            orphan_sims: Dict[Tuple[int, int], float] = {}
+
+            for oi in range(n_orphans):
+                gi = final_orphan_indices[oi]
+                for oj in range(oi + 1, n_orphans):
+                    gj = final_orphan_indices[oj]
+                    cosine_sim = float(pairwise_sim[oi, oj])
+                    # Use max of cosine and combined_sim (includes ST weighting)
+                    cs = combined_sim.get((gi, gj), combined_sim.get((gj, gi), 0.0))
+                    pair_sim = max(cosine_sim, cs)
+                    if pair_sim < orphan_threshold:
+                        continue
+                    if class_ids[gi] != class_ids[gj]:
+                        continue
+                    if camera_ids[gi] == camera_ids[gj]:
+                        continue
+                    # Scene blocking
+                    scene_gi = _extract_scene(camera_ids[gi])
+                    scene_gj = _extract_scene(camera_ids[gj])
+                    if scene_gi and scene_gj and scene_gi != scene_gj:
+                        continue
+                    st_ok = (
+                        st_validator.is_valid_transition(
+                            camera_ids[gi], camera_ids[gj],
+                            end_times[gi], start_times[gj],
+                        ) or st_validator.is_valid_transition(
+                            camera_ids[gj], camera_ids[gi],
+                            end_times[gj], start_times[gi],
+                        )
+                    )
+                    if not st_ok:
+                        continue
+                    orphan_sims[(gi, gj)] = pair_sim
+
+            if orphan_sims:
+                orphan_solver = GraphSolver(
+                    similarity_threshold=orphan_threshold,
+                    algorithm="connected_components",
+                    bridge_prune_margin=float(
+                        stage_cfg.get("graph", {}).get("bridge_prune_margin", 0.0)
+                    ),
+                    max_component_size=max_merge_size,
+                )
+                all_orphan_set = set(final_orphan_indices)
+                orphan_clusters_raw = orphan_solver.solve(
+                    orphan_sims, max(all_orphan_set) + 1,
+                )
+
+                new_orphans = []
+                new_multi = []
+                for cluster in orphan_clusters_raw:
+                    members = cluster & all_orphan_set
+                    if not members:
+                        continue
+                    if len(members) > 1:
+                        new_multi.append(members)
+                    else:
+                        new_orphans.append(members)
+                linked_orphans = set()
+                for c in new_multi + new_orphans:
+                    linked_orphans |= c
+                for gi in final_orphan_indices:
+                    if gi not in linked_orphans:
+                        new_orphans.append({gi})
+
+                clusters = final_multi + new_multi + new_orphans
+                logger.info(
+                    f"Hierarchical pass 3: orphan matching "
+                    f"(threshold={orphan_threshold:.2f}): "
+                    f"{len(orphan_sims)} pairs -> {len(new_multi)} new clusters"
+                )
+            else:
+                clusters = final_multi + [{gi} for gi in final_orphan_indices]
+                logger.info("Hierarchical pass 3: no valid orphan pairs")
+
+    logger.info(
+        f"Hierarchical expansion complete: "
+        f"absorbed {total_absorbed} orphans, merged {total_merged} clusters, "
+        f"{len(clusters)} final clusters"
+    )
+    return clusters
+
+
 def _gallery_expansion(
     clusters: List[Set[int]],
     embeddings: np.ndarray,
@@ -772,7 +1506,15 @@ def _gallery_expansion(
                 gi = final_orphan_indices[oi]
                 for oj in range(oi + 1, n_orphans):
                     gj = final_orphan_indices[oj]
-                    if pairwise_sim[oi, oj] < orphan_match_threshold:
+                    # Use combined_sim if available (includes ST/HSV weighting),
+                    # fall back to raw cosine similarity
+                    raw_cos = float(pairwise_sim[oi, oj])
+                    if combined_sim:
+                        cs_val = combined_sim.get((gi, gj)) or combined_sim.get((gj, gi))
+                        pair_sim = max(raw_cos, cs_val) if cs_val is not None else raw_cos
+                    else:
+                        pair_sim = raw_cos
+                    if pair_sim < orphan_match_threshold:
                         continue
                     if class_ids[gi] != class_ids[gj]:
                         continue
@@ -794,7 +1536,7 @@ def _gallery_expansion(
                     )
                     if not st_ok:
                         continue
-                    orphan_sims[(gi, gj)] = float(pairwise_sim[oi, oj])
+                    orphan_sims[(gi, gj)] = pair_sim
 
             if orphan_sims:
                 # Use GraphSolver with bridge pruning + component cap

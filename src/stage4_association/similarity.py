@@ -1,11 +1,13 @@
 """Multi-modal similarity computation for cross-camera association.
 
-Supports class-adaptive weighting (person vs vehicle) and mutual
-nearest-neighbor filtering.
+Supports class-adaptive weighting (person vs vehicle), mutual
+nearest-neighbor filtering, and temporal overlap bonus for
+overlapping-FOV camera pairs.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -21,6 +23,32 @@ def compute_hsv_similarity(hist_a: np.ndarray, hist_b: np.ndarray) -> float:
     Uses dot product (equivalent to cosine similarity for L2-normed vectors).
     """
     return float(np.dot(hist_a, hist_b))
+
+
+def compute_temporal_overlap_ratio(
+    start_i: float,
+    end_i: float,
+    start_j: float,
+    end_j: float,
+) -> float:
+    """Compute temporal IoU between two tracklets.
+
+    Returns the fraction of temporal overlap relative to the shorter tracklet's
+    duration.  This is more informative than IoU for asymmetric durations —
+    a short tracklet fully contained in a long one should get score ≈ 1.0.
+
+    Returns:
+        Ratio in [0, 1].  0 means no temporal overlap.
+    """
+    overlap_start = max(start_i, start_j)
+    overlap_end = min(end_i, end_j)
+    overlap = max(0.0, overlap_end - overlap_start)
+    if overlap <= 0:
+        return 0.0
+    min_duration = min(end_i - start_i, end_j - start_j)
+    if min_duration <= 0:
+        return 0.0
+    return min(overlap / min_duration, 1.0)
 
 
 def mutual_nearest_neighbor_filter(
@@ -76,6 +104,7 @@ def compute_combined_similarity(
     st_validator: SpatioTemporalValidator,
     weights: dict,
     num_frames: Optional[List[int]] = None,
+    temporal_overlap_cfg: Optional[dict] = None,
 ) -> Dict[Tuple[int, int], float]:
     """Compute weighted combined similarity with class-adaptive weights.
 
@@ -105,8 +134,6 @@ def compute_combined_similarity(
     Returns:
         Dict[(i, j)] -> combined similarity score.
     """
-    import math
-
     # Default weights
     default_w = {
         "appearance": weights.get("appearance", 0.6),
@@ -132,6 +159,15 @@ def compute_combined_similarity(
     # Length weighting config
     length_power = float(weights.get("length_weight_power", 0.0))
     use_length_weight = length_power > 0 and num_frames is not None
+
+    # Temporal overlap bonus for overlapping-FOV camera pairs.
+    # When two tracklets co-exist in time across cameras with overlapping FOV
+    # (mean transition time < threshold), this is a strong positive signal.
+    to_cfg = temporal_overlap_cfg or {}
+    to_enabled = to_cfg.get("enabled", False)
+    to_bonus = float(to_cfg.get("bonus", 0.05))
+    to_max_mean_time = float(to_cfg.get("max_mean_time", 5.0))
+    to_count = 0
 
     combined: Dict[Tuple[int, int], float] = {}
 
@@ -174,6 +210,23 @@ def compute_combined_similarity(
         # Combined score
         score = w_app * app_sim + w_hsv * hsv_sim + w_st * st_score
 
+        # Temporal overlap bonus: for overlapping-FOV cameras, temporal
+        # co-existence is a strong positive signal — the same vehicle is
+        # visible in both cameras simultaneously.
+        if to_enabled:
+            t_overlap = compute_temporal_overlap_ratio(
+                start_times[i], end_times[i],
+                start_times[j], end_times[j],
+            )
+            if t_overlap > 0:
+                # Check if this camera pair has overlapping FOV
+                pair_prior = st_validator._get_pair_prior(cam_a, cam_b)
+                if pair_prior is not None:
+                    mean_t = pair_prior.get("mean_time", float("inf"))
+                    if mean_t <= to_max_mean_time:
+                        score += to_bonus * t_overlap
+                        to_count += 1
+
         # Length weighting: shorter tracklets have less reliable embeddings
         # Uses the minimum length (weakest link) with hyperbolic saturation.
         # Unlike the ratio min/max, this doesn't over-penalize asymmetric pairs
@@ -187,5 +240,11 @@ def compute_combined_similarity(
             score *= 0.5 + 0.5 * length_w  # penalty range [0.5, 1.0]
 
         combined[(i, j)] = score
+
+    if to_enabled and to_count > 0:
+        logger.info(
+            f"Temporal overlap bonus applied to {to_count} pairs "
+            f"(bonus={to_bonus}, max_mean_time={to_max_mean_time}s)"
+        )
 
     return combined

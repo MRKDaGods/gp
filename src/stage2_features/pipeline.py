@@ -148,6 +148,7 @@ def run_stage2(
         num_cameras=stage_cfg.reid.vehicle.get("num_cameras", 0),
         vit_model=stage_cfg.reid.vehicle.get("vit_model", "vit_base_patch16_clip_224.openai"),
         clip_normalization=stage_cfg.reid.vehicle.get("clip_normalization", None),
+        concat_patch=stage_cfg.reid.vehicle.get("concat_patch", False),
     )
 
     # --- Optional second vehicle ReID model for ensemble (concatenated features) ---
@@ -202,6 +203,11 @@ def run_stage2(
     all_camera_ids: List[str] = []
     index_map: List[dict] = []
 
+    # --- SIE camera ID mapping for TransReID models ---
+    sie_camera_map: Dict[str, int] = stage_cfg.reid.vehicle.get("sie_camera_map", {}) or {}
+    if sie_camera_map:
+        logger.info(f"SIE camera map: {dict(sie_camera_map)}")
+
     for camera_id, tracklets in tracklets_by_camera.items():
         video_path = video_paths.get(camera_id)
         if video_path is None and not use_disk_frames:
@@ -245,19 +251,21 @@ def run_stage2(
             if tracklet.class_id in PERSON_CLASSES:
                 reid = person_reid
                 reid2 = None
+                sie_cam_id = None  # Person model doesn't use SIE camera map
             else:
                 reid = vehicle_reid
                 reid2 = vehicle_reid2
+                sie_cam_id = sie_camera_map.get(camera_id)
 
             # 2 & 3. Flip-augmented extraction + quality-weighted attention pooling
-            raw_embedding = reid.get_tracklet_embedding_from_scored_crops(scored_crops)
+            raw_embedding = reid.get_tracklet_embedding_from_scored_crops(scored_crops, cam_id=sie_cam_id)
             if raw_embedding is None:
                 dropped_no_embedding += 1
                 continue
 
             # Ensemble: extract from second model and concatenate (both L2-normalized)
             if reid2 is not None:
-                raw_embedding2 = reid2.get_tracklet_embedding_from_scored_crops(scored_crops)
+                raw_embedding2 = reid2.get_tracklet_embedding_from_scored_crops(scored_crops, cam_id=sie_cam_id)
                 if raw_embedding2 is not None:
                     # L2-normalize each independently before concatenation
                     norm1 = np.linalg.norm(raw_embedding)

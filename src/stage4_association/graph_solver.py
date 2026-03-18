@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import networkx as nx
 from loguru import logger
@@ -41,6 +41,9 @@ class GraphSolver:
         self,
         similarities: Dict[Tuple[int, int], float],
         num_nodes: int,
+        camera_ids: Optional[List[str]] = None,
+        start_times: Optional[List[float]] = None,
+        end_times: Optional[List[float]] = None,
     ) -> List[Set[int]]:
         """Build graph and find clusters.
 
@@ -97,6 +100,10 @@ class GraphSolver:
         # Find clusters
         if self.algorithm == "connected_components":
             clusters = list(nx.connected_components(G))
+        elif self.algorithm == "conflict_free_cc":
+            clusters = self._conflict_free_greedy(
+                similarities, num_nodes, camera_ids, start_times, end_times,
+            )
         elif self.algorithm == "community_detection":
             clusters = self._community_detection(G, self.louvain_resolution, self.louvain_seed)
         elif self.algorithm == "agglomerative":
@@ -221,6 +228,106 @@ class GraphSolver:
             f"Agglomerative clustering (complete linkage): "
             f"{m} active nodes → {len(clusters_dict)} clusters "
             f"+ {num_nodes - m} singletons"
+        )
+        return clusters
+
+    def _conflict_free_greedy(
+        self,
+        similarities: Dict[Tuple[int, int], float],
+        num_nodes: int,
+        camera_ids: Optional[List[str]],
+        start_times: Optional[List[float]],
+        end_times: Optional[List[float]],
+    ) -> List[Set[int]]:
+        """Conflict-free greedy matching: add edges in descending similarity
+        order, skipping any edge that would create a same-camera temporal
+        overlap within the resulting cluster.
+
+        This is fundamentally better than plain connected_components +
+        post-hoc conflict resolution because it prevents false transitive
+        chains from forming in the first place.  When a bad merge is blocked,
+        the tracklet stays unmatched and gets a second chance via gallery
+        expansion.
+
+        Falls back to connected_components when temporal info is unavailable.
+        """
+        if camera_ids is None or start_times is None or end_times is None:
+            logger.warning("conflict_free_cc: missing temporal info, falling back to connected_components")
+            G = nx.Graph()
+            G.add_nodes_from(range(num_nodes))
+            for (i, j), sim in similarities.items():
+                if sim >= self.similarity_threshold:
+                    G.add_edge(i, j, weight=sim)
+            return list(nx.connected_components(G))
+
+        # Sort edges above threshold in descending similarity
+        edges = [
+            (i, j, sim) for (i, j), sim in similarities.items()
+            if sim >= self.similarity_threshold
+        ]
+        edges.sort(key=lambda e: e[2], reverse=True)
+
+        # Union-Find with cluster membership tracking
+        parent = list(range(num_nodes))
+        rank = [0] * num_nodes
+        # Track all members of each cluster root
+        cluster_members: Dict[int, Set[int]] = {i: {i} for i in range(num_nodes)}
+
+        def find(x: int) -> int:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]  # path compression
+                x = parent[x]
+            return x
+
+        def _has_conflict(members_a: Set[int], members_b: Set[int]) -> bool:
+            """Check if merging two clusters would create a same-camera
+            temporal overlap."""
+            for a in members_a:
+                cam_a = camera_ids[a]
+                for b in members_b:
+                    if camera_ids[b] != cam_a:
+                        continue
+                    # Same camera — check temporal overlap
+                    if start_times[a] <= end_times[b] and start_times[b] <= end_times[a]:
+                        return True
+            return False
+
+        edges_added = 0
+        edges_blocked = 0
+
+        for i, j, sim in edges:
+            ri, rj = find(i), find(j)
+            if ri == rj:
+                continue  # already in same cluster
+
+            # Check for conflicts before merging
+            if _has_conflict(cluster_members[ri], cluster_members[rj]):
+                edges_blocked += 1
+                continue
+
+            # Merge: union by rank
+            if rank[ri] < rank[rj]:
+                ri, rj = rj, ri
+            parent[rj] = ri
+            if rank[ri] == rank[rj]:
+                rank[ri] += 1
+
+            # Merge member sets
+            cluster_members[ri] = cluster_members[ri] | cluster_members[rj]
+            del cluster_members[rj]
+            edges_added += 1
+
+        # Collect final clusters
+        clusters_dict: Dict[int, Set[int]] = {}
+        for node in range(num_nodes):
+            root = find(node)
+            clusters_dict.setdefault(root, set()).add(node)
+        clusters = list(clusters_dict.values())
+
+        logger.info(
+            f"Conflict-free greedy: {edges_added} edges added, "
+            f"{edges_blocked} blocked by conflicts, "
+            f"{len(clusters)} clusters"
         )
         return clusters
 

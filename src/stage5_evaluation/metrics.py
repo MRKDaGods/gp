@@ -36,6 +36,69 @@ for _np_alias, _builtin in [
 from src.core.data_models import EvaluationResult
 
 
+def _analyze_mtmc_errors(acc) -> Dict:
+    """Analyze fragmentation (under-merging) vs conflation (over-merging).
+
+    Extracts frame-level GT↔pred matches from the motmetrics accumulator
+    to identify:
+    - Fragmented GT IDs: one GT identity matched to multiple predicted IDs
+    - Conflated pred IDs: one predicted ID matched to multiple GT identities
+    - Unmatched GT/pred IDs
+    """
+    try:
+        events = acc.mot_events
+        matches = events[events["Type"] == "MATCH"]
+        if matches.empty:
+            return {}
+
+        # GT → set of pred IDs it was matched to
+        gt_to_preds: Dict[int, set] = {}
+        # Pred → set of GT IDs it was matched to
+        pred_to_gts: Dict[int, set] = {}
+
+        for _, row in matches.iterrows():
+            gt_id = row["OId"]
+            pred_id = row["HId"]
+            gt_to_preds.setdefault(gt_id, set()).add(pred_id)
+            pred_to_gts.setdefault(pred_id, set()).add(gt_id)
+
+        # All GT and pred IDs in the accumulator
+        all_gt_ids = set()
+        all_pred_ids = set()
+        for _, row in events.iterrows():
+            if row["OId"] is not None and not (isinstance(row["OId"], float) and np.isnan(row["OId"])):
+                all_gt_ids.add(row["OId"])
+            if row["HId"] is not None and not (isinstance(row["HId"], float) and np.isnan(row["HId"])):
+                all_pred_ids.add(row["HId"])
+
+        fragmented = {gt: preds for gt, preds in gt_to_preds.items() if len(preds) > 1}
+        conflated = {pred: gts for pred, gts in pred_to_gts.items() if len(gts) > 1}
+        unmatched_gt = all_gt_ids - set(gt_to_preds.keys())
+        unmatched_pred = all_pred_ids - set(pred_to_gts.keys())
+
+        # Top fragmented GTs (most pred IDs)
+        top_fragmented = sorted(fragmented.items(), key=lambda x: len(x[1]), reverse=True)[:10]
+        # Top conflated preds (most GT IDs)
+        top_conflated = sorted(conflated.items(), key=lambda x: len(x[1]), reverse=True)[:10]
+
+        result = {
+            "fragmented_gt": len(fragmented),
+            "conflated_pred": len(conflated),
+            "unmatched_gt": len(unmatched_gt),
+            "unmatched_pred": len(unmatched_pred),
+            "total_gt": len(all_gt_ids),
+            "total_pred": len(all_pred_ids),
+            "top_fragmented": [(int(gt), len(preds)) for gt, preds in top_fragmented],
+            "top_conflated": [(int(pred), len(gts)) for pred, gts in top_conflated],
+        }
+        logger.debug(f"Top fragmented GT IDs: {result['top_fragmented']}")
+        logger.debug(f"Top conflated pred IDs: {result['top_conflated']}")
+        return result
+    except Exception as e:
+        logger.warning(f"Error analysis failed: {e}")
+        return {}
+
+
 def evaluate_mtmc(
     gt_dir: str,
     pred_dir: str,
@@ -136,16 +199,29 @@ def evaluate_mtmc(
     mtmc_mota = float(global_summary["mota"].iloc[0])
     mtmc_idsw = int(global_summary["num_switches"].iloc[0])
 
+    # ── Error analysis: fragmentation vs conflation ─────────────────────
+    error_analysis = _analyze_mtmc_errors(global_acc)
+
     logger.info(
         f"MTMC evaluation: IDF1={mtmc_idf1:.3f}, MOTA={mtmc_mota:.3f}, "
         f"ID Switches={mtmc_idsw}"
     )
+    if error_analysis:
+        logger.info(
+            f"  Error analysis: {error_analysis['fragmented_gt']} fragmented GT IDs, "
+            f"{error_analysis['conflated_pred']} conflated pred IDs, "
+            f"{error_analysis['unmatched_gt']} unmatched GT IDs, "
+            f"{error_analysis['unmatched_pred']} unmatched pred IDs"
+        )
 
     result = EvaluationResult(
         mota=mtmc_mota,
         idf1=mtmc_idf1,
         id_switches=mtmc_idsw,
-        details={"per_camera": per_camera, "mtmc_idf1": mtmc_idf1},
+        details={
+            "per_camera": per_camera, "mtmc_idf1": mtmc_idf1,
+            "error_analysis": error_analysis,
+        },
     )
     return result
 
