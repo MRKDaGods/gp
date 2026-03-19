@@ -48,6 +48,14 @@ desktop.ini
 **/output*/
 **/exported_models/
 
+# Experiment sweep scripts (historical, not needed in repo)
+scripts/sweep_*.py
+
+# One-off temp scripts
+scripts/_tmp_*.py
+scripts/_find_*.py
+scripts/_print_*.py
+
 # Logs
 *.log
 logs/
