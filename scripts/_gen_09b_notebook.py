@@ -176,6 +176,8 @@ if not already_found:
         dst_cam = CITYFLOW_DIR / scene_dir.name / cam_dir.name
         dst_cam.mkdir(parents=True, exist_ok=True)
         for f in cam_dir.iterdir():
+            if not f.is_file():
+                continue
             dst = dst_cam / f.name
             if not dst.exists():
                 shutil.copy2(str(f), str(dst))
