@@ -402,18 +402,16 @@ def run_stage2(
         if len(valid_sec) == len(all_features):
             sec_matrix = np.stack(valid_sec, axis=0)
 
-            # Apply same post-processing pipeline as primary embeddings:
-            # camera BN → power norm → PCA → L2
+            # Post-processing for secondary embeddings:
+            # camera BN → L2 (tested: power norm & PCA both HURT secondary IDF1)
+            # Camera BN: +0.08pp (0.8275 → 0.8283)
+            # Power norm: -0.37pp (0.8275 → 0.8238) — SKIP
+            # PCA 280D: -1.0pp (0.8275 → 0.8172) — DISABLED
             if stage_cfg.get("camera_bn", {}).get("enabled", True):
                 sec_matrix = camera_aware_batch_normalize(sec_matrix, all_camera_ids)
 
-            if pn_alpha > 0:
-                sec_matrix = np.sign(sec_matrix) * np.abs(sec_matrix) ** pn_alpha
-                sec_norms = np.linalg.norm(sec_matrix, axis=1, keepdims=True)
-                sec_matrix = sec_matrix / np.maximum(sec_norms, 1e-8)
-
             sec_pca_cfg = stage_cfg.get("secondary_pca", {})
-            sec_pca_enabled = sec_pca_cfg.get("enabled", stage_cfg.pca.enabled)
+            sec_pca_enabled = sec_pca_cfg.get("enabled", False)  # disabled by default: hurts IDF1
             sec_pca_components = sec_pca_cfg.get("n_components", min(280, sec_matrix.shape[1]))
             if sec_pca_enabled and sec_matrix.shape[0] >= max(50, sec_pca_components):
                 sec_whitener = PCAWhitener(n_components=sec_pca_components)
