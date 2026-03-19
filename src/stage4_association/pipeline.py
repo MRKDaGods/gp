@@ -1030,6 +1030,7 @@ def _hierarchical_centroid_expansion(
     merge_threshold = float(hierarch_cfg.get("merge_threshold", 0.35))
     orphan_threshold = float(hierarch_cfg.get("orphan_threshold", 0.30))
     max_merge_size = int(hierarch_cfg.get("max_merge_size", 12))
+    hsv_gate = float(hierarch_cfg.get("hsv_gate", 0.2))
 
     total_absorbed = 0
     total_merged = 0
@@ -1145,7 +1146,7 @@ def _hierarchical_centroid_expansion(
                 # HSV consistency: orphan's HSV must be plausible
                 member_hsv = hsv_features[meta["members"]]
                 hsv_sims = member_hsv @ hsv_features[orphan_idx]
-                if float(hsv_sims.max()) < 0.2:
+                if hsv_gate > 0 and float(hsv_sims.max()) < hsv_gate:
                     continue
 
                 best_ci = ci
@@ -1424,6 +1425,7 @@ def _gallery_expansion(
         assigned = set()
         multi_clusters: List[Set[int]] = []
         orphan_indices: List[int] = []
+        gallery_hsv_gate = float((stage_cfg.get("gallery_expansion", {}) or {}).get("hsv_gate", 0.3))
 
         for cluster in clusters:
             if len(cluster) > 1:
@@ -1504,7 +1506,7 @@ def _gallery_expansion(
                 # HSV consistency gate: reject if color is too different
                 members = list(multi_clusters[ci])
                 hsv_sims = hsv_features[members] @ orphan_hsv
-                if float(hsv_sims.max()) < 0.3:
+                if gallery_hsv_gate > 0 and float(hsv_sims.max()) < gallery_hsv_gate:
                     continue
                 # Cross-camera check (orphan must come from a different camera
                 # than at least one cluster member, but must not violate
