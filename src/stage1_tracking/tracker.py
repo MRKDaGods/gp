@@ -40,18 +40,27 @@ class TrackerWrapper:
         # Import and create the tracker
         tracker_cls = self._get_tracker_class(algorithm)
 
-        kwargs = {"device": device, "half": half}
-        if reid_weights:
-            kwargs["reid_weights"] = reid_weights
+        from pathlib import Path as _Path
+        import inspect as _inspect
 
-        # Pass BoxMOT-specific config params
+        kwargs = {"device": device, "half": half}
+        # Always provide reid_weights as Path (required in newer boxmot)
+        _reid = reid_weights or "models/tracker/osnet_x0_25_msmt17.pt"
+        kwargs["reid_weights"] = _Path(_reid)
+
+        # Pass BoxMOT-specific config params — filter to only those accepted by this tracker version
         if tracker_config:
+            valid_params = set(_inspect.signature(tracker_cls.__init__).parameters.keys()) - {"self"}
             for key in ["track_high_thresh", "track_low_thresh", "new_track_thresh",
                         "track_buffer", "match_thresh", "proximity_thresh",
                         "appearance_thresh", "fuse_first_associate",
                         "max_age", "max_obs", "min_hits", "iou_threshold",
-                        "cmc_method", "frame_rate"]:
-                if key in tracker_config:
+                        "cmc_method", "frame_rate",
+                        # DeepOCSort-specific params
+                        "per_class", "cmc_off", "Q_xy_scaling", "Q_s_scaling",
+                        "delta_t", "inertia", "w_association_emb",
+                        "alpha_fixed_emb", "aw_param", "embedding_off", "aw_off"]:
+                if key in tracker_config and key in valid_params:
                     kwargs[key] = tracker_config[key]
 
         self.tracker = tracker_cls(**kwargs)

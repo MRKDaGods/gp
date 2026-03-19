@@ -1,0 +1,25 @@
+{
+  "id": "gumfreddy/gp-stage-1b-detection-tracking-deepocsort",
+  "id_no": 111728022,
+  "title": "GP Stage 1B - Detection + Tracking (DeepOCSORT)",
+  "code_file": "gp-stage-1b-detection-tracking-deepocsort.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "gpu"
+  ],
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": [
+    "mrkdagods/gp-yolov11-pretrained/Other/default/3"
+  ],
+  "docker_image": "gcr.io/kaggle-private-byod/python@sha256:9fa0da194fad2241d3f01a80581cbecbd3a258b4d1b695e2cbbbc62a0fd205ac",
+  "machine_shape": "Gpu"
+}
