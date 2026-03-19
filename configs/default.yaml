@@ -120,6 +120,10 @@ stage2:
   # --- NEW: camera-aware batch normalisation ---
   camera_bn:
     enabled: true
+  # --- NEW: power normalization (compress magnitudes before PCA) ---
+  # alpha > 0 enables; typical values: 0.3-0.5. 0 = disabled.
+  power_norm:
+    alpha: 0.0
 
 stage3:
   faiss:

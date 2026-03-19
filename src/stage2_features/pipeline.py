@@ -334,6 +334,14 @@ def run_stage2(
         logger.info("Applying camera-aware batch normalisation")
         raw_matrix = camera_aware_batch_normalize(raw_matrix, all_camera_ids)
 
+    # 5b. Power normalization (before PCA to compress outlier magnitudes)
+    pn_alpha = stage_cfg.get("power_norm", {}).get("alpha", 0.0)
+    if pn_alpha > 0:
+        logger.info(f"Applying power normalization (alpha={pn_alpha})")
+        raw_matrix = np.sign(raw_matrix) * np.abs(raw_matrix) ** pn_alpha
+        norms = np.linalg.norm(raw_matrix, axis=1, keepdims=True)
+        raw_matrix = raw_matrix / np.maximum(norms, 1e-8)
+
     # 6. PCA whitening
     if stage_cfg.pca.enabled:
         n_samples, n_features = raw_matrix.shape
