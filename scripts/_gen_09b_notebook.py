@@ -176,11 +176,14 @@ if not already_found:
         dst_cam = CITYFLOW_DIR / scene_dir.name / cam_dir.name
         dst_cam.mkdir(parents=True, exist_ok=True)
         for f in cam_dir.iterdir():
-            if not f.is_file():
-                continue
-            dst = dst_cam / f.name
-            if not dst.exists():
-                shutil.copy2(str(f), str(dst))
+            if f.is_file():
+                dst = dst_cam / f.name
+                if not dst.exists():
+                    shutil.copy2(str(f), str(dst))
+            elif f.is_dir() and f.name == "gt":
+                if not (dst_cam / "gt").exists():
+                    shutil.copytree(str(f), str(dst_cam / "gt"))
+            # skip mtsc/ and other subdirs
         moved += 1
     print(f"Organized {moved} camera directories")
     if skipped_splits:
