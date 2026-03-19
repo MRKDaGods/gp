@@ -25,7 +25,7 @@ from src.core.io_utils import save_global_trajectories
 from src.stage3_indexing.faiss_index import FAISSIndex
 from src.stage3_indexing.metadata_store import MetadataStore
 from src.stage4_association.camera_bias import CameraDistanceBias, ZoneTransitionModel
-from src.stage4_association.fic import per_camera_whiten, cross_camera_augment
+from src.stage4_association.fic import per_camera_whiten, cross_camera_augment, iterative_fac
 from src.stage4_association.global_trajectories import merge_tracklets_to_trajectories
 from src.stage4_association.graph_solver import GraphSolver
 from src.stage4_association.query_expansion import average_query_expansion_batched
@@ -125,13 +125,21 @@ def run_stage4(
     # Pulls each feature toward its cross-camera KNN consensus.
     fac_cfg = stage_cfg.get("fac", {})
     if fac_cfg.get("enabled", False):
-        embeddings = cross_camera_augment(
-            embeddings,
-            camera_ids,
-            knn=int(fac_cfg.get("knn", 20)),
-            learning_rate=float(fac_cfg.get("learning_rate", 0.5)),
-            beta=float(fac_cfg.get("beta", 0.08)),
-        )
+        fac_epochs = int(fac_cfg.get("epochs", 1))
+        fac_knn = int(fac_cfg.get("knn", 20))
+        fac_lr = float(fac_cfg.get("learning_rate", 0.5))
+        fac_beta = float(fac_cfg.get("beta", 0.08))
+        if fac_epochs > 1:
+            embeddings = iterative_fac(
+                embeddings, camera_ids,
+                epochs=fac_epochs, knn=fac_knn,
+                learning_rate=fac_lr, beta=fac_beta,
+            )
+        else:
+            embeddings = cross_camera_augment(
+                embeddings, camera_ids,
+                knn=fac_knn, learning_rate=fac_lr, beta=fac_beta,
+            )
 
     # Get temporal info and frame counts from metadata store
     start_times = []

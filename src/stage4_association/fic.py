@@ -179,3 +179,26 @@ def cross_camera_augment(
     )
 
     return out
+
+
+def iterative_fac(
+    embeddings: np.ndarray,
+    camera_ids: List[str],
+    epochs: int = 2,
+    knn: int = 20,
+    learning_rate: float = 0.5,
+    beta: float = 0.08,
+) -> np.ndarray:
+    """Run FAC iteratively (AIC21 uses 2-3 epochs).
+
+    Each epoch refines cross-camera features using increasingly clean
+    neighbours from the previous epoch.
+    """
+    result = embeddings
+    for ep in range(epochs):
+        result = cross_camera_augment(
+            result, camera_ids,
+            knn=knn, learning_rate=learning_rate, beta=beta,
+        )
+        logger.info(f"FAC epoch {ep + 1}/{epochs} complete")
+    return result

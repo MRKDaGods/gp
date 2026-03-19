@@ -401,6 +401,37 @@ def run_stage2(
         valid_sec = [e for e in all_secondary_embeddings if e is not None]
         if len(valid_sec) == len(all_features):
             sec_matrix = np.stack(valid_sec, axis=0)
+
+            # Apply same post-processing pipeline as primary embeddings:
+            # camera BN → power norm → PCA → L2
+            if stage_cfg.get("camera_bn", {}).get("enabled", True):
+                sec_matrix = camera_aware_batch_normalize(sec_matrix, all_camera_ids)
+
+            if pn_alpha > 0:
+                sec_matrix = np.sign(sec_matrix) * np.abs(sec_matrix) ** pn_alpha
+                sec_norms = np.linalg.norm(sec_matrix, axis=1, keepdims=True)
+                sec_matrix = sec_matrix / np.maximum(sec_norms, 1e-8)
+
+            sec_pca_cfg = stage_cfg.get("secondary_pca", {})
+            sec_pca_enabled = sec_pca_cfg.get("enabled", stage_cfg.pca.enabled)
+            sec_pca_components = sec_pca_cfg.get("n_components", min(280, sec_matrix.shape[1]))
+            if sec_pca_enabled and sec_matrix.shape[0] >= max(50, sec_pca_components):
+                sec_whitener = PCAWhitener(n_components=sec_pca_components)
+                sec_pca_path = sec_pca_cfg.get("pca_model_path", str(output_dir / "pca_secondary.pkl"))
+                if Path(sec_pca_path).exists():
+                    sec_whitener.load(sec_pca_path)
+                    if sec_whitener.n_components != sec_pca_components:
+                        sec_whitener = PCAWhitener(n_components=sec_pca_components)
+                        sec_whitener.fit(sec_matrix)
+                        sec_whitener.save(sec_pca_path)
+                    else:
+                        logger.info(f"Loaded secondary PCA model from {sec_pca_path}")
+                else:
+                    sec_whitener.fit(sec_matrix)
+                    sec_whitener.save(sec_pca_path)
+                    logger.info(f"Fitted secondary PCA ({sec_pca_components}D) → {sec_pca_path}")
+                sec_matrix = sec_whitener.transform(sec_matrix)
+
             sec_matrix = l2_normalize(sec_matrix)
             sec_path = output_dir / "embeddings_secondary.npy"
             np.save(sec_path, sec_matrix.astype(np.float32))

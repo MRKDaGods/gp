@@ -281,6 +281,21 @@ class ReIDModel:
                 features = features + ms_features.float().cpu().numpy()
                 n_views += 1
 
+                # Flip TTA on multi-scale views for additional viewpoint diversity
+                if self.flip_augment:
+                    ms_flipped = [cv2.flip(c, 1) for c in ms_crops]
+                    ms_flip_tensor = self._preprocess(ms_flipped).to(self.device)
+                    if self.half:
+                        ms_flip_tensor = ms_flip_tensor.half()
+                    if cam_tensor is not None:
+                        ms_flip_feat = self.model(ms_flip_tensor, cam_ids=cam_tensor)
+                    else:
+                        ms_flip_feat = self.model(ms_flip_tensor)
+                    if isinstance(ms_flip_feat, (tuple, list)):
+                        ms_flip_feat = ms_flip_feat[0]
+                    features = features + ms_flip_feat.float().cpu().numpy()
+                    n_views += 1
+
         return features / n_views
 
     @torch.no_grad()
