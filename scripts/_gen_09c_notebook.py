@@ -413,10 +413,10 @@ class PKSampler(Sampler):
             for pid in batch_pids:
                 pool = self.id2idx[pid]
                 indices += random.choices(pool, k=self.K)
-            yield from indices
+            yield indices
 
     def __len__(self):
-        return self.n_batches * self.P * self.K
+        return self.n_batches
 
 
 BATCH_P, BATCH_K = 8, 4
