@@ -124,6 +124,12 @@ stage2:
   # alpha > 0 enables; typical values: 0.3-0.5. 0 = disabled.
   power_norm:
     alpha: 0.0
+  # --- Camera-specific Test-Time Adaptation (CamTTA) ---
+  # Adapts BNNeck running stats to each camera's appearance distribution
+  # before feature extraction. Requires disk-based frames (stage0 output).
+  # Only applies to TransReID models.
+  camera_tta:
+    enabled: false  # v49: implemented, off by default — test with v48 features
 
 stage3:
   faiss:
@@ -225,6 +231,16 @@ stage4:
     cluster_verify:
       enabled: false
       min_connectivity: 0.30
+    # --- Sub-cluster temporal splitting (AIC21 technique) ---
+    # Splits clusters at "silence" gaps: time windows where NO member tracklet
+    # is active AND the cross-gap avg cosine similarity is below split_threshold.
+    # Targets conflation: two similar-looking vehicles at different times merged
+    # into one trajectory.  Conservative: only splits when both gap and similarity
+    # criteria are met simultaneously.
+    temporal_split:
+      enabled: false  # v49: implemented, off by default — test with min_gap=60
+      min_gap: 60.0         # minimum silence duration (seconds) to consider split
+      split_threshold: 0.50  # split if cross-gap avg cosine sim < this
     # --- Iterative gallery expansion for orphan tracklets (legacy, disabled when hierarchical is on) ---
     gallery_expansion:
       enabled: true

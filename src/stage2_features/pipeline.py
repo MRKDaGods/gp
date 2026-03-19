@@ -215,6 +215,12 @@ def run_stage2(
     if sie_camera_map:
         logger.info(f"SIE camera map: {dict(sie_camera_map)}")
 
+    # --- Camera-specific Test-Time Adaptation (CamTTA) ---
+    # Adapt the BNNeck running statistics to each camera before feature extraction.
+    # Requires disk frames (use_disk_frames) so we can pre-collect all crops.
+    tta_cfg = stage_cfg.get("camera_tta", {})
+    camera_tta_enabled = tta_cfg.get("enabled", False) and use_disk_frames
+
     for camera_id, tracklets in tracklets_by_camera.items():
         video_path = video_paths.get(camera_id)
         if video_path is None and not use_disk_frames:
@@ -239,12 +245,42 @@ def run_stage2(
                 f"  Loaded {len(cam_frame_images)}/{len(needed_ids)} frames from disk for {camera_id}"
             )
 
+        # --- CamTTA: pre-collect crops and warm up BNNeck for this camera ---
+        # When enabled, extract ALL crops for this camera first to build a
+        # camera-representative sample, then warm up the BNNeck, and then
+        # extract the final embeddings using the adapted statistics.
+        scored_crops_cache: Optional[List] = None
+        if camera_tta_enabled and cam_frame_images is not None:
+            all_cam_crops_for_tta = []
+            scored_crops_per_tracklet = []
+            for tracklet in tracklets:
+                sc = crop_extractor.extract_crops_from_frames(tracklet, cam_frame_images)
+                scored_crops_per_tracklet.append(sc)
+                all_cam_crops_for_tta.extend([c.image for c in sc])
+
+            if all_cam_crops_for_tta:
+                orig_state = vehicle_reid.save_bn_state()
+                vehicle_reid.warmup_camera_bn(all_cam_crops_for_tta)
+                logger.info(
+                    f"  CamTTA: warmed up BNNeck with {len(all_cam_crops_for_tta)} crops "
+                    f"for camera {camera_id}"
+                )
+            scored_crops_cache = scored_crops_per_tracklet
+
         dropped_no_crops = 0
         dropped_no_embedding = 0
 
-        for tracklet in tracklets:
+        tracklet_iter = (
+            zip(tracklets, scored_crops_cache)
+            if scored_crops_cache is not None
+            else ((t, None) for t in tracklets)
+        )
+
+        for tracklet, preloaded_scored_crops in tracklet_iter:
             # 1. Quality-aware crop selection
-            if cam_frame_images is not None:
+            if preloaded_scored_crops is not None:
+                scored_crops = preloaded_scored_crops
+            elif cam_frame_images is not None:
                 scored_crops = crop_extractor.extract_crops_from_frames(
                     tracklet, cam_frame_images,
                 )
@@ -320,6 +356,11 @@ def run_stage2(
                 f"{dropped_no_crops} dropped (no crops), "
                 f"{dropped_no_embedding} dropped (no embedding)"
             )
+
+        # Restore original BN state after processing this camera so the next
+        # camera starts from the same baseline (not from this camera's stats).
+        if camera_tta_enabled and all_cam_crops_for_tta:
+            vehicle_reid.restore_bn_state(orig_state)
 
     if not all_features:
         logger.warning("No features extracted from any tracklet")

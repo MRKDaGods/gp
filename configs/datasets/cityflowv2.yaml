@@ -136,6 +136,10 @@ stage2:
     laplacian_min_var: 30.0
   camera_bn:
     enabled: true
+  # --- Camera-specific Test-Time Adaptation (CamTTA) ---
+  # Adapts BNNeck running stats to each camera's appearance distribution.
+  camera_tta:
+    enabled: false  # v49: implemented, off by default — test with 384px features
 
 stage4:
   association:
@@ -222,6 +226,13 @@ stage4:
     cluster_verify:
       enabled: false  # v48: implemented, off by default; test with min_connectivity=0.30
       min_connectivity: 0.30
+    # --- Sub-cluster temporal splitting (AIC21 technique) ---
+    # Splits clusters with >min_gap silence AND low cross-gap similarity.
+    # max_time (S01: 20s, S02: 30s) → 60s gap is safely above any valid transition.
+    temporal_split:
+      enabled: false  # v49: implemented, off by default — test with baseline features
+      min_gap: 60.0         # > max transition time (30s for S02_c006→S02_c008)
+      split_threshold: 0.50  # conservative: same as graph threshold (0.53 baseline)
     gallery_expansion:
       enabled: true
       threshold: 0.50             # v48: corrected (was 0.40 — too aggressive, hurts IDF1)

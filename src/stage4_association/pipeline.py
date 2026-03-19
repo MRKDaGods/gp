@@ -648,6 +648,28 @@ def run_stage4(
             clusters, camera_ids, start_times, end_times, combined_sim,
         )
 
+    # Step 6e-pre: Sub-cluster temporal splitting (AIC21 technique).
+    # Splits clusters that contain a "silence" gap — a time window where NO member
+    # tracklet is active — longer than min_gap seconds, AND where the cross-gap
+    # average cosine similarity is below split_threshold.
+    # Targets conflation: same-looking vehicles driving through the scene at
+    # different times incorrectly merged into one trajectory.
+    temporal_split_cfg = stage_cfg.get("temporal_split", {})
+    if temporal_split_cfg.get("enabled", False):
+        ts_min_gap = float(temporal_split_cfg.get("min_gap", 60.0))
+        ts_split_thresh = float(temporal_split_cfg.get("split_threshold", 0.50))
+        clusters_before = len(clusters)
+        clusters = _temporal_split_clusters(
+            clusters, start_times, end_times, embeddings,
+            min_gap=ts_min_gap,
+            split_threshold=ts_split_thresh,
+        )
+        logger.info(
+            f"Temporal split: {clusters_before} → {len(clusters)} clusters "
+            f"(+{len(clusters) - clusters_before} splits, "
+            f"min_gap={ts_min_gap:.0f}s, threshold={ts_split_thresh:.2f})"
+        )
+
     # Step 6e: Post-cluster verification — check internal connectivity and
     # eject members whose maximum cosine similarity to any other cluster member
     # is below a minimum threshold.  This catches false transitive merges where
@@ -1389,6 +1411,130 @@ def _hierarchical_centroid_expansion(
         f"{len(clusters)} final clusters"
     )
     return clusters
+
+
+# ---------------------------------------------------------------------------
+# Sub-cluster temporal splitting (AIC21 technique)
+# ---------------------------------------------------------------------------
+
+def _try_temporal_split(
+    members: List[int],
+    start_times: List[float],
+    end_times: List[float],
+    embeddings: np.ndarray,
+    min_gap: float,
+    split_threshold: float,
+) -> List[Set[int]]:
+    """Recursively split a member group at the largest temporal silence gap.
+
+    A silence gap is a time interval [gap_start, gap_end] where every member
+    that started before gap_start has also ended before gap_start (i.e., no
+    member is active during the gap).  The gap is found via a start-time-sorted
+    sweep: after processing member m_i, ``max_end_so_far`` is the latest end
+    time of all members m_0..m_i.  If m_{i+1}.start > max_end_so_far, the
+    interval [max_end_so_far, m_{i+1}.start] is a true silence gap.
+
+    A split is only applied when:
+    1. The largest silence gap ≥ min_gap seconds.
+    2. The average cross-gap cosine similarity between group_a (members that
+       ended before the gap) and group_b (members that start after the gap)
+       is strictly less than split_threshold.  High similarity means same
+       vehicle — in that case we keep the cluster intact.
+
+    Returns a list of sub-cluster sets (possibly [set(members)] if no split).
+    """
+    if len(members) < 2:
+        return [set(members)]
+
+    # Sort by start time to enable the sweep
+    members_sorted = sorted(members, key=lambda m: start_times[m])
+
+    # Sweep to find the largest silence gap
+    best_gap_size = 0.0
+    best_gap_start = 0.0
+    best_gap_end = 0.0
+
+    max_end_so_far = end_times[members_sorted[0]]
+    for m in members_sorted[1:]:
+        gap_size = start_times[m] - max_end_so_far
+        if gap_size > best_gap_size:
+            best_gap_size = gap_size
+            best_gap_start = max_end_so_far
+            best_gap_end = start_times[m]
+        max_end_so_far = max(max_end_so_far, end_times[m])
+
+    if best_gap_size < min_gap:
+        return [set(members)]
+
+    # Partition members into groups relative to the gap
+    group_a = [m for m in members if end_times[m] <= best_gap_start]
+    group_b = [m for m in members if start_times[m] >= best_gap_end]
+    # Safety: members spanning the gap (start < gap_start AND end > gap_end)
+    # should not exist in a true silence gap, but keep them separately
+    group_c = [m for m in members if m not in group_a and m not in group_b]
+
+    if not group_a or not group_b:
+        return [set(members)]
+
+    # Compute average cross-gap cosine similarity
+    embs_a = embeddings[group_a]   # (|A|, D)
+    embs_b = embeddings[group_b]   # (|B|, D)
+    avg_sim = float((embs_a @ embs_b.T).mean())
+
+    if avg_sim >= split_threshold:
+        # Cross-gap similarity is high → same vehicle, do not split
+        return [set(members)]
+
+    # Split is warranted — recurse on each group independently
+    result: List[Set[int]] = []
+    result.extend(_try_temporal_split(
+        group_a, start_times, end_times, embeddings, min_gap, split_threshold,
+    ))
+    result.extend(_try_temporal_split(
+        group_b, start_times, end_times, embeddings, min_gap, split_threshold,
+    ))
+    if group_c:
+        result.append(set(group_c))
+
+    return result
+
+
+def _temporal_split_clusters(
+    clusters: List[Set[int]],
+    start_times: List[float],
+    end_times: List[float],
+    embeddings: np.ndarray,
+    min_gap: float = 60.0,
+    split_threshold: float = 0.50,
+) -> List[Set[int]]:
+    """Apply sub-cluster temporal splitting to all clusters.
+
+    For each cluster, attempts to split at temporal silence gaps using
+    `_try_temporal_split`.  Single-member clusters are passed through unchanged.
+
+    Args:
+        clusters: List of cluster sets.
+        start_times: Tracklet start times.
+        end_times: Tracklet end times.
+        embeddings: L2-normalised embedding matrix (N, D).
+        min_gap: Minimum silence duration in seconds to trigger a split check.
+        split_threshold: Maximum average cross-gap cosine similarity to allow a
+            split.  Pairs above this are assumed to be the same vehicle.
+
+    Returns:
+        Updated cluster list (may contain more clusters than input).
+    """
+    new_clusters: List[Set[int]] = []
+    for cluster in clusters:
+        if len(cluster) < 2:
+            new_clusters.append(cluster)
+            continue
+        sub_clusters = _try_temporal_split(
+            list(cluster), start_times, end_times, embeddings,
+            min_gap, split_threshold,
+        )
+        new_clusters.extend(sub_clusters)
+    return new_clusters
 
 
 def _gallery_expansion(

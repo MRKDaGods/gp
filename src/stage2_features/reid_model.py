@@ -409,3 +409,83 @@ class ReIDModel:
         crops = [sc.image for sc in scored_crops]
         qualities = [sc.quality for sc in scored_crops]
         return self.get_tracklet_embedding(crops, quality_scores=qualities, cam_id=cam_id, quality_temperature=quality_temperature)
+
+    # ------------------------------------------------------------------
+    # Camera-specific Test-Time Adaptation (CamTTA)
+    # ------------------------------------------------------------------
+
+    def save_bn_state(self) -> dict:
+        """Save BNNeck running statistics for later restoration.
+
+        Returns an opaque dict that can be passed to :meth:`restore_bn_state`.
+        Returns an empty dict for non-TransReID models.
+        """
+        if not self.is_transreid or not hasattr(self.model, "bn"):
+            return {}
+        bn = self.model.bn
+        return {
+            "running_mean": bn.running_mean.clone(),
+            "running_var": bn.running_var.clone(),
+            "num_batches_tracked": bn.num_batches_tracked.clone(),
+            "momentum": bn.momentum,
+        }
+
+    def restore_bn_state(self, state: dict) -> None:
+        """Restore BNNeck running statistics from a previously saved state.
+
+        Args:
+            state: Dict returned by :meth:`save_bn_state`.
+        """
+        if not state or not self.is_transreid or not hasattr(self.model, "bn"):
+            return
+        bn = self.model.bn
+        bn.running_mean.copy_(state["running_mean"])
+        bn.running_var.copy_(state["running_var"])
+        bn.num_batches_tracked.copy_(state["num_batches_tracked"])
+        bn.momentum = state.get("momentum", 0.1)
+
+    def warmup_camera_bn(self, crops: List[np.ndarray], batch_size: int = 64) -> None:
+        """Adapt BNNeck statistics to a specific camera's appearance distribution.
+
+        Runs all provided crops through the BNNeck in training mode (updating
+        ``running_mean`` / ``running_var``), then restores eval mode.  After
+        calling this, subsequent ``extract_features`` calls will use the
+        camera-adapted statistics for BN normalisation.
+
+        Uses cumulative moving average (``momentum=None``) so the running
+        statistics converge to the exact per-camera batch statistics after
+        all warmup crops are processed, producing a stable estimate regardless
+        of the number of crops.
+
+        Only applies to TransReID models (BNNeck is ``BatchNorm1d``).  Returns
+        immediately for other architectures.
+
+        Args:
+            crops: All BGR uint8 crops available for this camera.  More crops
+                produce a more accurate per-camera BN estimate.
+            batch_size: Forward-pass batch size for the warmup loop.
+        """
+        if not self.is_transreid or not hasattr(self.model, "bn") or not crops:
+            return
+
+        bn = self.model.bn
+        orig_momentum = bn.momentum
+
+        # Use CMA (momentum=None): running stats will exactly equal the
+        # cumulative mean/var of all warmup samples, regardless of batch count.
+        bn.momentum = None
+        bn.reset_running_stats()
+        bn.training = True  # enable running stat updates
+
+        with torch.no_grad():
+            for start in range(0, len(crops), batch_size):
+                batch = crops[start : start + batch_size]
+                t = self._preprocess(batch).to(self.device)
+                if self.half:
+                    t = t.half()
+                # Full forward pass: ViT backbone → BNNeck (updates running stats)
+                _ = self.model(t)
+
+        # Restore momentum and switch back to eval (locks in the adapted stats)
+        bn.momentum = orig_momentum
+        bn.training = False
