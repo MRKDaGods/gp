@@ -65,13 +65,13 @@ def per_camera_whiten(
         # Per-camera mean
         mean = X.mean(axis=0)
 
-        # Covariance + regularisation: P = inv(X^T X + n * lambda * I)
-        XtX = X.T @ X  # (D, D)
-        reg = n_cam * regularisation * np.eye(D, dtype=XtX.dtype)
-        P = np.linalg.inv(XtX + reg)
+        # FIC whitening: P = inv(C + n * lambda * I), where C = (X-μ)^T(X-μ)
+        centered = X - mean  # (n_cam, D)
+        CtC = centered.T @ centered  # (D, D) — scatter of centered data
+        reg = n_cam * regularisation * np.eye(D, dtype=CtC.dtype)
+        P = np.linalg.inv(CtC + reg)
 
         # Transform: feat_new = P @ (feat - mean)
-        centered = X - mean  # (n_cam, D)
         transformed = centered @ P.T  # (n_cam, D)
 
         # L2-normalise

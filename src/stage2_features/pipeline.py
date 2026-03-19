@@ -402,14 +402,12 @@ def run_stage2(
         if len(valid_sec) == len(all_features):
             sec_matrix = np.stack(valid_sec, axis=0)
 
-            # Post-processing for secondary embeddings:
-            # camera BN → L2 (tested: power norm & PCA both HURT secondary IDF1)
-            # Camera BN: +0.08pp (0.8275 → 0.8283)
-            # Power norm: -0.37pp (0.8275 → 0.8238) — SKIP
-            # PCA 280D: -1.0pp (0.8275 → 0.8172) — DISABLED
-            if stage_cfg.get("camera_bn", {}).get("enabled", True):
-                sec_matrix = camera_aware_batch_normalize(sec_matrix, all_camera_ids)
-
+            # Secondary embeddings: just L2-normalize and save.
+            # Stage 4 FIC whitening handles camera normalization separately.
+            # Tested alternatives (all HURT when combined with FIC fix):
+            # - Camera BN here: 0.8294 vs 0.8300 without (-0.06pp, double-whitening)
+            # - Power norm: -0.37pp
+            # - PCA 280D: -1.0pp
             sec_pca_cfg = stage_cfg.get("secondary_pca", {})
             sec_pca_enabled = sec_pca_cfg.get("enabled", False)  # disabled by default: hurts IDF1
             sec_pca_components = sec_pca_cfg.get("n_components", min(280, sec_matrix.shape[1]))
