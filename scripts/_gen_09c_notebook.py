@@ -496,14 +496,19 @@ def extract_features(model, loader, device="cuda", flip=True, is_kd_model=False)
                 f1 = model.get_student_feat(imgs)
                 f2 = model.get_student_feat(imgs_flip)
             else:
-                f1 = model(imgs)
-                f2 = model(imgs_flip)
+                out1 = model(imgs)
+                out2 = model(imgs_flip)
+                # TeacherReID returns (feat, logits); unwrap if needed
+                f1 = out1[0] if isinstance(out1, tuple) else out1
+                f2 = out2[0] if isinstance(out2, tuple) else out2
             f = F.normalize((f1 + f2) / 2, dim=1)
         else:
             if is_kd_model:
                 f = F.normalize(model.get_student_feat(imgs), dim=1)
             else:
-                f = F.normalize(model(imgs), dim=1)
+                out = model(imgs)
+                feat = out[0] if isinstance(out, tuple) else out
+                f = F.normalize(feat, dim=1)
         feats.append(f.cpu())
         if labels is not None:
             pids.extend(labels.tolist() if hasattr(labels, 'tolist') else [int(x) for x in labels])
@@ -811,7 +816,8 @@ for epoch in range(1, KD_EPOCHS + 1):
         l_task = l_ce + l_tri
 
         # KD loss (logit KD + feature alignment)
-        l_kd = kd_loss(s_logits, t_logits, s_cls_raw, t_cls_raw)
+        # s_feat_proj maps 768D → 1024D to align with teacher CLS space
+        l_kd = kd_loss(s_logits, t_logits, s_feat_proj, t_cls_raw)
 
         loss = (1 - KD_ALPHA) * l_task + l_kd
 
