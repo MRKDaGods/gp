@@ -160,7 +160,7 @@ stage4:
     exhaustive_min_similarity: 0.1  # v22: SOTA uses 0.1 (SCORE_THR); drop weak pairs early
     query_expansion:
       enabled: true
-      k: 7
+      k: 2  # v46: optimal after QE self-exclusion fix (k=2 true neighbors)
       # alpha controls original embedding weight: orig_weight = alpha / (alpha + k_valid)
       # alpha=1.0 → 16.7% original (over-smoothed); alpha=5.0 → 50% (Radenović et al. standard)
       alpha: 5.0

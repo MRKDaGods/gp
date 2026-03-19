@@ -113,14 +113,16 @@ def average_query_expansion_batched(
         (N, D) L2-normalised expanded embedding matrix.
     """
     n, d = embeddings.shape
-    k_use = min(k, indices.shape[1])
+    # Request k+1 columns to account for self-match removal
+    k_use = min(k + 1, indices.shape[1])
     if k_use <= 0 or n == 0:
         return embeddings.copy()
 
-    nn_idx = indices[:, :k_use]  # (N, k)
+    nn_idx = indices[:, :k_use]  # (N, k+1)
 
-    # Clamp invalid indices to 0 (will be masked out later)
-    valid_mask = (nn_idx >= 0) & (nn_idx < n)
+    # Mask self-matches (query is always its own top-1 neighbor in FAISS)
+    self_mask = nn_idx == np.arange(n).reshape(-1, 1)
+    valid_mask = (nn_idx >= 0) & (nn_idx < n) & ~self_mask
     safe_idx = np.where(valid_mask, nn_idx, 0)  # (N, k)
 
     # Gather neighbour embeddings: (N, k, D)
@@ -142,5 +144,5 @@ def average_query_expansion_batched(
     norms = np.maximum(norms, 1e-8)
     expanded /= norms
 
-    logger.info(f"Query Expansion (batched): k={k_use}, alpha={alpha}, N={n}")
+    logger.info(f"Query Expansion (batched): k={k}, alpha={alpha}, N={n}")
     return expanded
