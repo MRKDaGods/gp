@@ -150,9 +150,24 @@ if not already_found:
     CITYFLOW_DIR.mkdir(parents=True, exist_ok=True)
     archive_path = Path(f"/tmp/{ARCHIVE_NAME}")
     if not archive_path.exists():
-        print(f"Downloading CityFlowV2 (id={GDRIVE_ID})...")
         import gdown
-        gdown.download(f"https://drive.google.com/uc?id={GDRIVE_ID}", str(archive_path), quiet=False)
+        MAX_RETRIES = 3
+        for _attempt in range(1, MAX_RETRIES + 1):
+            print(f"Downloading CityFlowV2 attempt {_attempt}/{MAX_RETRIES} (id={GDRIVE_ID})...")
+            try:
+                gdown.download(f"https://drive.google.com/uc?id={GDRIVE_ID}", str(archive_path), quiet=False)
+            except Exception as e:
+                print(f"  gdown error: {e}")
+            if archive_path.exists() and archive_path.stat().st_size > 1e9:
+                print(f"  Download OK ({archive_path.stat().st_size/1e9:.2f} GB)")
+                break
+            if archive_path.exists():
+                archive_path.unlink()
+            if _attempt < MAX_RETRIES:
+                print(f"  Retrying in 30s...")
+                time.sleep(30)
+        if not archive_path.exists() or archive_path.stat().st_size < 1e9:
+            raise RuntimeError("Failed to download CityFlowV2 after all retries")
     else:
         print(f"Using cached archive: {archive_path}")
 
@@ -404,7 +419,7 @@ class PKSampler(Sampler):
         return self.n_batches * self.P * self.K
 
 
-BATCH_P, BATCH_K = 16, 4
+BATCH_P, BATCH_K = 8, 4
 batch_size = BATCH_P * BATCH_K * max(1, NUM_GPUS)
 pk_sampler = PKSampler(train_crops, id2label, P=BATCH_P, K=BATCH_K)
 train_ds   = KDCropDataset(train_crops, id2label, train_tf_student, train_tf_teacher)
@@ -412,8 +427,8 @@ train_loader = DataLoader(train_ds, batch_sampler=pk_sampler, num_workers=2, pin
 
 query_ds   = SimpleDataset(query_crops,   eval_tf_student)
 gallery_ds = SimpleDataset(gallery_crops, eval_tf_student)
-query_loader   = DataLoader(query_ds,   batch_size=64, num_workers=2)
-gallery_loader = DataLoader(gallery_ds, batch_size=64, num_workers=2)
+query_loader   = DataLoader(query_ds,   batch_size=32, num_workers=2)
+gallery_loader = DataLoader(gallery_ds, batch_size=32, num_workers=2)
 
 print(f"batch_size  : {batch_size}")
 print(f"train_loader: {len(train_loader)} batches")'''))
@@ -793,12 +808,15 @@ best_state_path = Path("/tmp/student_kd_best.pth")
 print(f"Stage 2: KD distillation for {KD_EPOCHS} epochs")
 print(f"  alpha={KD_ALPHA} (logit KD)  beta={KD_BETA} (feat align)  T={KD_TEMP}")
 
+ACCUM_STEPS = 2  # gradient accumulation to compensate for smaller batch
+
 for epoch in range(1, KD_EPOCHS + 1):
     student.train()
     teacher.eval()
 
     ep_loss = ep_task = ep_kd = 0.0
-    for imgs_s, imgs_t, labels in train_loader:
+    optimizer.zero_grad()
+    for step_i, (imgs_s, imgs_t, labels) in enumerate(train_loader):
         imgs_s = imgs_s.to(DEVICE, non_blocking=True)
         imgs_t = imgs_t.to(DEVICE, non_blocking=True)
         labels_gpu = labels.to(DEVICE, non_blocking=True)
@@ -819,14 +837,15 @@ for epoch in range(1, KD_EPOCHS + 1):
         # s_feat_proj maps 768D → 1024D to align with teacher CLS space
         l_kd = kd_loss(s_logits, t_logits, s_feat_proj, t_cls_raw)
 
-        loss = (1 - KD_ALPHA) * l_task + l_kd
+        loss = ((1 - KD_ALPHA) * l_task + l_kd) / ACCUM_STEPS
 
-        optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
-        optimizer.step()
+        if (step_i + 1) % ACCUM_STEPS == 0 or (step_i + 1) == len(train_loader):
+            torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
+            optimizer.step()
+            optimizer.zero_grad()
 
-        ep_loss += loss.item()
+        ep_loss += loss.item() * ACCUM_STEPS
         ep_task += l_task.item()
         ep_kd   += l_kd.item()
 

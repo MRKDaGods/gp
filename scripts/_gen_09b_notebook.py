@@ -150,7 +150,16 @@ if not already_found:
     if not archive_path.exists():
         print(f"Downloading CityFlowV2 (id={GDRIVE_ID})...")
         import gdown
-        gdown.download(f"https://drive.google.com/uc?id={GDRIVE_ID}", str(archive_path), quiet=False)
+        for _attempt in range(3):
+            try:
+                gdown.download(f"https://drive.google.com/uc?id={GDRIVE_ID}", str(archive_path), quiet=False)
+                if archive_path.exists() and archive_path.stat().st_size > 1e9:
+                    break
+            except Exception as e:
+                print(f"  Download attempt {_attempt+1} failed: {e}")
+                import time as _t; _t.sleep(30)
+        if not archive_path.exists():
+            raise RuntimeError("Failed to download CityFlowV2 after 3 attempts")
     else:
         print(f"Using cached archive: {archive_path}")
 
@@ -439,15 +448,15 @@ class PKSampler(Sampler):
         return self.length
 
 
-BATCH_P = 16
+BATCH_P = 8
 BATCH_K = 4
 batch_size = BATCH_P * BATCH_K * max(NUM_GPUS, 1)
 train_loader = DataLoader(ReIDDataset(train_data, train_tf), batch_size=batch_size,
                           sampler=PKSampler(train_data, BATCH_P, BATCH_K),
                           num_workers=4, pin_memory=True)
-query_loader = DataLoader(ReIDDataset(query_data, test_tf), batch_size=64,
+query_loader = DataLoader(ReIDDataset(query_data, test_tf), batch_size=32,
                           shuffle=False, num_workers=4, pin_memory=True)
-gallery_loader = DataLoader(ReIDDataset(gallery_data, test_tf), batch_size=64,
+gallery_loader = DataLoader(ReIDDataset(gallery_data, test_tf), batch_size=32,
                             shuffle=False, num_workers=4, pin_memory=True)
 print(f"Train loader: {len(train_loader)} batches/epoch (batch_size={batch_size})")"""))
 
