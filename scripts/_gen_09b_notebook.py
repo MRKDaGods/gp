@@ -714,7 +714,7 @@ class TransReID384(nn.Module):
         for m in [self.bn, self.proj, self.cls_head]:
             head_params.extend(list(m.parameters()))
         if self.sie_camera:
-            head_params.extend(list(self.sie_embed.parameters()))
+            head_params.append(self.sie_embed)
         if self.jpm:
             for m in [self.bn_jpm, self.jpm_cls]:
                 head_params.extend(list(m.parameters()))

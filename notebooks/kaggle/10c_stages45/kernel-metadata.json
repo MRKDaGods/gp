@@ -1,18 +1,15 @@
 {
-  "id": "mrkdagods/mtmc-10c-stages-4-5-association-eval",
+  "id": "yahiaakhalafallah/mtmc-10c-stages-4-5-association-eval",
   "title": "MTMC 10c - Stages 4-5 (Association + Eval)",
   "code_file": "mtmc-10c-stages-4-5-association-eval.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
   "enable_gpu": false,
-  "enable_tpu": false,
   "enable_internet": true,
-  "dataset_sources": [
-    "mrkdagods/mtmc-gt-annotations"
-  ],
+  "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": [
-    "mrkdagods/mtmc-10b-stage-3-faiss-indexing"
+    "yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing"
   ]
 }

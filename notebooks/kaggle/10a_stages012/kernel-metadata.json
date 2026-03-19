@@ -1,16 +1,14 @@
 {
-  "id": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+  "id": "yahiaakhalafallah/mtmc-10a-stages-0-2-tracking-reid-features",
   "title": "MTMC 10a - Stages 0-2 (Tracking + ReID Features)",
   "code_file": "mtmc-10a-stages-0-2-tracking-reid-features.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
   "enable_gpu": true,
-  "enable_tpu": false,
   "enable_internet": true,
-  "dataset_sources": [
-    "mrkdagods/mtmc-weights"
-  ],
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": []
 }
