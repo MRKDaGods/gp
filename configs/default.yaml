@@ -213,6 +213,18 @@ stage4:
     reciprocal_best_match:
       enabled: false  # v27: hurts MTMC badly (0.684→0.665, IDSw 33→208)
       min_similarity: 0.20   # absolute floor (prevent garbage links)
+    # --- CSLS hubness reduction ---
+    # Penalizes embeddings with high average similarity to their neighbors.
+    # Reduces "universal hub" false positives (high-recall, low-precision centroids).
+    csls:
+      enabled: false  # cheap post-processing; try k=10 with 384D features
+      k: 10
+    # --- Cluster post-verification ---
+    # After graph clustering, ejects members whose mean similarity to the cluster
+    # is below min_connectivity.  Catches false transitive merges (A→B→C, A≁C).
+    cluster_verify:
+      enabled: false
+      min_connectivity: 0.30
     # --- Iterative gallery expansion for orphan tracklets (legacy, disabled when hierarchical is on) ---
     gallery_expansion:
       enabled: true
