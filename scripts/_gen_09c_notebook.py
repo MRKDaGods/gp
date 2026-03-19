@@ -214,10 +214,9 @@ all_crops = []    # list of (img_path, id_str, cam_str)
 CROP_DIR  = Path("/tmp/crops_kd")
 CROP_DIR.mkdir(parents=True, exist_ok=True)
 
-cam_dirs = [d for d in CITYFLOW_DIR.iterdir()
-            if d.is_dir() and re.match(r"S\d{2}_c\d{3}", d.name)]
+cam_dirs = sorted({vdo.parent for vdo in CITYFLOW_DIR.rglob("vdo.avi")})
 
-for cam_dir in sorted(cam_dirs):
+for cam_dir in cam_dirs:
     gt_file = cam_dir / "gt.txt"
     if not gt_file.exists():
         gt_file = cam_dir / "gt" / "gt.txt"
