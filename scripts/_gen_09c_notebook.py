@@ -622,11 +622,11 @@ class TeacherReID(nn.Module):
         print("Teacher backbone frozen")
 
     def forward(self, x):
-        """Returns (cls_feat, logits). cls_feat is pre-BN for KD signal."""
+        """Returns (cls_bn, logits, cls_raw). cls_bn for eval, cls_raw for KD feature align."""
         cls_raw = self.vit(x)                    # [B, 1024]
         cls_bn  = self.bnneck(cls_raw)           # [B, 1024]
         logits  = self.classifier(cls_bn)        # [B, num_classes]
-        return cls_raw, logits
+        return cls_bn, logits, cls_raw
 
 
 teacher = TeacherReID(num_classes).to(DEVICE)
@@ -664,9 +664,9 @@ for epoch in range(1, TEACHER_EPOCHS + 1):
         imgs_t = imgs_t.to(DEVICE, non_blocking=True)
         labels_gpu = labels.to(DEVICE, non_blocking=True)
 
-        cls_raw, logits = teacher(imgs_t)
+        cls_bn, logits, cls_raw = teacher(imgs_t)
         l_ce  = teacher_ce(logits, labels_gpu)
-        l_tri = teacher_tri(F.normalize(cls_raw, dim=1), labels_gpu)
+        l_tri = teacher_tri(F.normalize(cls_bn, dim=1), labels_gpu)
         loss  = l_ce + l_tri
 
         t_opt.zero_grad()
@@ -849,7 +849,7 @@ for epoch in range(1, KD_EPOCHS + 1):
 
         # Teacher forward (no grad)
         with torch.no_grad():
-            t_cls_raw, t_logits = teacher(imgs_t)
+            _, t_logits, t_cls_raw = teacher(imgs_t)
 
         # Student forward
         s_cls_raw, s_cls_bn, s_logits, s_feat_proj = student(imgs_s)
