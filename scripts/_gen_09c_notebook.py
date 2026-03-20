@@ -290,7 +290,8 @@ print(f"Unique IDs : {len(ids)}")'''))
 # ── Cell 7: Train/eval splits ─────────────────────────────────────────────────
 cells.append(cell('markdown', '## 5. Train / Eval Splits'))
 
-cells.append(cell('code', r'''TRAIN_RATIO = 0.7
+cells.append(cell('code', r'''TRAIN_SCENES = {"S01", "S03", "S04"}
+EVAL_SCENES  = {"S02", "S05"}
 import random
 random.seed(42)
 
@@ -298,28 +299,41 @@ id_to_crops = defaultdict(list)
 for path, tid, cam in all_crops:
     id_to_crops[tid].append((path, tid, cam))
 
-all_ids = sorted(id_to_crops.keys())
-n_train_ids = int(len(all_ids) * TRAIN_RATIO)
-train_ids = set(all_ids[:n_train_ids])
-query_ids = set(all_ids[n_train_ids:])
+# Scene-based train/val split (CityFlowV2 protocol)
+train_ids, eval_ids_all = set(), set()
+for tid in id_to_crops:
+    scene = tid.split("_")[0]
+    if scene in TRAIN_SCENES:
+        train_ids.add(tid)
+    elif scene in EVAL_SCENES:
+        eval_ids_all.add(tid)
+
+# Only multi-camera eval IDs for query/gallery; single-cam -> distractors
+eval_id_cams = {tid: {c[2] for c in id_to_crops[tid]} for tid in eval_ids_all}
+eval_ids = {tid for tid, cams in eval_id_cams.items() if len(cams) >= 2}
+single_cam_eval = eval_ids_all - eval_ids
 
 train_crops, query_crops, gallery_crops = [], [], []
-for tid, crops in id_to_crops.items():
-    if tid in train_ids:
-        train_crops.extend(crops)
-    else:
-        n_q = max(1, len(crops) // 4)
-        cams = list({c[2] for c in crops})
-        q_cam = cams[0]
-        q_list = [c for c in crops if c[2] == q_cam][:n_q]
-        g_list = [c for c in crops if c not in q_list]
-        query_crops.extend(q_list)
-        gallery_crops.extend(g_list)
+for tid in sorted(train_ids):
+    train_crops.extend(id_to_crops[tid])
+
+for tid in sorted(eval_ids):
+    crops = id_to_crops[tid]
+    cams = sorted({c[2] for c in crops})
+    q_cam = cams[0]
+    q_list = [c for c in crops if c[2] == q_cam]
+    g_list = [c for c in crops if c[2] != q_cam]
+    query_crops.extend(q_list)
+    gallery_crops.extend(g_list)
+
+# Single-camera eval IDs as gallery distractors
+for tid in sorted(single_cam_eval):
+    gallery_crops.extend(id_to_crops[tid])
 
 num_classes = len(train_ids)
 id2label = {tid: i for i, tid in enumerate(sorted(train_ids))}
 print(f"Train IDs  : {len(train_ids)}  (crops: {len(train_crops)})")
-print(f"Query IDs  : {len(query_ids)}")
+print(f"Eval IDs   : {len(eval_ids)} multi-cam, {len(single_cam_eval)} single-cam distractors")
 print(f"Query crops: {len(query_crops)},  Gallery: {len(gallery_crops)}")
 print(f"num_classes: {num_classes}")'''))
 
@@ -569,7 +583,7 @@ def eval_market1501(q_feat, q_pids, q_cams, g_feat, g_pids, g_cams):
         prec_at_k = cum / (np.arange(len(matches)) + 1)
         ap = (prec_at_k * matches).sum() / matches.sum()
         mAP += ap
-        if matches[order][0]:
+        if matches[0]:
             rank1 += 1
     mAP   /= n_query
     rank1 /= n_query

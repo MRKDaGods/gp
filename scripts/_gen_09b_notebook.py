@@ -212,7 +212,6 @@ cells.append(cell('code', r"""H, W = 384, 384
 MAX_CROPS_PER_ID_PER_CAM = 32
 MIN_AREA = 2500
 MIN_BBOX_SIDE = 48
-TRAIN_RATIO = 0.7
 MIN_CAMS_FOR_EVAL = 2
 
 CROP_DIR = Path("/tmp/cityflowv2_crops_384")
@@ -318,22 +317,19 @@ cells.append(cell('markdown', '## 5. Build Train / Eval Splits'))
 cells.append(cell('code', r"""if not all_crops:
     raise RuntimeError("No crops extracted! Check download and extraction.")
 
-rng = np.random.RandomState(SEED)
+TRAIN_SCENES = {"S01", "S03", "S04"}
+EVAL_SCENES  = {"S02", "S05"}
 
-multi_cam_ids = sorted(tid for tid, cams in all_crops.items() if len(cams) >= MIN_CAMS_FOR_EVAL)
-single_cam_ids = sorted(tid for tid, cams in all_crops.items() if len(cams) < MIN_CAMS_FOR_EVAL)
+# Scene-based train/val split (CityFlowV2 protocol)
+train_ids_all = sorted(tid for tid in all_crops if tid.split("_")[0] in TRAIN_SCENES)
+eval_ids_all  = sorted(tid for tid in all_crops if tid.split("_")[0] in EVAL_SCENES)
 
-if not multi_cam_ids:
-    print("WARNING: No multi-camera IDs found -- using all IDs for training")
-    all_ids = sorted(all_crops.keys())
-    rng.shuffle(all_ids)
-    multi_cam_ids = all_ids
-    single_cam_ids = []
+# Multi-camera eval IDs for query/gallery; single-cam -> distractors
+multi_cam_eval  = sorted(tid for tid in eval_ids_all if len(all_crops[tid]) >= MIN_CAMS_FOR_EVAL)
+single_cam_eval = sorted(tid for tid in eval_ids_all if len(all_crops[tid]) < MIN_CAMS_FOR_EVAL)
 
-rng.shuffle(multi_cam_ids)
-n_train = int(len(multi_cam_ids) * TRAIN_RATIO)
-train_ids = set(multi_cam_ids[:n_train])
-eval_ids = set(multi_cam_ids[n_train:])
+train_ids = set(train_ids_all)
+eval_ids  = set(multi_cam_eval)
 
 cam_names = sorted({cam for cams in all_crops.values() for cam in cams})
 cam2id = {c: i for i, c in enumerate(cam_names)}
@@ -342,6 +338,8 @@ num_cameras = len(cam_names)
 train_pid_set = sorted(train_ids)
 pid2label = {tid: i for i, tid in enumerate(train_pid_set)}
 num_classes = len(train_pid_set)
+
+rng = np.random.RandomState(SEED)
 
 train_data, query_data, gallery_data = [], [], []
 
@@ -366,15 +364,16 @@ for tid in sorted(eval_ids):
                 gallery_data.append((p, pid, camid))
 
 distractor_pid = len(eval_ids)
-for tid in sorted(single_cam_ids):
+for tid in sorted(single_cam_eval):
     for cam_name, paths in all_crops[tid].items():
         camid = cam2id[cam_name]
         for p in paths:
             gallery_data.append((p, distractor_pid, camid))
     distractor_pid += 1
 
-print(f"Train: {len(train_data)} images, {num_classes} IDs, {num_cameras} cameras")
-print(f"Query: {len(query_data)}, Gallery: {len(gallery_data)}")"""))
+print(f"Train: {len(train_data)} images, {num_classes} IDs (scenes: S01/S03/S04)")
+print(f"Eval : {len(eval_ids)} multi-cam IDs, {len(single_cam_eval)} single-cam distractors (scenes: S02/S05)")
+print(f"Query: {len(query_data)}, Gallery: {len(gallery_data)}, Cameras: {num_cameras}")"""))
 
 # ── Cell 7: DataLoaders ────────────────────────────────────────────────────────
 cells.append(cell('markdown', '## 6. Data Loading + Losses'))
