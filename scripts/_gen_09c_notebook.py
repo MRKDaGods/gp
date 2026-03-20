@@ -719,6 +719,8 @@ def interpolate_pos_embed_student(model_vit, target_px, patch_size=16):
     patch_embed = patch_embed.permute(0, 2, 3, 1).flatten(1, 2)
     model_vit.pos_embed = nn.Parameter(torch.cat([cls_token, patch_embed], dim=1))
     print(f"  Interpolated student pos_embed: {pos_embed.shape} -> {model_vit.pos_embed.shape}")
+    # Update patch_embed.img_size so timm strict assertion passes
+    model_vit.patch_embed.img_size = (target_px, target_px)
 
 
 class StudentReID(nn.Module):
