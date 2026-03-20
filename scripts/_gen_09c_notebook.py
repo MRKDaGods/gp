@@ -395,7 +395,7 @@ class SimpleDataset(Dataset):
     def __getitem__(self, idx):
         path, tid, cam = self.crops[idx]
         img = Image.open(path).convert("RGB")
-        return self.tf(img), int(tid), cam
+        return self.tf(img), tid, cam
 
 
 class PKSampler(Sampler):
@@ -538,7 +538,7 @@ def extract_features(model, loader, device="cuda", flip=True, is_kd_model=False)
                 f = F.normalize(feat, dim=1)
         feats.append(f.cpu())
         if labels is not None:
-            pids.extend(labels.tolist() if hasattr(labels, 'tolist') else [int(x) for x in labels])
+            pids.extend(labels.tolist() if hasattr(labels, 'tolist') else list(labels))
         if cam_list is not None:
             cams.extend(list(cam_list))
     return torch.cat(feats, dim=0), pids, cams
