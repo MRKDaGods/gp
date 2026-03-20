@@ -136,6 +136,7 @@ ALLOWED_SPLITS = {"train", "validation"}
 
 already_found = False
 for check_dir in [CITYFLOW_DIR,
+                  Path("/kaggle/input/data-aicity-2023-track-2"),
                   Path("/kaggle/input/cityflowv2"),
                   Path("/kaggle/input/aic22-track1-mtmc-tracking")]:
     if check_dir.exists() and any(list(check_dir.rglob("vdo.avi"))[:1]):
@@ -199,12 +200,10 @@ if not already_found:
         print(f"Skipped splits: {skipped_splits}")
     shutil.rmtree(str(staging), ignore_errors=True)
 
-cameras = sorted({
-    p.parent.name
-    for p in CITYFLOW_DIR.rglob("vdo.avi")
-    if p.parent.parent.name.startswith("S") and p.parent.parent.parent == CITYFLOW_DIR
-})
-print(f"Found {len(cameras)} cameras: {cameras[:6]}...")"""))
+# Discover camera dirs via rglob (handles extra train/validation level)
+cam_dirs = sorted({vdo.parent for vdo in CITYFLOW_DIR.rglob("vdo.avi")})
+cameras = sorted({d.name for d in cam_dirs})
+print(f"Found {len(cameras)} cameras across {len(cam_dirs)} dirs: {cameras[:6]}...")"""))
 
 # ── Cell 5: Extract crops ──────────────────────────────────────────────────────
 cells.append(cell('markdown', '## 4. Extract Vehicle Crops (384×384)'))
@@ -291,27 +290,24 @@ all_crops = defaultdict(lambda: defaultdict(list))
 total_crops = 0
 missing = []
 
-for scene_dir in sorted(CITYFLOW_DIR.iterdir()):
-    if not scene_dir.is_dir() or not scene_dir.name.startswith("S"):
+for cam_dir in cam_dirs:
+    cam_name = cam_dir.name
+    if CAMERAS and cam_name not in CAMERAS:
         continue
-    for cam_dir in sorted(scene_dir.iterdir()):
-        if not cam_dir.is_dir():
-            continue
-        cam_name = cam_dir.name
-        if CAMERAS and cam_name not in CAMERAS:
-            continue
-        vid_file = cam_dir / "vdo.avi"
-        gt_file = cam_dir / "gt" / "gt.txt"
-        if not vid_file.exists() or not gt_file.exists():
-            missing.append(cam_name)
-            continue
-        cam_crops = extract_crops_from_camera(
-            cam_name, gt_file, vid_file, CROP_DIR,
-            MAX_CROPS_PER_ID_PER_CAM, MIN_AREA
-        )
-        for tid, paths in cam_crops.items():
-            all_crops[tid][cam_name].extend(paths)
-            total_crops += len(paths)
+    vid_file = cam_dir / "vdo.avi"
+    gt_file = cam_dir / "gt" / "gt.txt"
+    if not gt_file.exists():
+        gt_file = cam_dir / "gt.txt"
+    if not vid_file.exists() or not gt_file.exists():
+        missing.append(cam_name)
+        continue
+    cam_crops = extract_crops_from_camera(
+        cam_name, gt_file, vid_file, CROP_DIR,
+        MAX_CROPS_PER_ID_PER_CAM, MIN_AREA
+    )
+    for tid, paths in cam_crops.items():
+        all_crops[tid][cam_name].extend(paths)
+        total_crops += len(paths)
 
 print(f"Extracted {total_crops} crops from {sum(len(c) for c in all_crops.values())} tracklets across {len(all_crops)} IDs")
 if missing:

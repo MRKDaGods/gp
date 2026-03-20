@@ -138,6 +138,7 @@ ALLOWED_SPLITS = {"train", "validation"}
 
 already_found = False
 for check_dir in [CITYFLOW_DIR,
+                  Path("/kaggle/input/data-aicity-2023-track-2"),
                   Path("/kaggle/input/cityflowv2"),
                   Path("/kaggle/input/aic22-track1-mtmc-tracking")]:
     if check_dir.exists() and any(list(check_dir.rglob("vdo.avi"))[:1]):
@@ -207,12 +208,10 @@ if not already_found:
         print(f"Skipped splits: {skipped_splits}")
     shutil.rmtree(str(staging), ignore_errors=True)
 
-cameras = sorted({
-    p.parent.name
-    for p in CITYFLOW_DIR.rglob("vdo.avi")
-    if p.parent.parent.name.startswith("S") and p.parent.parent.parent == CITYFLOW_DIR
-})
-print(f"Found {len(cameras)} cameras: {cameras[:6]}...")'''))
+# Discover camera dirs via rglob (handles extra train/validation level)
+cam_dirs = sorted({vdo.parent for vdo in CITYFLOW_DIR.rglob("vdo.avi")})
+cameras = sorted({d.name for d in cam_dirs})
+print(f"Found {len(cameras)} cameras across {len(cam_dirs)} dirs: {cameras[:6]}...")'''))
 
 # ── Cell 6: Extract crops ─────────────────────────────────────────────────────
 cells.append(cell('markdown', '## 4. Extract Training Crops'))
