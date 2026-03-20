@@ -351,6 +351,11 @@ eval_tf_student = T.Compose([
     T.ToTensor(),
     T.Normalize(mean=CLIP_MEAN, std=CLIP_STD),
 ])
+eval_tf_teacher = T.Compose([
+    T.Resize((TEACHER_SZ, TEACHER_SZ)),
+    T.ToTensor(),
+    T.Normalize(mean=CLIP_MEAN, std=CLIP_STD),
+])
 
 
 class KDCropDataset(Dataset):
@@ -429,6 +434,12 @@ query_ds   = SimpleDataset(query_crops,   eval_tf_student)
 gallery_ds = SimpleDataset(gallery_crops, eval_tf_student)
 query_loader   = DataLoader(query_ds,   batch_size=32, num_workers=2)
 gallery_loader = DataLoader(gallery_ds, batch_size=32, num_workers=2)
+
+# Teacher eval loaders (224x224 for ViT-L/14)
+query_ds_t   = SimpleDataset(query_crops,   eval_tf_teacher)
+gallery_ds_t = SimpleDataset(gallery_crops, eval_tf_teacher)
+query_loader_teacher   = DataLoader(query_ds_t,   batch_size=32, num_workers=2)
+gallery_loader_teacher = DataLoader(gallery_ds_t, batch_size=32, num_workers=2)
 
 print(f"batch_size  : {batch_size}")
 print(f"train_loader: {len(train_loader)} batches")'''))
@@ -653,7 +664,7 @@ for epoch in range(1, TEACHER_EPOCHS + 1):
     t_history["loss"].append(avg_loss)
 
     if epoch % 2 == 0 or epoch == TEACHER_EPOCHS:
-        mAP, rank1 = evaluate(teacher, query_loader, gallery_loader, DEVICE)
+        mAP, rank1 = evaluate(teacher, query_loader_teacher, gallery_loader_teacher, DEVICE)
         t_history["mAP"].append(mAP)
         t_history["rank1"].append(rank1)
         print(f"  [T Epoch {epoch:2d}] loss={avg_loss:.4f}  mAP={mAP:.4f}  R1={rank1:.4f}")
