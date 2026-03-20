@@ -214,7 +214,6 @@ MIN_AREA = 2500
 MIN_BBOX_SIDE = 48
 TRAIN_RATIO = 0.7
 MIN_CAMS_FOR_EVAL = 2
-CAMERAS = cameras
 
 CROP_DIR = Path("/tmp/cityflowv2_crops_384")
 CROP_DIR.mkdir(parents=True, exist_ok=True)
@@ -291,22 +290,22 @@ total_crops = 0
 missing = []
 
 for cam_dir in cam_dirs:
-    cam_name = cam_dir.name
-    if CAMERAS and cam_name not in CAMERAS:
-        continue
+    scene = cam_dir.parent.name  # e.g. "S01"
+    cam_tag = f"{scene}_{cam_dir.name}"  # globally unique camera ID
     vid_file = cam_dir / "vdo.avi"
     gt_file = cam_dir / "gt" / "gt.txt"
     if not gt_file.exists():
         gt_file = cam_dir / "gt.txt"
     if not vid_file.exists() or not gt_file.exists():
-        missing.append(cam_name)
+        missing.append(cam_tag)
         continue
     cam_crops = extract_crops_from_camera(
-        cam_name, gt_file, vid_file, CROP_DIR,
+        cam_tag, gt_file, vid_file, CROP_DIR,
         MAX_CROPS_PER_ID_PER_CAM, MIN_AREA
     )
     for tid, paths in cam_crops.items():
-        all_crops[tid][cam_name].extend(paths)
+        global_id = f"{scene}_{tid}"  # scene-prefixed ID
+        all_crops[global_id][cam_tag].extend(paths)
         total_crops += len(paths)
 
 print(f"Extracted {total_crops} crops from {sum(len(c) for c in all_crops.values())} tracklets across {len(all_crops)} IDs")

@@ -263,7 +263,8 @@ for cam_dir in cam_dirs:
             continue
         h_frame, w_frame = frame.shape[:2]
         for (tid, x, y, bw, bh) in gt_data[frame_idx]:
-            key = (tid, cam_dir.name)
+            scene = cam_dir.parent.name  # e.g. "S01"
+            key = (tid, scene, cam_dir.name)
             if id_cam_count[key] >= MAX_CROPS_PER_ID_PER_CAM:
                 continue
             x1 = max(0, x); y1 = max(0, y)
@@ -273,13 +274,14 @@ for cam_dir in cam_dirs:
                 continue
             crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
             crop_pil = Image.fromarray(crop_rgb)
-            fname = CROP_DIR / f"{cam_dir.name}_id{tid:04d}_f{frame_idx:06d}.jpg"
+            fname = CROP_DIR / f"{scene}_{cam_dir.name}_id{tid:04d}_f{frame_idx:06d}.jpg"
             crop_pil.resize((W, H), Image.BICUBIC).save(str(fname), quality=90)
-            all_crops.append((str(fname), str(tid), cam_dir.name))
+            all_crops.append((str(fname), f"{scene}_{tid}", f"{scene}_{cam_dir.name}"))
             id_cam_count[key] += 1
             saved += 1
     cap.release()
-    print(f"  {cam_dir.name}: {saved} crops")
+    scene_label = cam_dir.parent.name
+    print(f"  {scene_label}/{cam_dir.name}: {saved} crops")
 
 print(f"\nTotal crops: {len(all_crops)}")
 ids  = list({c[1] for c in all_crops})
@@ -296,7 +298,7 @@ id_to_crops = defaultdict(list)
 for path, tid, cam in all_crops:
     id_to_crops[tid].append((path, tid, cam))
 
-all_ids = sorted(id_to_crops.keys(), key=lambda x: int(x))
+all_ids = sorted(id_to_crops.keys())
 n_train_ids = int(len(all_ids) * TRAIN_RATIO)
 train_ids = set(all_ids[:n_train_ids])
 query_ids = set(all_ids[n_train_ids:])
@@ -315,7 +317,7 @@ for tid, crops in id_to_crops.items():
         gallery_crops.extend(g_list)
 
 num_classes = len(train_ids)
-id2label = {tid: i for i, tid in enumerate(sorted(train_ids, key=lambda x: int(x)))}
+id2label = {tid: i for i, tid in enumerate(sorted(train_ids))}
 print(f"Train IDs  : {len(train_ids)}  (crops: {len(train_crops)})")
 print(f"Query IDs  : {len(query_ids)}")
 print(f"Query crops: {len(query_crops)},  Gallery: {len(gallery_crops)}")
@@ -624,7 +626,7 @@ cells.append(cell('markdown', '## 10. Stage 1 — Teacher Head Warmup (5 epochs)
 
 cells.append(cell('code', r'''# Only the BNNeck + classifier head are trained; backbone is frozen.
 # This is fast (~20-30 min) and gives the teacher calibrated ID logits.
-TEACHER_EPOCHS = 5
+TEACHER_EPOCHS = 15
 TEACHER_LR     = 1e-3
 
 teacher_ce  = CrossEntropyLabelSmooth(num_classes, 0.05).to(DEVICE)
@@ -662,7 +664,7 @@ for epoch in range(1, TEACHER_EPOCHS + 1):
     avg_loss = epoch_loss / len(train_loader)
     t_history["loss"].append(avg_loss)
 
-    if epoch % 2 == 0 or epoch == TEACHER_EPOCHS:
+    if epoch % 5 == 0 or epoch == TEACHER_EPOCHS:
         mAP, rank1 = evaluate(teacher, query_loader_teacher, gallery_loader_teacher, DEVICE)
         t_history["mAP"].append(mAP)
         t_history["rank1"].append(rank1)
