@@ -9,7 +9,8 @@
   "enable_internet": true,
   "machine_shape": "NvidiaTeslaT4",
   "dataset_sources": [
-    "mrkdagods/mtmc-weights"
+    "mrkdagods/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
   ],
   "competition_sources": [],
   "kernel_sources": [],
