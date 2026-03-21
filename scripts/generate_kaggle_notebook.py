@@ -114,21 +114,22 @@ from pathlib import Path
 # --- Guard: detect GPU BEFORE importing torch ---
 # Kaggle's PyTorch 2.10+ drops P100 (sm_60) support.
 # If we got a P100, downgrade to a compatible build first.
-_nvsmi = subprocess.run(
-    ["nvidia-smi", "--query-gpu=gpu_name,compute_cap", "--format=csv,noheader"],
-    capture_output=True, text=True)
-if _nvsmi.returncode == 0 and _nvsmi.stdout.strip():
-    _gpu_name, _cap = _nvsmi.stdout.strip().split(",", 1)
-    _major, _minor = _cap.strip().split(".")
-    _sm = int(_major) * 10 + int(_minor)
-    if _sm < 70:
-        print(f"\\u26a0 GPU {_gpu_name.strip()} (sm_{_sm}) — installing compatible PyTorch ...")
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "-q",
-            "torch==2.4.1", "torchvision==0.19.1",
-            "--index-url", "https://download.pytorch.org/whl/cu124",
-        ])
-        print("\\u2713 Compatible PyTorch installed")
+if shutil.which("nvidia-smi"):
+    _nvsmi = subprocess.run(
+        ["nvidia-smi", "--query-gpu=gpu_name,compute_cap", "--format=csv,noheader"],
+        capture_output=True, text=True)
+    if _nvsmi.returncode == 0 and _nvsmi.stdout.strip():
+        _gpu_name, _cap = _nvsmi.stdout.strip().split(",", 1)
+        _major, _minor = _cap.strip().split(".")
+        _sm = int(_major) * 10 + int(_minor)
+        if _sm < 70:
+            print(f"\\u26a0 GPU {_gpu_name.strip()} (sm_{_sm}) — installing compatible PyTorch ...")
+            subprocess.check_call([
+                sys.executable, "-m", "pip", "install", "-q",
+                "torch==2.4.1", "torchvision==0.19.1",
+                "--index-url", "https://download.pytorch.org/whl/cu124",
+            ])
+            print("\\u2713 Compatible PyTorch installed")
 
 import torch
 
