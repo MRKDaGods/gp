@@ -21,7 +21,8 @@ import json
 from pathlib import Path
 
 REPO_URL = "https://github.com/MRKDaGods/gp.git"
-OWNER = "mrkdagods"
+OWNER = "gumfreddy"
+WEIGHTS_OWNER = "mrkdagods"  # mtmc-weights dataset lives on this account
 
 # Kaggle kernel slugs — must match what Kaggle derives from the title
 # Rule: lowercase, replace non-alnum with hyphen, collapse hyphens
@@ -32,6 +33,7 @@ SLUG_10A = "mtmc-10a-stages-0-2-tracking-reid-features"
 SLUG_10B = "mtmc-10b-stage-3-faiss-indexing"
 SLUG_10C = "mtmc-10c-stages-4-5-association-eval"
 SLUG_GT  = "mtmc-gt-annotations"    # dataset: mrkdagods/mtmc-gt-annotations
+SLUG_CITYFLOW = "thanhnguyenle/data-aicity-2023-track-2"  # CityFlowV2 on Kaggle
 
 NB_ROOT = Path(__file__).parent.parent / "notebooks" / "kaggle"
 
@@ -108,6 +110,26 @@ def write_notebook(cells, out_dir, slug, title, kernel_sources=None, dataset_sou
 SETUP_ENV = """\
 import os, sys, subprocess, shutil, json, time, tarfile
 from pathlib import Path
+
+# --- Guard: detect GPU BEFORE importing torch ---
+# Kaggle's PyTorch 2.10+ drops P100 (sm_60) support.
+# If we got a P100, downgrade to a compatible build first.
+_nvsmi = subprocess.run(
+    ["nvidia-smi", "--query-gpu=gpu_name,compute_cap", "--format=csv,noheader"],
+    capture_output=True, text=True)
+if _nvsmi.returncode == 0 and _nvsmi.stdout.strip():
+    _gpu_name, _cap = _nvsmi.stdout.strip().split(",", 1)
+    _major, _minor = _cap.strip().split(".")
+    _sm = int(_major) * 10 + int(_minor)
+    if _sm < 70:
+        print(f"\\u26a0 GPU {_gpu_name.strip()} (sm_{_sm}) — installing compatible PyTorch ...")
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "-q",
+            "torch==2.4.1", "torchvision==0.19.1",
+            "--index-url", "https://download.pytorch.org/whl/cu124",
+        ])
+        print("\\u2713 Compatible PyTorch installed")
+
 import torch
 
 print(f"Python : {sys.version.split()[0]}")
@@ -156,7 +178,7 @@ except ImportError:
     except Exception: pip("faiss-cpu")
 
 pip("timm", "motmetrics")
-pip("gdown", "loguru", "omegaconf", "rich", "networkx>=3.1", "click")
+pip("loguru", "omegaconf", "rich", "networkx>=3.1", "click")
 subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "-q"],
                       cwd=str(PROJECT))
 print("\\n\\u2713 All dependencies installed")\
@@ -220,32 +242,32 @@ SANITY_LIGHT = _sanity([
     ("trackeval", "trackeval"),
 ])
 
-COPY_WEIGHTS = """\
-WEIGHTS_INPUT = Path("/kaggle/input/datasets/mrkdagods/mtmc-weights/models")
-assert WEIGHTS_INPUT.exists(), (
-    "Dataset 'mtmc-weights' not found.\\n"
-    f"  Expected: {WEIGHTS_INPUT}\\n"
-    "  Attach via: Add Data -> Your Datasets -> mtmc-weights"
+COPY_WEIGHTS = (
+    f'WEIGHTS_INPUT = Path("/kaggle/input/datasets/{WEIGHTS_OWNER}/mtmc-weights/models")\n'
+    'assert WEIGHTS_INPUT.exists(), (\n'
+    '    "Dataset \'mtmc-weights\' not found.\\n"\n'
+    '    f"  Expected: {WEIGHTS_INPUT}\\n"\n'
+    '    "  Attach via: Add Data -> Your Datasets -> mtmc-weights"\n'
+    ')\n'
+    '\n'
+    'MODELS_DST = PROJECT / "models"\n'
+    'if MODELS_DST.is_symlink(): MODELS_DST.unlink()\n'
+    'if MODELS_DST.exists(): shutil.rmtree(MODELS_DST)\n'
+    'print(f"Copying models/ from {WEIGHTS_INPUT} (~750 MB) ...")\n'
+    'shutil.copytree(str(WEIGHTS_INPUT), str(MODELS_DST))\n'
+    '\n'
+    'ESSENTIAL = [\n'
+    '    "models/detection/yolo26m.pt",\n'
+    '    "models/reid/transreid_cityflowv2_best.pth",\n'
+    '    "models/reid/vehicle_osnet_veri776.pth",\n'
+    '    "models/tracker/osnet_x0_25_msmt17.pt",\n'
+    ']\n'
+    'missing = [p for p in ESSENTIAL if not (PROJECT / p).exists()]\n'
+    'if missing:\n'
+    '    for m in missing: print(f"  MISSING: {m}")\n'
+    '    raise FileNotFoundError("Fix missing weights before continuing.")\n'
+    'print("\\u2713 All essential v4 weights present")'
 )
-
-MODELS_DST = PROJECT / "models"
-if MODELS_DST.is_symlink(): MODELS_DST.unlink()
-if MODELS_DST.exists(): shutil.rmtree(MODELS_DST)
-print(f"Copying models/ from {WEIGHTS_INPUT} (~750 MB) ...")
-shutil.copytree(str(WEIGHTS_INPUT), str(MODELS_DST))
-
-ESSENTIAL = [
-    "models/detection/yolo26m.pt",
-    "models/reid/transreid_cityflowv2_best.pth",
-    "models/reid/vehicle_osnet_veri776.pth",
-    "models/tracker/osnet_x0_25_msmt17.pt",
-]
-missing = [p for p in ESSENTIAL if not (PROJECT / p).exists()]
-if missing:
-    for m in missing: print(f"  MISSING: {m}")
-    raise FileNotFoundError("Fix missing weights before continuing.")
-print("\\u2713 All essential v4 weights present")\
-"""
 
 SHOW_RESULTS = """\
 stage5_dir = RUN_DIR / "stage5"
@@ -317,9 +339,9 @@ def build_10a():
     cells.append(code(COPY_WEIGHTS, "a08"))
 
     cells.append(md(
-        "## 3. Download CityFlowV2 (~17 GB)\n\n"
-        "Downloaded from Google Drive to `/tmp` (not `/kaggle/working` -- only 20 GB).\n"
-        "Peak disk in `/tmp`: ~44 GB (download + extraction + stage0 frames).",
+        "## 3. Mount CityFlowV2 Dataset\n\n"
+        "CityFlowV2 is attached as a Kaggle dataset. We symlink the nested\n"
+        "`train/S01/c001/` structure into the flat `S01_c001/` layout the pipeline expects.",
         "a09"))
 
     cells.append(code("""\
@@ -329,7 +351,23 @@ for mount in ["/tmp", "/kaggle/working"]:
     total, used, free = _shutil.disk_usage(mount)
     print(f"{mount:20s}  {free/1024**3:.1f} GB free / {total/1024**3:.1f} GB total")
 
-CAM_RE = _re.compile(r"^S\\d{2}_c\\d{3}$")
+# --- Locate the Kaggle-mounted CityFlowV2 dataset ---
+_CANDIDATE_MOUNTS = [
+    Path("/kaggle/input/data-aicity-2023-track-2"),
+    Path("/kaggle/input/datasets/thanhnguyenle/data-aicity-2023-track-2"),
+]
+CITYFLOW_INPUT = None
+for _p in _CANDIDATE_MOUNTS:
+    if _p.exists():
+        CITYFLOW_INPUT = _p
+        break
+assert CITYFLOW_INPUT is not None, (
+    "CityFlowV2 dataset not found.\\n"
+    "  Attach via: Add Data -> Datasets -> search 'data-aicity-2023-track-2'"
+)
+print(f"\\u2713 CityFlowV2 dataset at {CITYFLOW_INPUT}")
+
+# --- Flatten into data/raw/cityflowv2/S01_c001/ layout ---
 TMP_DATA = Path("/tmp/datasets")
 TMP_DATA.mkdir(parents=True, exist_ok=True)
 
@@ -345,17 +383,29 @@ else:
 DATA_OUT = Path("/tmp/pipeline_outputs")
 DATA_OUT.mkdir(parents=True, exist_ok=True)
 DATA_RAW = TMP_DATA / "cityflowv2"
+DATA_RAW.mkdir(parents=True, exist_ok=True)
 
-if DATA_RAW.exists() and any(CAM_RE.match(d.name) for d in DATA_RAW.iterdir() if d.is_dir()):
-    cams = [d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name)]
-    print(f"\\u2713 CityFlowV2 already present: {len(cams)} cameras")
-else:
-    print("Downloading CityFlowV2 from Google Drive (~17 GB) ...")
-    subprocess.check_call(
-        [sys.executable, "scripts/download_datasets.py", "--dataset", "cityflowv2"],
-        cwd=str(PROJECT))
-    cams = [d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name)]
-    print(f"\\u2713 CityFlowV2 ready: {sorted(cams)}")
+# Map: train/S01/c001 -> S01_c001, validation/S02/c006 -> S02_c006
+for split_dir in sorted(CITYFLOW_INPUT.iterdir()):
+    if not split_dir.is_dir() or split_dir.name not in ("train", "validation", "test"):
+        continue
+    for scene_dir in sorted(split_dir.iterdir()):
+        if not scene_dir.is_dir():
+            continue
+        for cam_dir in sorted(scene_dir.iterdir()):
+            if not cam_dir.is_dir():
+                continue
+            flat_name = f"{scene_dir.name}_{cam_dir.name}"  # e.g. S01_c001
+            flat_dir = DATA_RAW / flat_name
+            if flat_dir.exists():
+                continue
+            # Symlink the entire camera dir (read-only mount is fine for inference)
+            flat_dir.symlink_to(cam_dir)
+
+CAM_RE = _re.compile(r"^S\\d{2}_c\\d{3}$")
+cams = sorted(d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name))
+print(f"\\u2713 CityFlowV2 ready: {len(cams)} cameras")
+for c in cams: print(f"  {c}")
 print(f"\\nDataset path: {DATA_RAW}")\
 """, "a10"))
 
@@ -405,6 +455,11 @@ else:
         f"    \"--override\", f\"project.run_name={{RUN_NAME}}\",\n"
         f"    \"--override\", f\"project.output_dir={{DATA_OUT}}\",\n"
         f"    \"--override\", \"stage0.cameras=[{cam_list}]\",\n"
+        f"    # v47 feature overrides\n"
+        f"    \"--override\", \"stage2.reid.vehicle.concat_patch=true\",\n"
+        f"    \"--override\", \"stage2.crop.samples_per_tracklet=48\",\n"
+        f"    \"--override\", \"stage2.pca.n_components=384\",\n"
+        f"    \"--override\", \"stage2.power_norm.alpha=0.5\",\n"
         f"]\n"
         f"print(\"CMD:\", \" \".join(str(c) for c in cmd))\n"
         f"print(\"=\" * 70)\n"
@@ -1023,7 +1078,7 @@ def main():
         out_dir=NB_ROOT / "10a_stages012",
         slug=SLUG_10A,
         title="MTMC 10a - Stages 0-2 (Tracking + ReID Features)",
-        dataset_sources=[f"{OWNER}/mtmc-weights"],
+        dataset_sources=[f"{WEIGHTS_OWNER}/mtmc-weights", SLUG_CITYFLOW],
     )
     write_notebook(
         cells=build_10b(),
@@ -1038,7 +1093,7 @@ def main():
         slug=SLUG_10C,
         title="MTMC 10c - Stages 4-5 (Association + Eval)",
         kernel_sources=[f"{OWNER}/{SLUG_10B}"],
-        dataset_sources=[f"{OWNER}/{SLUG_GT}"],
+        dataset_sources=[f"{WEIGHTS_OWNER}/{SLUG_GT}"],
         enable_gpu=False,  # Stages 4-5 are CPU-only; save GPU quota
     )
     print("\nDone.")

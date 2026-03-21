@@ -131,10 +131,20 @@ def run_stage0(
 def _discover_videos(
     input_dir: Path, extensions: List[str]
 ) -> List[Path]:
-    """Find all video files in the input directory (recursive)."""
+    """Find all video files in the input directory (recursive).
+
+    Uses explicit iteration instead of rglob so that symlinked
+    subdirectories (e.g. Kaggle dataset mounts) are followed.
+    """
+    ext_set = {e.lower() for e in extensions}
     videos = []
-    for ext in extensions:
-        videos.extend(input_dir.rglob(f"*{ext}"))
+    for child in input_dir.iterdir():
+        if child.is_dir():  # is_dir() follows symlinks
+            for f in child.iterdir():
+                if f.is_file() and f.suffix.lower() in ext_set:
+                    videos.append(f)
+        elif child.is_file() and child.suffix.lower() in ext_set:
+            videos.append(child)
     return sorted(videos)
 
 
