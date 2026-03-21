@@ -754,39 +754,35 @@ def build_10c():
 
     cells.append(code("""\
 # ---- Stage 4: Cross-camera association -------------------------------------
-# AQE: k nearest neighbours for query expansion (higher = smoother features)
-AQE_K             = 7     # v7: 7 (best from scan, was 5)
-
-# Minimum cosine similarity to form an edge in the graph
-SIM_THRESH        = 0.55  # v11: 0.55 (reference value, raised from 0.50)
-
-# Clustering algorithm: connected_components (v11) or community_detection (Louvain)
+# v46 optimized config (local best: IDF1=0.8297)
+AQE_K             = 2     # v46: 2 (optimal after QE self-exclusion fix)
+SIM_THRESH        = 0.53  # v46: 0.53 (optimal from sweep)
 ALGORITHM         = "connected_components"
+LOUVAIN_RES       = 0.70  # fallback for community_detection
 
-# Louvain resolution (only used if ALGORITHM=community_detection)
-LOUVAIN_RES       = 0.70  # v7: 0.70 (best from scan)
+# Weights — v46 defaults (appearance-heavy for vehicles)
+APPEARANCE_WEIGHT = 0.75  # v46: CityFlowV2 vehicle config
+HSV_WEIGHT        = 0.0   # v46: disabled (hurts vehicles)
+ST_WEIGHT         = round(1.0 - APPEARANCE_WEIGHT - HSV_WEIGHT, 4)
 
-# Weight of appearance vs. spatio-temporal score (0.0=ST only, 1.0=appear only)
-APPEARANCE_WEIGHT = 0.70  # v7: 0.70 (best from scan)
-HSV_WEIGHT        = 0.025 # v16: lowered from cityflowv2's 0.30; scan showed minimal impact
-ST_WEIGHT         = round(1.0 - APPEARANCE_WEIGHT - HSV_WEIGHT, 4)  # ensure sum=1.0
+# Bridge pruning: v46 found pruning HURTS (-1.4pp) → disabled
+BRIDGE_PRUNE      = 0.0   # v46: 0.0 (pruning hurts by -1.4pp)
+MAX_COMP_SIZE     = 12
 
-# Bridge pruning margin: bridges with weight < sim_thresh + margin are removed
-BRIDGE_PRUNE      = 0.05  # v11: reference value
-
-# Max cluster size before splitting
-MAX_COMP_SIZE     = 12    # v11: reference value
+# Intra-camera merge: +1.0pp improvement
+INTRA_MERGE       = True
+INTRA_MERGE_THRESH = 0.75
+INTRA_MERGE_GAP   = 60    # seconds
 
 # ---- Stage 5: Evaluation ----------------------------------------------------
-# CityFlowV2 GT: 240 vehicles = 211 multi-cam + 29 single-cam.
-# AIC protocol: only cross-camera trajectories matter for MTMC eval.
-# Single-cam singletons are guaranteed FP (3-5x more preds than GT).
-# Dropping them loses 29/240=12% GT vehicles but eliminates massive FP.
-MTMC_ONLY = True
+# v46: MTMC_ONLY=False keeps single-cam trajectories (+5pp IDF1).
+# Single-cam tracks ARE real vehicles; dropping them loses 29/240=12% GT.
+MTMC_ONLY = False
 
-print("Stage 4 params:")
+print("Stage 4 params (v46 optimized):")
 print(f"  aqe_k={AQE_K}  sim_thresh={SIM_THRESH}  algorithm={ALGORITHM}  appearance_weight={APPEARANCE_WEIGHT}")
 print(f"  hsv_weight={HSV_WEIGHT}  st_weight={ST_WEIGHT}  bridge_prune={BRIDGE_PRUNE}  max_comp_size={MAX_COMP_SIZE}")
+print(f"  intra_merge={INTRA_MERGE}  intra_thresh={INTRA_MERGE_THRESH}  intra_gap={INTRA_MERGE_GAP}")
 print(f"Stage 5: mtmc_only_submission={MTMC_ONLY}, stationary_filter=True")\
 """, "c10"))
 
@@ -814,19 +810,22 @@ cmd = [
     "--override", "stage4.association.fic.enabled=true",
     "--override", "stage4.association.fic.regularisation=3.0",
     "--override", "stage4.association.fac.enabled=true",
+    "--override", "stage4.association.fac.knn=20",
+    "--override", "stage4.association.fac.learning_rate=0.5",
+    "--override", "stage4.association.fac.beta=0.08",
+    "--override", f"stage4.association.intra_camera_merge.enabled={str(INTRA_MERGE).lower()}",
+    "--override", f"stage4.association.intra_camera_merge.threshold={INTRA_MERGE_THRESH}",
+    "--override", f"stage4.association.intra_camera_merge.max_time_gap={INTRA_MERGE_GAP}",
     "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
     "--override", "stage5.stationary_filter.enabled=true",
-    "--override", "stage5.stationary_filter.min_displacement_px=50",
+    "--override", "stage5.stationary_filter.min_displacement_px=150",
     "--override", "stage5.stationary_filter.max_mean_velocity_px=2.0",
     "--override", "stage5.min_submission_confidence=0.15",
     "--override", "stage5.cross_id_nms_iou=0.35",
     "--override", "stage5.min_trajectory_confidence=0.30",
     "--override", "stage5.min_trajectory_frames=10",
-    "--override", "stage5.track_edge_trim.enabled=true",
-    "--override", "stage5.track_edge_trim.mode=confidence",
-    "--override", "stage5.track_smoothing.enabled=true",
-    "--override", "stage5.track_smoothing.window=7",
-    "--override", "stage5.track_smoothing.polyorder=2",
+    "--override", "stage5.track_edge_trim.enabled=false",
+    "--override", "stage5.track_smoothing.enabled=false",
     "--override", "stage5.gt_frame_clip=true",
     "--override", "stage5.gt_zone_filter=true",
 ]
@@ -860,7 +859,7 @@ print(f"\\u2713 Stages 4-5 done in {elapsed/60:.1f} min")\
 # SET SCAN_ENABLED = True to run the grid search.
 # This will overwrite the single-run results above.
 # ============================================================
-SCAN_ENABLED = True
+SCAN_ENABLED = False
 
 if SCAN_ENABLED:
     import itertools
@@ -950,21 +949,24 @@ if SCAN_ENABLED:
             "--override", "stage4.association.fic.enabled=true",
             "--override", "stage4.association.fic.regularisation=3.0",
             "--override", "stage4.association.fac.enabled=true",
+            "--override", "stage4.association.fac.knn=20",
+            "--override", "stage4.association.fac.learning_rate=0.5",
+            "--override", "stage4.association.fac.beta=0.08",
+            "--override", f"stage4.association.intra_camera_merge.enabled={str(INTRA_MERGE).lower()}",
+            "--override", f"stage4.association.intra_camera_merge.threshold={INTRA_MERGE_THRESH}",
+            "--override", f"stage4.association.intra_camera_merge.max_time_gap={INTRA_MERGE_GAP}",
             "--override", f"stage4.association.reranking.enabled={str(rerank_enabled).lower()}",
             "--override", f"stage4.association.reranking.lambda_value={params['rerank_lambda']}",
             "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
             "--override", "stage5.stationary_filter.enabled=true",
-            "--override", "stage5.stationary_filter.min_displacement_px=50",
+            "--override", "stage5.stationary_filter.min_displacement_px=150",
             "--override", "stage5.stationary_filter.max_mean_velocity_px=2.0",
             "--override", "stage5.min_submission_confidence=0.15",
             "--override", "stage5.cross_id_nms_iou=0.35",
             "--override", "stage5.min_trajectory_confidence=0.30",
             "--override", "stage5.min_trajectory_frames=10",
-            "--override", "stage5.track_edge_trim.enabled=true",
-            "--override", "stage5.track_edge_trim.mode=confidence",
-            "--override", "stage5.track_smoothing.enabled=true",
-            "--override", "stage5.track_smoothing.window=7",
-            "--override", "stage5.track_smoothing.polyorder=2",
+            "--override", "stage5.track_edge_trim.enabled=false",
+            "--override", "stage5.track_smoothing.enabled=false",
             "--override", "stage5.gt_frame_clip=true",
             "--override", "stage5.gt_zone_filter=true",
         ]
