@@ -1058,7 +1058,7 @@ def _hierarchical_centroid_expansion(
     total_merged = 0
 
     # ── Pass 1: Centroid-based orphan absorption ────────────────────────
-    for round_idx in range(3):  # Up to 3 rounds of centroid expansion
+    for round_idx in range(1):  # Single round — prevents centroid drift
         multi_clusters = [c for c in clusters if len(c) > 1]
         orphan_sets = [c for c in clusters if len(c) == 1]
         orphan_indices = [list(c)[0] for c in orphan_sets]
@@ -1086,10 +1086,9 @@ def _hierarchical_centroid_expansion(
                 "members": members,
             })
 
-        # For each orphan, find best matching cluster via centroid similarity
-        # Enhanced: also compute max-member similarity to handle viewpoint diversity.
-        # An orphan matching ANY cluster member strongly should be absorbed even if
-        # the centroid (averaged over all viewpoints) is only moderately similar.
+        # For each orphan, find best matching cluster via centroid similarity.
+        # Use centroid-only (no max-member shortcut) — centroids average out
+        # viewpoint noise, while max-member allows single spurious matches.
         orphan_embs = embeddings[orphan_indices]  # (O, D)
         # Centroid similarities: (O, C)
         centroid_sims = orphan_embs @ centroids.T
@@ -1101,27 +1100,14 @@ def _hierarchical_centroid_expansion(
             best_ci = -1
             best_sim = -1.0
 
-            # Sort cluster candidates by centroid similarity; check top candidates
+            # Sort cluster candidates by centroid similarity (descending)
             order = np.argsort(-centroid_sims[oi])
-            # Check top 20 candidates (by centroid) — some may have low centroid
-            # but high max-member similarity due to viewpoint diversity
-            for rank, ci in enumerate(order[:20]):
+            for rank, ci in enumerate(order[:10]):
                 c_sim = float(centroid_sims[oi, ci])
-                # Skip if centroid sim is too low (won't have good member sim either)
-                if c_sim < centroid_threshold - 0.15:
+                # Centroid-only gating — no max-member shortcut
+                if c_sim < centroid_threshold:
                     break
-                # Compute max-member similarity for this cluster
-                member_embs = embeddings[cluster_meta[ci]["members"]]
-                max_member_sim = float((orphan_embs[oi] @ member_embs.T).max())
-                # Also check combined_sim scores (include ST weighting)
-                max_combined = max(
-                    combined_sim.get((orphan_idx, m), combined_sim.get((m, orphan_idx), 0.0))
-                    for m in cluster_meta[ci]["members"]
-                )
-                # Use the best of centroid, max-member, and combined similarity
-                sim = max(c_sim, max_member_sim, max_combined)
-                if sim < centroid_threshold:
-                    continue
+                sim = c_sim
 
                 meta = cluster_meta[ci]
 
@@ -1227,23 +1213,12 @@ def _hierarchical_centroid_expansion(
         # Centroid-to-centroid similarity matrix
         cc_sim = centroids @ centroids.T
 
-        # Build merge candidate pairs (use max of centroid-centroid, max member-member, and combined_sim)
+        # Build merge candidate pairs using centroid-centroid similarity only.
+        # No max-member shortcut — centroids are inherently robust.
         merge_pairs = []
         for ci in range(nc):
             for cj in range(ci + 1, nc):
-                cc = float(cc_sim[ci, cj])
-                # Max member-to-member cosine similarity
-                embs_i = embeddings[list(multi_clusters[ci])]
-                embs_j = embeddings[list(multi_clusters[cj])]
-                max_mm = float((embs_i @ embs_j.T).max())
-                # Max combined_sim (includes ST weighting)
-                max_cs = 0.0
-                for mi in multi_clusters[ci]:
-                    for mj in multi_clusters[cj]:
-                        cs = combined_sim.get((mi, mj), combined_sim.get((mj, mi), 0.0))
-                        if cs > max_cs:
-                            max_cs = cs
-                sim = max(cc, max_mm, max_cs)
+                sim = float(cc_sim[ci, cj])
                 if sim < merge_threshold:
                     continue
                 # Same class
@@ -1336,10 +1311,7 @@ def _hierarchical_centroid_expansion(
                 gi = final_orphan_indices[oi]
                 for oj in range(oi + 1, n_orphans):
                     gj = final_orphan_indices[oj]
-                    cosine_sim = float(pairwise_sim[oi, oj])
-                    # Use max of cosine and combined_sim (includes ST weighting)
-                    cs = combined_sim.get((gi, gj), combined_sim.get((gj, gi), 0.0))
-                    pair_sim = max(cosine_sim, cs)
+                    pair_sim = float(pairwise_sim[oi, oj])
                     if pair_sim < orphan_threshold:
                         continue
                     if class_ids[gi] != class_ids[gj]:
