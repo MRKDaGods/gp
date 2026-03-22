@@ -125,8 +125,8 @@ stage2:
     v_bins: 16
     n_stripes: 3               # front/middle/rear for vehicles
   pca:
-    enabled: true              # PCA whitening on ensemble (TransReID 768D + OSNet 512D = 1280D → 512D)
-    n_components: 512          # v72: doubled from 256 to retain more discriminative info
+    enabled: true              # PCA whitening on ensemble (TransReID 768D + OSNet 512D = 1280D → 384D)
+    n_components: 384          # v72: 512 hurt (-0.6pp), 384 confirmed optimal
     pca_model_path: "models/reid/pca_transform_ensemble.pkl"  # separate path to avoid cache collision
   crop:
     min_area: 800
