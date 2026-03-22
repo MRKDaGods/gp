@@ -34,6 +34,10 @@ SLUG_10B = "mtmc-10b-stage-3-faiss-indexing"
 SLUG_10C = "mtmc-10c-stages-4-5-association-eval"
 SLUG_GT  = "mtmc-gt-annotations"    # dataset: mrkdagods/mtmc-gt-annotations
 SLUG_CITYFLOW = "thanhnguyenle/data-aicity-2023-track-2"  # CityFlowV2 on Kaggle
+SLUG_09C = "09c-vehicle-reid-kd-vit-l-teacher"  # KD training kernel output
+
+# Toggle: when True, 10a will use the KD model from 09c output instead of baseline
+USE_KD_MODEL = True
 
 NB_ROOT = Path(__file__).parent.parent / "notebooks" / "kaggle"
 
@@ -338,6 +342,45 @@ def build_10a():
     cells.append(code(SANITY_FULL, "a06"))
     cells.append(md("## 2. Mount Model Weights\nModel weights dataset (`mtmc-weights`) must be attached.", "a07"))
     cells.append(code(COPY_WEIGHTS, "a08"))
+
+    # ── KD model integration (conditional) ────────────────────────────
+    if USE_KD_MODEL:
+        cells.append(md(
+            "## 2b. KD Model Override\n\n"
+            "Replace baseline TransReID vehicle model with Knowledge-Distilled version\n"
+            "from 09c training output (ViT-L teacher → ViT-B student).",
+            "a08b"))
+        cells.append(code(f"""\
+# --- KD model integration ---
+import yaml as _yaml
+
+_KD_SEARCH = [
+    Path("/kaggle/input/{SLUG_09C}/exported_models/transreid_cityflowv2_kd_best.pth"),
+    Path("/kaggle/input/datasets/{OWNER}/{SLUG_09C}/exported_models/transreid_cityflowv2_kd_best.pth"),
+]
+_KD_SRC = None
+for _p in _KD_SEARCH:
+    if _p.exists():
+        _KD_SRC = _p
+        break
+
+if _KD_SRC:
+    _KD_DST = PROJECT / "models" / "reid" / "transreid_cityflowv2_kd_best.pth"
+    shutil.copy2(str(_KD_SRC), str(_KD_DST))
+    print(f"\\u2713 KD model copied: {{_KD_SRC}} -> {{_KD_DST}} ({{_KD_DST.stat().st_size/1024**2:.1f}} MB)")
+
+    # Patch config to use KD model
+    _cfg_path = PROJECT / "configs" / "default.yaml"
+    _cfg = _yaml.safe_load(_cfg_path.read_text())
+    _old_weights = _cfg["stage2"]["reid"]["vehicle"]["weights_path"]
+    _cfg["stage2"]["reid"]["vehicle"]["weights_path"] = "models/reid/transreid_cityflowv2_kd_best.pth"
+    _cfg_path.write_text(_yaml.dump(_cfg, default_flow_style=False, sort_keys=False))
+    print(f"\\u2713 Config patched: vehicle weights_path: {{_old_weights}} -> transreid_cityflowv2_kd_best.pth")
+else:
+    print("\\u26a0 KD model not found — using baseline TransReID weights")
+    for _p in _KD_SEARCH:
+        print(f"  tried: {{_p}}")
+""", "a08c"))
 
     cells.append(md(
         "## 3. Mount CityFlowV2 Dataset\n\n"
@@ -1069,6 +1112,121 @@ else:
     print("Scan disabled. Set SCAN_ENABLED = True to run grid search.")\
 """, "c16"))
 
+    # ── Hierarchical centroid expansion A/B test ──────────────────────────
+    cells.append(md(
+        "## 7. Feature A/B Tests\n\n"
+        "Tests untried association features vs the v46 baseline.\n"
+        "- **CSLS**: Cross-domain Similarity Local Scaling — hubness reduction to penalize 'universal hub' embeddings",
+        "c17"))
+
+    cells.append(code("""\
+# --- Feature A/B tests ---
+# Tests CSLS hubness reduction (last untested stage4 feature)
+FEATURE_TEST_ENABLED = True
+
+if FEATURE_TEST_ENABLED:
+    # Define experiments: (tag, extra_overrides_dict)
+    feature_experiments = [
+        ("csls_k10", {"stage4.association.csls.enabled": "true",
+                      "stage4.association.csls.k": "10"}),
+        ("csls_k5",  {"stage4.association.csls.enabled": "true",
+                      "stage4.association.csls.k": "5"}),
+        ("csls_k20", {"stage4.association.csls.enabled": "true",
+                      "stage4.association.csls.k": "20"}),
+    ]
+    feat_results = []
+
+    for tag, extra_overrides in feature_experiments:
+        feat_run = f"{RUN_NAME}_{tag}"
+        feat_dir = DATA_OUT / feat_run
+        feat_dir.mkdir(parents=True, exist_ok=True)
+        for stage_sub in ("stage1", "stage2", "stage3"):
+            src = RUN_DIR / stage_sub
+            dst = feat_dir / stage_sub
+            if src.exists() and not dst.exists():
+                dst.symlink_to(src)
+
+        st_w = round(1.0 - APPEARANCE_WEIGHT - HSV_WEIGHT, 4)
+        cmd_feat = [
+            sys.executable, "scripts/run_pipeline.py",
+            "--config", "configs/default.yaml",
+            "--dataset-config", "configs/datasets/cityflowv2.yaml",
+            "--stages", "4,5",
+            "--override", f"project.run_name={feat_run}",
+            "--override", f"project.output_dir={DATA_OUT}",
+            "--override", f"stage4.association.query_expansion.k={AQE_K}",
+            "--override", f"stage4.association.graph.similarity_threshold={SIM_THRESH}",
+            "--override", f"stage4.association.graph.algorithm={ALGORITHM}",
+            "--override", f"stage4.association.graph.bridge_prune_margin={BRIDGE_PRUNE}",
+            "--override", f"stage4.association.graph.max_component_size={MAX_COMP_SIZE}",
+            "--override", f"stage4.association.weights.vehicle.appearance={APPEARANCE_WEIGHT}",
+            "--override", f"stage4.association.weights.vehicle.hsv={HSV_WEIGHT}",
+            "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
+            "--override", "stage4.association.weights.length_weight_power=0.5",
+            "--override", "stage4.association.mutual_nn.top_k_per_query=20",
+            "--override", "stage4.association.fic.enabled=true",
+            "--override", "stage4.association.fic.regularisation=3.0",
+            "--override", "stage4.association.fac.enabled=true",
+            "--override", "stage4.association.fac.knn=20",
+            "--override", "stage4.association.fac.learning_rate=0.5",
+            "--override", "stage4.association.fac.beta=0.08",
+            "--override", f"stage4.association.intra_camera_merge.enabled={str(INTRA_MERGE).lower()}",
+            "--override", f"stage4.association.intra_camera_merge.threshold={INTRA_MERGE_THRESH}",
+            "--override", f"stage4.association.intra_camera_merge.max_time_gap={INTRA_MERGE_GAP}",
+            "--override", "stage4.association.gallery_expansion.enabled=true",
+            "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
+            "--override", "stage5.stationary_filter.enabled=true",
+            "--override", "stage5.stationary_filter.min_displacement_px=150",
+            "--override", "stage5.stationary_filter.max_mean_velocity_px=2.0",
+            "--override", "stage5.min_submission_confidence=0.15",
+            "--override", "stage5.cross_id_nms_iou=0.35",
+            "--override", "stage5.min_trajectory_confidence=0.30",
+            "--override", "stage5.min_trajectory_frames=10",
+            "--override", "stage5.track_edge_trim.enabled=false",
+            "--override", "stage5.track_smoothing.enabled=false",
+            "--override", "stage5.gt_frame_clip=true",
+            "--override", "stage5.gt_zone_filter=true",
+        ]
+        # Add feature-specific overrides
+        for k, v in extra_overrides.items():
+            cmd_feat += ["--override", f"{k}={v}"]
+        if GT_DIR:
+            cmd_feat += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
+
+        t0 = time.time()
+        r = subprocess.run(cmd_feat, cwd=str(PROJECT), capture_output=True)
+        elapsed = time.time() - t0
+
+        report = DATA_OUT / feat_run / "stage5" / "evaluation_report.json"
+        idf1 = mota = hota = mtmc_idf1 = 0.0
+        n_frag = n_conf = 0
+        if report.exists():
+            rp = json.loads(report.read_text())
+            m = rp.get("metrics", rp)
+            idf1 = m.get("IDF1", m.get("idf1", 0.0))
+            mota = m.get("MOTA", m.get("mota", 0.0))
+            hota = m.get("HOTA", m.get("hota", 0.0))
+            mtmc_idf1 = m.get("mtmc_idf1", idf1)
+            details = rp.get("details", rp)
+            ea = details.get("error_analysis", {})
+            n_frag = ea.get("fragmented_gt", 0)
+            n_conf = ea.get("conflated_pred", 0)
+        status = "OK" if r.returncode == 0 else "FAIL"
+        feat_results.append({"tag": tag, "IDF1": idf1, "mtmc_idf1": mtmc_idf1,
+                             "MOTA": mota, "HOTA": hota, "frag": n_frag, "conf": n_conf, "time": elapsed})
+        print(f"  [{status}] {tag}: IDF1={idf1:.3f} mtmc_idf1={mtmc_idf1:.3f} MOTA={mota:.3f} HOTA={hota:.3f} frag={n_frag} conf={n_conf} ({elapsed/60:.1f} min)")
+
+    print("\\n" + "=" * 80)
+    print("FEATURE A/B TEST RESULTS")
+    print("=" * 80)
+    print(f"  {'tag':<25} {'IDF1':>7} {'mtmc':>7} {'MOTA':>7} {'HOTA':>7} {'frag':>5} {'conf':>5}")
+    print(f"  {'baseline (v46)' :<25} {'---':>7} {'---':>7} {'---':>7} {'---':>7} {'---':>5} {'---':>5}  (see section 5)")
+    for r2 in sorted(feat_results, key=lambda x: x["IDF1"], reverse=True):
+        print(f"  {r2['tag']:<25} {r2['IDF1']:>7.3f} {r2['mtmc_idf1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f} {r2['frag']:>5} {r2['conf']:>5}")
+else:
+    print("Feature test disabled. Set FEATURE_TEST_ENABLED = True to run.")\
+""", "c18"))
+
     return cells
 
 
@@ -1076,11 +1234,13 @@ else:
 
 def main():
     print("Generating chained Kaggle notebooks ...")
+    _10a_kernel_sources = [f"{OWNER}/{SLUG_09C}"] if USE_KD_MODEL else []
     write_notebook(
         cells=build_10a(),
         out_dir=NB_ROOT / "10a_stages012",
         slug=SLUG_10A,
         title="MTMC 10a - Stages 0-2 (Tracking + ReID Features)",
+        kernel_sources=_10a_kernel_sources,
         dataset_sources=[f"{WEIGHTS_OWNER}/mtmc-weights", SLUG_CITYFLOW],
     )
     write_notebook(
