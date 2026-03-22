@@ -465,7 +465,7 @@ class ReIDModel:
                 produce a more accurate per-camera BN estimate.
             batch_size: Forward-pass batch size for the warmup loop.
         """
-        if not self.is_transreid or not hasattr(self.model, "bn") or not crops:
+        if not self.is_transreid or not hasattr(self.model, "bn") or len(crops) < 2:
             return
 
         bn = self.model.bn
@@ -480,6 +480,8 @@ class ReIDModel:
         with torch.no_grad():
             for start in range(0, len(crops), batch_size):
                 batch = crops[start : start + batch_size]
+                if len(batch) < 2:
+                    continue  # BatchNorm1d requires batch_size >= 2 in training mode
                 t = self._preprocess(batch).to(self.device)
                 if self.half:
                     t = t.half()
