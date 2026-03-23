@@ -130,6 +130,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v37 | v73 | Clean confirmation run | 78.0% | Baseline confirmed |
 | v38 | v74 | New features scan (20 configs) | 78.02% best | ALL NO-OPS |
 | v39 | v75 | Consolidated + TO/AQE_K scan (13 configs) | 78.01% best | TO=0.05 optimal, K=3 optimal |
+| v40 | v76 | quality_temperature=5.0 + laplacian_min_var=50.0 | 77.3% | -0.7pp, HURT (10a chain) |
 
 ---
 
@@ -169,7 +170,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
    - PCA whitening 384D
    - 48 crops per tracklet, quality-weighted pooling (temperature=3.0)
    - CLAHE preprocessing (clip_limit=2.5 from cityflowv2.yaml)
-   - **Untested stage 2 parameters:** quality_temperature, laplacian_min_var
+   - **Untested stage 2 parameters:** ~~quality_temperature, laplacian_min_var~~ (v76: quality_temp=5.0+blur=50 HURT -0.7pp)
    - **Untested stage 0/1 parameters:** denoise, detection thresholds, tracker params
 
 ---
@@ -185,4 +186,5 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v73 | 14 | ~1h (10a rebuild) | app_w=0.70 |
 | v74 | 20 | 0 | CSLS catastrophic, all others no-op |
 | v75 | 13 | 0 | TO=0.05 optimal, K=3 confirmed, consolidated baseline=78.0% |
-| **TOTAL** | **~200** | **~4h GPU** | |
+| v76 | 1 chain | ~1h | quality_temp=5.0+blur=50 HURT -0.7pp |
+| **TOTAL** | **~214** | **~5h GPU** | |
