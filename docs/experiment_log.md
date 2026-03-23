@@ -137,7 +137,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v44 | v80 | min_hits=2 (default=3) — recover short tracklets | **78.4%** | **+0.2pp**, id_sw 102 (ali369) |
 | v45 | v81 | +confidence_threshold=0.20 (stacked on v80) | 75.6% | -2.8pp, HURT, id_sw 172 |
 | v46 | v82 | +denoise=true (stacked on v80) | 75.7% | -2.7pp, HURT, id_sw 118 |
-| v47 | v83 | +max_iou_distance=0.5 (stacked on v80) | *pending* | 10a chain (ali369) |
+| v47 | v83 | +max_iou_distance=0.5 (stacked on v80) | 76.8% | -1.6pp, HURT, id_sw 100 |
 
 ---
 
@@ -148,7 +148,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v80 | min_hits | 3→2 | stage1.tracker.min_hits | **78.4% (+0.2pp)** | 10a v2 (ali369) |
 | v81 | confidence_threshold | 0.25→0.20 (+track_high/new_track) | stage1.detector.confidence_threshold | **75.6% (-2.8pp) HURT** | 10a v3 (ali369) |
 | v82 | denoise | false→true | stage0.denoise | **75.7% (-2.7pp) HURT** | 10a v4 (ali369) |
-| v83 | intra_merge.max_iou_distance | 0.7→0.5 | stage1.intra_merge.max_iou_distance | *pending* | 10a v5 (ali369) |
+| v83 | intra_merge.max_iou_distance | 0.7→0.5 | stage1.intra_merge.max_iou_distance | **76.8% (-1.6pp) HURT** | 10a v5 (ali369) |
 
 ---
 
@@ -189,7 +189,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
    - 48 crops per tracklet, quality-weighted pooling (temperature=3.0)
    - CLAHE preprocessing (clip_limit=2.5 from cityflowv2.yaml)
    - **Untested stage 2 parameters:** ~~quality_temperature, laplacian_min_var~~ (v76: quality_temp=5.0+blur=50 HURT -0.7pp)
-   - **Stage 0/1 parameters (NOW TESTING v80-v83):** min_hits, confidence_threshold, denoise, intra_merge.max_iou_distance
+   - **Stage 0/1 parameters (TESTED v80-v83):** min_hits=2 (+0.2pp BEST), confidence_threshold=0.20 (-2.8pp), denoise (-2.7pp), max_iou_distance=0.5 (-1.6pp)
 
 ---
 
@@ -208,4 +208,8 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v77 | 1 chain | ~1h | **NEW BEST 78.2%** max_gap=50, merge_time=40, id_sw 131→99 |
 | v78 | 1 chain | ~1h | max_gap=80, merge_time=60, match_thresh=0.80 → 75.0% (TOO AGGRESSIVE) |
 | v79 | 1 chain | ~1h | max_gap=60, merge_time=50 → 77.3% (overshot sweet spot) |
-| **TOTAL** | **~220** | **~9h GPU** | |
+| v80 | 1 chain | ~1h | **NEW BEST 78.4%** min_hits=2, id_sw 102 |
+| v81 | 1 chain | ~1h | conf_thresh=0.20 → 75.6% HURT (-2.8pp) |
+| v82 | 1 chain | ~1h | denoise=true → 75.7% HURT (-2.7pp) |
+| v83 | 1 chain | ~1h | max_iou_dist=0.5 → 76.8% HURT (-1.6pp) |
+| **TOTAL** | **~224** | **~13h GPU** | |
