@@ -105,11 +105,15 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | **gt_frame_clip** | on, off | on | +benefit | v46 |
 | **gt_zone_filter** | on, off | on | +benefit | v46 |
 
-### Feature Extraction (10a) — TESTED
+### Feature Extraction (10a/10b) — TESTED
 
 | Parameter | Values Tested | Best | Effect | Version |
-|-----------|--------------|------|--------|---------|
+|-----------|--------------|------|--------|--------|
 | **PCA n_components** | 256 (original), 384, 512 | 384 | 512 HURT (-0.78pp) | v48,v72 |
+| **ReID input 384×384** | 256×256 (default), 384×384 | 256×256 | 384 HURT (-1.3pp IDF1) — model trained at 256 | v50 |
+| **Multi-scale TTA** | off, [224,288] (v51), various (v33) | off | v33: "marginal/harmful locally" + 14h timeout → disabled v35b. v51: pushed but **logs unrecoverable** (Kaggle only stores latest) | v33,v35b,v51 |
+| **Ensemble concat** | score-level (10%), feature-level concat | score-level 10% | Concat HURT (-1.6pp) | v26 |
+| **Flip augment** | on, off | on | standard, kept | default |
 
 ---
 
@@ -135,16 +139,23 @@ Secondary model     = OSNet (score-level fusion @ 10%)
    either does nothing or actively destroys the good structure.
 
 3. **Feature quality is the bottleneck.** The 6pp gap to SOTA likely requires:
-   - Higher-resolution ReID input (384×384 vs current 256×256)
+   - **Training** a ReID model at 384×384 (just inferencing at 384 with 256-trained model HURT -1.3pp in v50)
    - Stronger ReID backbone (ViT-Large, or ensemble of 3+ models)
    - Better detection (missed detections = missed tracklets = missed associations)
    - Track interpolation (fill detection gaps)
 
-4. **Remaining levers that could help (all require 10a rebuild = ~1hr GPU each):**
-   - ReID input resolution 256→384: estimated +0.5-1.0pp
-   - 3rd ReID backbone for ensemble: estimated +0.3-0.5pp
-   - Track interpolation in stage 1: estimated +0.2-0.5pp
-   - AQE_K=2 vs 3 retest (was optimal in v46, changed in v59): ~0.1pp risk
+4. **Already tried and failed (feature-level):**
+   - 384×384 inference with 256-trained model: -1.3pp (v50)
+   - Feature-level concat ensemble: -1.6pp (v26)
+   - PCA 512D: -0.78pp (v72)
+   - Multi-scale TTA: v33 "marginal/harmful locally" + Kaggle timeout → disabled v35b; v51 re-attempted with [224,288], logs unrecoverable
+
+5. **Genuinely untried options (all require significant GPU/training):**
+   - Train a ReID model natively at 384×384 resolution
+   - Complete Knowledge Distillation (09c got 22% mAP, was abandoned)
+   - Different secondary backbone for score-level fusion
+   - Detection-level improvements (confidence thresholds, tracking gaps)
+   - Track interpolation to fill detection gaps
 
 ---
 
