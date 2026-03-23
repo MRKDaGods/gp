@@ -134,6 +134,18 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v41 | v77 | max_gap=50, intra_merge_time=40 (tracker) | **78.2%** | **NEW BEST**, id_sw 131→99 |
 | v42 | v78 | max_gap=80, merge_time=60, match_thresh=0.80 | 75.0% | -3.0pp, TOO AGGRESSIVE |
 | v43 | v79 | max_gap=60, merge_time=50 (between v77/v78) | 77.3% | -0.9pp, overshot sweet spot |
+| v44 | v80 | min_hits=2 (default=3) — recover short tracklets | *pending* | 10a chain (ali369) |
+
+---
+
+## Stage 0/1 Tracker Param Experiments (NEW — previously untested)
+
+| Experiment | Parameter | Values | Config Key | Result | Version |
+|-----------|-----------|--------|-----------|--------|---------|
+| v80 | min_hits | 3→2 | stage1.tracker.min_hits | *pending* | 10a v2 (ali369) |
+| v81 | confidence_threshold | 0.25→0.20 | stage1.detector.confidence_threshold | *planned* | — |
+| v82 | denoise | false→true | stage0.denoise | *planned* | — |
+| v83 | intra_merge.max_iou_distance | 0.7→0.5 | stage1.intra_merge.max_iou_distance | *planned* | — |
 
 ---
 
@@ -174,7 +186,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
    - 48 crops per tracklet, quality-weighted pooling (temperature=3.0)
    - CLAHE preprocessing (clip_limit=2.5 from cityflowv2.yaml)
    - **Untested stage 2 parameters:** ~~quality_temperature, laplacian_min_var~~ (v76: quality_temp=5.0+blur=50 HURT -0.7pp)
-   - **Untested stage 0/1 parameters:** denoise, detection thresholds, tracker params
+   - **Stage 0/1 parameters (NOW TESTING v80-v83):** min_hits, confidence_threshold, denoise, intra_merge.max_iou_distance
 
 ---
 
