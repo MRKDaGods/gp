@@ -131,6 +131,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v38 | v74 | New features scan (20 configs) | 78.02% best | ALL NO-OPS |
 | v39 | v75 | Consolidated + TO/AQE_K scan (13 configs) | 78.01% best | TO=0.05 optimal, K=3 optimal |
 | v40 | v76 | quality_temperature=5.0 + laplacian_min_var=50.0 | 77.3% | -0.7pp, HURT (10a chain) |
+| v41 | v77 | max_gap=50, intra_merge_time=40 (tracker) | **78.2%** | **NEW BEST**, id_sw 131→99 |
 
 ---
 
@@ -187,4 +188,5 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v74 | 20 | 0 | CSLS catastrophic, all others no-op |
 | v75 | 13 | 0 | TO=0.05 optimal, K=3 confirmed, consolidated baseline=78.0% |
 | v76 | 1 chain | ~1h | quality_temp=5.0+blur=50 HURT -0.7pp |
-| **TOTAL** | **~214** | **~5h GPU** | |
+| v77 | 1 chain | ~1h | **NEW BEST 78.2%** max_gap=50, merge_time=40, id_sw 131→99 |
+| **TOTAL** | **~216** | **~7h GPU** | |
