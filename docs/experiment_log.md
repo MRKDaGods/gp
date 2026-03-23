@@ -136,7 +136,8 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v43 | v79 | max_gap=60, merge_time=50 (between v77/v78) | 77.3% | -0.9pp, overshot sweet spot |
 | v44 | v80 | min_hits=2 (default=3) — recover short tracklets | **78.4%** | **+0.2pp**, id_sw 102 (ali369) |
 | v45 | v81 | +confidence_threshold=0.20 (stacked on v80) | 75.6% | -2.8pp, HURT, id_sw 172 |
-| v46 | v82 | +denoise=true (stacked on v80) | *pending* | 10a chain (ali369) |
+| v46 | v82 | +denoise=true (stacked on v80) | 75.7% | -2.7pp, HURT, id_sw 118 |
+| v47 | v83 | +max_iou_distance=0.5 (stacked on v80) | *pending* | 10a chain (ali369) |
 
 ---
 
@@ -146,8 +147,8 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 |-----------|-----------|--------|-----------|--------|---------|
 | v80 | min_hits | 3→2 | stage1.tracker.min_hits | **78.4% (+0.2pp)** | 10a v2 (ali369) |
 | v81 | confidence_threshold | 0.25→0.20 (+track_high/new_track) | stage1.detector.confidence_threshold | **75.6% (-2.8pp) HURT** | 10a v3 (ali369) |
-| v82 | denoise | false→true | stage0.denoise | *pending* | 10a v4 (ali369) |
-| v83 | intra_merge.max_iou_distance | 0.7→0.5 | stage1.intra_merge.max_iou_distance | *planned* | — |
+| v82 | denoise | false→true | stage0.denoise | **75.7% (-2.7pp) HURT** | 10a v4 (ali369) |
+| v83 | intra_merge.max_iou_distance | 0.7→0.5 | stage1.intra_merge.max_iou_distance | *pending* | 10a v5 (ali369) |
 
 ---
 
