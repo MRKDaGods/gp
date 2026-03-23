@@ -1,5 +1,5 @@
 {
-  "id": "gumfreddy/mtmc-10c-stages-4-5-association-eval",
+  "id": "ali_369/mtmc-10c-stages-4-5-association-eval",
   "title": "MTMC 10c - Stages 4-5 (Association + Eval)",
   "code_file": "mtmc-10c-stages-4-5-association-eval.ipynb",
   "language": "python",
@@ -13,6 +13,6 @@
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "gumfreddy/mtmc-10b-stage-3-faiss-indexing"
+    "ali_369/mtmc-10b-stage-3-faiss-indexing"
   ]
 }

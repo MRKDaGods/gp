@@ -133,6 +133,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v40 | v76 | quality_temperature=5.0 + laplacian_min_var=50.0 | 77.3% | -0.7pp, HURT (10a chain) |
 | v41 | v77 | max_gap=50, intra_merge_time=40 (tracker) | **78.2%** | **NEW BEST**, id_sw 131→99 |
 | v42 | v78 | max_gap=80, merge_time=60, match_thresh=0.80 | 75.0% | -3.0pp, TOO AGGRESSIVE |
+| v43 | v79 | max_gap=60, merge_time=50 (between v77/v78) | 77.3% | -0.9pp, overshot sweet spot |
 
 ---
 
@@ -191,4 +192,5 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v76 | 1 chain | ~1h | quality_temp=5.0+blur=50 HURT -0.7pp |
 | v77 | 1 chain | ~1h | **NEW BEST 78.2%** max_gap=50, merge_time=40, id_sw 131→99 |
 | v78 | 1 chain | ~1h | max_gap=80, merge_time=60, match_thresh=0.80 → 75.0% (TOO AGGRESSIVE) |
-| **TOTAL** | **~218** | **~8h GPU** | |
+| v79 | 1 chain | ~1h | max_gap=60, merge_time=50 → 77.3% (overshot sweet spot) |
+| **TOTAL** | **~220** | **~9h GPU** | |
