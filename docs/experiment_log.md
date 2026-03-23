@@ -83,6 +83,9 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | **gallery_expansion thresh** | 0.40, 0.45, 0.50, 0.55, 0.60 | 0.50 | lower hurts, higher = same | v74 |
 | **length_weight_power** | 0.0, 0.1, 0.3, 0.5, 0.7, 1.0 | 0.3 | 0.0=-0.4pp, 1.0=-0.9pp | v74 |
 | **exhaustive_min_sim** | 0.05, 0.10, 0.15, 0.20 | doesn't matter | ALL IDENTICAL | v74 |
+| **temporal_overlap bonus** | 0.0(off), 0.02, 0.05, 0.10, 0.15, 0.20 | 0.05 | OFF=-0.9pp!, 0.15+HURTS | v75 |
+| **temporal_overlap max_mean_time** | 5.0, 10.0, 15.0 | 5.0 | wider window HURTS | v75 |
+| **AQE_K (extended)** | 5, 7, 10 | 3 (prev) | k=5: -0.57pp, k=7: -0.54pp, k=10: -1.64pp | v75 |
 | **camera_bias** | on (2 iter), off | off | ON = -0.4pp | v54-v57 |
 | **zone_model** | on (bonus=0.06, pen=0.04), off | off | ON = -0.4pp | v54-v57 |
 | **hierarchical** | on (various thresholds), off | off | ON = -1.0 to -5.1pp | v54-v56,v62 |
@@ -126,6 +129,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v36 | v73 | app_w/DBA/top_k scan (14 configs) | 78.01% best | app_w=0.70 |
 | v37 | v73 | Clean confirmation run | 78.0% | Baseline confirmed |
 | v38 | v74 | New features scan (20 configs) | 78.02% best | ALL NO-OPS |
+| v39 | v75 | Consolidated + TO/AQE_K scan (13 configs) | 78.01% best | TO=0.05 optimal, K=3 optimal |
 
 ---
 
@@ -157,6 +161,17 @@ Secondary model     = OSNet (score-level fusion @ 10%)
    - Detection-level improvements (confidence thresholds, tracking gaps)
    - Track interpolation to fill detection gaps
 
+6. **Current 10a feature pipeline already uses advanced techniques:**
+   - TransReID ViT-B/16 with concat_patch (CLS + GeM patches → 1536D)
+   - Power normalization α=0.5 (signed sqrt before PCA)
+   - OSNet ensemble (score-level fusion at 10%)
+   - Color augmentation TTA + flip augment
+   - PCA whitening 384D
+   - 48 crops per tracklet, quality-weighted pooling (temperature=3.0)
+   - CLAHE preprocessing (clip_limit=2.5 from cityflowv2.yaml)
+   - **Untested stage 2 parameters:** quality_temperature, laplacian_min_var
+   - **Untested stage 0/1 parameters:** denoise, detection thresholds, tracker params
+
 ---
 
 ## Total Experiments Run
@@ -169,4 +184,5 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | PCA 512 | 1 chain | ~1h | 512D HURT |
 | v73 | 14 | ~1h (10a rebuild) | app_w=0.70 |
 | v74 | 20 | 0 | CSLS catastrophic, all others no-op |
-| **TOTAL** | **~187** | **~4h GPU** | |
+| v75 | 13 | 0 | TO=0.05 optimal, K=3 confirmed, consolidated baseline=78.0% |
+| **TOTAL** | **~200** | **~4h GPU** | |
