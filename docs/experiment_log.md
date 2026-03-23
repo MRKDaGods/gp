@@ -132,6 +132,7 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v39 | v75 | Consolidated + TO/AQE_K scan (13 configs) | 78.01% best | TO=0.05 optimal, K=3 optimal |
 | v40 | v76 | quality_temperature=5.0 + laplacian_min_var=50.0 | 77.3% | -0.7pp, HURT (10a chain) |
 | v41 | v77 | max_gap=50, intra_merge_time=40 (tracker) | **78.2%** | **NEW BEST**, id_sw 131→99 |
+| v42 | v78 | max_gap=80, merge_time=60, match_thresh=0.80 | 75.0% | -3.0pp, TOO AGGRESSIVE |
 
 ---
 
@@ -189,4 +190,5 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v75 | 13 | 0 | TO=0.05 optimal, K=3 confirmed, consolidated baseline=78.0% |
 | v76 | 1 chain | ~1h | quality_temp=5.0+blur=50 HURT -0.7pp |
 | v77 | 1 chain | ~1h | **NEW BEST 78.2%** max_gap=50, merge_time=40, id_sw 131→99 |
-| **TOTAL** | **~216** | **~7h GPU** | |
+| v78 | 1 chain | ~1h | max_gap=80, merge_time=60, match_thresh=0.80 → 75.0% (TOO AGGRESSIVE) |
+| **TOTAL** | **~218** | **~8h GPU** | |
