@@ -1,7 +1,7 @@
 {
-  "id": "mrkdagods/09b-vehicle-reid-384px-training-vit-b-16-clip",
-  "title": "09b Vehicle ReID 384px ViT Training",
-  "code_file": "09b_vehicle_reid_384px.ipynb",
+  "id": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+  "title": "09d Vehicle ReID ResNet101-IBN-a Training",
+  "code_file": "09d_vehicle_reid_resnet101ibn.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": false,

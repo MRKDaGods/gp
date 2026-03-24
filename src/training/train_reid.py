@@ -28,7 +28,7 @@ import torch
 import torch.nn as nn
 from loguru import logger
 
-from src.training.model import ReIDModelBoT
+from src.training.model import ReIDModelBoT, ReIDModelResNet101IBN
 from src.training.losses import (
     CrossEntropyLabelSmooth,
     TripletLoss,
@@ -40,7 +40,7 @@ from src.training.evaluate_reid import evaluate_reid, compute_reranking
 
 
 def build_optimizer(
-    model: ReIDModelBoT,
+    model: nn.Module,
     center_loss: CenterLoss | None,
     lr: float = 3.5e-4,
     weight_decay: float = 5e-4,
@@ -61,6 +61,21 @@ def build_optimizer(
         )
 
     return optimizer, center_optimizer
+
+
+def build_resnet101_optimizer(
+    model: ReIDModelResNet101IBN,
+    lr: float = 3.5e-4,
+    weight_decay: float = 5e-4,
+) -> torch.optim.Optimizer:
+    """Build optimizer for ResNet101-IBN-a with GeM and BNNeck."""
+    params = [
+        {"params": model.backbone.parameters(), "lr": lr * 0.1},
+        {"params": model.pool.parameters(), "lr": lr},
+        {"params": model.bottleneck.parameters(), "lr": lr},
+        {"params": model.classifier.parameters(), "lr": lr},
+    ]
+    return torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
 
 
 def build_scheduler(
@@ -85,8 +100,33 @@ def build_scheduler(
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
+def build_cosine_scheduler(
+    optimizer: torch.optim.Optimizer,
+    warmup_epochs: int = 10,
+    total_epochs: int = 80,
+    eta_min: float = 1e-6,
+) -> torch.optim.lr_scheduler._LRScheduler:
+    """Build cosine annealing scheduler with linear warmup."""
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+        optimizer,
+        start_factor=0.01,
+        end_factor=1.0,
+        total_iters=warmup_epochs,
+    )
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=max(total_epochs - warmup_epochs, 1),
+        eta_min=eta_min,
+    )
+    return torch.optim.lr_scheduler.SequentialLR(
+        optimizer,
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[warmup_epochs],
+    )
+
+
 def train_one_epoch(
-    model: ReIDModelBoT,
+    model: nn.Module,
     train_loader,
     id_loss_fn,
     triplet_loss_fn,
@@ -99,12 +139,15 @@ def train_one_epoch(
     id_weight: float = 1.0,
     triplet_weight: float = 1.0,
     center_weight: float = 0.0005,
+    circle_loss_fn=None,
+    circle_weight: float = 1.0,
 ):
     """Train for one epoch."""
     model.train()
     running_loss = 0.0
     running_id = 0.0
     running_tri = 0.0
+    running_circle = 0.0
     running_cen = 0.0
     n_batches = 0
 
@@ -124,11 +167,17 @@ def train_one_epoch(
 
             loss = loss_id + loss_tri
 
+            if circle_loss_fn is not None:
+                loss_circle = circle_loss_fn(global_feat, pids) * circle_weight
+                loss += loss_circle
+            else:
+                loss_circle = torch.tensor(0.0, device=global_feat.device)
+
             if center_loss_fn is not None:
                 loss_cen = center_loss_fn(global_feat, pids) * center_weight
                 loss += loss_cen
             else:
-                loss_cen = torch.tensor(0.0)
+                loss_cen = torch.tensor(0.0, device=global_feat.device)
 
         if scaler is not None:
             scaler.scale(loss).backward()
@@ -147,6 +196,7 @@ def train_one_epoch(
         running_loss += loss.item()
         running_id += loss_id.item()
         running_tri += loss_tri.item()
+        running_circle += loss_circle.item() if isinstance(loss_circle, torch.Tensor) else loss_circle
         running_cen += loss_cen.item() if isinstance(loss_cen, torch.Tensor) else loss_cen
         n_batches += 1
 
@@ -155,6 +205,7 @@ def train_one_epoch(
                 f"Epoch {epoch} [{batch_idx}/{len(train_loader)}] "
                 f"Loss: {loss.item():.4f} "
                 f"(ID: {loss_id.item():.4f}, Tri: {loss_tri.item():.4f}, "
+                f"Cir: {loss_circle.item() if isinstance(loss_circle, torch.Tensor) else 0:.4f}, "
                 f"Cen: {loss_cen.item() if isinstance(loss_cen, torch.Tensor) else 0:.4f})"
             )
 
@@ -162,6 +213,7 @@ def train_one_epoch(
         "loss": running_loss / max(n_batches, 1),
         "id_loss": running_id / max(n_batches, 1),
         "tri_loss": running_tri / max(n_batches, 1),
+        "circle_loss": running_circle / max(n_batches, 1),
         "cen_loss": running_cen / max(n_batches, 1),
     }
 
@@ -186,11 +238,21 @@ def main():
     parser.add_argument("--milestones", type=int, nargs="+", default=[40, 70])
     parser.add_argument("--label-smoothing", type=float, default=0.1)
     parser.add_argument("--random-erasing", type=float, default=0.5)
+    parser.add_argument("--color-jitter", action="store_true", default=False)
     parser.add_argument("--last-stride", type=int, default=1)
     parser.add_argument("--loss", type=str, default="triplet",
-                        choices=["triplet", "circle", "triplet+center"])
+                        choices=["triplet", "circle", "triplet+center", "triplet+circle"])
     parser.add_argument("--triplet-margin", type=float, default=0.3)
+    parser.add_argument("--circle-m", type=float, default=0.25,
+                        help="Circle loss margin")
+    parser.add_argument("--circle-gamma", type=float, default=80,
+                        help="Circle loss scale factor")
+    parser.add_argument("--circle-weight", type=float, default=1.0,
+                        help="Circle loss weight when combined with triplet")
     parser.add_argument("--center-weight", type=float, default=0.0005)
+    parser.add_argument("--scheduler", type=str, default="step",
+                        choices=["step", "cosine"],
+                        help="LR scheduler type")
     parser.add_argument("--fp16", action="store_true", default=True)
     parser.add_argument("--no-fp16", action="store_false", dest="fp16")
     parser.add_argument("--eval-every", type=int, default=10)
@@ -222,6 +284,7 @@ def main():
             num_instances=args.num_instances,
             num_workers=args.num_workers,
             random_erasing_prob=args.random_erasing,
+            color_jitter=args.color_jitter,
         )
     )
     logger.info(
@@ -230,14 +293,24 @@ def main():
     )
 
     # Build model
-    model = ReIDModelBoT(
-        model_name=args.backbone,
-        num_classes=num_classes,
-        last_stride=args.last_stride,
-        pretrained=True,
-        feat_dim=2048 if "resnet50" in args.backbone else 512,
-        neck="bnneck",
-    ).to(device)
+    if args.backbone == "resnet101_ibn_a":
+        model = ReIDModelResNet101IBN(
+            num_classes=num_classes,
+            last_stride=args.last_stride,
+            pretrained=True,
+            gem_p=3.0,
+        ).to(device)
+        feat_dim = 2048
+    else:
+        feat_dim = 2048 if "resnet" in args.backbone else 512
+        model = ReIDModelBoT(
+            model_name=args.backbone,
+            num_classes=num_classes,
+            last_stride=args.last_stride,
+            pretrained=True,
+            feat_dim=feat_dim,
+            neck="bnneck",
+        ).to(device)
 
     if args.pretrained_reid:
         model.load_pretrained_reid(args.pretrained_reid)
@@ -245,26 +318,42 @@ def main():
     # Build losses
     id_loss_fn = CrossEntropyLabelSmooth(num_classes, epsilon=args.label_smoothing)
 
+    circle_loss_fn = None
     if args.loss == "circle":
-        triplet_loss_fn = CircleLoss(m=0.25, gamma=64)
+        triplet_loss_fn = CircleLoss(m=args.circle_m, gamma=args.circle_gamma)
+    elif args.loss == "triplet+circle":
+        triplet_loss_fn = TripletLoss(margin=args.triplet_margin)
+        circle_loss_fn = CircleLoss(m=args.circle_m, gamma=args.circle_gamma)
     else:
         triplet_loss_fn = TripletLoss(margin=args.triplet_margin)
 
     center_loss_fn = None
     if "center" in args.loss:
-        feat_dim = 2048 if "resnet50" in args.backbone else 512
         center_loss_fn = CenterLoss(num_classes=num_classes, feat_dim=feat_dim).to(device)
 
     # Build optimizer and scheduler
-    optimizer, center_optimizer = build_optimizer(
-        model, center_loss_fn, lr=args.lr, center_lr=0.5
-    )
-    scheduler = build_scheduler(
-        optimizer,
-        warmup_epochs=args.warmup_epochs,
-        total_epochs=args.epochs,
-        milestones=args.milestones,
-    )
+    if args.backbone == "resnet101_ibn_a":
+        optimizer = build_resnet101_optimizer(model, lr=args.lr)
+        center_optimizer = None
+    else:
+        optimizer, center_optimizer = build_optimizer(
+            model, center_loss_fn, lr=args.lr, center_lr=0.5
+        )
+
+    if args.scheduler == "cosine":
+        scheduler = build_cosine_scheduler(
+            optimizer,
+            warmup_epochs=args.warmup_epochs,
+            total_epochs=args.epochs,
+            eta_min=1e-6,
+        )
+    else:
+        scheduler = build_scheduler(
+            optimizer,
+            warmup_epochs=args.warmup_epochs,
+            total_epochs=args.epochs,
+            milestones=args.milestones,
+        )
 
     # Mixed precision
     scaler = torch.amp.GradScaler("cuda") if args.fp16 and "cuda" in device else None
@@ -290,6 +379,8 @@ def main():
             center_loss_fn, optimizer, center_optimizer, scaler,
             device, epoch,
             center_weight=args.center_weight,
+            circle_loss_fn=circle_loss_fn,
+            circle_weight=args.circle_weight,
         )
         scheduler.step()
 

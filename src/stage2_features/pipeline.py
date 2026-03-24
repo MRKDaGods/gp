@@ -307,12 +307,13 @@ def run_stage2(
                 continue
 
             # Ensemble: extract from second model
+            raw_embedding2 = None
             if reid2 is not None:
                 raw_embedding2 = reid2.get_tracklet_embedding_from_scored_crops(scored_crops, cam_id=sie_cam_id, quality_temperature=quality_temperature)
                 if raw_embedding2 is not None:
                     if vehicle2_separate:
                         # Save separately for stage4 fusion
-                        all_secondary_embeddings.append(raw_embedding2)
+                        pass
                     else:
                         # Legacy: concatenate into single vector
                         norm1 = np.linalg.norm(raw_embedding)
@@ -320,8 +321,6 @@ def run_stage2(
                         e1 = raw_embedding / max(norm1, 1e-8)
                         e2 = raw_embedding2 / max(norm2, 1e-8)
                         raw_embedding = np.concatenate([e1, e2], axis=0)
-                elif vehicle2_separate:
-                    all_secondary_embeddings.append(None)
 
             # 4. Spatial HSV histogram with quality weighting
             hsv_hist = hsv_extractor.extract_tracklet_histogram_from_scored_crops(
@@ -330,6 +329,8 @@ def run_stage2(
 
             all_raw_embeddings.append(raw_embedding)
             all_camera_ids.append(camera_id)
+            if vehicle2_separate:
+                all_secondary_embeddings.append(raw_embedding2)
             index_map.append({
                 "track_id": tracklet.track_id,
                 "camera_id": camera_id,
@@ -425,6 +426,60 @@ def run_stage2(
     else:
         embeddings = raw_matrix
 
+    # 6b. Separate PCA whitening for secondary embeddings (score-level fusion).
+    sec_matrix: Optional[np.ndarray] = None
+    if vehicle2_separate and all_secondary_embeddings:
+        sec_valid = [embedding for embedding in all_secondary_embeddings if embedding is not None]
+        if sec_valid:
+            sec_matrix = np.stack(sec_valid, axis=0)
+            logger.info(f"Secondary embedding matrix: {sec_matrix.shape}")
+
+            if stage_cfg.get("camera_bn", {}).get("enabled", True):
+                sec_camera_ids = [
+                    all_camera_ids[i]
+                    for i, embedding in enumerate(all_secondary_embeddings)
+                    if embedding is not None
+                ]
+                logger.info("Applying camera-aware batch normalisation to secondary embeddings")
+                sec_matrix = camera_aware_batch_normalize(sec_matrix, sec_camera_ids)
+
+            if stage_cfg.pca.enabled:
+                n_sec, d_sec = sec_matrix.shape
+                sec_components = min(int(stage_cfg.pca.n_components), d_sec)
+                sec_min_samples = max(50, sec_components)
+                sec_pca_path = stage_cfg.pca.get(
+                    "secondary_pca_model_path",
+                    "models/reid/pca_transform_secondary.pkl",
+                )
+
+                if n_sec >= sec_min_samples:
+                    sec_whitener = PCAWhitener(n_components=sec_components)
+                    if Path(sec_pca_path).exists():
+                        sec_whitener.load(sec_pca_path)
+                        if sec_whitener.n_components != sec_components:
+                            logger.warning(
+                                f"Secondary PCA model has {sec_whitener.n_components} components "
+                                f"but config requests {sec_components}. Refitting."
+                            )
+                            sec_whitener = PCAWhitener(n_components=sec_components)
+                            sec_whitener.fit(sec_matrix)
+                            sec_whitener.save(sec_pca_path)
+                            logger.info(f"Refitted and saved secondary PCA model to {sec_pca_path}")
+                        else:
+                            logger.info(f"Loaded secondary PCA model from {sec_pca_path}")
+                    else:
+                        sec_whitener.fit(sec_matrix)
+                        sec_whitener.save(sec_pca_path)
+                        logger.info(f"Fitted and saved secondary PCA model to {sec_pca_path}")
+
+                    sec_matrix = sec_whitener.transform(sec_matrix)
+                    logger.info(f"Secondary PCA: {d_sec}D -> {sec_components}D")
+                else:
+                    logger.warning(
+                        f"Skipping secondary PCA: need at least {sec_min_samples} samples "
+                        f"for reliable {sec_components}D PCA, but only have {n_sec}."
+                    )
+
     # 7. L2 normalisation
     embeddings = l2_normalize(embeddings)
 
@@ -438,47 +493,16 @@ def run_stage2(
     save_hsv_features(hsv_matrix, output_dir)
 
     # Save secondary model embeddings separately (for stage4 fusion)
-    if vehicle2_separate and all_secondary_embeddings:
-        valid_sec = [e for e in all_secondary_embeddings if e is not None]
-        if len(valid_sec) == len(all_features):
-            sec_matrix = np.stack(valid_sec, axis=0)
-
-            # Secondary embeddings: just L2-normalize and save.
-            # Stage 4 FIC whitening handles camera normalization separately.
-            # Tested alternatives (all HURT when combined with FIC fix):
-            # - Camera BN here: 0.8294 vs 0.8300 without (-0.06pp, double-whitening)
-            # - Power norm: -0.37pp
-            # - PCA 280D: -1.0pp
-            sec_pca_cfg = stage_cfg.get("secondary_pca", {})
-            sec_pca_enabled = sec_pca_cfg.get("enabled", False)  # disabled by default: hurts IDF1
-            sec_pca_components = sec_pca_cfg.get("n_components", min(280, sec_matrix.shape[1]))
-            if sec_pca_enabled and sec_matrix.shape[0] >= max(50, sec_pca_components):
-                sec_whitener = PCAWhitener(n_components=sec_pca_components)
-                sec_pca_path = sec_pca_cfg.get("pca_model_path", str(output_dir / "pca_secondary.pkl"))
-                if Path(sec_pca_path).exists():
-                    sec_whitener.load(sec_pca_path)
-                    if sec_whitener.n_components != sec_pca_components:
-                        sec_whitener = PCAWhitener(n_components=sec_pca_components)
-                        sec_whitener.fit(sec_matrix)
-                        sec_whitener.save(sec_pca_path)
-                    else:
-                        logger.info(f"Loaded secondary PCA model from {sec_pca_path}")
-                else:
-                    sec_whitener.fit(sec_matrix)
-                    sec_whitener.save(sec_pca_path)
-                    logger.info(f"Fitted secondary PCA ({sec_pca_components}D) → {sec_pca_path}")
-                sec_matrix = sec_whitener.transform(sec_matrix)
-
-            sec_matrix = l2_normalize(sec_matrix)
-            sec_path = output_dir / "embeddings_secondary.npy"
-            np.save(sec_path, sec_matrix.astype(np.float32))
-            logger.info(
-                f"Secondary embeddings saved: {sec_matrix.shape} → {sec_path}"
-            )
-        else:
-            logger.warning(
-                f"Secondary embeddings incomplete: {len(valid_sec)}/{len(all_features)}"
-            )
+    if vehicle2_separate and sec_matrix is not None:
+        sec_matrix = l2_normalize(sec_matrix)
+        sec_path = output_dir / "embeddings_secondary.npy"
+        np.save(sec_path, sec_matrix.astype(np.float32))
+        logger.info(f"Secondary embeddings saved: {sec_matrix.shape} -> {sec_path}")
+    elif vehicle2_separate and all_secondary_embeddings:
+        valid_secondary = sum(embedding is not None for embedding in all_secondary_embeddings)
+        logger.warning(
+            f"Secondary embeddings incomplete: {valid_secondary}/{len(all_secondary_embeddings)}"
+        )
 
     logger.info(
         f"Stage 2 complete: {len(all_features)} tracklet features, "

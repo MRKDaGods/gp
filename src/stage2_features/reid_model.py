@@ -111,7 +111,52 @@ class ReIDModel:
         """
         if self.is_transreid:
             return self._build_transreid(weights_path)
+        if model_name.lower() == "resnet101_ibn_a":
+            return self._build_resnet101_ibn(weights_path)
         return self._build_torchreid(model_name, weights_path)
+
+    def _build_resnet101_ibn(self, weights_path: Optional[str]):
+        """Build ResNet101-IBN-a model for inference."""
+        from src.training.model import ReIDModelResNet101IBN
+
+        model = ReIDModelResNet101IBN(
+            num_classes=1,
+            last_stride=1,
+            pretrained=False,
+            gem_p=3.0,
+        )
+
+        if weights_path is not None:
+            try:
+                state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
+                if "state_dict" in state_dict:
+                    state_dict = state_dict["state_dict"]
+                elif "model" in state_dict:
+                    state_dict = state_dict["model"]
+
+                state_dict = {
+                    k.replace("module.", "", 1): v for k, v in state_dict.items()
+                }
+                state_dict = {
+                    k: v for k, v in state_dict.items()
+                    if not k.startswith("classifier")
+                }
+                missing, unexpected = model.load_state_dict(state_dict, strict=False)
+
+                critical_missing = [k for k in missing if not k.startswith("classifier")]
+                if critical_missing:
+                    logger.warning(
+                        f"ResNet101-IBN missing critical keys: {critical_missing}"
+                    )
+                if unexpected:
+                    logger.debug(f"ResNet101-IBN unexpected keys: {unexpected}")
+
+                logger.info(f"Loaded ResNet101-IBN-a weights from {weights_path}")
+            except Exception as e:
+                logger.warning(f"Could not load ResNet101-IBN-a weights from {weights_path}: {e}")
+                logger.warning("Using randomly initialized ResNet101-IBN-a weights")
+
+        return model
 
     def _build_transreid(self, weights_path: Optional[str]):
         """Build TransReID ViT model."""

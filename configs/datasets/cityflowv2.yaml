@@ -95,11 +95,10 @@ stage2:
   reid:
     vehicle:
       model_name: "transreid"
-      # v13 model: fine-tuned on CityFlowV2, 59 cameras, 256×256 input
-      weights_path: "models/reid/transreid_cityflowv2_best.pth"
-      weights_fallback: "models/reid/transreid_veri_best.pth"
+      weights_path: "models/reid/transreid_cityflowv2_384px_best.pth"
+      weights_fallback: "models/reid/transreid_cityflowv2_best.pth"
       embedding_dim: 768
-      input_size: [256, 256]
+      input_size: [384, 384]
       vit_model: "vit_base_patch16_clip_224.openai"
       num_cameras: 59   # trained on 59 cameras; SIE pads extra cameras to zero
       clip_normalization: true
@@ -114,20 +113,22 @@ stage2:
     # that complement TransReID's global shape representation.
     vehicle2:
       enabled: true
-      model_name: "osnet_x1_0"
-      weights_path: "models/reid/vehicle_osnet_veri776.pth"
-      embedding_dim: 512
-      input_size: [256, 128]   # OSNet standard input
-      clip_normalization: false  # OSNet uses ImageNet normalization
+      save_separate: true
+      model_name: "resnet101_ibn_a"
+      weights_path: "models/reid/resnet101ibn_cityflowv2_384px_best.pth"
+      embedding_dim: 2048
+      input_size: [384, 384]
+      clip_normalization: false
   hsv:
     h_bins: 32
     s_bins: 16
     v_bins: 16
     n_stripes: 3               # front/middle/rear for vehicles
   pca:
-    enabled: true              # PCA whitening on ensemble (TransReID 768D + OSNet 512D = 1280D → 384D)
+    enabled: true
     n_components: 384          # v72: 512 hurt (-0.6pp), 384 confirmed optimal
     pca_model_path: "models/reid/pca_transform_ensemble.pkl"  # separate path to avoid cache collision
+    secondary_pca_model_path: "models/reid/pca_transform_secondary.pkl"
   crop:
     min_area: 800
     padding_ratio: 0.05        # tighter crops for vehicles
@@ -144,11 +145,14 @@ stage2:
 stage4:
   association:
     top_k: 100
+    secondary_embeddings:
+      path: "data/outputs/run_latest/stage2/embeddings_secondary.npy"
+      weight: 0.4
     # FIC: per-camera feature whitening (AIC21 1st-place technique)
     # Removes camera-specific bias from embeddings before association.
     fic:
       enabled: true  # v48: always enabled (was: false overridden in scan)
-      regularisation: 3.0
+      regularisation: 0.1
       min_samples: 5
     # FAC: cross-camera feature augmentation (AIC21 1st-place technique)
     # Pulls each embedding toward its cross-camera KNN neighbourhood consensus.
@@ -175,10 +179,10 @@ stage4:
       enabled: true
       top_k_per_query: 20
     reranking:
-      enabled: false    # k-reciprocal reranking amplifies noise with many similar-coloured vehicles; raw TransReID similarity is more discriminative
-      k1: 20            # v22: AIC21 SOTA value (default 30 is too broad)
-      k2: 3             # v22: AIC21 SOTA value (default 10 is too deep for exhaustive pairs)
-      lambda_value: 0.3 # v22: AIC21 SOTA value (70% Jaccard + 30% cosine)
+      enabled: false
+      k1: 20
+      k2: 3
+      lambda_value: 0.3
     weights:
       appearance: 0.5
       hsv: 0.3
@@ -244,7 +248,8 @@ stage4:
     # then re-clusters with bias-corrected scores.
     camera_bias:
       enabled: true
-      iterations: 1   # 1 iteration = optimal; 2 iterations over-corrects with exhaustive pairs
+      cid_bias_npy_path: "configs/datasets/cityflowv2_cid_bias.npy"
+      iterations: 0
 
 stage5:
   ground_truth_dir: "data/raw/cityflowv2"  # gt.txt files alongside videos

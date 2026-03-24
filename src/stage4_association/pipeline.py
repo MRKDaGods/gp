@@ -12,6 +12,7 @@ Improvements over baseline:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -331,16 +332,48 @@ def run_stage4(
     # Step 5b: Camera distance bias adjustment (iterative)
     camera_bias_cfg = stage_cfg.get("camera_bias", {})
     if camera_bias_cfg.get("enabled", False):
+        cid_bias_path = camera_bias_cfg.get("cid_bias_npy_path", "")
+        cid_bias_applied = False
+        if cid_bias_path and Path(cid_bias_path).exists():
+            cid_bias_matrix = np.load(cid_bias_path).astype(np.float32)
+            cid_mapping_path = Path(cid_bias_path).with_suffix(".json")
+            if cid_mapping_path.exists():
+                with open(cid_mapping_path, encoding="utf-8") as f:
+                    cam_names = json.load(f).get("cameras", [])
+            else:
+                cam_names = sorted(set(camera_ids))
+            cam2idx = {camera_name: idx for idx, camera_name in enumerate(cam_names)}
+
+            adjusted_count = 0
+            missing_count = 0
+            for (i, j), sim in list(combined_sim.items()):
+                ci = cam2idx.get(camera_ids[i])
+                cj = cam2idx.get(camera_ids[j])
+                if ci is None or cj is None:
+                    missing_count += 1
+                    continue
+                if ci >= cid_bias_matrix.shape[0] or cj >= cid_bias_matrix.shape[1]:
+                    missing_count += 1
+                    continue
+                combined_sim[(i, j)] = sim + float(cid_bias_matrix[ci, cj])
+                adjusted_count += 1
+
+            logger.info(
+                f"CID_BIAS: adjusted {adjusted_count} pairs from {cid_bias_path}"
+                + (f" ({missing_count} pairs skipped: unmapped cameras)" if missing_count else "")
+            )
+            cid_bias_applied = True
+
         cam_bias = CameraDistanceBias()
 
-        # Load pre-learned bias if available
+        # Load pre-learned JSON bias if available
         bias_path = camera_bias_cfg.get("bias_path")
         if bias_path and Path(bias_path).exists():
             cam_bias.load(bias_path)
             logger.info(f"Loaded camera bias from {bias_path}")
             combined_sim = cam_bias.adjust_similarity_matrix(combined_sim, camera_ids)
             logger.info("Applied pre-learned camera distance bias")
-        else:
+        elif not cid_bias_applied:
             # Learn bias iteratively: cluster → learn bias → re-adjust → re-cluster
             n_iterations = camera_bias_cfg.get("iterations", 1)
             for iter_idx in range(n_iterations):
