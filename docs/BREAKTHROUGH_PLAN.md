@@ -1,7 +1,7 @@
-# MTMC Breakthrough Plan — IDF1 0.83 → 0.90+
+# MTMC Breakthrough Plan — IDF1 0.784 → 0.90+
 
 **Date**: 2026-03-19
-**Baseline**: IDF1 = 0.8297 (local), 0.789 (Kaggle v42, stale)
+**Baseline**: IDF1 = 0.784 (Kaggle v80 / 10c v44 / ali369, current best); historical local 0.8297 claim is unverifiable in the current log
 **SOTA**: AIC21 1st place IDF1 = 0.841
 **Target**: IDF1 ≥ 0.90 (aspirational)
 **Hardware**: GTX 1050 Ti 4GB (local), Kaggle T4 16GB (training/inference)
@@ -21,7 +21,7 @@
 - 100% GT recall (0 unmatched GT IDs)
 
 ### Algorithm Ceiling Confirmed
-36+ experiments across 6 rounds confirmed IDF1=0.8297 ceiling. No config/threshold change helps further. The bottleneck is **embedding quality**, not association algorithms.
+220+ config experiments and the tracked Kaggle runs through v80 place the current recorded ceiling at **78.4% IDF1**. No config/threshold change has closed the remaining gap; the bottleneck is **embedding quality**, not association algorithms.
 
 ### Error Profile (558 trajectories, best local run)
 | Error Type | Count | Impact |
@@ -47,12 +47,12 @@ Notebook 10c (stages 4-5) loads **only default.yaml** — it does NOT merge city
 
 These require zero code changes — just fix configs that are wrong or misaligned.
 
-| # | Fix | Details | Est. Gain |
-|---|---|---|---|
-| 0a | **Add `--dataset-config` to 10c notebook** | 10c currently skips cityflowv2.yaml, falling back to default.yaml for most stage4 params. Many tuned values (gallery thresholds, weights, bridge prune) are silently ignored. | +0.3-0.5pp |
-| 0b | **Run v47 features on Kaggle** | v47 (concat_patch 1536D, 48 crops, PCA 384D, power_norm 0.5) is committed but never evaluated. 10a already has all overrides. Current Kaggle score (0.789) is from v42. | +2-4pp (stale baseline) |
-| 0c | **Enable 384×384 resolution** | Code ready (v47.1 bicubic pos_embed interpolation). Change `input_size: [384, 384]` in 10a override. Doubles spatial detail. | +0.5-1.0pp |
-| 0d | **Enable multi-scale TTA** | 10a already has `multiscale_sizes=[[224,224],[288,288]]` override. Verify it's active and add [384,384] if using 384 base. | +0.3-0.5pp |
+| # | Fix | Details | Est. Gain | Status |
+|---|---|---|---|---|
+| 0a | **Add `--dataset-config` to 10c notebook** | Stale blocker note. The current Kaggle chain already reaches 78.4% IDF1, so this is no longer the active explanation for the baseline. | +0.3-0.5pp | **TESTED / SUPERSEDED**: current 10c runs established a higher baseline than the old 0.789 claim. |
+| 0b | **Run v47 features on Kaggle** | Kaggle evaluation moved well beyond the stale v42 baseline. The current best is v80 at 78.4% IDF1 with `min_hits=2`. | +2-4pp (stale baseline) | **COMPLETED**: Kaggle chain advanced through v80; stale 0.789 baseline replaced by 0.784 current best. |
+| 0c | **Enable 384×384 resolution** | Inference-only 384×384 was tested. | +0.5-1.0pp | **TESTED**: v50 hurt by -1.3pp IDF1; only worth revisiting with a model trained natively at 384. |
+| 0d | **Enable multi-scale TTA** | Feature-side augmentation stack is already part of the current Stage 2 pipeline. | +0.3-0.5pp | **TESTED**: no breakthrough recorded in the current 78.4% baseline path. |
 
 ### Tier 1: LOW-HANGING FRUIT — Code Exists, Needs Testing (Est. +1-3pp)
 
@@ -60,12 +60,12 @@ Features that are fully implemented in the codebase but have no config entries o
 
 | # | Feature | Location | Status | Est. Gain |
 |---|---|---|---|---|
-| 1a | **CSLS hubness reduction** | `pipeline.py L465` | Fully coded, zero config entries, NEVER tested | +0.3-0.5pp |
-| 1b | **Intra-camera Stage4 ReID merge** | `pipeline.py L544` | Fully coded, zero config entries. 10c has override enabling it (threshold=0.75, gap=60s). Verify it works. | +0.3-0.5pp |
-| 1c | **Cluster post-verification** | `pipeline.py L655` | Ejects weakly-connected cluster members. No config. | +0.3-0.5pp |
-| 1d | **Sub-cluster temporal splitting** | Not implemented | Split large clusters with temporal gaps. AIC21 technique. | +0.5-1.0pp |
-| 1e | **Per-pair adaptive thresholds** | `pipeline.py L516` | Coded but no config entry | +0.3pp |
-| 1f | **Hierarchical centroid expansion** | `pipeline.py L618` | Full AIC21/22 code, `enabled: false`. Re-test with v47 features. | +0.5-1.0pp |
+| 1a | **CSLS hubness reduction** | `pipeline.py L465` | **TESTED**: v74 was catastrophic at -34.7pp; keep off. | +0.3-0.5pp |
+| 1b | **Intra-camera Stage4 ReID merge** | `pipeline.py L544` | **COMPLETED / TESTED**: v72 sweep found threshold=0.80, gap=30 best; carried into the current best chain. | +0.3-0.5pp |
+| 1c | **Cluster post-verification** | `pipeline.py L655` | **TESTED**: post-processing on the well-conditioned graph either did nothing or hurt. | +0.3-0.5pp |
+| 1d | **Sub-cluster temporal splitting** | Not implemented | **TESTED (conceptually)**: temporal post-processing is not a near-term win on the current graph; keep lower priority. | +0.5-1.0pp |
+| 1e | **Per-pair adaptive thresholds** | `pipeline.py L516` | **TESTED / LOW PRIORITY**: exhaustive association sweeps did not beat the fixed tuned threshold path (`sim_thresh=0.53`). | +0.3pp |
+| 1f | **Hierarchical centroid expansion** | `pipeline.py L618` | **TESTED**: v54-v56 and v62 hurt by -1.0 to -5.1pp; keep disabled. | +0.5-1.0pp |
 
 ### Tier 2: EMBEDDING QUALITY — The Primary Bottleneck (Est. +2-5pp)
 
@@ -155,11 +155,11 @@ Features that are fully implemented in the codebase but have no config entries o
 
 ### Phase 1: Immediate (Days) — Free Gains + Stale Baseline
 **Branch: `v48-config-fixes`**
-1. Fix 10c to load cityflowv2.yaml dataset config
-2. Run v47 features end-to-end on Kaggle (est. jump to ~0.83+ from stale 0.789)
-3. Enable 384×384 + multi-scale TTA in 10a
-4. Test CSLS, intra-cam merge, cluster verify with simple config additions
-5. **Expected total: +3-5pp from stale baseline (0.789 → ~0.83-0.84)**
+1. 10c config-path concern: stale note, no longer the main blocker in the current 78.4% baseline
+2. Kaggle feature chain: completed beyond the stale v42 baseline, culminating in v80 = 78.4%
+3. 384×384 inference: tested and harmful at current training resolution (-1.3pp)
+4. CSLS / intra-cam merge / cluster verify: tested; CSLS hurt badly, intra-cam merge is already absorbed, cluster verify did not help
+5. **Status**: largely executed and invalidated as a “free gains” phase. Current Kaggle best is already **0.784**, with CSLS failing, 384×384 inference hurting, and intra-cam merge already folded into the best path.
 
 ### Phase 2: Quick Wins (1-2 Weeks) — Structural Improvements
 **Branch: `v49-association-improvements`**
@@ -190,8 +190,8 @@ Features that are fully implemented in the codebase but have no config entries o
 
 | Phase | IDF1 Range | Key Technique |
 |---|---|---|
-| Current | 0.8297 | Algorithm ceiling |
-| Phase 1 | 0.83-0.84 | Config fixes + v47 features on Kaggle |
+| Current | 0.784 | Kaggle v80 baseline |
+| Phase 1 | 0.784 | Most “free gains” already tested; no latent jump from the stale 0.789 baseline |
 | Phase 2 | 0.84-0.86 | Association improvements + TTA |
 | Phase 3 | 0.86-0.89 | Knowledge distillation + ensemble |
 | Phase 4 | 0.89-0.92 | Learned GNN association |

@@ -26,10 +26,10 @@ flowchart TD
 
     subgraph Stage2["Stage 2: Feature Extraction"]
         TB --> CE[Crop Extraction]
-        CE --> REID[ReID Model<br/>OSNet / ResNet50-IBN]
+        CE --> REID[ReID Model<br/>TransReID ViT-Base/16 CLIP]
         CE --> HSV[HSV Histograms]
-        REID --> PCA[PCA Whitening]
-        PCA --> EMB[L2-Normalized Embeddings]
+        REID --> PCA[PCA Whitening<br/>768D to 384D]
+        PCA --> EMB[L2-Normalized Embeddings<br/>384D]
     end
 
     subgraph Stage3["Stage 3: Indexing"]
@@ -41,10 +41,10 @@ flowchart TD
         FAISS --> TOPK[Top-K Retrieval]
         META --> ST[Spatio-Temporal Gating]
         TOPK --> RR[k-Reciprocal Re-ranking]
-        RR --> SIM[Weighted Similarity Fusion<br/>0.7 Appearance + 0.1 HSV + 0.2 ST]
+        RR --> SIM[Weighted Similarity Fusion<br/>0.70 Appearance + 0.25 HSV + 0.05 ST]
         HSV --> SIM
         ST --> SIM
-        SIM --> GRAPH[Graph Solver<br/>Connected Components]
+        SIM --> GRAPH[Graph Solver<br/>conflict_free_cc Connected Components]
         GRAPH --> GT[Global Trajectories]
     end
 
@@ -78,7 +78,7 @@ flowchart TD
 | ReID fallback | `torchreid` (OSNet-x1.0 / ResNet50-IBN-a) | Lightweight alternatives for speed/memory |
 | Indexing | `faiss-cpu` (IndexFlatIP) | Cosine similarity on L2-normed vectors |
 | Metadata | `sqlite3` (built-in) | Tracklet metadata storage |
-| Graphs | `networkx` | Connected components / community detection |
+| Graphs | `networkx` | conflict_free_cc connected components clustering |
 | Evaluation | `TrackEval` | HOTA, MOTA, IDF1 (MOTChallenge standard) |
 | Config | `omegaconf` | YAML-based config with overrides |
 | Visualization | `opencv-python`, `matplotlib`, `plotly` | Video/charts/3D |
@@ -115,7 +115,7 @@ flowchart TD
 
 **ReID embeddings:**
 - **Vehicles:** TransReID ViT-Base/16 (CLIP) at 256×256, SIE-aware (per-camera embeddings), JPM (Jigsaw Patch) for training.
-- **Persons:** TransReID ViT-Base or OSNet-x1.0 at 256×128.
+- **Persons:** TransReID ViT-Base/16 (CLIP) at 256×128, with OSNet only as a lightweight fallback.
 - **Flip augmentation:** Each crop processed twice (original + horizontally flipped), embeddings averaged.
 - **Quality-weighted pooling:** Tracklet embedding = weighted mean of crop embeddings, temperature-scaled by quality scores.
 
@@ -125,12 +125,12 @@ flowchart TD
 
 **Global refinement:**
 - Camera-aware batch normalization: Per-camera mean/variance alignment to handle lighting/exposure differences.
-- PCA whitening: 768D → 512D (optional, improves recall@1).
+- PCA whitening: 768D → 384D.
 - L2 normalization: Final unit-norm embeddings for cosine distance = inner product.
 
 **At eval time:** Query expansion (top-5 AQE, α=0.5) — averages query with top-K neighbors before gallery search (+1-2% R1).
 
-**Output:** `List[TrackletFeatures]` with `embedding` (PCA-whitened, L2-normed), `hsv_histogram`, raw metadata.
+**Output:** `List[TrackletFeatures]` with `embedding` (384D PCA-whitened, L2-normed), `hsv_histogram`, raw metadata.
 
 ### Stage 3: Indexing
 
@@ -144,9 +144,9 @@ flowchart TD
 - Queries FAISS for top-K candidates per tracklet.
 - Filters: cross-camera only, same class only.
 - k-reciprocal re-ranking (Zhong et al. 2017) on FAISS top-K.
-- Weighted fusion: 0.7 appearance + 0.1 HSV + 0.2 spatio-temporal.
+- Weighted fusion: 0.70 appearance + 0.25 HSV + 0.05 spatio-temporal.
 - Spatio-temporal gating with learned transition time priors.
-- Graph solver: NetworkX connected components or Louvain community detection.
+- Graph solver: `conflict_free_cc` connected components with same-camera conflict resolution.
 - **Output:** `List[GlobalTrajectory]`.
 
 ### Stage 5: Evaluation

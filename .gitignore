@@ -52,9 +52,10 @@ desktop.ini
 scripts/sweep_*.py
 
 # One-off temp scripts
-scripts/_tmp_*.py
-scripts/_find_*.py
-scripts/_print_*.py
+scripts/_*.py
+
+# Root-level temp scripts
+_*.py
 
 # Logs
 *.log
@@ -72,4 +73,7 @@ nul
 yolo26m.pt
 
 *.zip
+*.xlsx
 run_metadata.json
+explorer_output.txt
+planner_output.txt

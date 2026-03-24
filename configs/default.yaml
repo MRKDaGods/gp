@@ -41,7 +41,7 @@ stage1:
     track_buffer: 450          # death timer: keeps stopped vehicles alive during red lights (20-60s)
     max_age: 450               # must be >= track_buffer for BaseTracker buffer sizing
     max_obs: 460               # must be > max_age + 5 per BaseTracker docs
-    min_hits: 3                # require 3 consecutive detections to confirm track
+    min_hits: 2                # require 3 consecutive detections to confirm track
     match_thresh: 0.85
     appearance_thresh: 0.5
     proximity_thresh: 0.5
@@ -109,7 +109,7 @@ stage2:
     n_stripes: 3       # spatial: 3 horizontal stripes (head/torso/legs)
   pca:
     enabled: true
-    n_components: 280  # v30: 768 → 280 PCA whitening (optimal dim, IDF1=0.795)
+    n_components: 384  # v30: 768 → 280 PCA whitening (optimal dim, IDF1=0.795)
     pca_model_path: "models/reid/pca_transform.pkl"
   crop:
     min_area: 500
@@ -147,7 +147,7 @@ stage4:
     # --- FIC: per-camera feature whitening (AIC21 1st-place technique) ---
     fic:
       enabled: true
-      regularisation: 0.3  # v30: optimal for 280D PCA (was 3.0 for 512D)
+      regularisation: 0.1  # v30: optimal for 280D PCA (was 3.0 for 512D)
       min_samples: 5
     # --- FAC: cross-camera feature augmentation (AIC21 technique) ---
     fac:
@@ -174,9 +174,9 @@ stage4:
       k2: 10           # deeper expansion
       lambda_value: 0.4  # blend: 60% Jaccard + 40% original cosine
     weights:
-      appearance: 0.55
+      appearance: 0.70
       hsv: 0.25
-      spatiotemporal: 0.20
+      spatiotemporal: 0.05
       # --- Per-class weight overrides (SOTA TransReID CLIP) ---
       person:
         appearance: 0.70   # TransReID CLIP person: mAP 90.5% — very strong

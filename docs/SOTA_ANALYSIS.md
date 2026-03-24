@@ -35,11 +35,13 @@
 |--------|------|------|------|---------------|
 | AIC21 1st Place (Liu et al.) | **84.1** | ~80 | 2021 | Zone-based ST + Re-ranking |
 | BoTrack | ~80 | ~75 | 2022 | Strong ReID + IoU matching |
-| **Our pipeline** | ~30 | ~-60 | - | FAISS + Louvain (on WILDTRACK) |
+| **Our pipeline (Kaggle v80)** | **78.4** | - | 2026 | TransReID ViT-B/16 CLIP + FAISS + conflict_free_cc |
 
 ---
 
 ## Gap Analysis: Our Pipeline vs SOTA
+
+**Current MTMC baseline**: 78.4% IDF1 on CityFlowV2 Kaggle (v80 / 10c v44 / ali369), which places the remaining gap at roughly 5.7pp to the 84.1% AIC21 reference.
 
 ### GAP 1: ReID Backbone (HIGH IMPACT)
 **Current**: ResNet50-IBN-a via torchreid (2048-dim) → PCA to 256/512
@@ -63,14 +65,14 @@
 **Action**: The most practical approach is to train ResNet50-IBN-a with the full BoT recipe on Market-1501 and VeRi-776, then use those weights. The pre-trained weights we have may already include some of these tricks.
 
 ### GAP 2: Association / Clustering (MEDIUM IMPACT)
-**Current**: FAISS top-K → mutual NN → k-reciprocal re-ranking → weighted fusion → Louvain community detection → gallery expansion
+**Current**: FAISS top-K → mutual NN → k-reciprocal re-ranking → weighted fusion → conflict_free_cc connected components → gallery expansion
 **SOTA** (AIC21 1st Place):
   - Zone-based spatio-temporal constraints (crossroad zone transition model)
   - Camera-aware distance bias (CID_BIAS)
   - Hierarchical clustering with timestamp ordering
   - Multi-model ReID ensemble (2× ResNet101-IBN + 1× ResNeXt101-IBN)
 
-**Our advantages**: We already have k-reciprocal re-ranking, mutual NN, and Louvain. 
+**Our advantages**: We already have k-reciprocal re-ranking, mutual NN, and conflict-aware connected-components clustering.
 **Key missing pieces**:
   1. **Zone-based spatio-temporal model** — AIC21 defines entry/exit zones per camera and computes transition time distributions between zone pairs. This is critical for CityFlow.
   2. **Camera distance bias** — Per camera-pair bias terms to calibrate cross-camera distances

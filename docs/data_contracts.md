@@ -61,9 +61,9 @@ class TrackletFeatures:
     track_id: int
     camera_id: str
     class_id: int
-    embedding: np.ndarray       # shape (D,), L2-normalized, D=512 (OSNet) or 2048 (ResNet50)
+  embedding: np.ndarray       # shape (384,), L2-normalized PCA output used downstream
     hsv_histogram: np.ndarray | None  # shape (num_bins,), L2-normalized
-    raw_embedding: np.ndarray | None  # before PCA, optional
+  raw_embedding: np.ndarray | None  # shape (768,), TransReID output before PCA, optional
 ```
 Used by: Stage 2 → Stage 3
 
@@ -136,10 +136,10 @@ tracklets_cam01.json:
 
 ### Stage 2 Output
 Directory: `{output_dir}/stage2/`
-- `embeddings.npy` — shape (N, D), all tracklet embeddings stacked
+- `embeddings.npy` — shape (N, 384), all PCA-whitened tracklet embeddings stacked
 - `features.json` — TrackletFeatures metadata (without numpy arrays)
 - `hsv_features.npy` — shape (N, num_bins), HSV histograms
-- `pca_model.pkl` — fitted PCA model (optional, for later use)
+- `pca_model.pkl` — fitted PCA model reducing TransReID 768D features to 384D
 
 ### Stage 3 Output
 Directory: `{output_dir}/stage3/`
@@ -203,5 +203,5 @@ All in `src/core/io_utils.py`:
 2. **Timestamps**: Seconds from video start (float)
 3. **Camera IDs**: String format, e.g., "cam01", "cam02"
 4. **Class IDs**: COCO class IDs (0=person, 2=car, 5=bus, 7=truck)
-5. **Embeddings**: Always L2-normalized for cosine similarity via inner product
+5. **Embeddings**: TransReID emits 768D raw embeddings; PCA whitening reduces them to 384D and the saved vectors are always L2-normalized for cosine similarity via inner product
 6. **JSON encoding**: Custom NumpyEncoder handles np.ndarray, np.float32, np.int64
