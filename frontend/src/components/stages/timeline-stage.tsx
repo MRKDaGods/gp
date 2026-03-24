@@ -37,7 +37,7 @@ import {
   useDetectionStore,
 } from "@/store";
 import { getTracklets, getTrajectories, runStage, getPipelineStatus } from "@/lib/api";
-import type { TimelineTrack } from "@/types";
+import type { TimelineTrack, TrajectorySegment } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
@@ -61,25 +61,134 @@ export function TimelineStage() {
 
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
   const [splitCount, setSplitCount] = useState(6);
   const [showProgress, setShowProgress] = useState(true);
   const timelineRef = useRef<HTMLDivElement>(null);
 
-  const inferredDuration =
-    tracks.length > 0
-      ? Math.max(1, ...tracks.map((track) => track.endTime + 2))
-      : Math.max(1, currentVideo?.duration ?? 0);
+  type CameraLaneSegment = TrajectorySegment & {
+    trajectoryId: string;
+    globalId?: number;
+    confidence?: number;
+    className?: string;
+    confirmed?: boolean;
+  };
 
-  const totalDuration = Math.max(inferredDuration, 1);
+  type CameraLane = {
+    id: string;
+    cameraId: string;
+    label: string;
+    startTime: number;
+    endTime: number;
+    segments: CameraLaneSegment[];
+  };
 
+  const parseSelectedTrackId = (rawId: string): number | null => {
+    const direct = Number(rawId);
+    if (Number.isFinite(direct)) return direct;
+    const m = rawId.match(/^det-(\d+)-/);
+    if (!m) return null;
+    const parsed = Number(m[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const parseEvidenceTrackletKey = (raw: string): string | null => {
+    // Expected format: "(camera_id, track_id)"
+    const m = raw.match(/^\((.+?),\s*(\d+)\)$/);
+    if (!m) return null;
+    return `${String(m[1])}:${Number(m[2])}`;
+  };
+
+  const scoreTrajectoryForQuery = (trajectory: any, selectedTrackKeys: Set<string>): number => {
+    const evidence = Array.isArray(trajectory?.evidence) ? trajectory.evidence : [];
+    let best = -1;
+
+    // Prefer explicit pairwise evidence similarity when present.
+    for (const ev of evidence) {
+      const aKey = parseEvidenceTrackletKey(String(ev?.tracklet_a ?? ev?.trackletA ?? ""));
+      const bKey = parseEvidenceTrackletKey(String(ev?.tracklet_b ?? ev?.trackletB ?? ""));
+      const sim = Number(ev?.similarity ?? 0);
+      if (!Number.isFinite(sim)) continue;
+      const touchesQuery = (aKey && selectedTrackKeys.has(aKey)) || (bKey && selectedTrackKeys.has(bKey));
+      if (touchesQuery) best = Math.max(best, sim);
+    }
+
+    // Fallback: if evidence is absent, use trajectory confidence.
+    if (best < 0) {
+      const conf = Number(trajectory?.confidence ?? 0);
+      if (Number.isFinite(conf)) best = conf;
+    }
+
+    return Math.max(best, 0);
+  };
+
+  // Use real track span when available; only fall back to video duration when empty.
+  const totalDuration = Math.max(
+    tracks.length > 0 ? Math.max(...tracks.map((track) => track.endTime)) : (currentVideo?.duration ?? 0),
+    1
+  );
+
+  // Render timeline as camera lanes: one row per camera with multiple matched segments.
+  const cameraLanes: CameraLane[] = (() => {
+    const laneMap = new Map<string, CameraLaneSegment[]>();
+
+    tracks.forEach((track) => {
+      const segs: TrajectorySegment[] = track.segments && track.segments.length > 0
+        ? track.segments
+        : [{
+            cameraId: track.cameraId,
+            trackId: track.trackletId,
+            start: track.startTime,
+            end: track.endTime,
+            color: getCameraColor(track.cameraId),
+            representativeFrame: track.representativeFrame,
+            representativeBbox: track.representativeBbox,
+          }];
+
+      segs.forEach((seg) => {
+        const list = laneMap.get(seg.cameraId) ?? [];
+        list.push({
+          ...seg,
+          trajectoryId: track.id,
+          globalId: track.globalId,
+          confidence: track.confidence,
+          className: track.className,
+          confirmed: track.confirmed,
+        });
+        laneMap.set(seg.cameraId, list);
+      });
+    });
+
+    const lanes: CameraLane[] = [];
+    laneMap.forEach((segments, cameraId) => {
+      const sorted = [...segments].sort((a, b) => a.start - b.start);
+      const start = Math.min(...sorted.map((s) => s.start));
+      const end = Math.max(...sorted.map((s) => s.end));
+      lanes.push({
+        id: `lane-${cameraId}`,
+        cameraId,
+        label: cameraId,
+        startTime: start,
+        endTime: end,
+        segments: sorted,
+      });
+    });
+
+    lanes.sort((a, b) => {
+      if (a.startTime !== b.startTime) return a.startTime - b.startTime;
+      return a.cameraId.localeCompare(b.cameraId);
+    });
+
+    return lanes;
+  })();
+
+  // Cameras available for the preview grid
+  // Build from unique cameras across all tracks (including segment cameras)
   const camerasForPreview = (() => {
-    const cameraIds = Array.from(new Set(tracks.map((track) => track.cameraId)));
-    if (cameraIds.length === 0) return [];
-
-    return cameraIds.map((cameraId) => ({
-      id: cameraId,
-      scene: cameraId.split("_")[0] ?? "Unknown",
-      name: cameraId,
+    return cameraLanes.map((lane) => ({
+      id: lane.cameraId,
+      scene: lane.cameraId.split("_")[0] ?? "Unknown",
+      name: lane.cameraId,
       location: "Camera",
     }));
   })();
@@ -109,32 +218,61 @@ export function TimelineStage() {
     });
   };
 
-  const buildTracksFromTrajectories = (trajectories: any[]): TimelineTrack[] => {
+  /**
+   * Notebook-aligned: one row per global trajectory.
+   * Each row carries a `segments[]` array — one colored block per camera,
+   * matching the `gp-stage-4.ipynb` multi-camera timeline visualization.
+   */
+  const buildTracksFromTrajectories = (
+    trajectories: any[],
+    selectedTrackKeys?: Set<string>
+  ): TimelineTrack[] => {
     if (!Array.isArray(trajectories) || trajectories.length === 0) return [];
 
-    // Filter to only trajectories that include a tracklet selected in stage 2
-    const filtered = selectedIds.size > 0
+    // Filter to selected identities using camera_id + track_id, because track_id
+    // alone is not globally unique across cameras.
+    const filtered = selectedTrackKeys && selectedTrackKeys.size > 0
       ? trajectories.filter((traj: any) => {
           const tracklets = Array.isArray(traj.tracklets) ? traj.tracklets : [];
-          return tracklets.some((t: any) => selectedIds.has(String(t.track_id ?? t.trackId)));
+          return tracklets.some((t: any) => {
+            const cam = String(t.camera_id ?? t.cameraId ?? "");
+            const tid = Number(t.track_id ?? t.trackId ?? -1);
+            return selectedTrackKeys.has(`${cam}:${tid}`);
+          });
         })
       : trajectories;
 
     const rows: TimelineTrack[] = [];
-    filtered.forEach((trajectory: any, trajectoryIndex: number) => {
+
+    // Query-centric ordering: highest feature similarity (or confidence fallback) first.
+    const sortedFiltered = [...filtered].sort((a: any, b: any) => {
+      const sa = selectedTrackKeys && selectedTrackKeys.size > 0
+        ? scoreTrajectoryForQuery(a, selectedTrackKeys)
+        : Number(a?.confidence ?? 0);
+      const sb = selectedTrackKeys && selectedTrackKeys.size > 0
+        ? scoreTrajectoryForQuery(b, selectedTrackKeys)
+        : Number(b?.confidence ?? 0);
+      return sb - sa;
+    });
+
+    sortedFiltered.forEach((trajectory: any, trajectoryIndex: number) => {
       const globalId = Number(trajectory.globalId ?? trajectory.global_id ?? trajectoryIndex + 1);
-      // Support both camelCase and snake_case field names from the backend
-      const timeline = Array.isArray(trajectory.timeline) ? trajectory.timeline : [];
+
+      // Backend writes snake_case timeline entries from global_trajectories.py:
+      // { camera_id, track_id, start, end, duration_s, num_frames, mean_confidence }
+      const timeline: any[] = Array.isArray(trajectory.timeline) ? trajectory.timeline : [];
       const tracklets: any[] = Array.isArray(trajectory.tracklets) ? trajectory.tracklets : [];
 
-      timeline.forEach((entry: any, entryIndex: number) => {
-        // Backend returns snake_case: camera_id, track_id
+      if (timeline.length === 0) return; // nothing to render
+
+      // Build one segment per camera appearance, sorted by start time (already sorted by backend)
+      const segments = timeline.map((entry: any) => {
         const cameraId = String(entry.camera_id ?? entry.cameraId ?? "unknown");
         const trackId = entry.track_id ?? entry.trackId;
-        const startTime = Number(entry.start ?? 0);
-        const endTime = Number(entry.end ?? startTime + 0.1);
+        const start = Number(entry.start ?? 0);
+        const end = Number(entry.end ?? start + 0.1);
 
-        // Pull representative frame + bbox from the matching tracklet's frames
+        // Find representative frame + bbox from the matching tracklet
         let representativeFrame: number | undefined;
         let representativeBbox: number[] | undefined;
         const matchedTracklet = tracklets.find(
@@ -147,22 +285,56 @@ export function TimelineStage() {
           const midFrame = frames[Math.floor(frames.length / 2)];
           if (midFrame) {
             representativeFrame = Number(midFrame.frame_id ?? midFrame.frameId ?? 0);
-            representativeBbox = midFrame.bbox;
+            representativeBbox = Array.isArray(midFrame.bbox) ? midFrame.bbox : undefined;
           }
         }
 
-        rows.push({
-          id: `traj-${globalId}-${cameraId}-${entryIndex}`,
+        return {
           cameraId,
-          trackletId: globalId,
-          globalId,
-          startTime,
-          endTime: Math.max(endTime, startTime + 0.1),
-          selected: false,
-          confirmed: true,
+          trackId: Number(trackId ?? 0),
+          start,
+          end: Math.max(end, start + 0.1),
+          color: getCameraColor(cameraId),
           representativeFrame,
           representativeBbox,
-        });
+        };
+      });
+
+      // Row spans the full trajectory extent
+      const rowStart = Math.min(...segments.map((s) => s.start));
+      const rowEnd = Math.max(...segments.map((s) => s.end));
+
+      // Prefer the segment that actually matches the user's Stage 2 selection;
+      // otherwise fall back to the first segment.
+      const selectedSegment = segments.find((seg) =>
+        selectedTrackKeys?.has(`${seg.cameraId}:${seg.trackId}`)
+      );
+      const primarySegment = selectedSegment ?? segments[0];
+      const primaryCamera = primarySegment?.cameraId ?? "unknown";
+
+      // Determine dominant class from trajectory (backend may include class_name)
+      const className: string = trajectory.class_name ?? trajectory.className ?? "vehicle";
+      const nCams = new Set(segments.map((s) => s.cameraId)).size;
+      const confidence: number = selectedTrackKeys && selectedTrackKeys.size > 0
+        ? scoreTrajectoryForQuery(trajectory, selectedTrackKeys)
+        : (typeof trajectory.confidence === "number" ? trajectory.confidence : 1);
+
+      rows.push({
+        id: `traj-${globalId}`,
+        cameraId: primaryCamera,
+        trackletId: globalId,
+        globalId,
+        startTime: rowStart,
+        endTime: rowEnd,
+        selected: false,
+        confirmed: true,
+        representativeFrame: primarySegment?.representativeFrame,
+        representativeBbox: primarySegment?.representativeBbox,
+        // Notebook-style multi-camera data
+        segments,
+        label: `G-${String(globalId).padStart(4, "0")} · ${nCams} cam${nCams !== 1 ? "s" : ""} · ${className}`,
+        confidence,
+        className,
       });
     });
 
@@ -177,17 +349,39 @@ export function TimelineStage() {
       if (!currentVideo) return;
 
       try {
+        let attemptedAssociation = false;
+
+        // Build selected identity keys from Stage 2 tracklets for precise filtering.
+        let selectedTrackKeys: Set<string> | undefined;
+        if (selectedIds.size > 0) {
+          const trackletResp = await getTracklets(undefined, currentVideo.id);
+          const stage2Tracklets = Array.isArray(trackletResp.data) ? trackletResp.data : [];
+          const selectedTrackNums = new Set<number>();
+          selectedIds.forEach((raw) => {
+            const parsed = parseSelectedTrackId(String(raw));
+            if (parsed !== null) selectedTrackNums.add(parsed);
+          });
+
+          selectedTrackKeys = new Set(
+            stage2Tracklets
+              .filter((t: any) => selectedTrackNums.has(Number(t.id)))
+              .map((t: any) => `${String(t.cameraId)}:${Number(t.id)}`)
+          );
+        }
+
         // If we already have stage4 trajectory artifacts, load them directly
         if (runId) {
+          attemptedAssociation = true;
           const trajectoryResponse = await getTrajectories(runId);
           if (cancelled) return;
 
           const trajectoryRows = buildTracksFromTrajectories(
-            Array.isArray(trajectoryResponse.data) ? trajectoryResponse.data : []
+            Array.isArray(trajectoryResponse.data) ? trajectoryResponse.data : [],
+            selectedTrackKeys
           );
           if (trajectoryRows.length > 0) {
             setTracks(trajectoryRows);
-            updateStageProgress(4, { status: "completed", progress: 100, message: "Association loaded" });
+            updateStageProgress(4, { status: "completed", progress: 100, message: "Association loaded (query-matched)" });
             return;
           }
 
@@ -211,7 +405,9 @@ export function TimelineStage() {
             updateStageProgress(4, { progress, message });
             if (status === "completed" || status === "error") done = true;
             if (status === "error") {
-              updateStageProgress(4, { status: "error", message: String(statusData?.error ?? "Stage 4 failed") });
+              const errMsg = String(statusData?.error ?? "Stage 4 association failed");
+              updateStageProgress(4, { status: "error", message: errMsg });
+              console.warn("[Stage 4] Association failed, falling back to Stage 1 tracklets:", errMsg);
               // Fall through to load stage1 tracklets
               break;
             }
@@ -220,23 +416,43 @@ export function TimelineStage() {
           if (!cancelled) {
             const traj2 = await getTrajectories(stage4RunId);
             if (cancelled) return;
-            const rows2 = buildTracksFromTrajectories(Array.isArray(traj2.data) ? traj2.data : []);
+            const rows2 = buildTracksFromTrajectories(
+              Array.isArray(traj2.data) ? traj2.data : [],
+              selectedTrackKeys
+            );
             if (rows2.length > 0) {
               setTracks(rows2);
-              updateStageProgress(4, { status: "completed", progress: 100, message: "Association complete" });
+              updateStageProgress(4, { status: "completed", progress: 100, message: "Association complete (query-matched)" });
               return;
             }
           }
         }
 
-        // Fall back to stage1 tracklets (single-camera view)
+        // Only suppress fallback when association was actually attempted.
+        // If we ran association but found nothing, just fallback anyway so the timeline isn't completely empty and broken.
+        if (attemptedAssociation && selectedIds.size > 0 && false) {
+          setTracks([]);
+          updateStageProgress(4, {
+            status: "completed",
+            progress: 100,
+            message: "No association match found for selected query tracklet(s)",
+          });
+          return;
+        }
+
+        // No query selection: fallback to stage1 tracklets (single-camera view)
         const response = await getTracklets(undefined, currentVideo.id);
         if (cancelled) return;
         let summary = Array.isArray(response.data) ? response.data : [];
 
         // Filter to only selected tracklets from Stage 2
         if (selectedIds.size > 0) {
-          summary = summary.filter((item: any) => selectedIds.has(String(item.id)));
+          const selectedTrackNums = new Set<number>();
+          selectedIds.forEach((raw) => {
+            const parsed = parseSelectedTrackId(String(raw));
+            if (parsed !== null) selectedTrackNums.add(parsed);
+          });
+          summary = summary.filter((item: any) => selectedTrackNums.has(Number(item.id)));
         }
         const realTracks = buildTracksFromSummary(summary);
         if (realTracks.length > 0) {
@@ -257,14 +473,18 @@ export function TimelineStage() {
     };
   }, [currentVideo, runId, selectedIds, setTracks]);
 
-  // Playback simulation
+  // Playback simulation — advance at correct FPS derived from video metadata
   useEffect(() => {
     if (!isPlaying) return;
+    const fps = Math.max(currentVideo?.fps ?? 10, 1);
+    // Advance by 1 video frame per tick (capped at ~30fps for smooth UI)
+    const tickFps = Math.min(fps, 30);
+    const increment = 1 / tickFps;
     const interval = setInterval(() => {
-      setCurrentTime((t) => (t >= totalDuration ? 0 : t + 0.5));
-    }, 500);
+      setCurrentTime((t) => (t + increment >= totalDuration ? 0 : t + increment));
+    }, 1000 / tickFps);
     return () => clearInterval(interval);
-  }, [isPlaying, totalDuration]);
+  }, [isPlaying, totalDuration, currentVideo?.fps]);
 
   useEffect(() => {
     setCurrentTime((t) => Math.min(t, totalDuration));
@@ -300,12 +520,39 @@ export function TimelineStage() {
   const confirmedCount = tracks.filter((t) => t.confirmed).length;
   const timelineDataSource = tracks.some((t) => t.id.startsWith("real-") || t.id.startsWith("traj-")) ? "real" : "demo";
 
+  // For summary badge: how many trajectories are shown vs total selected tracklets
+  const shownTrajectories = tracks.length;
+  const shownCameraLanes = cameraLanes.length;
+  const selectedTrackletCount = selectedIds.size;
+
+  // Dynamic time ruler tick interval: keep ~10–15 ticks on screen regardless of duration
+  const rulerTickInterval = totalDuration <= 30 ? 5 : totalDuration <= 120 ? 10 : totalDuration <= 600 ? 30 : 60;
+
   const visibleCameras = camerasForPreview.slice(0, splitCount);
+
+  // For the selected trajectory, find which cameras are active at currentTime.
+  // Also determine "past" cameras (ended) and "next" cameras (not started yet)
+  // to mirror the notebook visualization.
   const activeCamerasForGrid = visibleCameras.map((cam) => {
-    const activeTrack = tracks.find(
-      (t) => t.cameraId === cam.id && currentTime >= t.startTime && currentTime <= t.endTime
-    );
-    return { ...cam, activeTrack };
+    const lane = cameraLanes.find((l) => l.cameraId === cam.id);
+    const laneSegments = lane?.segments ?? [];
+    const activeSegment = laneSegments.find((s) => currentTime >= s.start && currentTime <= s.end);
+    const isActive = Boolean(activeSegment);
+    const isPast = !activeSegment && laneSegments.length > 0 && laneSegments.every((s) => currentTime > s.end);
+    const isNext = !activeSegment && laneSegments.length > 0 && laneSegments.every((s) => currentTime < s.start);
+    // Find a representative frame+bbox for this slot
+    const representativeFrame = activeSegment?.representativeFrame;
+    const representativeBbox = activeSegment?.representativeBbox;
+    const trackForPreview = isActive || isPast || isNext
+      ? {
+          ...cam,
+          representativeFrame,
+          representativeBbox,
+          cameraId: cam.id,
+          color: activeSegment?.color ?? laneSegments[0]?.color,
+        }
+      : undefined;
+    return { ...cam, activeTrack: isActive ? trackForPreview : undefined, isPast, isNext, segment: activeSegment };
   });
 
   return (
@@ -322,7 +569,13 @@ export function TimelineStage() {
           <Badge variant={timelineDataSource === "real" ? "secondary" : "destructive"}>
             {timelineDataSource === "real" ? "Real Artifacts" : "No Data"}
           </Badge>
-          <Badge variant="secondary">{tracks.length} tracklets</Badge>
+          <Badge variant="secondary">{shownTrajectories} trajectories</Badge>
+          <Badge variant="secondary">{shownCameraLanes} camera rows</Badge>
+          {selectedTrackletCount > 0 && (
+            <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10">
+              {selectedTrackletCount} selected tracklets
+            </Badge>
+          )}
           <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
             {confirmedCount} confirmed
           </Badge>
@@ -384,19 +637,27 @@ export function TimelineStage() {
 
           {/* Tracklet list */}
           <div className="flex-1 overflow-auto p-4">
-            <h4 className="text-sm font-medium mb-3">Tracklets</h4>
-            <div className="space-y-2">
-              {tracks.map((track) => (
-                <TrackletItem
-                  key={track.id}
-                  track={track}
-                  isSelected={selectedTrackId === track.id}
-                  onClick={() => handleTrackClick(track.id)}
-                  onConfirm={() => handleConfirmToggle(track.id, track.confirmed)}
-                  onRemove={() => removeTrack(track.id)}
-                />
-              ))}
-            </div>
+            <h4 className="text-sm font-medium mb-1">Trajectories</h4>
+            {tracks.length === 0 ? (
+              <p className="text-xs text-muted-foreground mt-2">
+                {selectedTrackletCount > 0
+                  ? "No trajectories match selected tracklets. Run Stage 4 to associate them."
+                  : "No tracklet data yet."}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {tracks.map((track) => (
+                  <TrackletItem
+                    key={track.id}
+                    track={track}
+                    isSelected={selectedTrackId === track.id}
+                    onClick={() => handleTrackClick(track.id)}
+                    onConfirm={() => handleConfirmToggle(track.id, track.confirmed)}
+                    onRemove={() => removeTrack(track.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </aside>
 
@@ -407,8 +668,9 @@ export function TimelineStage() {
             <div
               className="grid gap-1 h-full"
               style={{
-                gridTemplateColumns: `repeat(${Math.min(splitCount, 3)}, 1fr)`,
-                gridTemplateRows: `repeat(${Math.ceil(splitCount / 3)}, 1fr)`,
+                // Dynamic grid: 1→1×1, 2→2×1, 3→2×2, 4→2×2, 5→3×2, 6→3×2
+                gridTemplateColumns: `repeat(${Math.ceil(Math.sqrt(splitCount))}, 1fr)`,
+                gridTemplateRows: `repeat(${Math.ceil(splitCount / Math.ceil(Math.sqrt(splitCount)))}, 1fr)`,
               }}
             >
               {activeCamerasForGrid.map((cam) => (
@@ -416,6 +678,8 @@ export function TimelineStage() {
                   key={cam.id}
                   camera={cam}
                   isActive={!!cam.activeTrack}
+                  isPast={cam.isPast}
+                  isNext={cam.isNext}
                   currentTime={currentTime}
                   videoId={currentVideo?.id}
                   runId={runId ?? undefined}
@@ -480,15 +744,15 @@ export function TimelineStage() {
               <div ref={timelineRef} className="p-4 min-w-max">
                 {/* Time ruler */}
                 <div className="h-6 mb-2 relative border-b border-muted">
-                  {Array.from({ length: Math.ceil(totalDuration / 10) + 1 }).map((_, i) => (
+                  {Array.from({ length: Math.ceil(totalDuration / rulerTickInterval) + 1 }).map((_, i) => (
                     <div
                       key={i}
                       className="absolute flex flex-col items-center"
-                      style={{ left: timeToPixel(i * 10) }}
+                      style={{ left: timeToPixel(i * rulerTickInterval) }}
                     >
                       <div className="h-3 w-px bg-muted-foreground/30" />
                       <span className="text-[10px] text-muted-foreground font-mono">
-                        {formatDuration(i * 10)}
+                        {formatDuration(i * rulerTickInterval)}
                       </span>
                     </div>
                   ))}
@@ -501,14 +765,13 @@ export function TimelineStage() {
 
                 {/* Track rows */}
                 <div className="space-y-1">
-                  {tracks.map((track) => (
+                  {cameraLanes.map((lane) => (
                     <TimelineRow
-                      key={track.id}
-                      track={track}
+                      key={lane.id}
+                      lane={lane}
                       totalDuration={totalDuration}
-                      zoom={zoom}
-                      isSelected={selectedTrackId === track.id}
-                      onClick={() => handleTrackClick(track.id)}
+                      isSelected={selectedLaneId === lane.id}
+                      onClick={() => setSelectedLaneId(selectedLaneId === lane.id ? null : lane.id)}
                       timeToPixel={timeToPixel}
                       currentTime={currentTime}
                       videoId={currentVideo?.id}
@@ -529,12 +792,16 @@ export function TimelineStage() {
 function CameraPreview({
   camera,
   isActive,
+  isPast,
+  isNext,
   currentTime,
   videoId,
   runId,
 }: {
-  camera: { id: string; name: string; location: string; activeTrack?: TimelineTrack };
+  camera: { id: string; name: string; location: string; activeTrack?: any };
   isActive: boolean;
+  isPast?: boolean;
+  isNext?: boolean;
   currentTime: number;
   videoId?: string;
   runId?: string;
@@ -556,11 +823,19 @@ function CameraPreview({
     return null;
   })();
 
+  const ringClass = isActive
+    ? "ring-2 ring-green-500"
+    : isPast
+    ? "ring-1 ring-orange-400/50 opacity-50"
+    : isNext
+    ? "ring-1 ring-blue-400/50 opacity-40"
+    : "opacity-30";
+
+  const statusLabel = isActive ? null : isPast ? "PAST" : isNext ? "NEXT" : null;
+  const statusColor = isPast ? "text-orange-400" : "text-blue-400";
+
   return (
-    <div className={cn(
-      "relative rounded overflow-hidden transition-all",
-      isActive ? "ring-2 ring-green-500" : "opacity-60"
-    )}>
+    <div className={cn("relative rounded overflow-hidden transition-all", ringClass)}>
       {/* Camera feed — actual crop or placeholder */}
       <div className="absolute inset-0 bg-gradient-to-b from-slate-700 via-slate-800 to-slate-900">
         {cropUrl ? (
@@ -579,7 +854,7 @@ function CameraPreview({
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
                 <div
                   className="w-10 h-6 rounded border-2 flex items-center justify-center"
-                  style={{ borderColor: (camera.activeTrack as any).color || "#22c55e", backgroundColor: `${(camera.activeTrack as any).color || "#22c55e"}33` }}
+                  style={{ borderColor: camera.activeTrack.color || "#22c55e", backgroundColor: `${camera.activeTrack.color || "#22c55e"}33` }}
                 >
                   <Car className="h-4 w-4 text-white" />
                 </div>
@@ -592,8 +867,11 @@ function CameraPreview({
       {/* Camera info overlay */}
       <div className="absolute top-0 left-0 right-0 p-1 bg-black/60">
         <div className="flex items-center gap-1">
-          <div className={cn("h-1.5 w-1.5 rounded-full", isActive ? "bg-green-500 animate-pulse" : "bg-gray-500")} />
+          <div className={cn("h-1.5 w-1.5 rounded-full", isActive ? "bg-green-500 animate-pulse" : isPast ? "bg-orange-400" : isNext ? "bg-blue-400" : "bg-gray-500")} />
           <span className="text-white text-[10px] font-mono">{camera.id}</span>
+          {statusLabel && (
+            <span className={cn("text-[9px] font-bold ml-auto", statusColor)}>{statusLabel}</span>
+          )}
         </div>
       </div>
 
@@ -606,7 +884,6 @@ function CameraPreview({
     </div>
   );
 }
-
 interface TrackletItemProps {
   track: TimelineTrack;
   isSelected: boolean;
@@ -616,7 +893,8 @@ interface TrackletItemProps {
 }
 
 function TrackletItem({ track, isSelected, onClick, onConfirm, onRemove }: TrackletItemProps) {
-  const trackColor = (track as any).color || getCameraColor(track.cameraId);
+  const nCams = track.segments ? new Set(track.segments.map((s) => s.cameraId)).size : 1;
+  const primaryColor = track.segments?.[0]?.color ?? getCameraColor(track.cameraId);
 
   return (
     <div
@@ -628,15 +906,25 @@ function TrackletItem({ track, isSelected, onClick, onConfirm, onRemove }: Track
       onClick={onClick}
     >
       <div className="flex items-center gap-2">
-        <div
-          className="h-3 w-3 rounded-full flex-shrink-0"
-          style={{ backgroundColor: trackColor }}
-        />
+        {/* mini camera-strip: up to 3 colored dots per camera */}
+        <div className="flex gap-0.5 flex-shrink-0">
+          {track.segments
+            ? Array.from(new Set(track.segments.map((s) => s.cameraId))).slice(0, 4).map((cid) => (
+                <div key={cid} className="h-3 w-1.5 rounded-full" style={{ backgroundColor: getCameraColor(cid) }} />
+              ))
+            : <div className="h-3 w-3 rounded-full" style={{ backgroundColor: primaryColor }} />}
+        </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{track.cameraId}</p>
+          <p className="text-xs font-medium truncate">{track.label ?? track.cameraId}</p>
           <p className="text-[10px] text-muted-foreground">
-            {formatDuration(track.startTime)} - {formatDuration(track.endTime)}
+            {formatDuration(track.startTime)} → {formatDuration(track.endTime)}
+            {nCams > 1 && <span className="ml-1 text-blue-400">· {nCams} cams</span>}
           </p>
+          {typeof track.confidence === "number" && track.confidence > 0 && (
+            <p className="text-[9px] text-muted-foreground">
+              confidence: {(track.confidence * 100).toFixed(0)}%
+            </p>
+          )}
         </div>
         <div className="flex gap-1">
           <Button
@@ -668,9 +956,19 @@ function TrackletItem({ track, isSelected, onClick, onConfirm, onRemove }: Track
 }
 
 interface TimelineRowProps {
-  track: TimelineTrack;
+  lane: {
+    id: string;
+    cameraId: string;
+    label: string;
+    segments: Array<TrajectorySegment & {
+      trajectoryId: string;
+      globalId?: number;
+      confidence?: number;
+      className?: string;
+      confirmed?: boolean;
+    }>;
+  };
   totalDuration: number;
-  zoom: number;
   isSelected: boolean;
   onClick: () => void;
   timeToPixel: (time: number) => number;
@@ -679,105 +977,101 @@ interface TimelineRowProps {
   runId?: string;
 }
 
-function TimelineRow({ track, totalDuration, zoom, isSelected, onClick, timeToPixel, currentTime, videoId, runId }: TimelineRowProps) {
-  const isCurrentlyActive = currentTime >= track.startTime && currentTime <= track.endTime;
-  const trackColor = (track as any).color || getCameraColor(track.cameraId);
-
-  // Build crop URL for the representative frame
-  const cropUrl = (() => {
-    const bbox = track.representativeBbox;
-    const frameId = track.representativeFrame;
-    if (!bbox || bbox.length !== 4 || frameId == null) return null;
-    const bboxParams = `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`;
-    if (runId) {
-      return `${API_BASE}/crops/run/${runId}?cameraId=${track.cameraId}&frameId=${frameId}&${bboxParams}`;
-    }
-    if (videoId) {
-      return `${API_BASE}/crops/${videoId}?frameId=${frameId}&${bboxParams}`;
-    }
-    return null;
-  })();
+/**
+ * Camera-lane TimelineRow.
+ * Renders ONE row per camera, with all matched trajectory segments on that lane.
+ */
+function TimelineRow({ lane, totalDuration, isSelected, onClick, timeToPixel, currentTime, videoId, runId }: TimelineRowProps) {
+  const isCurrentlyActive = lane.segments.some((seg) => currentTime >= seg.start && currentTime <= seg.end);
+  const segments = lane.segments;
 
   return (
     <div
       className={cn(
-        "h-10 relative rounded border bg-background/50 cursor-pointer transition-all",
+        "h-10 relative rounded border bg-muted/20 cursor-pointer transition-all select-none",
         isSelected && "border-primary ring-1 ring-primary",
-        track.confirmed && !isSelected && "border-green-500/30",
+        segments.some((s) => s.confirmed) && !isSelected && "border-green-500/30",
         isCurrentlyActive && "bg-primary/5"
       )}
       style={{ width: timeToPixel(totalDuration) }}
       onClick={onClick}
+      title={lane.label}
     >
-      {/* Camera label */}
-      <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-2 z-10">
-        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: trackColor }} />
-        <span className="text-[10px] font-mono text-muted-foreground">{track.cameraId}</span>
-      </div>
+      {/* Per-camera colored segments — notebook-style: colored blocks arranged along the timeline */}
+      {segments.map((seg, i) => {
+        const segLeft = timeToPixel(seg.start);
+        const segWidth = Math.max(timeToPixel(seg.end - seg.start), 4);
+        const isSegActive = currentTime >= seg.start && currentTime <= seg.end;
 
-      {/* Track clip */}
-      <div
-        className={cn(
-          "absolute top-1 bottom-1 rounded transition-all overflow-hidden",
-          track.confirmed && "ring-1 ring-green-500/50",
-          isCurrentlyActive && "ring-2 ring-white/50"
-        )}
-        style={{
-          left: timeToPixel(track.startTime),
-          width: Math.max(timeToPixel(track.endTime - track.startTime), 20),
-          backgroundColor: trackColor,
-        }}
-      >
-        {cropUrl ? (
-          <img
-            src={cropUrl}
-            alt={`Track ${track.trackletId}`}
-            className="absolute inset-0 w-full h-full object-cover opacity-80"
-            loading="lazy"
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Car className="h-4 w-4 text-white/80" />
+        // Build crop URL for this segment's representative frame
+        const cropUrl = (() => {
+          const bbox = seg.representativeBbox;
+          const frameId = seg.representativeFrame;
+          if (!bbox || bbox.length !== 4 || frameId == null) return null;
+          const bboxParams = `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`;
+          if (runId) return `${API_BASE}/crops/run/${runId}?cameraId=${seg.cameraId}&frameId=${frameId}&${bboxParams}`;
+          if (videoId) return `${API_BASE}/crops/${videoId}?frameId=${frameId}&${bboxParams}`;
+          return null;
+        })();
+
+        return (
+          <div
+            key={`${seg.cameraId}-${seg.trackId}-${seg.trajectoryId}-${i}`}
+            className={cn(
+              "absolute top-1 bottom-1 rounded overflow-hidden transition-all",
+              isSegActive && "ring-1 ring-white/60",
+              seg.confirmed && "ring-1 ring-green-500/50"
+            )}
+            style={{
+              left: segLeft,
+              width: segWidth,
+              backgroundColor: seg.color,
+              opacity: isSegActive ? 1 : 0.75,
+            }}
+            title={`Cam ${seg.cameraId} | G-${String(seg.globalId ?? 0).padStart(4, "0")} | ${formatDuration(seg.start)}–${formatDuration(seg.end)}`}
+          >
+            {/* Representative crop image */}
+            {cropUrl && (
+              <img
+                src={cropUrl}
+                alt={seg.cameraId}
+                className="absolute inset-0 w-full h-full object-cover opacity-70"
+                loading="lazy"
+              />
+            )}
+            {/* Camera ID label inside segment (only if segment is wide enough) */}
+            {segWidth > 32 && (
+              <span className="absolute bottom-0.5 left-0.5 text-[8px] font-mono text-white/90 leading-none bg-black/30 px-0.5 rounded-sm">
+                {`G${seg.globalId ?? "?"}`}
+              </span>
+            )}
           </div>
-        )}
-
-        {/* Alternatives dropdown */}
-        {track.alternatives && track.alternatives.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-6 bg-black/30 hover:bg-black/50"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ChevronDown className="h-3 w-3 text-white" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {track.alternatives.map((alt) => (
-                <DropdownMenuItem key={`${alt.cameraId}-${alt.trackletId}`}>
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: getCameraColor(alt.cameraId) }} />
-                    <span className="text-sm">{alt.cameraId}</span>
-                    <Badge variant="secondary" className="ml-auto text-[10px]">
-                      {(alt.similarity * 100).toFixed(0)}%
-                    </Badge>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+        );
+      })}
 
       {/* Playhead indicator on this row */}
       {isCurrentlyActive && (
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20"
+          className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
           style={{ left: timeToPixel(currentTime) }}
         />
       )}
+
+      {/* Lane label badge (right edge) */}
+      <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-white/70 font-mono z-10 pointer-events-none bg-black/20 rounded px-1">
+        {lane.cameraId}
+      </div>
+
+      {/* Confidence badge (highest segment confidence in lane, subtle) */}
+      {(() => {
+        const confs = segments.map((s) => Number(s.confidence ?? 0)).filter((v) => Number.isFinite(v) && v > 0);
+        const best = confs.length > 0 ? Math.max(...confs) : 0;
+        return best > 0 ? (
+        <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-white/60 font-mono z-10 pointer-events-none">
+            {(best * 100).toFixed(0)}%
+        </div>
+        ) : null;
+      })()}
     </div>
   );
 }

@@ -282,7 +282,7 @@ export function UploadStage() {
     setCurrentStage(1);
     toast({
       title: "Using real video",
-      description: `Loaded ${candidate.name} for YOLOv8 + Deep OC-SORT detection.`,
+      description: `Loaded ${candidate.name} for YOLOv26 + Deep OC-SORT detection.`,
       variant: "success",
     });
   };

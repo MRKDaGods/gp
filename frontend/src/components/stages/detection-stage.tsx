@@ -37,6 +37,7 @@ export function DetectionStage() {
   const [videoSize, setVideoSize] = useState({ width: 1920, height: 1080 });
   const [totalFrames, setTotalFrames] = useState(100);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [videoFallback, setVideoFallback] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -81,6 +82,7 @@ export function DetectionStage() {
       }
 
       setVideoError(null);
+      setErrorDetail(null);
       setVideoFallback(false);
       setIsLoading(true);
       setIsPlaying(false);
@@ -122,7 +124,7 @@ export function DetectionStage() {
       updateStageProgress(1, {
         status: "running",
         progress: 5,
-        message: "Running Stage 1 (YOLOv8 + Deep OC-SORT)...",
+        message: "Running Stage 1 (YOLOv26 + Deep OC-SORT)...",
       });
 
       const pollStatus = async () => {
@@ -151,12 +153,19 @@ export function DetectionStage() {
 
           if (status === "error") {
             if (interval) clearInterval(interval);
-            setVideoError(String(statusData?.error ?? "Stage 1 backend run failed."));
+            const errMsg = statusData?.error
+              ? String(statusData.error)
+              : statusData?.message
+              ? String(statusData.message)
+              : "Stage 1 failed — unknown error";
+            const detail = statusData?.errorDetail ? String(statusData.errorDetail) : null;
+            setVideoError(errMsg);
+            setErrorDetail(detail);
             setDetections([]);
             updateStageProgress(1, {
               status: "error",
               progress: 100,
-              message: String(statusData?.error ?? "Stage 1 failed"),
+              message: errMsg,
             });
             setIsRunning(false);
             setIsLoading(false);
@@ -172,6 +181,7 @@ export function DetectionStage() {
           if (cancelled) return;
           const msg = err instanceof Error ? err.message : String(err);
           setVideoError(`Failed to poll Stage 1 status: ${msg}`);
+          setErrorDetail(null);
           if (interval) clearInterval(interval);
           setIsLoading(false);
         }
@@ -338,7 +348,7 @@ export function DetectionStage() {
         <div>
           <h1 className="text-lg font-semibold">Stage 1: Vehicle Detection</h1>
           <p className="text-sm text-muted-foreground">
-            YOLOv8 + Deep OC-SORT on CityFlowV2 footage
+            YOLOv26 + Deep OC-SORT on CityFlowV2 footage
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -358,20 +368,6 @@ export function DetectionStage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Video area */}
         <div className="flex-1 flex flex-col p-4">
-          {/* Progress bar during detection */}
-          {stage1Progress?.status === "running" && (
-            <div className="mb-4 p-3 bg-muted/50 rounded-lg">
-              <div className="flex justify-between text-sm mb-2">
-                <span className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {stage1Progress.message}
-                </span>
-                <span className="font-mono">{stage1Progress.progress}%</span>
-              </div>
-              <Progress value={stage1Progress.progress} className="h-2" />
-            </div>
-          )}
-
           {/* Video container - CityFlow camera view */}
           <div
             ref={containerRef}
@@ -383,7 +379,7 @@ export function DetectionStage() {
                   <AlertCircle className="h-12 w-12 mx-auto mb-3 text-amber-400" />
                   <p className="font-medium">No video selected</p>
                   <p className="text-sm text-white/60 mt-2">
-                    Go back to Upload and pick a CityFlowV2 video. The stage will run YOLOv8 detection with Deep OC-SORT tracking.
+                    Go back to Upload and pick a CityFlowV2 video. The stage will run YOLOv26 detection with Deep OC-SORT tracking.
                   </p>
                   <Button className="mt-4" variant="secondary" onClick={() => setCurrentStage(0)}>
                     Go To Upload
@@ -396,7 +392,7 @@ export function DetectionStage() {
                   <Loader2 className="h-14 w-14 text-primary animate-spin" />
                   <div className="text-center">
                     <p className="text-white font-medium">Processing Video</p>
-                    <p className="text-white/60 text-sm">Running YOLOv8 + Deep OC-SORT...</p>
+                    <p className="text-white/60 text-sm">Running YOLOv26 + Deep OC-SORT...</p>
                   </div>
                 </div>
               </div>
@@ -537,8 +533,20 @@ export function DetectionStage() {
             )}
 
             {videoError && (
-              <div className="absolute top-3 left-3 right-3 z-20 rounded-md border border-red-500/40 bg-red-500/15 px-3 py-2 text-sm text-red-100">
-                {videoError}
+              <div className="absolute top-3 left-3 right-3 z-20 rounded-md border border-red-500/50 bg-red-950/80 backdrop-blur-sm text-sm text-red-100 overflow-hidden">
+                <div className="flex items-start gap-2 px-3 py-2">
+                  <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-red-300 text-xs uppercase tracking-wide mb-1">Pipeline Error</p>
+                    <p className="break-words text-red-100">{videoError}</p>
+                    {errorDetail && (
+                      <details className="mt-2">
+                        <summary className="text-xs text-red-400 cursor-pointer hover:text-red-300">Show full traceback</summary>
+                        <pre className="mt-1 text-[10px] text-red-300/80 font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto bg-black/40 rounded p-2">{errorDetail}</pre>
+                      </details>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

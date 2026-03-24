@@ -120,9 +120,9 @@ stage2:
   crop:
     min_area: 500
     padding_ratio: 0.1
-    samples_per_tracklet: 16
+    samples_per_tracklet: 32  # v37: increased from 16 for better quality
     min_quality: 0.05       # composite quality threshold [0, 1]
-    laplacian_min_var: 30.0   # Laplacian-variance blur filter (0 = disabled)
+    laplacian_min_var: 15.0   # v37: lowered from 30.0 (accept slightly blurrier crops)
   # --- NEW: camera-aware batch normalisation ---
   camera_bn:
     enabled: true

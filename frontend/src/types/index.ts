@@ -190,13 +190,25 @@ export interface WsMessage {
 }
 
 // Timeline view types
+
+/** One camera-segment within a global trajectory row */
+export interface TrajectorySegment {
+  cameraId: string;
+  trackId: number;
+  start: number;
+  end: number;
+  color: string;
+  representativeFrame?: number;
+  representativeBbox?: number[];
+}
+
 export interface TimelineTrack {
   id: string;
-  cameraId: string;
+  cameraId: string;          // primary camera (first seen for multi-cam, or only camera)
   trackletId: number;
   globalId?: number;
-  startTime: number;
-  endTime: number;
+  startTime: number;         // earliest start across all segments
+  endTime: number;           // latest end across all segments
   thumbnail?: string;
   selected: boolean;
   confirmed: boolean;
@@ -204,6 +216,12 @@ export interface TimelineTrack {
   representativeFrame?: number;
   representativeBbox?: number[];
   sampleFrames?: { frameId: number; bbox: number[] }[];
+  // Notebook-style multi-camera segments (one per camera in the trajectory)
+  segments?: TrajectorySegment[];
+  // Display label e.g. "G-0001 | 3 cams | car"
+  label?: string;
+  confidence?: number;
+  className?: string;
 }
 
 export interface AlternativeMatch {

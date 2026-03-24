@@ -10,6 +10,11 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import io
 import asyncio
+import sys as _sys
+# On Windows, the default event loop must be ProactorEventLoop for
+# asyncio.create_subprocess_exec to work. Ensure this before anything else.
+if _sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 import configparser
 import json
 import os
@@ -18,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import traceback as _traceback
 import uuid
 from datetime import datetime
 import tempfile
@@ -28,6 +34,15 @@ try:
     _HAS_CV2 = True
 except ImportError:
     _HAS_CV2 = False
+
+# Use venv Python for pipeline subprocesses so all ML dependencies are available.
+# Falls back to sys.executable when running inside the venv already.
+_VENV_PYTHON = Path(__file__).resolve().parent / ".venv" / "Scripts" / "python.exe"
+_PIPELINE_PYTHON: str = str(_VENV_PYTHON) if _VENV_PYTHON.exists() else sys.executable
+
+# ffprobe path (for duration probing when cv2 is unavailable)
+import shutil as _shutil
+_FFPROBE = _shutil.which("ffprobe")
 
 app = FastAPI(title="MTMC Tracker API", version="1.0.0")
 
@@ -58,23 +73,61 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 
 def _probe_video_metadata(file_path: Path) -> Dict[str, Any]:
-    """Probe actual video duration/fps/resolution via OpenCV."""
+    """Probe actual video duration/fps/resolution.
+    Tries OpenCV first, then ffprobe, then returns safe defaults."""
     defaults = {"duration": 0.0, "fps": 30.0, "width": 1920, "height": 1080}
-    if not _HAS_CV2 or not file_path.exists():
+    if not file_path.exists():
         return defaults
-    try:
-        cap = cv2.VideoCapture(str(file_path))
-        if not cap.isOpened():
-            return defaults
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 1920)
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1080)
-        cap.release()
-        duration = frame_count / fps if fps > 0 else 0.0
-        return {"duration": round(duration, 2), "fps": round(fps, 2), "width": width, "height": height}
-    except Exception:
-        return defaults
+
+    # --- attempt 1: OpenCV ---
+    if _HAS_CV2:
+        try:
+            cap = cv2.VideoCapture(str(file_path))
+            if cap.isOpened():
+                fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 1920)
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1080)
+                cap.release()
+                duration = frame_count / fps if fps > 0 else 0.0
+                if duration > 0:
+                    return {"duration": round(duration, 2), "fps": round(fps, 2), "width": width, "height": height}
+        except Exception:
+            pass
+
+    # --- attempt 2: ffprobe ---
+    if _FFPROBE:
+        try:
+            import json as _json
+            result = subprocess.run(
+                [
+                    _FFPROBE, "-v", "quiet", "-print_format", "json",
+                    "-show_streams", "-show_format", str(file_path),
+                ],
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.returncode == 0:
+                info = _json.loads(result.stdout)
+                duration = float(info.get("format", {}).get("duration", 0) or 0)
+                video_stream = next(
+                    (s for s in info.get("streams", []) if s.get("codec_type") == "video"),
+                    {}
+                )
+                width = int(video_stream.get("width", 1920) or 1920)
+                height = int(video_stream.get("height", 1080) or 1080)
+                # Parse FPS from r_frame_rate string like "30000/1001" or "10/1"
+                fps_raw = video_stream.get("r_frame_rate", "30/1")
+                try:
+                    num, den = fps_raw.split("/")
+                    fps = round(float(num) / float(den), 3) if float(den) else 30.0
+                except Exception:
+                    fps = 30.0
+                if duration > 0:
+                    return {"duration": round(duration, 2), "fps": fps, "width": width, "height": height}
+        except Exception:
+            pass
+
+    return defaults
 
 
 def _build_video_record(video_id: str, file_path: Path) -> Dict[str, Any]:
@@ -256,7 +309,7 @@ async def _background_precompute_dataset() -> None:
 
     try:
         cmd = [
-            sys.executable,
+            _PIPELINE_PYTHON,
             "scripts/run_pipeline.py",
             "--config", "configs/default.yaml",
             "--stages", "0,1,2,3,4",
@@ -362,7 +415,7 @@ def _prepare_input_for_run(run_id: str, source_video_path: Path, camera_id: str)
 # Stage name mapping for progress messages
 _STAGE_NAMES = {
     0: "Ingestion & Pre-Processing",
-    1: "Detection & Tracking (YOLO + DeepOCSORT)",
+    1: "Detection & Tracking (YOLOv26 + DeepOCSORT)",
     2: "Feature Extraction (ReID Embeddings)",
     3: "Indexing (FAISS + SQLite)",
     4: "Cross-Camera Association",
@@ -388,7 +441,7 @@ def _build_pipeline_cmd(
 ) -> list[str]:
     """Build the subprocess command for run_pipeline.py."""
     cmd = [
-        sys.executable,
+        _PIPELINE_PYTHON,
         "scripts/run_pipeline.py",
         "--config",
         "configs/default.yaml",
@@ -426,15 +479,19 @@ async def _run_pipeline_streaming(
     cmd: list[str],
     stage_nums: list[int],
 ) -> Dict[str, Any]:
-    """Run a pipeline subprocess, streaming stdout to update active_runs progress.
+    """Run a pipeline subprocess, draining both stdout AND stderr concurrently.
 
-    *stage_nums* is the list of stages being run (e.g. [0,1] or [0,1,2,3,4]).
-    Progress is divided evenly across the stages: when the pipeline prints a
-    "Stage N:" marker we bump progress proportionally.
+    The MTMC pipeline (loguru + Rich) writes everything to stderr.  Reading only
+    stdout while ignoring stderr fills the 64 KB OS pipe buffer and deadlocks the
+    child process.  We solve this by reading both pipes concurrently with two
+    asyncio tasks so neither buffer ever blocks.
+
+    Progress updates are derived from log lines on *either* stream.
     """
     total_stages = max(len(stage_nums), 1)
     completed_stages = 0
     cameras_seen: list[str] = []
+    log_lines: list[str] = []
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
@@ -443,29 +500,18 @@ async def _run_pipeline_streaming(
         stderr=asyncio.subprocess.PIPE,
     )
 
-    log_lines: list[str] = []
-    assert process.stdout is not None  # guaranteed by PIPE
-
-    while True:
-        raw_line = await process.stdout.readline()
-        if not raw_line:
-            break
-        line = raw_line.decode(errors="ignore").strip()
+    def _handle_line(line: str) -> None:
+        """Update active_runs progress from a single log line."""
+        nonlocal completed_stages
         log_lines.append(line)
 
-        # Detect stage start markers (e.g. "Stage 0: Ingestion ...")
         m = _STAGE_LINE_RE.search(line)
         if m:
             stage_num = int(m.group(1))
             stage_label = _STAGE_NAMES.get(stage_num, f"Stage {stage_num}")
-
-            # The *previous* stage just finished
             completed_stages += 1
-            pct = min(int((completed_stages / total_stages) * 95), 95)  # cap at 95 until truly done
-
-            # Reset camera counter for each new stage
+            pct = min(int((completed_stages / total_stages) * 95), 95)
             cameras_seen.clear()
-
             if run_id in active_runs:
                 active_runs[run_id]["progress"] = pct
                 active_runs[run_id]["message"] = f"Running {stage_label}..."
@@ -474,7 +520,6 @@ async def _run_pipeline_streaming(
                 active_runs[run_id]["completedStages"] = completed_stages
                 active_runs[run_id]["totalStages"] = total_stages
 
-        # Detect per-camera processing lines
         cm = _CAMERA_LINE_RE.search(line)
         if cm and run_id in active_runs:
             cam_id = cm.group(1)
@@ -483,20 +528,36 @@ async def _run_pipeline_streaming(
             cam_index = cameras_seen.index(cam_id) + 1
             active_runs[run_id]["currentCamera"] = cam_id
             active_runs[run_id]["camerasProcessed"] = cam_index
-            current_stage_name = active_runs[run_id].get("currentStageName", "Processing")
+            stage_name = active_runs[run_id].get("currentStageName", "Processing")
             active_runs[run_id]["message"] = (
-                f"{current_stage_name} — camera {cam_id} ({cam_index} processed)"
+                f"{stage_name} — camera {cam_id} ({cam_index} processed)"
             )
 
-    stderr_bytes = await process.stderr.read() if process.stderr else b""
+    async def _drain(stream: asyncio.StreamReader) -> None:
+        """Read lines from a pipe until EOF, calling _handle_line for each."""
+        while True:
+            raw = await stream.readline()
+            if not raw:
+                break
+            _handle_line(raw.decode(errors="ignore").rstrip())
+
+    # Drain stdout and stderr concurrently so neither pipe ever blocks.
+    assert process.stdout is not None
+    assert process.stderr is not None
+    await asyncio.gather(
+        _drain(process.stdout),
+        _drain(process.stderr),
+    )
     await process.wait()
 
     run_dir = OUTPUT_DIR / run_id
 
     if process.returncode != 0:
-        stderr_text = stderr_bytes.decode(errors="ignore")[-4000:]
+        # Include last 4 KB of logs for a useful error message.
+        stderr_tail = "\n".join(log_lines[-80:])[-4000:]
         raise RuntimeError(
-            f"Pipeline failed with code {process.returncode}: {stderr_text}"
+            f"Pipeline exited with code {process.returncode}.\n\n"
+            f"Last log output:\n{stderr_tail}"
         )
 
     return {
@@ -1024,8 +1085,13 @@ async def get_tracklets(cameraId: Optional[str] = None, videoId: Optional[str] =
         # Pick a representative frame near the middle for the crop thumbnail
         mid_frame = frames[len(frames) // 2]
 
-        # Return ALL frames so the frontend can show every frame
-        sample_frames_data = frames
+        # Return at most 6 evenly-spaced frames so UI thumbnails stay fast
+        _max_samples = 6
+        if len(frames) <= _max_samples:
+            sample_frames_data = frames
+        else:
+            step = (len(frames) - 1) / (_max_samples - 1)
+            sample_frames_data = [frames[round(i * step)] for i in range(_max_samples)]
 
         sample_frames = [
             {
@@ -1535,11 +1601,19 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
         active_runs[run_id]["progress"] = 100
         active_runs[run_id]["completedAt"] = datetime.now().isoformat()
 
-    except Exception as e:
+    except BaseException as e:
+        tb = _traceback.format_exc()
+        err_type = type(e).__name__
+        err_msg = str(e) or f"({err_type} with no message)"
+        full_error = f"{err_type}: {err_msg}"
+        print(f"[PIPELINE ERROR] run={run_id} stage={stage}\n{tb}", flush=True)
         if run_id in active_runs:
             active_runs[run_id]["status"] = "error"
-            active_runs[run_id]["error"] = str(e)
-            active_runs[run_id]["message"] = f"Error: {str(e)[:200]}"
+            active_runs[run_id]["error"] = full_error
+            active_runs[run_id]["errorDetail"] = tb[-3000:]
+            active_runs[run_id]["message"] = f"Stage {stage} failed — {full_error[:300]}"
+        if isinstance(e, (asyncio.CancelledError, KeyboardInterrupt)):
+            raise
 
 async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
     """Execute all pipeline stages (0-4) in sequence."""
@@ -1579,11 +1653,19 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
         active_runs[run_id]["runDir"] = run_meta["runDir"]
         active_runs[run_id]["completedAt"] = datetime.now().isoformat()
 
-    except Exception as e:
+    except BaseException as e:
+        tb = _traceback.format_exc()
+        err_type = type(e).__name__
+        err_msg = str(e) or f"({err_type} with no message)"
+        full_error = f"{err_type}: {err_msg}"
+        print(f"[PIPELINE ERROR] full-pipeline run={run_id}\n{tb}", flush=True)
         if run_id in active_runs:
             active_runs[run_id]["status"] = "error"
-            active_runs[run_id]["error"] = str(e)
-            active_runs[run_id]["message"] = f"Error: {str(e)[:200]}"
+            active_runs[run_id]["error"] = full_error
+            active_runs[run_id]["errorDetail"] = tb[-3000:]
+            active_runs[run_id]["message"] = f"Pipeline failed — {full_error[:300]}"
+        if isinstance(e, (asyncio.CancelledError, KeyboardInterrupt)):
+            raise
 
 # ============================================================================
 # Dataset Browsing & Processing

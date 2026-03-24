@@ -556,6 +556,35 @@ export function InferenceStage() {
             </CardContent>
           </Card>
 
+          {/* Active Pipeline Parameters (read-only, notebook-aligned) */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                Active Pipeline Parameters
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <div className="text-muted-foreground">Detector</div>
+                <div className="font-mono">YOLOv26 · conf 0.25 · IoU 0.65</div>
+                <div className="text-muted-foreground">Tracker</div>
+                <div className="font-mono">DeepOCSort · max_age 30</div>
+                <div className="text-muted-foreground">ReID backbone</div>
+                <div className="font-mono">TransReID ViT-Base · 768D → 280D PCA</div>
+                <div className="text-muted-foreground">Samples / tracklet</div>
+                <div className="font-mono">32 · flip_augment ✓ · cam_BN ✓</div>
+                <div className="text-muted-foreground">Quality filter</div>
+                <div className="font-mono">Laplacian var ≥ 15 · temp 3.0</div>
+                <div className="text-muted-foreground">Matching</div>
+                <div className="font-mono">FAISS IndexFlatIP · threshold 0.60</div>
+                <div className="text-muted-foreground">Solver</div>
+                <div className="font-mono">conflict_free_cc · AQE k=5 α=5.0</div>
+                <div className="text-muted-foreground">FIC whitening</div>
+                <div className="font-mono">reg 0.3 · gallery_expansion rounds=2</div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Date/Time range */}
           <Card>
             <CardHeader>
