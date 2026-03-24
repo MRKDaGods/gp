@@ -1,5 +1,5 @@
 {
-  "id": "mrkdagods/09b-vehicle-reid-384px-training-vit-b-16-clip",
+  "id": "mrkdagods/09b-vehicle-reid-384px-vit-training",
   "title": "09b Vehicle ReID 384px ViT Training",
   "code_file": "09b_vehicle_reid_384px.ipynb",
   "language": "python",
