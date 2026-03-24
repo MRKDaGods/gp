@@ -34,6 +34,7 @@ import {
   usePipelineStore,
   useSessionStore,
   useVideoStore,
+  useDetectionStore,
 } from "@/store";
 import { getTracklets, getTrajectories, runStage, getPipelineStatus } from "@/lib/api";
 import type { TimelineTrack } from "@/types";
@@ -56,6 +57,7 @@ export function TimelineStage() {
   const { runId, updateStageProgress, stages } = usePipelineStore();
   const { setCurrentStage } = useSessionStore();
   const { currentVideo } = useVideoStore();
+  const { selectedIds } = useDetectionStore();
 
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -110,23 +112,56 @@ export function TimelineStage() {
   const buildTracksFromTrajectories = (trajectories: any[]): TimelineTrack[] => {
     if (!Array.isArray(trajectories) || trajectories.length === 0) return [];
 
+    // Filter to only trajectories that include a tracklet selected in stage 2
+    const filtered = selectedIds.size > 0
+      ? trajectories.filter((traj: any) => {
+          const tracklets = Array.isArray(traj.tracklets) ? traj.tracklets : [];
+          return tracklets.some((t: any) => selectedIds.has(String(t.track_id ?? t.trackId)));
+        })
+      : trajectories;
+
     const rows: TimelineTrack[] = [];
-    trajectories.forEach((trajectory: any, trajectoryIndex: number) => {
+    filtered.forEach((trajectory: any, trajectoryIndex: number) => {
       const globalId = Number(trajectory.globalId ?? trajectory.global_id ?? trajectoryIndex + 1);
+      // Support both camelCase and snake_case field names from the backend
       const timeline = Array.isArray(trajectory.timeline) ? trajectory.timeline : [];
+      const tracklets: any[] = Array.isArray(trajectory.tracklets) ? trajectory.tracklets : [];
 
       timeline.forEach((entry: any, entryIndex: number) => {
+        // Backend returns snake_case: camera_id, track_id
+        const cameraId = String(entry.camera_id ?? entry.cameraId ?? "unknown");
+        const trackId = entry.track_id ?? entry.trackId;
         const startTime = Number(entry.start ?? 0);
         const endTime = Number(entry.end ?? startTime + 0.1);
+
+        // Pull representative frame + bbox from the matching tracklet's frames
+        let representativeFrame: number | undefined;
+        let representativeBbox: number[] | undefined;
+        const matchedTracklet = tracklets.find(
+          (t: any) =>
+            (t.track_id ?? t.trackId) === trackId &&
+            (t.camera_id ?? t.cameraId) === cameraId
+        );
+        if (matchedTracklet) {
+          const frames: any[] = Array.isArray(matchedTracklet.frames) ? matchedTracklet.frames : [];
+          const midFrame = frames[Math.floor(frames.length / 2)];
+          if (midFrame) {
+            representativeFrame = Number(midFrame.frame_id ?? midFrame.frameId ?? 0);
+            representativeBbox = midFrame.bbox;
+          }
+        }
+
         rows.push({
-          id: `traj-${globalId}-${entry.cameraId}-${entryIndex}`,
-          cameraId: String(entry.cameraId ?? "unknown"),
+          id: `traj-${globalId}-${cameraId}-${entryIndex}`,
+          cameraId,
           trackletId: globalId,
           globalId,
           startTime,
           endTime: Math.max(endTime, startTime + 0.1),
           selected: false,
           confirmed: true,
+          representativeFrame,
+          representativeBbox,
         });
       });
     });
@@ -197,7 +232,12 @@ export function TimelineStage() {
         // Fall back to stage1 tracklets (single-camera view)
         const response = await getTracklets(undefined, currentVideo.id);
         if (cancelled) return;
-        const summary = Array.isArray(response.data) ? response.data : [];
+        let summary = Array.isArray(response.data) ? response.data : [];
+
+        // Filter to only selected tracklets from Stage 2
+        if (selectedIds.size > 0) {
+          summary = summary.filter((item: any) => selectedIds.has(String(item.id)));
+        }
         const realTracks = buildTracksFromSummary(summary);
         if (realTracks.length > 0) {
           setTracks(realTracks);
@@ -215,7 +255,7 @@ export function TimelineStage() {
     return () => {
       cancelled = true;
     };
-  }, [currentVideo, runId, setTracks]);
+  }, [currentVideo, runId, selectedIds, setTracks]);
 
   // Playback simulation
   useEffect(() => {
@@ -378,6 +418,7 @@ export function TimelineStage() {
                   isActive={!!cam.activeTrack}
                   currentTime={currentTime}
                   videoId={currentVideo?.id}
+                  runId={runId ?? undefined}
                 />
               ))}
             </div>
@@ -471,6 +512,7 @@ export function TimelineStage() {
                       timeToPixel={timeToPixel}
                       currentTime={currentTime}
                       videoId={currentVideo?.id}
+                      runId={runId ?? undefined}
                     />
                   ))}
                 </div>
@@ -489,20 +531,27 @@ function CameraPreview({
   isActive,
   currentTime,
   videoId,
+  runId,
 }: {
   camera: { id: string; name: string; location: string; activeTrack?: TimelineTrack };
   isActive: boolean;
   currentTime: number;
   videoId?: string;
+  runId?: string;
 }) {
   // Build a crop URL from the active track's representative frame
   const cropUrl = (() => {
-    if (!isActive || !videoId || !camera.activeTrack) return null;
+    if (!isActive || !camera.activeTrack) return null;
     const t = camera.activeTrack;
     const bbox = t.representativeBbox;
     const frameId = t.representativeFrame;
-    if (bbox && bbox.length === 4 && frameId != null) {
-      return `${API_BASE}/crops/${videoId}?frameId=${frameId}&x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`;
+    if (!bbox || bbox.length !== 4 || frameId == null) return null;
+    const bboxParams = `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`;
+    if (runId) {
+      return `${API_BASE}/crops/run/${runId}?cameraId=${t.cameraId}&frameId=${frameId}&${bboxParams}`;
+    }
+    if (videoId) {
+      return `${API_BASE}/crops/${videoId}?frameId=${frameId}&${bboxParams}`;
     }
     return null;
   })();
@@ -627,19 +676,24 @@ interface TimelineRowProps {
   timeToPixel: (time: number) => number;
   currentTime: number;
   videoId?: string;
+  runId?: string;
 }
 
-function TimelineRow({ track, totalDuration, zoom, isSelected, onClick, timeToPixel, currentTime, videoId }: TimelineRowProps) {
+function TimelineRow({ track, totalDuration, zoom, isSelected, onClick, timeToPixel, currentTime, videoId, runId }: TimelineRowProps) {
   const isCurrentlyActive = currentTime >= track.startTime && currentTime <= track.endTime;
   const trackColor = (track as any).color || getCameraColor(track.cameraId);
 
   // Build crop URL for the representative frame
   const cropUrl = (() => {
-    if (!videoId) return null;
     const bbox = track.representativeBbox;
     const frameId = track.representativeFrame;
-    if (bbox && bbox.length === 4 && frameId != null) {
-      return `${API_BASE}/crops/${videoId}?frameId=${frameId}&x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`;
+    if (!bbox || bbox.length !== 4 || frameId == null) return null;
+    const bboxParams = `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`;
+    if (runId) {
+      return `${API_BASE}/crops/run/${runId}?cameraId=${track.cameraId}&frameId=${frameId}&${bboxParams}`;
+    }
+    if (videoId) {
+      return `${API_BASE}/crops/${videoId}?frameId=${frameId}&${bboxParams}`;
     }
     return null;
   })();

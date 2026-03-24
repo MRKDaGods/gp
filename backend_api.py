@@ -373,6 +373,9 @@ _STAGE_NAMES = {
 # Regex to detect stage start markers from pipeline stdout (Rich markup stripped)
 _STAGE_LINE_RE = re.compile(r"Stage\s+(\d)")
 
+# Regex to detect per-camera processing lines (e.g. "Processing camera S01_c003: ...")
+_CAMERA_LINE_RE = re.compile(r"Processing camera\s+([\w_]+)")
+
 
 def _build_pipeline_cmd(
     stages: str,
@@ -431,6 +434,7 @@ async def _run_pipeline_streaming(
     """
     total_stages = max(len(stage_nums), 1)
     completed_stages = 0
+    cameras_seen: list[str] = []
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
@@ -459,6 +463,9 @@ async def _run_pipeline_streaming(
             completed_stages += 1
             pct = min(int((completed_stages / total_stages) * 95), 95)  # cap at 95 until truly done
 
+            # Reset camera counter for each new stage
+            cameras_seen.clear()
+
             if run_id in active_runs:
                 active_runs[run_id]["progress"] = pct
                 active_runs[run_id]["message"] = f"Running {stage_label}..."
@@ -466,6 +473,20 @@ async def _run_pipeline_streaming(
                 active_runs[run_id]["currentStageNum"] = stage_num
                 active_runs[run_id]["completedStages"] = completed_stages
                 active_runs[run_id]["totalStages"] = total_stages
+
+        # Detect per-camera processing lines
+        cm = _CAMERA_LINE_RE.search(line)
+        if cm and run_id in active_runs:
+            cam_id = cm.group(1)
+            if cam_id not in cameras_seen:
+                cameras_seen.append(cam_id)
+            cam_index = cameras_seen.index(cam_id) + 1
+            active_runs[run_id]["currentCamera"] = cam_id
+            active_runs[run_id]["camerasProcessed"] = cam_index
+            current_stage_name = active_runs[run_id].get("currentStageName", "Processing")
+            active_runs[run_id]["message"] = (
+                f"{current_stage_name} — camera {cam_id} ({cam_index} processed)"
+            )
 
     stderr_bytes = await process.stderr.read() if process.stderr else b""
     await process.wait()
@@ -929,6 +950,53 @@ async def get_crop(
         cap.release()
 
 
+@app.get("/api/crops/run/{run_id}")
+async def get_crop_from_run(
+    run_id: str,
+    cameraId: str = "",
+    frameId: int = 0,
+    x1: float = 0,
+    y1: float = 0,
+    x2: float = 0,
+    y2: float = 0,
+):
+    """Extract a cropped vehicle image from a pre-extracted frame in a run directory."""
+    if not _HAS_CV2:
+        raise HTTPException(status_code=500, detail="OpenCV not available")
+
+    run_dir = OUTPUT_DIR / run_id / "stage0" / cameraId
+    if not run_dir.exists():
+        raise HTTPException(status_code=404, detail="Run/camera frames not found")
+
+    # Try both .jpg and .png frame files
+    frame_path = run_dir / f"frame_{frameId:06d}.jpg"
+    if not frame_path.exists():
+        frame_path = run_dir / f"frame_{frameId:06d}.png"
+    if not frame_path.exists():
+        raise HTTPException(status_code=404, detail=f"Frame {frameId} not found")
+
+    frame = cv2.imread(str(frame_path))
+    if frame is None:
+        raise HTTPException(status_code=500, detail="Failed to read frame image")
+
+    h, w = frame.shape[:2]
+    cx1 = max(0, int(x1))
+    cy1 = max(0, int(y1))
+    cx2 = min(w, int(x2))
+    cy2 = min(h, int(y2))
+
+    if cx2 <= cx1 or cy2 <= cy1:
+        raise HTTPException(status_code=400, detail="Invalid bbox")
+
+    crop = frame[cy1:cy2, cx1:cx2]
+    _, buf = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return StreamingResponse(
+        io.BytesIO(buf.tobytes()),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 # ============================================================================
 # Stage 4: Tracklets & Trajectories
 # ============================================================================
@@ -956,14 +1024,8 @@ async def get_tracklets(cameraId: Optional[str] = None, videoId: Optional[str] =
         # Pick a representative frame near the middle for the crop thumbnail
         mid_frame = frames[len(frames) // 2]
 
-        # Pick up to 5 evenly-spaced sample frames for a mini gallery
-        n_samples = min(15, len(frames))
-        if n_samples <= 1:
-            sample_frames_data = [frames[0]]
-        else:
-            step = max(1, (len(frames) - 1) / (n_samples - 1))
-            indices = [int(round(i * step)) for i in range(n_samples)]
-            sample_frames_data = [frames[idx] for idx in indices]
+        # Return ALL frames so the frontend can show every frame
+        sample_frames_data = frames
 
         sample_frames = [
             {
