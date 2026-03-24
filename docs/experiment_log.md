@@ -212,4 +212,5 @@ Secondary model     = OSNet (score-level fusion @ 10%)
 | v81 | 1 chain | ~1h | conf_thresh=0.20 → 75.6% HURT (-2.8pp) |
 | v82 | 1 chain | ~1h | denoise=true → 75.7% HURT (-2.7pp) |
 | v83 | 1 chain | ~1h | max_iou_dist=0.5 → 76.8% HURT (-1.6pp) |
-| **TOTAL** | **~224** | **~13h GPU** | |
+| v84 | 1 chain | ~1h | 384px fine-tuned model (09b output, mAP=0.4494) + input_size=[384,384] + PCA refit |
+| **TOTAL** | **~225** | **~14h GPU** | |
