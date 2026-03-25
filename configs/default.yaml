@@ -134,6 +134,9 @@ stage3:
     db_path: null  # auto-set to output_dir/stage3/metadata.db
 
 stage4:
+  global_gallery:
+    enabled: false
+    run_id: "dataset_precompute_s01"
   association:
     top_k: 100
     # --- Secondary embedding fusion (e.g., OSNet + TransReID ensemble) ---

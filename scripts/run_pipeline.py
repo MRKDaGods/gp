@@ -184,9 +184,70 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
                 from src.core.io_utils import load_tracklets_by_camera
                 tracklets_by_camera = load_tracklets_by_camera(output_base / "stage1")
 
+            query_cameras = None
+
+            if cfg.stage4.get("global_gallery", {}).get("enabled", False):
+                gallery_run_id = cfg.stage4.global_gallery.get("run_id", "")
+                if gallery_run_id:
+                    gallery_dir = Path(cfg.project.output_dir) / gallery_run_id
+                    console.print(f"  [cyan]Loading global gallery from {gallery_run_id}[/cyan]")
+                    try:
+                        from src.core.io_utils import load_embeddings, load_hsv_features, load_tracklets_by_camera
+                        from src.core.data_models import TrackletFeatures
+                        from src.stage3_indexing import run_stage3
+
+                        # Load gallery stage 2
+                        gal_embeddings, gal_index_map = load_embeddings(gallery_dir / "stage2")
+                        gal_hsv_matrix = load_hsv_features(gallery_dir / "stage2")
+                        gal_features = [
+                            TrackletFeatures(
+                                track_id=m["track_id"],
+                                camera_id=m["camera_id"],
+                                class_id=m["class_id"],
+                                embedding=gal_embeddings[i],
+                                hsv_histogram=gal_hsv_matrix[i],
+                            )
+                            for i, m in enumerate(gal_index_map)
+                        ]
+
+                        # Load gallery tracklets
+                        gal_tracklets_by_camera = load_tracklets_by_camera(gallery_dir / "stage1")
+
+                        # Prefix current run cameras to avoid collision (current run = query)
+                        query_cameras = set()
+                        new_features = []
+                        for f in features:
+                            new_cam_id = f"query_{f.camera_id}"
+                            f.camera_id = new_cam_id
+                            query_cameras.add(new_cam_id)
+                            new_features.append(f)
+
+                        new_tracklets_by_camera = {}
+                        for cam_id, tracklets in tracklets_by_camera.items():
+                            new_cam_id = f"query_{cam_id}"
+                            for t in tracklets:
+                                t.camera_id = new_cam_id
+                            new_tracklets_by_camera[new_cam_id] = tracklets
+
+                        # Merge
+                        features = gal_features + new_features
+                        new_tracklets_by_camera.update(gal_tracklets_by_camera)
+                        tracklets_by_camera = new_tracklets_by_camera
+
+                        console.print(f"  [cyan]Merged query features with gallery: total {len(features)} features[/cyan]")
+
+                        # Re-run Stage 3 in memory for the combined set
+                        combined_out = output_base / "stage3_combined"
+                        faiss_index, metadata_store = run_stage3(
+                            cfg, features, tracklets_by_camera, output_dir=combined_out
+                        )
+                    except Exception as e:
+                        console.print(f"[red]Failed to load or merge global gallery: {e}[/red]")
+
             trajectories = run_stage4(
                 cfg, faiss_index, metadata_store, features,
-                tracklets_by_camera, output_dir=output_base / "stage4"
+                tracklets_by_camera, output_dir=output_base / "stage4",
+                query_cameras=query_cameras
             )
 
     # --- Stage 5: Evaluation ---

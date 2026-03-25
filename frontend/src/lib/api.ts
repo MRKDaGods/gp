@@ -293,6 +293,29 @@ export async function getTrajectories(
   return fetchApi(`/trajectories/${runId}`);
 }
 
+export async function queryTimeline(
+  runId: string,
+  videoId: string,
+  selectedTrackIds: string[]
+): Promise<ApiResponse<{
+  stage4Available: boolean;
+  mode: string;
+  message: string;
+  trajectories: GlobalTrajectory[];
+  selectedTracklets: any[];
+  diagnostics: {
+    selectedCount: number;
+    selectedKeyCount: number;
+    trajectoryCount: number;
+    matchedTrajectoryCount: number;
+  };
+}>> {
+  return fetchApi('/timeline/query', {
+    method: 'POST',
+    body: JSON.stringify({ runId, videoId, selectedTrackIds }),
+  });
+}
+
 export async function searchByImage(
   imageData: string, // base64
   topK: number = 20,

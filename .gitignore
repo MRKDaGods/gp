@@ -65,3 +65,5 @@ yolo26m.pt
 
 *.zip
 run_metadata.json
+*.avi
+*.mp4

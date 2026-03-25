@@ -370,6 +370,12 @@ class SearchRequest(BaseModel):
     topK: int = 20
 
 
+class TimelineQueryRequest(BaseModel):
+    runId: str
+    videoId: str
+    selectedTrackIds: List[str] = []
+
+
 class ImportKaggleRequest(BaseModel):
     runId: Optional[str] = None
     videoId: Optional[str] = None
@@ -400,6 +406,28 @@ def _detect_camera_for_video(video_meta: Dict[str, Any], requested_camera_id: Op
 
     # Meeting-safe default requested by user flow.
     return "S02_c008"
+
+
+def _normalize_camera_id(camera_id: str) -> str:
+    # Stage 4 query mode can prefix cameras with `query_`; normalize for key matching.
+    return camera_id[6:] if camera_id.startswith("query_") else camera_id
+
+
+def _parse_selected_track_nums(raw_ids: List[str]) -> set[int]:
+    selected: set[int] = set()
+    for raw in raw_ids:
+        txt = str(raw)
+        try:
+            direct = int(txt)
+            selected.add(direct)
+            continue
+        except Exception:
+            pass
+
+        m = re.match(r"^det-(\d+)-", txt)
+        if m:
+            selected.add(int(m.group(1)))
+    return selected
 
 
 def _prepare_input_for_run(run_id: str, source_video_path: Path, camera_id: str) -> Path:
@@ -453,6 +481,8 @@ def _build_pipeline_cmd(
         f"project.run_name={run_id}",
         "--override",
         f"stage0.input_dir={input_dir}",
+        "--override",
+        "stage4.global_gallery.enabled=true",
     ]
     if camera_id:
         cmd.extend(["--override", f"stage0.cameras=[{camera_id}]"])
@@ -1027,18 +1057,35 @@ async def get_crop_from_run(
 
     run_dir = OUTPUT_DIR / run_id / "stage0" / cameraId
     if not run_dir.exists():
-        raise HTTPException(status_code=404, detail="Run/camera frames not found")
+        # Fallback to the main dataset global gallery precomputed folder
+        fallback_dir = OUTPUT_DIR / "dataset_precompute_s01" / "stage0" / cameraId
+        if fallback_dir.exists():
+            run_dir = fallback_dir
+        else:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Run/camera frames not found. Looked in '{run_dir}' and fallback '{fallback_dir}' for cameraId '{cameraId}'."
+            )
 
     # Try both .jpg and .png frame files
-    frame_path = run_dir / f"frame_{frameId:06d}.jpg"
-    if not frame_path.exists():
-        frame_path = run_dir / f"frame_{frameId:06d}.png"
-    if not frame_path.exists():
-        raise HTTPException(status_code=404, detail=f"Frame {frameId} not found")
+    frame_path_jpg = run_dir / f"frame_{frameId:06d}.jpg"
+    frame_path_png = run_dir / f"frame_{frameId:06d}.png"
+    if frame_path_jpg.exists():
+        frame_path = frame_path_jpg
+    elif frame_path_png.exists():
+        frame_path = frame_path_png
+    else:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Frame {frameId} not found. Looked for '{frame_path_jpg}' and '{frame_path_png}'."
+        )
 
     frame = cv2.imread(str(frame_path))
     if frame is None:
-        raise HTTPException(status_code=500, detail="Failed to read frame image")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to read frame image from '{frame_path}'"
+        )
 
     h, w = frame.shape[:2]
     cx1 = max(0, int(x1))
@@ -1130,6 +1177,103 @@ async def get_trajectories(run_id: str):
         return {"success": True, "data": []}
 
     return {"success": True, "data": json.loads(traj_path.read_text())}
+
+
+@app.post("/api/timeline/query")
+async def query_timeline(request: TimelineQueryRequest):
+    """Resolve selected Stage-2 tracklets into Stage-4 matched trajectories.
+
+    Returns both matched trajectories (if any) and selected single-camera tracklet
+    summaries as a safe fallback so the timeline never has to guess.
+    """
+    if request.videoId not in uploaded_videos:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    selected_nums = _parse_selected_track_nums(request.selectedTrackIds)
+    if not selected_nums:
+        return {
+            "success": True,
+            "data": {
+                "stage4Available": False,
+                "mode": "no_selection",
+                "message": "No selected tracklets were provided",
+                "trajectories": [],
+                "selectedTracklets": [],
+                "diagnostics": {
+                    "selectedCount": 0,
+                    "selectedKeyCount": 0,
+                    "trajectoryCount": 0,
+                    "matchedTrajectoryCount": 0,
+                },
+            },
+        }
+
+    video_info = uploaded_videos[request.videoId]
+    resolved_cam = _normalize_camera_id(_detect_camera_for_video(video_info, None))
+
+    diag = {
+        "selectedCount": len(selected_nums),
+        "trajectoryCount": 0,
+        "matchedTrajectoryCount": 0,
+        "parsedNums": list(selected_nums),
+        "rawIdsReceived": request.selectedTrackIds,
+        "resolvedCamera": resolved_cam,
+    }
+
+    traj_path = OUTPUT_DIR / request.runId / "stage4" / "global_trajectories.json"
+    if not traj_path.exists():
+        return {
+            "success": True,
+            "data": {
+                "stage4Available": False,
+                "mode": "needs_association",
+                "message": "Stage 4 artifacts missing for this run",
+                "trajectories": [],
+                "selectedTracklets": [],
+                "diagnostics": diag,
+            },
+        }
+
+    trajectories = json.loads(traj_path.read_text())
+    if not isinstance(trajectories, list):
+        trajectories = []
+
+    diag["trajectoryCount"] = len(trajectories)
+
+    filtered: List[Dict[str, Any]] = []
+    if selected_nums:
+        for traj in trajectories:
+            tracklets = traj.get("tracklets", []) if isinstance(traj, dict) else []
+            found = False
+            for t in tracklets:
+                cam = _normalize_camera_id(str(t.get("camera_id") or t.get("cameraId") or ""))
+                tid = int(t.get("track_id") or t.get("trackId") or -1)
+                if tid in selected_nums and cam == resolved_cam:
+                    found = True
+                    break
+            if found:
+                filtered.append(traj)
+
+    if filtered:
+        mode = "matched"
+        message = "Association loaded (query-matched)"
+    else:
+        mode = "empty"
+        message = "Selected tracklets could not be resolved in current video/run context"
+
+    diag["matchedTrajectoryCount"] = len(filtered)
+
+    return {
+        "success": True,
+        "data": {
+            "stage4Available": True,
+            "mode": mode,
+            "message": message,
+            "trajectories": filtered,
+            "selectedTracklets": [],
+            "diagnostics": diag,
+        },
+    }
 
 @app.post("/api/search/tracklet")
 async def search_by_tracklet(request: SearchRequest):

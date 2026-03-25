@@ -46,6 +46,7 @@ def run_stage4(
     features: List[TrackletFeatures],
     tracklets_by_camera: Dict[str, List[Tracklet]],
     output_dir: str | Path,
+    query_cameras: Optional[Set[str]] = None,
 ) -> List[GlobalTrajectory]:
     """Run cross-camera association.
 
@@ -56,6 +57,7 @@ def run_stage4(
         features: TrackletFeatures from Stage 2.
         tracklets_by_camera: Tracklets from Stage 1.
         output_dir: Directory for stage4 outputs.
+        query_cameras: If provided, filter final trajectories to only those involving these cameras.
 
     Returns:
         List of GlobalTrajectory objects.
@@ -702,6 +704,22 @@ def run_stage4(
         embeddings=embeddings,
         combined_sim=combined_sim,
     )
+
+    # If we are in query mode, filter the results
+    if query_cameras:
+        original_count = len(trajectories)
+        filtered_trajectories = []
+        for traj in trajectories:
+            # Get unique cameras involved in this trajectory
+            traj_cameras = set([t.camera_id for t in traj.tracklets])
+            
+            is_query_involved = any(cam in query_cameras for cam in traj_cameras)
+            # Ensure it linked to the wider gallery, otherwise it's just the local tracklet
+            is_global_match = len(traj_cameras - query_cameras) > 0
+            if is_query_involved and is_global_match:
+                filtered_trajectories.append(traj)
+        trajectories = filtered_trajectories
+        logger.info(f"Filtered to query matches: kept {len(trajectories)} trajectories out of {original_count}")
 
     # Log confidence distribution for diagnostics
     confidences = [t.confidence for t in trajectories if t.num_cameras > 1]

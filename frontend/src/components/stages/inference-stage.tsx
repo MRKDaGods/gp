@@ -120,7 +120,7 @@ export function InferenceStage() {
   const { setCurrentStage, locationFilter, setLocationFilter, dateTimeRange, setDateTimeRange } =
     useSessionStore();
   const { runId, setRunId, setIsRunning, updateStageProgress, stages } = usePipelineStore();
-  const { currentVideo } = useVideoStore();
+  const { currentVideo, videos, setCurrentVideo } = useVideoStore();
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processStep, setProcessStep] = useState(0);
@@ -175,6 +175,13 @@ export function InferenceStage() {
     return (match?.[0] ?? "S02_c008").toUpperCase();
   };
 
+  const inferCameraIdFromVideo = (video?: { name?: string; path?: string } | null, fallback = "S02_c008") => {
+    if (!video) return fallback;
+    const candidate = `${video.name ?? ""} ${video.path ?? ""}`;
+    const match = candidate.match(/S\d{2}_c\d{3}/i);
+    return (match?.[0] ?? fallback).toUpperCase();
+  };
+
   const pollStageStatus = async (activeRunId: string, stage: 2 | 3) => {
     while (true) {
       const statusResponse = await getPipelineStatus(activeRunId);
@@ -206,20 +213,53 @@ export function InferenceStage() {
     const useDataset = selectedDataset && selectedDataset !== "__uploaded__";
     const selectedDs = useDataset ? datasets.find((d) => d.name === selectedDataset) : null;
 
-    if (!useDataset && !currentVideo) {
+    const datasetPrefix = useDataset ? `${selectedDataset.toUpperCase()}_` : null;
+    const datasetVideo = datasetPrefix
+      ? videos.find((v) => `${v.name} ${v.path}`.toUpperCase().includes(datasetPrefix))
+      : null;
+    const effectiveVideo = useDataset ? (datasetVideo ?? currentVideo) : currentVideo;
+
+    // Fast-path: if a dataset folder is already precomputed, reuse it instead of rerunning stages 2/3.
+    if (useDataset && selectedDs?.alreadyProcessed && selectedDs.runId) {
+      setRunId(selectedDs.runId);
+      setIsRunning(false);
+
+      if (effectiveVideo) {
+        setCurrentVideo(effectiveVideo);
+      }
+
+      updateStageProgress(2, {
+        status: "completed",
+        progress: 100,
+        message: "Using cached embeddings/index from dataset run",
+      });
+      updateStageProgress(3, {
+        status: "completed",
+        progress: 100,
+        message: "Using cached embeddings/index from dataset run",
+      });
+      setCurrentStage(4);
+      return;
+    }
+
+    if (!effectiveVideo) {
       updateStageProgress(2, {
         status: "error",
         progress: 100,
-        message: "No video selected. Go back to Upload.",
+        message: useDataset
+          ? "No video found for selected dataset scene. Select a matching video first."
+          : "No video selected. Go back to Upload.",
       });
       return;
     }
 
-    const cameraId = inferCameraId();
+    const cameraId = useDataset
+      ? inferCameraIdFromVideo(effectiveVideo, `${selectedDataset.toUpperCase()}_c001`)
+      : inferCameraId();
     const effectiveRunId = useDataset
       ? (selectedDs?.runId ?? `dataset_precompute_${selectedDataset.toLowerCase()}`)
       : (runId ?? undefined);
-    const effectiveVideoId = currentVideo?.id;
+    const effectiveVideoId = effectiveVideo.id;
 
     setIsProcessing(true);
     setIsRunning(true);
@@ -260,6 +300,9 @@ export function InferenceStage() {
         await pollStageStatus(stage3RunId, 3);
       }
 
+      if (effectiveVideo) {
+        setCurrentVideo(effectiveVideo);
+      }
       setCurrentStage(4);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Inference failed";

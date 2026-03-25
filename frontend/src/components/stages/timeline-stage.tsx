@@ -36,10 +36,25 @@ import {
   useVideoStore,
   useDetectionStore,
 } from "@/store";
-import { getTracklets, getTrajectories, runStage, getPipelineStatus } from "@/lib/api";
+import { getTracklets, getTrajectories, runStage, getPipelineStatus, queryTimeline } from "@/lib/api";
 import type { TimelineTrack, TrajectorySegment } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
+function shouldUseRunCropsForCamera(runId: string | undefined, cameraId: string): boolean {
+  if (!runId) return false;
+
+  // Dataset precompute runs are scene-scoped (e.g. dataset_precompute_s01).
+  // If the lane camera is from a different scene, run-stage0 crops will 404.
+  const m = runId.match(/^dataset_precompute_(s\d{2})$/i);
+  if (m) {
+    const runScene = m[1].toUpperCase();
+    const camScene = cameraId.split("_")[0]?.toUpperCase() ?? "";
+    return runScene === camScene;
+  }
+
+  return true;
+}
 
 
 export function TimelineStage() {
@@ -64,6 +79,7 @@ export function TimelineStage() {
   const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
   const [splitCount, setSplitCount] = useState(6);
   const [showProgress, setShowProgress] = useState(true);
+  const [triggerReload, setTriggerReload] = useState(0);
   const timelineRef = useRef<HTMLDivElement>(null);
 
   type CameraLaneSegment = TrajectorySegment & {
@@ -96,9 +112,14 @@ export function TimelineStage() {
     // Expected format: "(camera_id, track_id)"
     const m = raw.match(/^\((.+?),\s*(\d+)\)$/);
     if (!m) return null;
-    return `${String(m[1])}:${Number(m[2])}`;
+    return `${normalizeCameraId(String(m[1]))}:${Number(m[2])}`;
   };
 
+  const normalizeCameraId = (cameraId: string): string => {
+    // Stage 4 query mode prefixes uploaded cameras with `query_`.
+    // Normalize here so selected keys from Stage 2 still match Stage 4 outputs.
+    return cameraId.startsWith("query_") ? cameraId.slice(6) : cameraId;
+  };
   const scoreTrajectoryForQuery = (trajectory: any, selectedTrackKeys: Set<string>): number => {
     const evidence = Array.isArray(trajectory?.evidence) ? trajectory.evidence : [];
     let best = -1;
@@ -229,13 +250,17 @@ export function TimelineStage() {
   ): TimelineTrack[] => {
     if (!Array.isArray(trajectories) || trajectories.length === 0) return [];
 
+    // If caller provided a selection filter but it resolved to no keys,
+    // treat as "no match" instead of showing every trajectory.
+    if (selectedTrackKeys !== undefined && selectedTrackKeys.size === 0) return [];
+
     // Filter to selected identities using camera_id + track_id, because track_id
     // alone is not globally unique across cameras.
-    const filtered = selectedTrackKeys && selectedTrackKeys.size > 0
+    const filtered = selectedTrackKeys !== undefined
       ? trajectories.filter((traj: any) => {
           const tracklets = Array.isArray(traj.tracklets) ? traj.tracklets : [];
           return tracklets.some((t: any) => {
-            const cam = String(t.camera_id ?? t.cameraId ?? "");
+            const cam = normalizeCameraId(String(t.camera_id ?? t.cameraId ?? ""));
             const tid = Number(t.track_id ?? t.trackId ?? -1);
             return selectedTrackKeys.has(`${cam}:${tid}`);
           });
@@ -278,7 +303,7 @@ export function TimelineStage() {
         const matchedTracklet = tracklets.find(
           (t: any) =>
             (t.track_id ?? t.trackId) === trackId &&
-            (t.camera_id ?? t.cameraId) === cameraId
+            normalizeCameraId(String(t.camera_id ?? t.cameraId)) === normalizeCameraId(cameraId)
         );
         if (matchedTracklet) {
           const frames: any[] = Array.isArray(matchedTracklet.frames) ? matchedTracklet.frames : [];
@@ -307,7 +332,7 @@ export function TimelineStage() {
       // Prefer the segment that actually matches the user's Stage 2 selection;
       // otherwise fall back to the first segment.
       const selectedSegment = segments.find((seg) =>
-        selectedTrackKeys?.has(`${seg.cameraId}:${seg.trackId}`)
+        selectedTrackKeys?.has(`${normalizeCameraId(seg.cameraId)}:${seg.trackId}`)
       );
       const primarySegment = selectedSegment ?? segments[0];
       const primaryCamera = primarySegment?.cameraId ?? "unknown";
@@ -350,38 +375,157 @@ export function TimelineStage() {
 
       try {
         let attemptedAssociation = false;
+        const selectedTrackIds = Array.from(selectedIds).map((v) => String(v));
 
-        // Build selected identity keys from Stage 2 tracklets for precise filtering.
-        let selectedTrackKeys: Set<string> | undefined;
-        if (selectedIds.size > 0) {
-          const trackletResp = await getTracklets(undefined, currentVideo.id);
-          const stage2Tracklets = Array.isArray(trackletResp.data) ? trackletResp.data : [];
-          const selectedTrackNums = new Set<number>();
-          selectedIds.forEach((raw) => {
-            const parsed = parseSelectedTrackId(String(raw));
-            if (parsed !== null) selectedTrackNums.add(parsed);
+        console.groupCollapsed("[Stage4][Timeline] loadTracks");
+        console.info("context", {
+          runId,
+          videoId: currentVideo.id,
+          selectedTrackletCount: selectedTrackIds.length,
+          selectedTrackIds,
+        });
+
+        // Query mode: resolve selected tracklets to matched trajectories on backend.
+        if (runId && selectedIds.size > 0) {
+          attemptedAssociation = true;
+          const q1 = await queryTimeline(runId, currentVideo.id, selectedTrackIds);
+          if (cancelled) return;
+
+          const q1Data: any = q1.data ?? {};
+          const q1Traj = Array.isArray(q1Data.trajectories) ? q1Data.trajectories : [];
+          const q1Selected = Array.isArray(q1Data.selectedTracklets) ? q1Data.selectedTracklets : [];
+
+          console.info("queryTimeline#1", {
+            mode: q1Data.mode,
+            message: q1Data.message,
+            stage4Available: q1Data.stage4Available,
+            diagnostics: q1Data.diagnostics,
+            trajectories: q1Traj.length,
+            selectedTracklets: q1Selected.length,
           });
 
-          selectedTrackKeys = new Set(
-            stage2Tracklets
-              .filter((t: any) => selectedTrackNums.has(Number(t.id)))
-              .map((t: any) => `${String(t.cameraId)}:${Number(t.id)}`)
-          );
+          if (q1Traj.length > 0) {
+            const rows = buildTracksFromTrajectories(q1Traj);
+            setTracks(rows);
+            updateStageProgress(4, { status: "completed", progress: 100, message: String(q1Data.message ?? "Association loaded (query-matched)") });
+            console.info("decision", "matched trajectories rendered", { rows: rows.length });
+            console.groupEnd();
+            return;
+          }
+
+          // If stage4 artifacts are missing for this run, execute stage4 then query again.
+          if (!q1Data.stage4Available) {
+            updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
+            const stageResp = await runStage(4, { runId, videoId: currentVideo.id });
+            if (cancelled) return;
+            const stage4RunId = (stageResp.data as any)?.runId ?? runId;
+
+            let done = false;
+            while (!done && !cancelled) {
+              await new Promise((r) => setTimeout(r, 1500));
+              if (cancelled) return;
+              const statusResp = await getPipelineStatus(stage4RunId);
+              if (cancelled) return;
+              const statusData: any = statusResp.data;
+              const status = statusData?.status;
+              const progress = Number(statusData?.progress ?? 0);
+              const message = String(statusData?.message ?? "Running...");
+              updateStageProgress(4, { progress, message });
+              if (status === "completed" || status === "error") done = true;
+              if (status === "error") {
+                const errMsg = String(statusData?.error ?? "Stage 4 association failed");
+                updateStageProgress(4, { status: "error", message: errMsg });
+                break;
+              }
+            }
+
+            if (!cancelled) {
+              const q2 = await queryTimeline(stage4RunId, currentVideo.id, selectedTrackIds);
+              if (cancelled) return;
+              const q2Data: any = q2.data ?? {};
+              const q2Traj = Array.isArray(q2Data.trajectories) ? q2Data.trajectories : [];
+              const q2Selected = Array.isArray(q2Data.selectedTracklets) ? q2Data.selectedTracklets : [];
+
+              console.info("queryTimeline#2", {
+                mode: q2Data.mode,
+                message: q2Data.message,
+                stage4Available: q2Data.stage4Available,
+                diagnostics: q2Data.diagnostics,
+                trajectories: q2Traj.length,
+                selectedTracklets: q2Selected.length,
+              });
+
+              if (q2Traj.length > 0) {
+                const rows = buildTracksFromTrajectories(q2Traj);
+                setTracks(rows);
+                updateStageProgress(4, { status: "completed", progress: 100, message: String(q2Data.message ?? "Association complete (query-matched)") });
+                console.info("decision", "matched trajectories rendered after stage4", { rows: rows.length });
+                console.groupEnd();
+                return;
+              }
+
+              if (q2Selected.length > 0) {
+                const fallbackTracks = buildTracksFromSummary(q2Selected);
+                setTracks(fallbackTracks);
+                updateStageProgress(4, {
+                  status: "completed",
+                  progress: 100,
+                  message: String(q2Data.message ?? "No cross-camera match found; showing selected single-camera tracklets"),
+                });
+                console.info("decision", "selected single-camera fallback rendered after stage4", {
+                  rows: fallbackTracks.length,
+                });
+                console.groupEnd();
+                return;
+              }
+            }
+          }
+
+          // stage4 exists but no match; show selected single-camera tracklets if available.
+          if (q1Selected.length > 0) {
+            const fallbackTracks = buildTracksFromSummary(q1Selected);
+            setTracks(fallbackTracks);
+            updateStageProgress(4, {
+              status: "completed",
+              progress: 100,
+              message: String(q1Data.message ?? "No cross-camera match found; showing selected single-camera tracklets"),
+            });
+            console.info("decision", "selected single-camera fallback rendered", { rows: fallbackTracks.length });
+            console.groupEnd();
+            return;
+          }
+
+          // Critical: if query mode was requested but backend returned neither
+          // matches nor selected fallback, do NOT fall through to the non-query
+          // path that loads all trajectories.
+          setTracks([]);
+          updateStageProgress(4, {
+            status: "completed",
+            progress: 100,
+            message: String(q1Data.message ?? "Selected query could not be resolved for this run/video context"),
+          });
+          console.warn("decision", "query unresolved; blocked non-query fallback to avoid showing all trajectories", {
+            diagnostics: q1Data.diagnostics,
+          });
+          console.groupEnd();
+          return;
         }
 
-        // If we already have stage4 trajectory artifacts, load them directly
+        // If we already have stage4 trajectory artifacts and no explicit query selection,
+        // load them directly.
         if (runId) {
           attemptedAssociation = true;
           const trajectoryResponse = await getTrajectories(runId);
           if (cancelled) return;
 
           const trajectoryRows = buildTracksFromTrajectories(
-            Array.isArray(trajectoryResponse.data) ? trajectoryResponse.data : [],
-            selectedTrackKeys
+            Array.isArray(trajectoryResponse.data) ? trajectoryResponse.data : []
           );
           if (trajectoryRows.length > 0) {
             setTracks(trajectoryRows);
             updateStageProgress(4, { status: "completed", progress: 100, message: "Association loaded (query-matched)" });
+            console.info("decision", "non-query stage4 trajectories rendered", { rows: trajectoryRows.length });
+            console.groupEnd();
             return;
           }
 
@@ -417,12 +561,13 @@ export function TimelineStage() {
             const traj2 = await getTrajectories(stage4RunId);
             if (cancelled) return;
             const rows2 = buildTracksFromTrajectories(
-              Array.isArray(traj2.data) ? traj2.data : [],
-              selectedTrackKeys
+              Array.isArray(traj2.data) ? traj2.data : []
             );
             if (rows2.length > 0) {
               setTracks(rows2);
               updateStageProgress(4, { status: "completed", progress: 100, message: "Association complete (query-matched)" });
+              console.info("decision", "non-query stage4 trajectories rendered after rerun", { rows: rows2.length });
+              console.groupEnd();
               return;
             }
           }
@@ -430,13 +575,39 @@ export function TimelineStage() {
 
         // Only suppress fallback when association was actually attempted.
         // If we ran association but found nothing, just fallback anyway so the timeline isn't completely empty and broken.
-        if (attemptedAssociation && selectedIds.size > 0 && false) {
-          setTracks([]);
-          updateStageProgress(4, {
-            status: "completed",
-            progress: 100,
-            message: "No association match found for selected query tracklet(s)",
+        if (attemptedAssociation && selectedIds.size > 0) {
+          // Keep strict query behavior (do not show unrelated trajectories), but
+          // avoid a blank timeline by falling back to only the selected stage-1 tracklets.
+          const fallbackResp = await getTracklets(undefined, currentVideo.id);
+          if (cancelled) return;
+          let fallbackSummary = Array.isArray(fallbackResp.data) ? fallbackResp.data : [];
+
+          const selectedTrackNums = new Set<number>();
+          selectedIds.forEach((raw) => {
+            const parsed = parseSelectedTrackId(String(raw));
+            if (parsed !== null) selectedTrackNums.add(parsed);
           });
+          fallbackSummary = fallbackSummary.filter((item: any) => selectedTrackNums.has(Number(item.id)));
+
+          const fallbackTracks = buildTracksFromSummary(fallbackSummary);
+          if (fallbackTracks.length > 0) {
+            setTracks(fallbackTracks);
+            updateStageProgress(4, {
+              status: "completed",
+              progress: 100,
+              message: "No cross-camera match found; showing selected single-camera tracklets",
+            });
+            console.info("decision", "selected stage1 fallback rendered", { rows: fallbackTracks.length });
+          } else {
+            setTracks([]);
+            updateStageProgress(4, {
+              status: "completed",
+              progress: 100,
+              message: "No association match found for selected query tracklet(s)",
+            });
+            console.warn("decision", "no selected stage1 fallback available");
+          }
+          console.groupEnd();
           return;
         }
 
@@ -458,11 +629,15 @@ export function TimelineStage() {
         if (realTracks.length > 0) {
           setTracks(realTracks);
           updateStageProgress(4, { status: "completed", progress: 100, message: "Showing stage 1 tracklets" });
+          console.info("decision", "no-query stage1 summary rendered", { rows: realTracks.length });
         }
+        console.groupEnd();
       } catch (err) {
         if (!cancelled) {
           updateStageProgress(4, { status: "error", progress: 0, message: String(err) });
+          console.error("[Stage4][Timeline] loadTracks error", err);
         }
+        console.groupEnd();
       }
     };
 
@@ -471,7 +646,7 @@ export function TimelineStage() {
     return () => {
       cancelled = true;
     };
-  }, [currentVideo, runId, selectedIds, setTracks]);
+  }, [currentVideo, runId, selectedIds, setTracks, triggerReload]);
 
   // Playback simulation — advance at correct FPS derived from video metadata
   useEffect(() => {
@@ -515,6 +690,33 @@ export function TimelineStage() {
 
   const handleProceed = () => {
     setCurrentStage(5);
+  };
+
+  const handleRerunAssociation = async () => {
+    if (!currentVideo || !runId) return;
+    setTracks([]);
+    updateStageProgress(4, { status: "running", progress: 5, message: "Manually re-running association..." });
+    try {
+      await runStage(4, { runId, videoId: currentVideo.id });
+      let done = false;
+      while (!done) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const statusData = await getPipelineStatus(runId);
+        const st = statusData.data as any;
+        const progress = st?.stageProgress?.[4] ?? 0;
+        const message = st?.stageMessages?.[4] ?? "Running...";
+        const status = st?.stageStatus?.[4] ?? "running";
+        
+        updateStageProgress(4, { progress, message, status });
+        if (status === "completed" || status === "error") {
+          done = true;
+        }
+      }
+      // trigger a refresh
+      setTriggerReload(n => n + 1);
+    } catch (e) {
+      updateStageProgress(4, { status: "error", progress: 0, message: String(e) });
+    }
   };
 
   const confirmedCount = tracks.filter((t) => t.confirmed).length;
@@ -579,6 +781,15 @@ export function TimelineStage() {
           <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
             {confirmedCount} confirmed
           </Badge>
+          <Button
+              className="mr-2"
+              variant="outline"
+              disabled={progress.status === "running"}
+              onClick={handleRerunAssociation}
+            >
+              <RefreshCw className={cn("mr-2 h-4 w-4", progress.status === "running" && "animate-spin")} />
+              Rerun Association
+          </Button>
           <Button onClick={handleProceed}>
             Continue to Refinement
             <ArrowRight className="ml-2 h-4 w-4" />
@@ -641,7 +852,7 @@ export function TimelineStage() {
             {tracks.length === 0 ? (
               <p className="text-xs text-muted-foreground mt-2">
                 {selectedTrackletCount > 0
-                  ? "No trajectories match selected tracklets. Run Stage 4 to associate them."
+                  ? (stage4Progress?.message || "No trajectories match selected tracklets. Run Stage 4 to associate them.")
                   : "No tracklet data yet."}
               </p>
             ) : (
@@ -812,9 +1023,11 @@ function CameraPreview({
     const t = camera.activeTrack;
     const bbox = t.representativeBbox;
     const frameId = t.representativeFrame;
-    if (!bbox || bbox.length !== 4 || frameId == null) return null;
-    const bboxParams = `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`;
-    if (runId) {
+    if (frameId == null) return null;
+    const bboxParams = (bbox && bbox.length === 4)
+      ? `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`
+      : "x1=0&y1=0&x2=9999&y2=9999";
+    if (runId && shouldUseRunCropsForCamera(runId, t.cameraId)) {
       return `${API_BASE}/crops/run/${runId}?cameraId=${t.cameraId}&frameId=${frameId}&${bboxParams}`;
     }
     if (videoId) {
@@ -1007,9 +1220,13 @@ function TimelineRow({ lane, totalDuration, isSelected, onClick, timeToPixel, cu
         const cropUrl = (() => {
           const bbox = seg.representativeBbox;
           const frameId = seg.representativeFrame;
-          if (!bbox || bbox.length !== 4 || frameId == null) return null;
-          const bboxParams = `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`;
-          if (runId) return `${API_BASE}/crops/run/${runId}?cameraId=${seg.cameraId}&frameId=${frameId}&${bboxParams}`;
+          if (frameId == null) return null;
+          const bboxParams = (bbox && bbox.length === 4)
+            ? `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`
+            : "x1=0&y1=0&x2=9999&y2=9999";
+          if (runId && shouldUseRunCropsForCamera(runId, seg.cameraId)) {
+            return `${API_BASE}/crops/run/${runId}?cameraId=${seg.cameraId}&frameId=${frameId}&${bboxParams}`;
+          }
           if (videoId) return `${API_BASE}/crops/${videoId}?frameId=${frameId}&${bboxParams}`;
           return null;
         })();
