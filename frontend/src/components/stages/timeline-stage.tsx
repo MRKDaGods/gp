@@ -78,7 +78,7 @@ export function TimelineStage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
-  const [splitCount, setSplitCount] = useState(6);
+  const [splitCount, setSplitCount] = useState<number | null>(null);
   const [showProgress, setShowProgress] = useState(true);
   const [triggerReload, setTriggerReload] = useState(0);
   const [matchedFallbackActive, setMatchedFallbackActive] = useState(false);
@@ -235,6 +235,8 @@ export function TimelineStage() {
     }));
   })();
 
+  const effectiveSplitCount = splitCount ?? Math.min(camerasForPreview.length || 1, 8);
+
   const buildTracksFromSummary = (summary: any[]): TimelineTrack[] => {
     if (!currentVideo || summary.length === 0) return [];
     const fps = Math.max(currentVideo.fps || 10, 1);
@@ -268,39 +270,35 @@ export function TimelineStage() {
     const clips: any[] = Array.isArray(summary?.clips) ? summary.clips.filter((c: any) => c.ok) : [];
     if (clips.length === 0) return [];
 
-    // Group by global_id → one trajectory row per global vehicle
-    const byGid = new Map<number, any[]>();
+    const rows: TimelineTrack[] = [];
     for (const clip of clips) {
       const gid = Number(clip.global_id ?? 0);
-      byGid.set(gid, [...(byGid.get(gid) ?? []), clip]);
-    }
-
-    const rows: TimelineTrack[] = [];
-    byGid.forEach((clipList, gid) => {
-      const segments = clipList.map((clip: any) => ({
-        cameraId: String(clip.camera_id),
-        trackId: Number(clip.track_id),
+      const cam = String(clip.camera_id);
+      const tid = Number(clip.track_id);
+      const start = Number(clip.start_time_s ?? 0);
+      const end = Number(clip.end_time_s ?? (start + Number(clip.duration_s ?? 0.1)));
+      const seg = {
+        cameraId: cam,
+        trackId: tid,
         globalId: gid,
-        start: Number(clip.start_time_s ?? 0),
-        end: Number(clip.end_time_s ?? (Number(clip.start_time_s ?? 0) + Number(clip.duration_s ?? 0.1))),
-        color: getCameraColor(String(clip.camera_id)),
-      }));
-      const startTime = Math.min(...segments.map((s) => s.start));
-      const endTime = Math.max(...segments.map((s) => s.end));
+        start,
+        end,
+        color: getCameraColor(cam),
+      };
       rows.push({
-        id: `fallback-${gid}`,
-        cameraId: segments[0]?.cameraId ?? "unknown",
-        trackletId: gid,
+        id: `fallback-${gid}-${cam}-${tid}`,
+        cameraId: cam,
+        trackletId: tid,
         globalId: gid,
-        startTime,
-        endTime: Math.max(endTime, startTime + 0.1),
+        startTime: start,
+        endTime: Math.max(end, start + 0.1),
         selected: false,
-        confirmed: true,
-        segments,
-        label: `G-${String(gid).padStart(4, "0")} · ${segments.length} cam${segments.length !== 1 ? "s" : ""}`,
-        confidence: Number(clipList[0]?.confidence ?? 0),
+        confirmed: false,
+        segments: [seg],
+        label: `G-${String(gid).padStart(4, "0")} · ${cam} · track ${tid}`,
+        confidence: Number(clip.confidence ?? 0),
       });
-    });
+    }
     return rows;
   };
 
@@ -354,8 +352,6 @@ export function TimelineStage() {
       const tracklets: any[] = Array.isArray(trajectory.tracklets) ? trajectory.tracklets : [];
 
       if (timeline.length === 0) return; // nothing to render
-
-      // Build one segment per camera appearance, sorted by start time (already sorted by backend)
       const segments = timeline.map((entry: any) => {
         const cameraId = String(entry.camera_id ?? entry.cameraId ?? "unknown");
         const trackId = entry.track_id ?? entry.trackId;
@@ -391,41 +387,30 @@ export function TimelineStage() {
         };
       });
 
-      // Row spans the full trajectory extent
-      const rowStart = Math.min(...segments.map((s) => s.start));
-      const rowEnd = Math.max(...segments.map((s) => s.end));
-
-      // Prefer the segment that actually matches the user's Stage 2 selection;
-      // otherwise fall back to the first segment.
-      const selectedSegment = segments.find((seg) =>
-        selectedTrackKeys?.has(`${normalizeCameraId(seg.cameraId)}:${seg.trackId}`)
-      );
-      const primarySegment = selectedSegment ?? segments[0];
-      const primaryCamera = primarySegment?.cameraId ?? "unknown";
-
       // Determine dominant class from trajectory (backend may include class_name)
       const className: string = trajectory.class_name ?? trajectory.className ?? "vehicle";
-      const nCams = new Set(segments.map((s) => s.cameraId)).size;
       const confidence: number = selectedTrackKeys && selectedTrackKeys.size > 0
         ? scoreTrajectoryForQuery(trajectory, selectedTrackKeys)
         : (typeof trajectory.confidence === "number" ? trajectory.confidence : 1);
 
-      rows.push({
-        id: `traj-${globalId}`,
-        cameraId: primaryCamera,
-        trackletId: globalId,
-        globalId,
-        startTime: rowStart,
-        endTime: rowEnd,
-        selected: false,
-        confirmed: true,
-        representativeFrame: primarySegment?.representativeFrame,
-        representativeBbox: primarySegment?.representativeBbox,
-        // Notebook-style multi-camera data
-        segments,
-        label: `G-${String(globalId).padStart(4, "0")} · ${nCams} cam${nCams !== 1 ? "s" : ""} · ${className}`,
-        confidence,
-        className,
+      // One row per camera segment so the user can confirm/reject each individually
+      segments.forEach((seg) => {
+        rows.push({
+          id: `traj-${globalId}-${seg.cameraId}-${seg.trackId}`,
+          cameraId: seg.cameraId,
+          trackletId: seg.trackId,
+          globalId,
+          startTime: seg.start,
+          endTime: seg.end,
+          selected: false,
+          confirmed: false,
+          representativeFrame: seg.representativeFrame,
+          representativeBbox: seg.representativeBbox,
+          segments: [seg],
+          label: `G-${String(globalId).padStart(4, "0")} · ${seg.cameraId} · track ${seg.trackId}`,
+          confidence,
+          className,
+        });
       });
     });
 
@@ -832,7 +817,7 @@ export function TimelineStage() {
   // Dynamic time ruler tick interval: keep ~10–15 ticks on screen regardless of duration
   const rulerTickInterval = totalDuration <= 30 ? 5 : totalDuration <= 120 ? 10 : totalDuration <= 600 ? 30 : 60;
 
-  const visibleCameras = camerasForPreview.slice(0, splitCount);
+  const visibleCameras = camerasForPreview.slice(0, effectiveSplitCount);
 
   // For the selected trajectory, find which cameras are active at currentTime.
   // Also determine "past" cameras (ended) and "next" cameras (not started yet)
@@ -962,12 +947,12 @@ export function TimelineStage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Cameras</span>
-                <span className="text-sm font-medium">{splitCount}</span>
+                <span className="text-sm font-medium">{effectiveSplitCount}</span>
               </div>
               <Slider
-                value={[splitCount]}
+                value={[effectiveSplitCount]}
                 min={1}
-                max={6}
+                max={8}
                 step={1}
                 onValueChange={(v) => setSplitCount(v[0])}
               />
@@ -1003,15 +988,14 @@ export function TimelineStage() {
         </aside>
 
         {/* Main timeline area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col overflow-y-auto">
           {/* Video preview area - CityFlow camera grid */}
-          <div className="h-56 border-b bg-slate-900 p-2">
+          <div className="border-b bg-slate-900 p-2 shrink-0" style={{ height: '65vh' }}>
             <div
               className="grid gap-1 h-full"
               style={{
-                // Dynamic grid: 1→1×1, 2→2×1, 3→2×2, 4→2×2, 5→3×2, 6→3×2
-                gridTemplateColumns: `repeat(${Math.ceil(Math.sqrt(splitCount))}, 1fr)`,
-                gridTemplateRows: `repeat(${Math.ceil(splitCount / Math.ceil(Math.sqrt(splitCount)))}, 1fr)`,
+                gridTemplateColumns: `repeat(${Math.ceil(Math.sqrt(effectiveSplitCount))}, 1fr)`,
+                gridTemplateRows: `repeat(${Math.ceil(effectiveSplitCount / Math.ceil(Math.sqrt(effectiveSplitCount)))}, 1fr)`,
               }}
             >
               {activeCamerasForGrid.map((cam) => (
@@ -1087,8 +1071,8 @@ export function TimelineStage() {
           </div>
 
           {/* Timeline tracks */}
-          <div className="flex-1 overflow-hidden bg-muted/10">
-            <ScrollArea className="h-full">
+          <div className="shrink-0 bg-muted/10" style={{ minHeight: '200px' }}>
+            <ScrollArea>
               <div ref={timelineRef} className="p-4 min-w-max">
                 {/* Time ruler */}
                 <div className="h-6 mb-2 relative border-b border-muted">
