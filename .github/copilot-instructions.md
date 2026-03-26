@@ -79,6 +79,12 @@ tests/            pytest test suite
 - **Gap**: ~5.6pp from SOTA, caused by feature quality not association tuning (220+ configs exhausted)
 - Key params (v80 best): sim_thresh=0.53, fic_reg=0.1, app_w=0.70, conflict_free_cc, min_hits=2, PCA=384D
 
+## Experiment History
+- **Full experiment log**: See `docs/experiment-log.md` for 225+ tracked experiments
+- Before trying ANY parameter change, check the experiment log to avoid repeating failed experiments
+- Key dead ends documented: CSLS (-34.7pp), hierarchical clustering (-1-5pp), FAC (-2.5pp), feature concat (-1.6pp), mtmc_only (-5pp)
+- Association parameters are EXHAUSTED (220+ configs). Future gains come from feature quality improvements.
+
 ## Kaggle Workflow
 - Pipeline chain: 10a (stages 0-2, GPU) → 10b (stage 3, CPU) → 10c (stages 4-5, CPU)
 - Push: `kaggle kernels push -p notebooks/kaggle/10X_stagesNN/`

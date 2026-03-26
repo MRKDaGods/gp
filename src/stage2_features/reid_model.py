@@ -134,13 +134,28 @@ class ReIDModel:
                 elif "model" in state_dict:
                     state_dict = state_dict["model"]
 
-                state_dict = {
-                    k.replace("module.", "", 1): v for k, v in state_dict.items()
-                }
-                state_dict = {
-                    k: v for k, v in state_dict.items()
-                    if not k.startswith("classifier")
-                }
+                remapped_state_dict = {}
+                backbone_roots = (
+                    "conv1",
+                    "bn1",
+                    "layer1",
+                    "layer2",
+                    "layer3",
+                    "layer4",
+                )
+                for key, value in state_dict.items():
+                    key = key.replace("module.", "", 1)
+                    key = key.replace(".in_norm.", ".IN.").replace(".bn_norm.", ".BN.")
+
+                    if key.startswith("classifier"):
+                        continue
+
+                    if key.startswith(backbone_roots):
+                        key = f"backbone.{key}"
+
+                    remapped_state_dict[key] = value
+
+                state_dict = remapped_state_dict
                 missing, unexpected = model.load_state_dict(state_dict, strict=False)
 
                 critical_missing = [k for k in missing if not k.startswith("classifier")]

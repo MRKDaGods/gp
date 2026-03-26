@@ -1,7 +1,7 @@
 {
-  "id": "mrkdagods/09b-vehicle-reid-384px-vit-training",
-  "title": "09b Vehicle ReID 384px ViT Training v2",
-  "code_file": "09b_vehicle_reid_384px.ipynb",
+  "id": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+  "title": "09d Vehicle ReID ResNet101-IBN-a Training",
+  "code_file": "09d_vehicle_reid_resnet101ibn.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": false,
@@ -13,7 +13,5 @@
   ],
   "competition_sources": [],
   "kernel_sources": [],
-  "model_sources": [
-    "mrkdagods/transreid-veri/other/default/1"
-  ]
+  "model_sources": []
 }

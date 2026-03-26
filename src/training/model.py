@@ -21,6 +21,12 @@ import torch.nn.functional as F
 from loguru import logger
 
 
+_RESNET101_IBN_A_URL = (
+    "https://github.com/XingangPan/IBN-Net/releases/download/v1.0/"
+    "resnet101_ibn_a-59ea0ac6.pth"
+)
+
+
 def _build_backbone(model_name: str, last_stride: int = 1, pretrained: bool = True):
     """Build backbone using torchreid model zoo.
 
@@ -82,16 +88,34 @@ class GeM(nn.Module):
 
 
 def _build_resnet101_ibn_a(last_stride: int = 1, pretrained: bool = True) -> nn.Module:
-    """Build ResNet101 with IBN-a layers on layer1 and layer2."""
+    """Build ResNet101 with IBN-a layers on layer1, layer2, and layer3."""
     import torchvision.models as tv_models
 
-    weights = tv_models.ResNet101_Weights.DEFAULT if pretrained else None
-    base = tv_models.resnet101(weights=weights)
+    base = tv_models.resnet101(weights=None)
 
-    for layer in [base.layer1, base.layer2]:
+    for layer in [base.layer1, base.layer2, base.layer3]:
         for block in layer:
             if hasattr(block, "bn1"):
                 block.bn1 = IBN_a(block.bn1.num_features)
+
+    if pretrained:
+        state_dict = torch.hub.load_state_dict_from_url(
+            _RESNET101_IBN_A_URL,
+            map_location="cpu",
+            progress=True,
+        )
+        load_result = base.load_state_dict(state_dict, strict=False)
+        expected_missing = {"fc.weight", "fc.bias"}
+        if set(load_result.missing_keys) != expected_missing:
+            raise RuntimeError(
+                "Unexpected missing keys when loading ResNet101-IBN-a weights: "
+                f"{load_result.missing_keys}"
+            )
+        if load_result.unexpected_keys:
+            raise RuntimeError(
+                "Unexpected keys when loading ResNet101-IBN-a weights: "
+                f"{load_result.unexpected_keys}"
+            )
 
     if last_stride == 1:
         for module in base.layer4.modules():
