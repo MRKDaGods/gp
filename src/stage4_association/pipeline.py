@@ -111,6 +111,11 @@ def run_stage4(
                 logger.info("Applied FIC whitening to secondary embeddings")
         else:
             logger.warning(f"Secondary embeddings shape mismatch: {sec_raw.shape[0]} vs {n}")
+    elif sec_path:
+        logger.warning(
+            f"Secondary embeddings file not found: {sec_path}. "
+            f"Falling back to primary-only (sec_weight=0.0)."
+        )
 
     # Step 0: Per-camera feature whitening (FIC) — AIC21 1st-place technique.
     # Removes camera-specific bias (lighting, viewpoint) from embeddings.
