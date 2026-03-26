@@ -21,7 +21,8 @@ import json
 from pathlib import Path
 
 REPO_URL = "https://github.com/MRKDaGods/gp.git"
-OWNER = "mrkdagods"
+OWNER = "gumfreddy"
+WEIGHTS_OWNER = "mrkdagods"  # mtmc-weights dataset lives on this account
 
 # Kaggle kernel slugs — must match what Kaggle derives from the title
 # Rule: lowercase, replace non-alnum with hyphen, collapse hyphens
@@ -32,6 +33,11 @@ SLUG_10A = "mtmc-10a-stages-0-2-tracking-reid-features"
 SLUG_10B = "mtmc-10b-stage-3-faiss-indexing"
 SLUG_10C = "mtmc-10c-stages-4-5-association-eval"
 SLUG_GT  = "mtmc-gt-annotations"    # dataset: mrkdagods/mtmc-gt-annotations
+SLUG_CITYFLOW = "thanhnguyenle/data-aicity-2023-track-2"  # CityFlowV2 on Kaggle
+SLUG_09C = "09c-vehicle-reid-kd-vit-l-teacher"  # KD training kernel output
+
+# Toggle: when True, 10a will use the KD model from 09c output instead of baseline
+USE_KD_MODEL = True
 
 NB_ROOT = Path(__file__).parent.parent / "notebooks" / "kaggle"
 
@@ -108,6 +114,27 @@ def write_notebook(cells, out_dir, slug, title, kernel_sources=None, dataset_sou
 SETUP_ENV = """\
 import os, sys, subprocess, shutil, json, time, tarfile
 from pathlib import Path
+
+# --- Guard: detect GPU BEFORE importing torch ---
+# Kaggle's PyTorch 2.10+ drops P100 (sm_60) support.
+# If we got a P100, downgrade to a compatible build first.
+if shutil.which("nvidia-smi"):
+    _nvsmi = subprocess.run(
+        ["nvidia-smi", "--query-gpu=gpu_name,compute_cap", "--format=csv,noheader"],
+        capture_output=True, text=True)
+    if _nvsmi.returncode == 0 and _nvsmi.stdout.strip():
+        _gpu_name, _cap = _nvsmi.stdout.strip().split(",", 1)
+        _major, _minor = _cap.strip().split(".")
+        _sm = int(_major) * 10 + int(_minor)
+        if _sm < 70:
+            print(f"\\u26a0 GPU {_gpu_name.strip()} (sm_{_sm}) — installing compatible PyTorch ...")
+            subprocess.check_call([
+                sys.executable, "-m", "pip", "install", "-q",
+                "torch==2.4.1", "torchvision==0.19.1",
+                "--index-url", "https://download.pytorch.org/whl/cu124",
+            ])
+            print("\\u2713 Compatible PyTorch installed")
+
 import torch
 
 print(f"Python : {sys.version.split()[0]}")
@@ -156,7 +183,7 @@ except ImportError:
     except Exception: pip("faiss-cpu")
 
 pip("timm", "motmetrics")
-pip("gdown", "loguru", "omegaconf", "rich", "networkx>=3.1", "click")
+pip("loguru", "omegaconf", "rich", "networkx>=3.1", "click")
 subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "-q"],
                       cwd=str(PROJECT))
 print("\\n\\u2713 All dependencies installed")\
@@ -220,32 +247,32 @@ SANITY_LIGHT = _sanity([
     ("trackeval", "trackeval"),
 ])
 
-COPY_WEIGHTS = """\
-WEIGHTS_INPUT = Path("/kaggle/input/datasets/mrkdagods/mtmc-weights/models")
-assert WEIGHTS_INPUT.exists(), (
-    "Dataset 'mtmc-weights' not found.\\n"
-    f"  Expected: {WEIGHTS_INPUT}\\n"
-    "  Attach via: Add Data -> Your Datasets -> mtmc-weights"
+COPY_WEIGHTS = (
+    f'WEIGHTS_INPUT = Path("/kaggle/input/datasets/{WEIGHTS_OWNER}/mtmc-weights/models")\n'
+    'assert WEIGHTS_INPUT.exists(), (\n'
+    '    "Dataset \'mtmc-weights\' not found.\\n"\n'
+    '    f"  Expected: {WEIGHTS_INPUT}\\n"\n'
+    '    "  Attach via: Add Data -> Your Datasets -> mtmc-weights"\n'
+    ')\n'
+    '\n'
+    'MODELS_DST = PROJECT / "models"\n'
+    'if MODELS_DST.is_symlink(): MODELS_DST.unlink()\n'
+    'if MODELS_DST.exists(): shutil.rmtree(MODELS_DST)\n'
+    'print(f"Copying models/ from {WEIGHTS_INPUT} (~750 MB) ...")\n'
+    'shutil.copytree(str(WEIGHTS_INPUT), str(MODELS_DST))\n'
+    '\n'
+    'ESSENTIAL = [\n'
+    '    "models/detection/yolo26m.pt",\n'
+    '    "models/reid/transreid_cityflowv2_best.pth",\n'
+    '    "models/reid/vehicle_osnet_veri776.pth",\n'
+    '    "models/tracker/osnet_x0_25_msmt17.pt",\n'
+    ']\n'
+    'missing = [p for p in ESSENTIAL if not (PROJECT / p).exists()]\n'
+    'if missing:\n'
+    '    for m in missing: print(f"  MISSING: {m}")\n'
+    '    raise FileNotFoundError("Fix missing weights before continuing.")\n'
+    'print("\\u2713 All essential v4 weights present")'
 )
-
-MODELS_DST = PROJECT / "models"
-if MODELS_DST.is_symlink(): MODELS_DST.unlink()
-if MODELS_DST.exists(): shutil.rmtree(MODELS_DST)
-print(f"Copying models/ from {WEIGHTS_INPUT} (~750 MB) ...")
-shutil.copytree(str(WEIGHTS_INPUT), str(MODELS_DST))
-
-ESSENTIAL = [
-    "models/detection/yolo26m.pt",
-    "models/reid/transreid_cityflowv2_best.pth",
-    "models/reid/vehicle_osnet_veri776.pth",
-    "models/tracker/osnet_x0_25_msmt17.pt",
-]
-missing = [p for p in ESSENTIAL if not (PROJECT / p).exists()]
-if missing:
-    for m in missing: print(f"  MISSING: {m}")
-    raise FileNotFoundError("Fix missing weights before continuing.")
-print("\\u2713 All essential v4 weights present")\
-"""
 
 SHOW_RESULTS = """\
 stage5_dir = RUN_DIR / "stage5"
@@ -316,10 +343,49 @@ def build_10a():
     cells.append(md("## 2. Mount Model Weights\nModel weights dataset (`mtmc-weights`) must be attached.", "a07"))
     cells.append(code(COPY_WEIGHTS, "a08"))
 
+    # ── KD model integration (conditional) ────────────────────────────
+    if USE_KD_MODEL:
+        cells.append(md(
+            "## 2b. KD Model Override\n\n"
+            "Replace baseline TransReID vehicle model with Knowledge-Distilled version\n"
+            "from 09c training output (ViT-L teacher → ViT-B student).",
+            "a08b"))
+        cells.append(code(f"""\
+# --- KD model integration ---
+import yaml as _yaml
+
+_KD_SEARCH = [
+    Path("/kaggle/input/{SLUG_09C}/exported_models/transreid_cityflowv2_kd_best.pth"),
+    Path("/kaggle/input/datasets/{OWNER}/{SLUG_09C}/exported_models/transreid_cityflowv2_kd_best.pth"),
+]
+_KD_SRC = None
+for _p in _KD_SEARCH:
+    if _p.exists():
+        _KD_SRC = _p
+        break
+
+if _KD_SRC:
+    _KD_DST = PROJECT / "models" / "reid" / "transreid_cityflowv2_kd_best.pth"
+    shutil.copy2(str(_KD_SRC), str(_KD_DST))
+    print(f"\\u2713 KD model copied: {{_KD_SRC}} -> {{_KD_DST}} ({{_KD_DST.stat().st_size/1024**2:.1f}} MB)")
+
+    # Patch config to use KD model
+    _cfg_path = PROJECT / "configs" / "default.yaml"
+    _cfg = _yaml.safe_load(_cfg_path.read_text())
+    _old_weights = _cfg["stage2"]["reid"]["vehicle"]["weights_path"]
+    _cfg["stage2"]["reid"]["vehicle"]["weights_path"] = "models/reid/transreid_cityflowv2_kd_best.pth"
+    _cfg_path.write_text(_yaml.dump(_cfg, default_flow_style=False, sort_keys=False))
+    print(f"\\u2713 Config patched: vehicle weights_path: {{_old_weights}} -> transreid_cityflowv2_kd_best.pth")
+else:
+    print("\\u26a0 KD model not found — using baseline TransReID weights")
+    for _p in _KD_SEARCH:
+        print(f"  tried: {{_p}}")
+""", "a08c"))
+
     cells.append(md(
-        "## 3. Download CityFlowV2 (~17 GB)\n\n"
-        "Downloaded from Google Drive to `/tmp` (not `/kaggle/working` -- only 20 GB).\n"
-        "Peak disk in `/tmp`: ~44 GB (download + extraction + stage0 frames).",
+        "## 3. Mount CityFlowV2 Dataset\n\n"
+        "CityFlowV2 is attached as a Kaggle dataset. We symlink the nested\n"
+        "`train/S01/c001/` structure into the flat `S01_c001/` layout the pipeline expects.",
         "a09"))
 
     cells.append(code("""\
@@ -329,7 +395,23 @@ for mount in ["/tmp", "/kaggle/working"]:
     total, used, free = _shutil.disk_usage(mount)
     print(f"{mount:20s}  {free/1024**3:.1f} GB free / {total/1024**3:.1f} GB total")
 
-CAM_RE = _re.compile(r"^S\\d{2}_c\\d{3}$")
+# --- Locate the Kaggle-mounted CityFlowV2 dataset ---
+_CANDIDATE_MOUNTS = [
+    Path("/kaggle/input/data-aicity-2023-track-2"),
+    Path("/kaggle/input/datasets/thanhnguyenle/data-aicity-2023-track-2"),
+]
+CITYFLOW_INPUT = None
+for _p in _CANDIDATE_MOUNTS:
+    if _p.exists():
+        CITYFLOW_INPUT = _p
+        break
+assert CITYFLOW_INPUT is not None, (
+    "CityFlowV2 dataset not found.\\n"
+    "  Attach via: Add Data -> Datasets -> search 'data-aicity-2023-track-2'"
+)
+print(f"\\u2713 CityFlowV2 dataset at {CITYFLOW_INPUT}")
+
+# --- Flatten into data/raw/cityflowv2/S01_c001/ layout ---
 TMP_DATA = Path("/tmp/datasets")
 TMP_DATA.mkdir(parents=True, exist_ok=True)
 
@@ -345,17 +427,29 @@ else:
 DATA_OUT = Path("/tmp/pipeline_outputs")
 DATA_OUT.mkdir(parents=True, exist_ok=True)
 DATA_RAW = TMP_DATA / "cityflowv2"
+DATA_RAW.mkdir(parents=True, exist_ok=True)
 
-if DATA_RAW.exists() and any(CAM_RE.match(d.name) for d in DATA_RAW.iterdir() if d.is_dir()):
-    cams = [d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name)]
-    print(f"\\u2713 CityFlowV2 already present: {len(cams)} cameras")
-else:
-    print("Downloading CityFlowV2 from Google Drive (~17 GB) ...")
-    subprocess.check_call(
-        [sys.executable, "scripts/download_datasets.py", "--dataset", "cityflowv2"],
-        cwd=str(PROJECT))
-    cams = [d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name)]
-    print(f"\\u2713 CityFlowV2 ready: {sorted(cams)}")
+# Map: train/S01/c001 -> S01_c001, validation/S02/c006 -> S02_c006
+for split_dir in sorted(CITYFLOW_INPUT.iterdir()):
+    if not split_dir.is_dir() or split_dir.name not in ("train", "validation", "test"):
+        continue
+    for scene_dir in sorted(split_dir.iterdir()):
+        if not scene_dir.is_dir():
+            continue
+        for cam_dir in sorted(scene_dir.iterdir()):
+            if not cam_dir.is_dir():
+                continue
+            flat_name = f"{scene_dir.name}_{cam_dir.name}"  # e.g. S01_c001
+            flat_dir = DATA_RAW / flat_name
+            if flat_dir.exists():
+                continue
+            # Symlink the entire camera dir (read-only mount is fine for inference)
+            flat_dir.symlink_to(cam_dir)
+
+CAM_RE = _re.compile(r"^S\\d{2}_c\\d{3}$")
+cams = sorted(d.name for d in DATA_RAW.iterdir() if d.is_dir() and CAM_RE.match(d.name))
+print(f"\\u2713 CityFlowV2 ready: {len(cams)} cameras")
+for c in cams: print(f"  {c}")
 print(f"\\nDataset path: {DATA_RAW}")\
 """, "a10"))
 
@@ -405,6 +499,11 @@ else:
         f"    \"--override\", f\"project.run_name={{RUN_NAME}}\",\n"
         f"    \"--override\", f\"project.output_dir={{DATA_OUT}}\",\n"
         f"    \"--override\", \"stage0.cameras=[{cam_list}]\",\n"
+        f"    # v47 feature overrides\n"
+        f"    \"--override\", \"stage2.reid.vehicle.concat_patch=true\",\n"
+        f"    \"--override\", \"stage2.crop.samples_per_tracklet=48\",\n"
+        f"    \"--override\", \"stage2.pca.n_components=384\",\n"
+        f"    \"--override\", \"stage2.power_norm.alpha=0.5\",\n"
         f"]\n"
         f"print(\"CMD:\", \" \".join(str(c) for c in cmd))\n"
         f"print(\"=\" * 70)\n"
@@ -698,39 +797,35 @@ def build_10c():
 
     cells.append(code("""\
 # ---- Stage 4: Cross-camera association -------------------------------------
-# AQE: k nearest neighbours for query expansion (higher = smoother features)
-AQE_K             = 7     # v7: 7 (best from scan, was 5)
-
-# Minimum cosine similarity to form an edge in the graph
-SIM_THRESH        = 0.55  # v11: 0.55 (reference value, raised from 0.50)
-
-# Clustering algorithm: connected_components (v11) or community_detection (Louvain)
+# v46 optimized config (local best: IDF1=0.8297)
+AQE_K             = 2     # v46: 2 (optimal after QE self-exclusion fix)
+SIM_THRESH        = 0.53  # v46: 0.53 (optimal from sweep)
 ALGORITHM         = "connected_components"
+LOUVAIN_RES       = 0.70  # fallback for community_detection
 
-# Louvain resolution (only used if ALGORITHM=community_detection)
-LOUVAIN_RES       = 0.70  # v7: 0.70 (best from scan)
+# Weights — v46 defaults (appearance-heavy for vehicles)
+APPEARANCE_WEIGHT = 0.75  # v46: CityFlowV2 vehicle config
+HSV_WEIGHT        = 0.0   # v46: disabled (hurts vehicles)
+ST_WEIGHT         = round(1.0 - APPEARANCE_WEIGHT - HSV_WEIGHT, 4)
 
-# Weight of appearance vs. spatio-temporal score (0.0=ST only, 1.0=appear only)
-APPEARANCE_WEIGHT = 0.70  # v7: 0.70 (best from scan)
-HSV_WEIGHT        = 0.025 # v16: lowered from cityflowv2's 0.30; scan showed minimal impact
-ST_WEIGHT         = round(1.0 - APPEARANCE_WEIGHT - HSV_WEIGHT, 4)  # ensure sum=1.0
+# Bridge pruning: v46 found pruning HURTS (-1.4pp) → disabled
+BRIDGE_PRUNE      = 0.0   # v46: 0.0 (pruning hurts by -1.4pp)
+MAX_COMP_SIZE     = 12
 
-# Bridge pruning margin: bridges with weight < sim_thresh + margin are removed
-BRIDGE_PRUNE      = 0.05  # v11: reference value
-
-# Max cluster size before splitting
-MAX_COMP_SIZE     = 12    # v11: reference value
+# Intra-camera merge: +1.0pp improvement
+INTRA_MERGE       = True
+INTRA_MERGE_THRESH = 0.75
+INTRA_MERGE_GAP   = 60    # seconds
 
 # ---- Stage 5: Evaluation ----------------------------------------------------
-# CityFlowV2 GT: 240 vehicles = 211 multi-cam + 29 single-cam.
-# AIC protocol: only cross-camera trajectories matter for MTMC eval.
-# Single-cam singletons are guaranteed FP (3-5x more preds than GT).
-# Dropping them loses 29/240=12% GT vehicles but eliminates massive FP.
-MTMC_ONLY = True
+# v46: MTMC_ONLY=False keeps single-cam trajectories (+5pp IDF1).
+# Single-cam tracks ARE real vehicles; dropping them loses 29/240=12% GT.
+MTMC_ONLY = False
 
-print("Stage 4 params:")
+print("Stage 4 params (v46 optimized):")
 print(f"  aqe_k={AQE_K}  sim_thresh={SIM_THRESH}  algorithm={ALGORITHM}  appearance_weight={APPEARANCE_WEIGHT}")
 print(f"  hsv_weight={HSV_WEIGHT}  st_weight={ST_WEIGHT}  bridge_prune={BRIDGE_PRUNE}  max_comp_size={MAX_COMP_SIZE}")
+print(f"  intra_merge={INTRA_MERGE}  intra_thresh={INTRA_MERGE_THRESH}  intra_gap={INTRA_MERGE_GAP}")
 print(f"Stage 5: mtmc_only_submission={MTMC_ONLY}, stationary_filter=True")\
 """, "c10"))
 
@@ -758,19 +853,22 @@ cmd = [
     "--override", "stage4.association.fic.enabled=true",
     "--override", "stage4.association.fic.regularisation=3.0",
     "--override", "stage4.association.fac.enabled=true",
+    "--override", "stage4.association.fac.knn=20",
+    "--override", "stage4.association.fac.learning_rate=0.5",
+    "--override", "stage4.association.fac.beta=0.08",
+    "--override", f"stage4.association.intra_camera_merge.enabled={str(INTRA_MERGE).lower()}",
+    "--override", f"stage4.association.intra_camera_merge.threshold={INTRA_MERGE_THRESH}",
+    "--override", f"stage4.association.intra_camera_merge.max_time_gap={INTRA_MERGE_GAP}",
     "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
     "--override", "stage5.stationary_filter.enabled=true",
-    "--override", "stage5.stationary_filter.min_displacement_px=50",
+    "--override", "stage5.stationary_filter.min_displacement_px=150",
     "--override", "stage5.stationary_filter.max_mean_velocity_px=2.0",
     "--override", "stage5.min_submission_confidence=0.15",
     "--override", "stage5.cross_id_nms_iou=0.35",
     "--override", "stage5.min_trajectory_confidence=0.30",
     "--override", "stage5.min_trajectory_frames=10",
-    "--override", "stage5.track_edge_trim.enabled=true",
-    "--override", "stage5.track_edge_trim.mode=confidence",
-    "--override", "stage5.track_smoothing.enabled=true",
-    "--override", "stage5.track_smoothing.window=7",
-    "--override", "stage5.track_smoothing.polyorder=2",
+    "--override", "stage5.track_edge_trim.enabled=false",
+    "--override", "stage5.track_smoothing.enabled=false",
     "--override", "stage5.gt_frame_clip=true",
     "--override", "stage5.gt_zone_filter=true",
 ]
@@ -804,7 +902,7 @@ print(f"\\u2713 Stages 4-5 done in {elapsed/60:.1f} min")\
 # SET SCAN_ENABLED = True to run the grid search.
 # This will overwrite the single-run results above.
 # ============================================================
-SCAN_ENABLED = True
+SCAN_ENABLED = False
 
 if SCAN_ENABLED:
     import itertools
@@ -894,21 +992,24 @@ if SCAN_ENABLED:
             "--override", "stage4.association.fic.enabled=true",
             "--override", "stage4.association.fic.regularisation=3.0",
             "--override", "stage4.association.fac.enabled=true",
+            "--override", "stage4.association.fac.knn=20",
+            "--override", "stage4.association.fac.learning_rate=0.5",
+            "--override", "stage4.association.fac.beta=0.08",
+            "--override", f"stage4.association.intra_camera_merge.enabled={str(INTRA_MERGE).lower()}",
+            "--override", f"stage4.association.intra_camera_merge.threshold={INTRA_MERGE_THRESH}",
+            "--override", f"stage4.association.intra_camera_merge.max_time_gap={INTRA_MERGE_GAP}",
             "--override", f"stage4.association.reranking.enabled={str(rerank_enabled).lower()}",
             "--override", f"stage4.association.reranking.lambda_value={params['rerank_lambda']}",
             "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
             "--override", "stage5.stationary_filter.enabled=true",
-            "--override", "stage5.stationary_filter.min_displacement_px=50",
+            "--override", "stage5.stationary_filter.min_displacement_px=150",
             "--override", "stage5.stationary_filter.max_mean_velocity_px=2.0",
             "--override", "stage5.min_submission_confidence=0.15",
             "--override", "stage5.cross_id_nms_iou=0.35",
             "--override", "stage5.min_trajectory_confidence=0.30",
             "--override", "stage5.min_trajectory_frames=10",
-            "--override", "stage5.track_edge_trim.enabled=true",
-            "--override", "stage5.track_edge_trim.mode=confidence",
-            "--override", "stage5.track_smoothing.enabled=true",
-            "--override", "stage5.track_smoothing.window=7",
-            "--override", "stage5.track_smoothing.polyorder=2",
+            "--override", "stage5.track_edge_trim.enabled=false",
+            "--override", "stage5.track_smoothing.enabled=false",
             "--override", "stage5.gt_frame_clip=true",
             "--override", "stage5.gt_zone_filter=true",
         ]
@@ -1011,6 +1112,121 @@ else:
     print("Scan disabled. Set SCAN_ENABLED = True to run grid search.")\
 """, "c16"))
 
+    # ── Hierarchical centroid expansion A/B test ──────────────────────────
+    cells.append(md(
+        "## 7. Feature A/B Tests\n\n"
+        "Tests untried association features vs the v46 baseline.\n"
+        "- **CSLS**: Cross-domain Similarity Local Scaling — hubness reduction to penalize 'universal hub' embeddings",
+        "c17"))
+
+    cells.append(code("""\
+# --- Feature A/B tests ---
+# Tests CSLS hubness reduction (last untested stage4 feature)
+FEATURE_TEST_ENABLED = True
+
+if FEATURE_TEST_ENABLED:
+    # Define experiments: (tag, extra_overrides_dict)
+    feature_experiments = [
+        ("csls_k10", {"stage4.association.csls.enabled": "true",
+                      "stage4.association.csls.k": "10"}),
+        ("csls_k5",  {"stage4.association.csls.enabled": "true",
+                      "stage4.association.csls.k": "5"}),
+        ("csls_k20", {"stage4.association.csls.enabled": "true",
+                      "stage4.association.csls.k": "20"}),
+    ]
+    feat_results = []
+
+    for tag, extra_overrides in feature_experiments:
+        feat_run = f"{RUN_NAME}_{tag}"
+        feat_dir = DATA_OUT / feat_run
+        feat_dir.mkdir(parents=True, exist_ok=True)
+        for stage_sub in ("stage1", "stage2", "stage3"):
+            src = RUN_DIR / stage_sub
+            dst = feat_dir / stage_sub
+            if src.exists() and not dst.exists():
+                dst.symlink_to(src)
+
+        st_w = round(1.0 - APPEARANCE_WEIGHT - HSV_WEIGHT, 4)
+        cmd_feat = [
+            sys.executable, "scripts/run_pipeline.py",
+            "--config", "configs/default.yaml",
+            "--dataset-config", "configs/datasets/cityflowv2.yaml",
+            "--stages", "4,5",
+            "--override", f"project.run_name={feat_run}",
+            "--override", f"project.output_dir={DATA_OUT}",
+            "--override", f"stage4.association.query_expansion.k={AQE_K}",
+            "--override", f"stage4.association.graph.similarity_threshold={SIM_THRESH}",
+            "--override", f"stage4.association.graph.algorithm={ALGORITHM}",
+            "--override", f"stage4.association.graph.bridge_prune_margin={BRIDGE_PRUNE}",
+            "--override", f"stage4.association.graph.max_component_size={MAX_COMP_SIZE}",
+            "--override", f"stage4.association.weights.vehicle.appearance={APPEARANCE_WEIGHT}",
+            "--override", f"stage4.association.weights.vehicle.hsv={HSV_WEIGHT}",
+            "--override", f"stage4.association.weights.vehicle.spatiotemporal={st_w}",
+            "--override", "stage4.association.weights.length_weight_power=0.5",
+            "--override", "stage4.association.mutual_nn.top_k_per_query=20",
+            "--override", "stage4.association.fic.enabled=true",
+            "--override", "stage4.association.fic.regularisation=3.0",
+            "--override", "stage4.association.fac.enabled=true",
+            "--override", "stage4.association.fac.knn=20",
+            "--override", "stage4.association.fac.learning_rate=0.5",
+            "--override", "stage4.association.fac.beta=0.08",
+            "--override", f"stage4.association.intra_camera_merge.enabled={str(INTRA_MERGE).lower()}",
+            "--override", f"stage4.association.intra_camera_merge.threshold={INTRA_MERGE_THRESH}",
+            "--override", f"stage4.association.intra_camera_merge.max_time_gap={INTRA_MERGE_GAP}",
+            "--override", "stage4.association.gallery_expansion.enabled=true",
+            "--override", f"stage5.mtmc_only_submission={str(MTMC_ONLY).lower()}",
+            "--override", "stage5.stationary_filter.enabled=true",
+            "--override", "stage5.stationary_filter.min_displacement_px=150",
+            "--override", "stage5.stationary_filter.max_mean_velocity_px=2.0",
+            "--override", "stage5.min_submission_confidence=0.15",
+            "--override", "stage5.cross_id_nms_iou=0.35",
+            "--override", "stage5.min_trajectory_confidence=0.30",
+            "--override", "stage5.min_trajectory_frames=10",
+            "--override", "stage5.track_edge_trim.enabled=false",
+            "--override", "stage5.track_smoothing.enabled=false",
+            "--override", "stage5.gt_frame_clip=true",
+            "--override", "stage5.gt_zone_filter=true",
+        ]
+        # Add feature-specific overrides
+        for k, v in extra_overrides.items():
+            cmd_feat += ["--override", f"{k}={v}"]
+        if GT_DIR:
+            cmd_feat += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
+
+        t0 = time.time()
+        r = subprocess.run(cmd_feat, cwd=str(PROJECT), capture_output=True)
+        elapsed = time.time() - t0
+
+        report = DATA_OUT / feat_run / "stage5" / "evaluation_report.json"
+        idf1 = mota = hota = mtmc_idf1 = 0.0
+        n_frag = n_conf = 0
+        if report.exists():
+            rp = json.loads(report.read_text())
+            m = rp.get("metrics", rp)
+            idf1 = m.get("IDF1", m.get("idf1", 0.0))
+            mota = m.get("MOTA", m.get("mota", 0.0))
+            hota = m.get("HOTA", m.get("hota", 0.0))
+            mtmc_idf1 = m.get("mtmc_idf1", idf1)
+            details = rp.get("details", rp)
+            ea = details.get("error_analysis", {})
+            n_frag = ea.get("fragmented_gt", 0)
+            n_conf = ea.get("conflated_pred", 0)
+        status = "OK" if r.returncode == 0 else "FAIL"
+        feat_results.append({"tag": tag, "IDF1": idf1, "mtmc_idf1": mtmc_idf1,
+                             "MOTA": mota, "HOTA": hota, "frag": n_frag, "conf": n_conf, "time": elapsed})
+        print(f"  [{status}] {tag}: IDF1={idf1:.3f} mtmc_idf1={mtmc_idf1:.3f} MOTA={mota:.3f} HOTA={hota:.3f} frag={n_frag} conf={n_conf} ({elapsed/60:.1f} min)")
+
+    print("\\n" + "=" * 80)
+    print("FEATURE A/B TEST RESULTS")
+    print("=" * 80)
+    print(f"  {'tag':<25} {'IDF1':>7} {'mtmc':>7} {'MOTA':>7} {'HOTA':>7} {'frag':>5} {'conf':>5}")
+    print(f"  {'baseline (v46)' :<25} {'---':>7} {'---':>7} {'---':>7} {'---':>7} {'---':>5} {'---':>5}  (see section 5)")
+    for r2 in sorted(feat_results, key=lambda x: x["IDF1"], reverse=True):
+        print(f"  {r2['tag']:<25} {r2['IDF1']:>7.3f} {r2['mtmc_idf1']:>7.3f} {r2['MOTA']:>7.3f} {r2['HOTA']:>7.3f} {r2['frag']:>5} {r2['conf']:>5}")
+else:
+    print("Feature test disabled. Set FEATURE_TEST_ENABLED = True to run.")\
+""", "c18"))
+
     return cells
 
 
@@ -1018,12 +1234,14 @@ else:
 
 def main():
     print("Generating chained Kaggle notebooks ...")
+    _10a_kernel_sources = [f"{OWNER}/{SLUG_09C}"] if USE_KD_MODEL else []
     write_notebook(
         cells=build_10a(),
         out_dir=NB_ROOT / "10a_stages012",
         slug=SLUG_10A,
         title="MTMC 10a - Stages 0-2 (Tracking + ReID Features)",
-        dataset_sources=[f"{OWNER}/mtmc-weights"],
+        kernel_sources=_10a_kernel_sources,
+        dataset_sources=[f"{WEIGHTS_OWNER}/mtmc-weights", SLUG_CITYFLOW],
     )
     write_notebook(
         cells=build_10b(),
@@ -1038,7 +1256,7 @@ def main():
         slug=SLUG_10C,
         title="MTMC 10c - Stages 4-5 (Association + Eval)",
         kernel_sources=[f"{OWNER}/{SLUG_10B}"],
-        dataset_sources=[f"{OWNER}/{SLUG_GT}"],
+        dataset_sources=[f"{WEIGHTS_OWNER}/{SLUG_GT}"],
         enable_gpu=False,  # Stages 4-5 are CPU-only; save GPU quota
     )
     print("\nDone.")

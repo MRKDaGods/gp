@@ -21,6 +21,12 @@ import torch.nn.functional as F
 from loguru import logger
 
 
+_RESNET101_IBN_A_URL = (
+    "https://github.com/XingangPan/IBN-Net/releases/download/v1.0/"
+    "resnet101_ibn_a-59ea0ac6.pth"
+)
+
+
 def _build_backbone(model_name: str, last_stride: int = 1, pretrained: bool = True):
     """Build backbone using torchreid model zoo.
 
@@ -49,6 +55,132 @@ def _build_backbone(model_name: str, last_stride: int = 1, pretrained: bool = Tr
                     module.stride = (last_stride, last_stride)
 
     return model
+
+
+class IBN_a(nn.Module):
+    """Instance-Batch Normalization (IBN-a) layer."""
+
+    def __init__(self, planes: int):
+        super().__init__()
+        half = planes // 2
+        self.IN = nn.InstanceNorm2d(half, affine=True)
+        self.BN = nn.BatchNorm2d(planes - half)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        split = x.shape[1] // 2
+        out1 = self.IN(x[:, :split])
+        out2 = self.BN(x[:, split:])
+        return torch.cat([out1, out2], dim=1)
+
+
+class GeM(nn.Module):
+    """Generalized Mean Pooling."""
+
+    def __init__(self, p: float = 3.0, eps: float = 1e-6):
+        super().__init__()
+        self.p = nn.Parameter(torch.ones(1) * p)
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.adaptive_avg_pool2d(
+            x.clamp(min=self.eps).pow(self.p), 1
+        ).pow(1.0 / self.p)
+
+
+def _build_resnet101_ibn_a(last_stride: int = 1, pretrained: bool = True) -> nn.Module:
+    """Build ResNet101 with IBN-a layers on layer1, layer2, and layer3."""
+    import torchvision.models as tv_models
+
+    base = tv_models.resnet101(weights=None)
+
+    for layer in [base.layer1, base.layer2, base.layer3]:
+        for block in layer:
+            if hasattr(block, "bn1"):
+                block.bn1 = IBN_a(block.bn1.num_features)
+
+    if pretrained:
+        state_dict = torch.hub.load_state_dict_from_url(
+            _RESNET101_IBN_A_URL,
+            map_location="cpu",
+            progress=True,
+        )
+        load_result = base.load_state_dict(state_dict, strict=False)
+        expected_missing = {"fc.weight", "fc.bias"}
+        if set(load_result.missing_keys) != expected_missing:
+            raise RuntimeError(
+                "Unexpected missing keys when loading ResNet101-IBN-a weights: "
+                f"{load_result.missing_keys}"
+            )
+        if load_result.unexpected_keys:
+            raise RuntimeError(
+                "Unexpected keys when loading ResNet101-IBN-a weights: "
+                f"{load_result.unexpected_keys}"
+            )
+
+    if last_stride == 1:
+        for module in base.layer4.modules():
+            if isinstance(module, nn.Conv2d) and module.stride == (2, 2):
+                module.stride = (1, 1)
+
+    base.fc = nn.Identity()
+    base.avgpool = nn.Identity()
+    return base
+
+
+class ReIDModelResNet101IBN(nn.Module):
+    """ResNet101-IBN-a with GeM pooling and BNNeck for BoT-style training."""
+
+    def __init__(
+        self,
+        num_classes: int = 751,
+        last_stride: int = 1,
+        pretrained: bool = True,
+        gem_p: float = 3.0,
+    ):
+        super().__init__()
+        self.backbone = _build_resnet101_ibn_a(last_stride, pretrained)
+        self.feat_dim = 2048
+        self.pool = GeM(p=gem_p)
+
+        self.bottleneck = nn.BatchNorm1d(self.feat_dim)
+        self.bottleneck.bias.requires_grad_(False)
+        nn.init.constant_(self.bottleneck.weight, 1)
+        nn.init.constant_(self.bottleneck.bias, 0)
+
+        self.classifier = nn.Linear(self.feat_dim, num_classes, bias=False)
+        nn.init.normal_(self.classifier.weight, std=0.001)
+
+        logger.info(
+            f"ReIDModelResNet101IBN: classes={num_classes}, "
+            f"feat_dim={self.feat_dim}, last_stride={last_stride}, gem_p={gem_p}"
+        )
+
+    def _backbone_forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.backbone.conv1(x)
+        x = self.backbone.bn1(x)
+        x = self.backbone.relu(x)
+        x = self.backbone.maxpool(x)
+        x = self.backbone.layer1(x)
+        x = self.backbone.layer2(x)
+        x = self.backbone.layer3(x)
+        x = self.backbone.layer4(x)
+        return x
+
+    def forward(self, x: torch.Tensor):
+        feat_map = self._backbone_forward(x)
+        global_feat = self.pool(feat_map)
+        global_feat = global_feat.view(global_feat.shape[0], -1)
+        bn_feat = self.bottleneck(global_feat)
+
+        if self.training:
+            cls_score = self.classifier(bn_feat)
+            return cls_score, global_feat, bn_feat
+        return F.normalize(bn_feat, p=2, dim=1)
+
+    @torch.no_grad()
+    def extract_features(self, x: torch.Tensor) -> torch.Tensor:
+        self.eval()
+        return self.forward(x)
 
 
 class ReIDModelBoT(nn.Module):

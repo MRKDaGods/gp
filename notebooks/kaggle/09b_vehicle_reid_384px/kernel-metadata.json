@@ -1,0 +1,19 @@
+{
+  "id": "mrkdagods/09b-vehicle-reid-384px-vit-training",
+  "title": "09b Vehicle ReID 384px ViT Training v2",
+  "code_file": "09b_vehicle_reid_384px.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": [
+    "mrkdagods/transreid-veri/other/default/1"
+  ]
+}

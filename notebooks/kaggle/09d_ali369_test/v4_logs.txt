@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "E:\dev\src\gp\scripts\kaggle_logs.py", line 161, in <module>
+    main()
+    ~~~~^^
+  File "E:\dev\src\gp\scripts\kaggle_logs.py", line 143, in main
+    log = fetch_logs(args.kernel, tail=args.tail, raw=args.raw)
+  File "E:\dev\src\gp\scripts\kaggle_logs.py", line 62, in fetch_logs
+    resp = client.kernels.kernels_api_client.list_kernel_session_output(req)
+  File "C:\Users\mamar\AppData\Local\Programs\Python\Python313\Lib\site-packages\kagglesdk\kernels\services\kernels_api_service.py", line 70, in list_kernel_session_output
+    return self._client.call("kernels.KernelsApiService", "ListKernelSessionOutput", request, ApiListKernelSessionOutputResponse)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\mamar\AppData\Local\Programs\Python\Python313\Lib\site-packages\kagglesdk\kaggle_http_client.py", line 98, in call
+    response = self._prepare_response(response_type, http_response)
+  File "C:\Users\mamar\AppData\Local\Programs\Python\Python313\Lib\site-packages\kagglesdk\kaggle_http_client.py", line 124, in _prepare_response
+    http_response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\mamar\AppData\Local\Programs\Python\Python313\Lib\site-packages\requests\models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 429 Client Error: Too Many Requests for url: https://api.kaggle.com/v1/kernels.KernelsApiService/ListKernelSessionOutput

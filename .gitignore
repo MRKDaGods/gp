@@ -48,6 +48,15 @@ desktop.ini
 **/output*/
 **/exported_models/
 
+# Experiment sweep scripts (historical, not needed in repo)
+scripts/sweep_*.py
+
+# One-off temp scripts
+scripts/_*.py
+
+# Root-level temp scripts
+_*.py
+
 # Logs
 *.log
 logs/
@@ -64,6 +73,9 @@ nul
 yolo26m.pt
 
 *.zip
+*.xlsx
 run_metadata.json
 *.avi
 *.mp4
+explorer_output.txt
+planner_output.txt

@@ -191,17 +191,30 @@ def build_train_transforms(
     height: int = 256,
     width: int = 128,
     random_erasing_prob: float = 0.5,
+    color_jitter: bool = False,
 ) -> T.Compose:
     """Build training augmentation pipeline (BoT recipe)."""
-    return T.Compose([
+    transforms_list = [
         T.Resize((height, width), interpolation=T.InterpolationMode.BICUBIC),
         T.RandomHorizontalFlip(p=0.5),
         T.Pad(10),
         T.RandomCrop((height, width)),
+    ]
+    if color_jitter:
+        transforms_list.append(
+            T.ColorJitter(
+                brightness=0.2,
+                contrast=0.15,
+                saturation=0.1,
+                hue=0.05,
+            )
+        )
+    transforms_list.extend([
         T.ToTensor(),
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         T.RandomErasing(p=random_erasing_prob, value="random"),
     ])
+    return T.Compose(transforms_list)
 
 
 def build_test_transforms(height: int = 256, width: int = 128) -> T.Compose:
@@ -300,6 +313,7 @@ def build_dataloader(
     num_instances: int = 4,
     num_workers: int = 4,
     random_erasing_prob: float = 0.5,
+    color_jitter: bool = False,
 ) -> Tuple[DataLoader, DataLoader, DataLoader, int, int]:
     """Build train/query/gallery dataloaders.
 
@@ -318,7 +332,12 @@ def build_dataloader(
     num_classes = len(set(pid for _, pid, _ in train_data))
     num_cameras = len(set(cam for _, _, cam in train_data))
 
-    train_transform = build_train_transforms(height, width, random_erasing_prob)
+    train_transform = build_train_transforms(
+        height,
+        width,
+        random_erasing_prob,
+        color_jitter,
+    )
     test_transform = build_test_transforms(height, width)
 
     train_dataset = ReIDDataset(train_data, train_transform)

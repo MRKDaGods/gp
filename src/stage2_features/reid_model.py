@@ -111,7 +111,67 @@ class ReIDModel:
         """
         if self.is_transreid:
             return self._build_transreid(weights_path)
+        if model_name.lower() == "resnet101_ibn_a":
+            return self._build_resnet101_ibn(weights_path)
         return self._build_torchreid(model_name, weights_path)
+
+    def _build_resnet101_ibn(self, weights_path: Optional[str]):
+        """Build ResNet101-IBN-a model for inference."""
+        from src.training.model import ReIDModelResNet101IBN
+
+        model = ReIDModelResNet101IBN(
+            num_classes=1,
+            last_stride=1,
+            pretrained=False,
+            gem_p=3.0,
+        )
+
+        if weights_path is not None:
+            try:
+                state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
+                if "state_dict" in state_dict:
+                    state_dict = state_dict["state_dict"]
+                elif "model" in state_dict:
+                    state_dict = state_dict["model"]
+
+                remapped_state_dict = {}
+                backbone_roots = (
+                    "conv1",
+                    "bn1",
+                    "layer1",
+                    "layer2",
+                    "layer3",
+                    "layer4",
+                )
+                for key, value in state_dict.items():
+                    key = key.replace("module.", "", 1)
+                    key = key.replace(".in_norm.", ".IN.").replace(".bn_norm.", ".BN.")
+
+                    if key.startswith("classifier"):
+                        continue
+
+                    if key.startswith(backbone_roots):
+                        key = f"backbone.{key}"
+
+                    remapped_state_dict[key] = value
+
+                state_dict = remapped_state_dict
+                missing, unexpected = model.load_state_dict(state_dict, strict=False)
+
+                critical_missing = [k for k in missing if not k.startswith("classifier")]
+                if critical_missing:
+                    logger.warning(
+                        f"ResNet101-IBN missing critical keys: {critical_missing}"
+                    )
+                if unexpected:
+                    logger.debug(f"ResNet101-IBN unexpected keys: {unexpected}")
+
+                logger.info(f"Loaded ResNet101-IBN-a weights from {weights_path}")
+            except Exception as e:
+                logger.warning(f"Could not load ResNet101-IBN-a weights from {weights_path}: {e}")
+                logger.warning("Using randomly initialized ResNet101-IBN-a weights")
+
+        return model
 
     def _build_transreid(self, weights_path: Optional[str]):
         """Build TransReID ViT model."""
@@ -281,6 +341,21 @@ class ReIDModel:
                 features = features + ms_features.float().cpu().numpy()
                 n_views += 1
 
+                # Flip TTA on multi-scale views for additional viewpoint diversity
+                if self.flip_augment:
+                    ms_flipped = [cv2.flip(c, 1) for c in ms_crops]
+                    ms_flip_tensor = self._preprocess(ms_flipped).to(self.device)
+                    if self.half:
+                        ms_flip_tensor = ms_flip_tensor.half()
+                    if cam_tensor is not None:
+                        ms_flip_feat = self.model(ms_flip_tensor, cam_ids=cam_tensor)
+                    else:
+                        ms_flip_feat = self.model(ms_flip_tensor)
+                    if isinstance(ms_flip_feat, (tuple, list)):
+                        ms_flip_feat = ms_flip_feat[0]
+                    features = features + ms_flip_feat.float().cpu().numpy()
+                    n_views += 1
+
         return features / n_views
 
     @torch.no_grad()
@@ -394,3 +469,85 @@ class ReIDModel:
         crops = [sc.image for sc in scored_crops]
         qualities = [sc.quality for sc in scored_crops]
         return self.get_tracklet_embedding(crops, quality_scores=qualities, cam_id=cam_id, quality_temperature=quality_temperature)
+
+    # ------------------------------------------------------------------
+    # Camera-specific Test-Time Adaptation (CamTTA)
+    # ------------------------------------------------------------------
+
+    def save_bn_state(self) -> dict:
+        """Save BNNeck running statistics for later restoration.
+
+        Returns an opaque dict that can be passed to :meth:`restore_bn_state`.
+        Returns an empty dict for non-TransReID models.
+        """
+        if not self.is_transreid or not hasattr(self.model, "bn"):
+            return {}
+        bn = self.model.bn
+        return {
+            "running_mean": bn.running_mean.clone(),
+            "running_var": bn.running_var.clone(),
+            "num_batches_tracked": bn.num_batches_tracked.clone(),
+            "momentum": bn.momentum,
+        }
+
+    def restore_bn_state(self, state: dict) -> None:
+        """Restore BNNeck running statistics from a previously saved state.
+
+        Args:
+            state: Dict returned by :meth:`save_bn_state`.
+        """
+        if not state or not self.is_transreid or not hasattr(self.model, "bn"):
+            return
+        bn = self.model.bn
+        bn.running_mean.copy_(state["running_mean"])
+        bn.running_var.copy_(state["running_var"])
+        bn.num_batches_tracked.copy_(state["num_batches_tracked"])
+        bn.momentum = state.get("momentum", 0.1)
+
+    def warmup_camera_bn(self, crops: List[np.ndarray], batch_size: int = 64) -> None:
+        """Adapt BNNeck statistics to a specific camera's appearance distribution.
+
+        Runs all provided crops through the BNNeck in training mode (updating
+        ``running_mean`` / ``running_var``), then restores eval mode.  After
+        calling this, subsequent ``extract_features`` calls will use the
+        camera-adapted statistics for BN normalisation.
+
+        Uses cumulative moving average (``momentum=None``) so the running
+        statistics converge to the exact per-camera batch statistics after
+        all warmup crops are processed, producing a stable estimate regardless
+        of the number of crops.
+
+        Only applies to TransReID models (BNNeck is ``BatchNorm1d``).  Returns
+        immediately for other architectures.
+
+        Args:
+            crops: All BGR uint8 crops available for this camera.  More crops
+                produce a more accurate per-camera BN estimate.
+            batch_size: Forward-pass batch size for the warmup loop.
+        """
+        if not self.is_transreid or not hasattr(self.model, "bn") or len(crops) < 2:
+            return
+
+        bn = self.model.bn
+        orig_momentum = bn.momentum
+
+        # Use CMA (momentum=None): running stats will exactly equal the
+        # cumulative mean/var of all warmup samples, regardless of batch count.
+        bn.momentum = None
+        bn.reset_running_stats()
+        bn.training = True  # enable running stat updates
+
+        with torch.no_grad():
+            for start in range(0, len(crops), batch_size):
+                batch = crops[start : start + batch_size]
+                if len(batch) < 2:
+                    continue  # BatchNorm1d requires batch_size >= 2 in training mode
+                t = self._preprocess(batch).to(self.device)
+                if self.half:
+                    t = t.half()
+                # Full forward pass: ViT backbone → BNNeck (updates running stats)
+                _ = self.model(t)
+
+        # Restore momentum and switch back to eval (locks in the adapted stats)
+        bn.momentum = orig_momentum
+        bn.training = False

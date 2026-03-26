@@ -241,14 +241,39 @@ def build_transreid(
                         f"{model_sd[key].shape[0]} cameras"
                     )
                 elif key == "vit.pos_embed":
-                    # Resize model param to match checkpoint (keep trained values)
-                    logger.info(
-                        f"Resizing vit.pos_embed: model {model_sd[key].shape} → "
-                        f"checkpoint {state_dict[key].shape}"
-                    )
-                    model.vit.pos_embed = nn.Parameter(
-                        torch.zeros_like(state_dict[key]), requires_grad=False,
-                    )
+                    ckpt_pe = state_dict[key]  # (1, ckpt_tokens, D)
+                    model_pe = model_sd[key]   # (1, model_tokens, D)
+                    ckpt_tokens = ckpt_pe.shape[1]
+                    model_tokens = model_pe.shape[1]
+                    if ckpt_tokens == model_tokens:
+                        pass  # same size, load directly
+                    elif model_tokens > ckpt_tokens:
+                        # Model requests larger grid (e.g. 384×384) than checkpoint
+                        # (e.g. 256×256). Bicubic-interpolate grid embeddings.
+                        cls_token = ckpt_pe[:, :1, :]  # (1, 1, D)
+                        grid_pe = ckpt_pe[:, 1:, :]    # (1, N_ckpt, D)
+                        ckpt_grid = int(grid_pe.shape[1] ** 0.5)
+                        model_grid = int((model_tokens - 1) ** 0.5)
+                        grid_pe = grid_pe.reshape(1, ckpt_grid, ckpt_grid, -1).permute(0, 3, 1, 2)
+                        grid_pe = F.interpolate(
+                            grid_pe.float(), size=(model_grid, model_grid),
+                            mode="bicubic", align_corners=False,
+                        ).to(ckpt_pe.dtype)
+                        grid_pe = grid_pe.permute(0, 2, 3, 1).reshape(1, model_grid * model_grid, -1)
+                        state_dict[key] = torch.cat([cls_token, grid_pe], dim=1)
+                        logger.info(
+                            f"Interpolated vit.pos_embed: {ckpt_grid}×{ckpt_grid} → "
+                            f"{model_grid}×{model_grid} grid (bicubic)"
+                        )
+                    else:
+                        # Checkpoint has more tokens — resize model to match
+                        logger.info(
+                            f"Resizing vit.pos_embed: model {model_sd[key].shape} → "
+                            f"checkpoint {state_dict[key].shape}"
+                        )
+                        model.vit.pos_embed = nn.Parameter(
+                            torch.zeros_like(state_dict[key]), requires_grad=False,
+                        )
                 else:
                     # Shape mismatch on classifier heads etc. — drop
                     logger.debug(

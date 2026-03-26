@@ -12,6 +12,7 @@ Improvements over baseline:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -25,7 +26,7 @@ from src.core.io_utils import save_global_trajectories
 from src.stage3_indexing.faiss_index import FAISSIndex
 from src.stage3_indexing.metadata_store import MetadataStore
 from src.stage4_association.camera_bias import CameraDistanceBias, ZoneTransitionModel
-from src.stage4_association.fic import per_camera_whiten, cross_camera_augment
+from src.stage4_association.fic import per_camera_whiten, cross_camera_augment, iterative_fac
 from src.stage4_association.global_trajectories import merge_tracklets_to_trajectories
 from src.stage4_association.graph_solver import GraphSolver
 from src.stage4_association.query_expansion import average_query_expansion_batched
@@ -112,6 +113,11 @@ def run_stage4(
                 logger.info("Applied FIC whitening to secondary embeddings")
         else:
             logger.warning(f"Secondary embeddings shape mismatch: {sec_raw.shape[0]} vs {n}")
+    elif sec_path:
+        logger.warning(
+            f"Secondary embeddings file not found: {sec_path}. "
+            f"Falling back to primary-only (sec_weight=0.0)."
+        )
 
     # Step 0: Per-camera feature whitening (FIC) — AIC21 1st-place technique.
     # Removes camera-specific bias (lighting, viewpoint) from embeddings.
@@ -127,13 +133,21 @@ def run_stage4(
     # Pulls each feature toward its cross-camera KNN consensus.
     fac_cfg = stage_cfg.get("fac", {})
     if fac_cfg.get("enabled", False):
-        embeddings = cross_camera_augment(
-            embeddings,
-            camera_ids,
-            knn=int(fac_cfg.get("knn", 20)),
-            learning_rate=float(fac_cfg.get("learning_rate", 0.5)),
-            beta=float(fac_cfg.get("beta", 0.08)),
-        )
+        fac_epochs = int(fac_cfg.get("epochs", 1))
+        fac_knn = int(fac_cfg.get("knn", 20))
+        fac_lr = float(fac_cfg.get("learning_rate", 0.5))
+        fac_beta = float(fac_cfg.get("beta", 0.08))
+        if fac_epochs > 1:
+            embeddings = iterative_fac(
+                embeddings, camera_ids,
+                epochs=fac_epochs, knn=fac_knn,
+                learning_rate=fac_lr, beta=fac_beta,
+            )
+        else:
+            embeddings = cross_camera_augment(
+                embeddings, camera_ids,
+                knn=fac_knn, learning_rate=fac_lr, beta=fac_beta,
+            )
 
     # Get temporal info and frame counts from metadata store
     start_times = []
@@ -325,16 +339,48 @@ def run_stage4(
     # Step 5b: Camera distance bias adjustment (iterative)
     camera_bias_cfg = stage_cfg.get("camera_bias", {})
     if camera_bias_cfg.get("enabled", False):
+        cid_bias_path = camera_bias_cfg.get("cid_bias_npy_path", "")
+        cid_bias_applied = False
+        if cid_bias_path and Path(cid_bias_path).exists():
+            cid_bias_matrix = np.load(cid_bias_path).astype(np.float32)
+            cid_mapping_path = Path(cid_bias_path).with_suffix(".json")
+            if cid_mapping_path.exists():
+                with open(cid_mapping_path, encoding="utf-8") as f:
+                    cam_names = json.load(f).get("cameras", [])
+            else:
+                cam_names = sorted(set(camera_ids))
+            cam2idx = {camera_name: idx for idx, camera_name in enumerate(cam_names)}
+
+            adjusted_count = 0
+            missing_count = 0
+            for (i, j), sim in list(combined_sim.items()):
+                ci = cam2idx.get(camera_ids[i])
+                cj = cam2idx.get(camera_ids[j])
+                if ci is None or cj is None:
+                    missing_count += 1
+                    continue
+                if ci >= cid_bias_matrix.shape[0] or cj >= cid_bias_matrix.shape[1]:
+                    missing_count += 1
+                    continue
+                combined_sim[(i, j)] = sim + float(cid_bias_matrix[ci, cj])
+                adjusted_count += 1
+
+            logger.info(
+                f"CID_BIAS: adjusted {adjusted_count} pairs from {cid_bias_path}"
+                + (f" ({missing_count} pairs skipped: unmapped cameras)" if missing_count else "")
+            )
+            cid_bias_applied = True
+
         cam_bias = CameraDistanceBias()
 
-        # Load pre-learned bias if available
+        # Load pre-learned JSON bias if available
         bias_path = camera_bias_cfg.get("bias_path")
         if bias_path and Path(bias_path).exists():
             cam_bias.load(bias_path)
             logger.info(f"Loaded camera bias from {bias_path}")
             combined_sim = cam_bias.adjust_similarity_matrix(combined_sim, camera_ids)
             logger.info("Applied pre-learned camera distance bias")
-        else:
+        elif not cid_bias_applied:
             # Learn bias iteratively: cluster → learn bias → re-adjust → re-cluster
             n_iterations = camera_bias_cfg.get("iterations", 1)
             for iter_idx in range(n_iterations):
@@ -640,6 +686,28 @@ def run_stage4(
     if run_gallery or not hierarch_cfg.get("enabled", False):
         clusters = _resolve_same_camera_conflicts(
             clusters, camera_ids, start_times, end_times, combined_sim,
+        )
+
+    # Step 6e-pre: Sub-cluster temporal splitting (AIC21 technique).
+    # Splits clusters that contain a "silence" gap — a time window where NO member
+    # tracklet is active — longer than min_gap seconds, AND where the cross-gap
+    # average cosine similarity is below split_threshold.
+    # Targets conflation: same-looking vehicles driving through the scene at
+    # different times incorrectly merged into one trajectory.
+    temporal_split_cfg = stage_cfg.get("temporal_split", {})
+    if temporal_split_cfg.get("enabled", False):
+        ts_min_gap = float(temporal_split_cfg.get("min_gap", 60.0))
+        ts_split_thresh = float(temporal_split_cfg.get("split_threshold", 0.50))
+        clusters_before = len(clusters)
+        clusters = _temporal_split_clusters(
+            clusters, start_times, end_times, embeddings,
+            min_gap=ts_min_gap,
+            split_threshold=ts_split_thresh,
+        )
+        logger.info(
+            f"Temporal split: {clusters_before} → {len(clusters)} clusters "
+            f"(+{len(clusters) - clusters_before} splits, "
+            f"min_gap={ts_min_gap:.0f}s, threshold={ts_split_thresh:.2f})"
         )
 
     # Step 6e: Post-cluster verification — check internal connectivity and
@@ -1040,12 +1108,13 @@ def _hierarchical_centroid_expansion(
     merge_threshold = float(hierarch_cfg.get("merge_threshold", 0.35))
     orphan_threshold = float(hierarch_cfg.get("orphan_threshold", 0.30))
     max_merge_size = int(hierarch_cfg.get("max_merge_size", 12))
+    hsv_gate = float(hierarch_cfg.get("hsv_gate", 0.2))
 
     total_absorbed = 0
     total_merged = 0
 
     # ── Pass 1: Centroid-based orphan absorption ────────────────────────
-    for round_idx in range(3):  # Up to 3 rounds of centroid expansion
+    for round_idx in range(1):  # Single round — prevents centroid drift
         multi_clusters = [c for c in clusters if len(c) > 1]
         orphan_sets = [c for c in clusters if len(c) == 1]
         orphan_indices = [list(c)[0] for c in orphan_sets]
@@ -1073,10 +1142,9 @@ def _hierarchical_centroid_expansion(
                 "members": members,
             })
 
-        # For each orphan, find best matching cluster via centroid similarity
-        # Enhanced: also compute max-member similarity to handle viewpoint diversity.
-        # An orphan matching ANY cluster member strongly should be absorbed even if
-        # the centroid (averaged over all viewpoints) is only moderately similar.
+        # For each orphan, find best matching cluster via centroid similarity.
+        # Use centroid-only (no max-member shortcut) — centroids average out
+        # viewpoint noise, while max-member allows single spurious matches.
         orphan_embs = embeddings[orphan_indices]  # (O, D)
         # Centroid similarities: (O, C)
         centroid_sims = orphan_embs @ centroids.T
@@ -1088,27 +1156,14 @@ def _hierarchical_centroid_expansion(
             best_ci = -1
             best_sim = -1.0
 
-            # Sort cluster candidates by centroid similarity; check top candidates
+            # Sort cluster candidates by centroid similarity (descending)
             order = np.argsort(-centroid_sims[oi])
-            # Check top 20 candidates (by centroid) — some may have low centroid
-            # but high max-member similarity due to viewpoint diversity
-            for rank, ci in enumerate(order[:20]):
+            for rank, ci in enumerate(order[:10]):
                 c_sim = float(centroid_sims[oi, ci])
-                # Skip if centroid sim is too low (won't have good member sim either)
-                if c_sim < centroid_threshold - 0.15:
+                # Centroid-only gating — no max-member shortcut
+                if c_sim < centroid_threshold:
                     break
-                # Compute max-member similarity for this cluster
-                member_embs = embeddings[cluster_meta[ci]["members"]]
-                max_member_sim = float((orphan_embs[oi] @ member_embs.T).max())
-                # Also check combined_sim scores (include ST weighting)
-                max_combined = max(
-                    combined_sim.get((orphan_idx, m), combined_sim.get((m, orphan_idx), 0.0))
-                    for m in cluster_meta[ci]["members"]
-                )
-                # Use the best of centroid, max-member, and combined similarity
-                sim = max(c_sim, max_member_sim, max_combined)
-                if sim < centroid_threshold:
-                    continue
+                sim = c_sim
 
                 meta = cluster_meta[ci]
 
@@ -1155,7 +1210,7 @@ def _hierarchical_centroid_expansion(
                 # HSV consistency: orphan's HSV must be plausible
                 member_hsv = hsv_features[meta["members"]]
                 hsv_sims = member_hsv @ hsv_features[orphan_idx]
-                if float(hsv_sims.max()) < 0.2:
+                if hsv_gate > 0 and float(hsv_sims.max()) < hsv_gate:
                     continue
 
                 best_ci = ci
@@ -1214,23 +1269,12 @@ def _hierarchical_centroid_expansion(
         # Centroid-to-centroid similarity matrix
         cc_sim = centroids @ centroids.T
 
-        # Build merge candidate pairs (use max of centroid-centroid, max member-member, and combined_sim)
+        # Build merge candidate pairs using centroid-centroid similarity only.
+        # No max-member shortcut — centroids are inherently robust.
         merge_pairs = []
         for ci in range(nc):
             for cj in range(ci + 1, nc):
-                cc = float(cc_sim[ci, cj])
-                # Max member-to-member cosine similarity
-                embs_i = embeddings[list(multi_clusters[ci])]
-                embs_j = embeddings[list(multi_clusters[cj])]
-                max_mm = float((embs_i @ embs_j.T).max())
-                # Max combined_sim (includes ST weighting)
-                max_cs = 0.0
-                for mi in multi_clusters[ci]:
-                    for mj in multi_clusters[cj]:
-                        cs = combined_sim.get((mi, mj), combined_sim.get((mj, mi), 0.0))
-                        if cs > max_cs:
-                            max_cs = cs
-                sim = max(cc, max_mm, max_cs)
+                sim = float(cc_sim[ci, cj])
                 if sim < merge_threshold:
                     continue
                 # Same class
@@ -1323,10 +1367,7 @@ def _hierarchical_centroid_expansion(
                 gi = final_orphan_indices[oi]
                 for oj in range(oi + 1, n_orphans):
                     gj = final_orphan_indices[oj]
-                    cosine_sim = float(pairwise_sim[oi, oj])
-                    # Use max of cosine and combined_sim (includes ST weighting)
-                    cs = combined_sim.get((gi, gj), combined_sim.get((gj, gi), 0.0))
-                    pair_sim = max(cosine_sim, cs)
+                    pair_sim = float(pairwise_sim[oi, oj])
                     if pair_sim < orphan_threshold:
                         continue
                     if class_ids[gi] != class_ids[gj]:
@@ -1400,6 +1441,130 @@ def _hierarchical_centroid_expansion(
     return clusters
 
 
+# ---------------------------------------------------------------------------
+# Sub-cluster temporal splitting (AIC21 technique)
+# ---------------------------------------------------------------------------
+
+def _try_temporal_split(
+    members: List[int],
+    start_times: List[float],
+    end_times: List[float],
+    embeddings: np.ndarray,
+    min_gap: float,
+    split_threshold: float,
+) -> List[Set[int]]:
+    """Recursively split a member group at the largest temporal silence gap.
+
+    A silence gap is a time interval [gap_start, gap_end] where every member
+    that started before gap_start has also ended before gap_start (i.e., no
+    member is active during the gap).  The gap is found via a start-time-sorted
+    sweep: after processing member m_i, ``max_end_so_far`` is the latest end
+    time of all members m_0..m_i.  If m_{i+1}.start > max_end_so_far, the
+    interval [max_end_so_far, m_{i+1}.start] is a true silence gap.
+
+    A split is only applied when:
+    1. The largest silence gap ≥ min_gap seconds.
+    2. The average cross-gap cosine similarity between group_a (members that
+       ended before the gap) and group_b (members that start after the gap)
+       is strictly less than split_threshold.  High similarity means same
+       vehicle — in that case we keep the cluster intact.
+
+    Returns a list of sub-cluster sets (possibly [set(members)] if no split).
+    """
+    if len(members) < 2:
+        return [set(members)]
+
+    # Sort by start time to enable the sweep
+    members_sorted = sorted(members, key=lambda m: start_times[m])
+
+    # Sweep to find the largest silence gap
+    best_gap_size = 0.0
+    best_gap_start = 0.0
+    best_gap_end = 0.0
+
+    max_end_so_far = end_times[members_sorted[0]]
+    for m in members_sorted[1:]:
+        gap_size = start_times[m] - max_end_so_far
+        if gap_size > best_gap_size:
+            best_gap_size = gap_size
+            best_gap_start = max_end_so_far
+            best_gap_end = start_times[m]
+        max_end_so_far = max(max_end_so_far, end_times[m])
+
+    if best_gap_size < min_gap:
+        return [set(members)]
+
+    # Partition members into groups relative to the gap
+    group_a = [m for m in members if end_times[m] <= best_gap_start]
+    group_b = [m for m in members if start_times[m] >= best_gap_end]
+    # Safety: members spanning the gap (start < gap_start AND end > gap_end)
+    # should not exist in a true silence gap, but keep them separately
+    group_c = [m for m in members if m not in group_a and m not in group_b]
+
+    if not group_a or not group_b:
+        return [set(members)]
+
+    # Compute average cross-gap cosine similarity
+    embs_a = embeddings[group_a]   # (|A|, D)
+    embs_b = embeddings[group_b]   # (|B|, D)
+    avg_sim = float((embs_a @ embs_b.T).mean())
+
+    if avg_sim >= split_threshold:
+        # Cross-gap similarity is high → same vehicle, do not split
+        return [set(members)]
+
+    # Split is warranted — recurse on each group independently
+    result: List[Set[int]] = []
+    result.extend(_try_temporal_split(
+        group_a, start_times, end_times, embeddings, min_gap, split_threshold,
+    ))
+    result.extend(_try_temporal_split(
+        group_b, start_times, end_times, embeddings, min_gap, split_threshold,
+    ))
+    if group_c:
+        result.append(set(group_c))
+
+    return result
+
+
+def _temporal_split_clusters(
+    clusters: List[Set[int]],
+    start_times: List[float],
+    end_times: List[float],
+    embeddings: np.ndarray,
+    min_gap: float = 60.0,
+    split_threshold: float = 0.50,
+) -> List[Set[int]]:
+    """Apply sub-cluster temporal splitting to all clusters.
+
+    For each cluster, attempts to split at temporal silence gaps using
+    `_try_temporal_split`.  Single-member clusters are passed through unchanged.
+
+    Args:
+        clusters: List of cluster sets.
+        start_times: Tracklet start times.
+        end_times: Tracklet end times.
+        embeddings: L2-normalised embedding matrix (N, D).
+        min_gap: Minimum silence duration in seconds to trigger a split check.
+        split_threshold: Maximum average cross-gap cosine similarity to allow a
+            split.  Pairs above this are assumed to be the same vehicle.
+
+    Returns:
+        Updated cluster list (may contain more clusters than input).
+    """
+    new_clusters: List[Set[int]] = []
+    for cluster in clusters:
+        if len(cluster) < 2:
+            new_clusters.append(cluster)
+            continue
+        sub_clusters = _try_temporal_split(
+            list(cluster), start_times, end_times, embeddings,
+            min_gap, split_threshold,
+        )
+        new_clusters.extend(sub_clusters)
+    return new_clusters
+
+
 def _gallery_expansion(
     clusters: List[Set[int]],
     embeddings: np.ndarray,
@@ -1434,6 +1599,7 @@ def _gallery_expansion(
         assigned = set()
         multi_clusters: List[Set[int]] = []
         orphan_indices: List[int] = []
+        gallery_hsv_gate = float((stage_cfg.get("gallery_expansion", {}) or {}).get("hsv_gate", 0.3))
 
         for cluster in clusters:
             if len(cluster) > 1:
@@ -1514,7 +1680,7 @@ def _gallery_expansion(
                 # HSV consistency gate: reject if color is too different
                 members = list(multi_clusters[ci])
                 hsv_sims = hsv_features[members] @ orphan_hsv
-                if float(hsv_sims.max()) < 0.3:
+                if gallery_hsv_gate > 0 and float(hsv_sims.max()) < gallery_hsv_gate:
                     continue
                 # Cross-camera check (orphan must come from a different camera
                 # than at least one cluster member, but must not violate

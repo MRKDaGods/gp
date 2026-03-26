@@ -1,0 +1,18 @@
+{
+  "id": "gumfreddy/09c-vehicle-reid-kd-vit-l-teacher",
+  "title": "09c Vehicle ReID KD ViT-L Teacher",
+  "code_file": "09c_kd_vitl_teacher.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

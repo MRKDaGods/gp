@@ -65,13 +65,13 @@ def per_camera_whiten(
         # Per-camera mean
         mean = X.mean(axis=0)
 
-        # Covariance + regularisation: P = inv(X^T X + n * lambda * I)
-        XtX = X.T @ X  # (D, D)
-        reg = n_cam * regularisation * np.eye(D, dtype=XtX.dtype)
-        P = np.linalg.inv(XtX + reg)
+        # FIC whitening: P = inv(C + n * lambda * I), where C = (X-μ)^T(X-μ)
+        centered = X - mean  # (n_cam, D)
+        CtC = centered.T @ centered  # (D, D) — scatter of centered data
+        reg = n_cam * regularisation * np.eye(D, dtype=CtC.dtype)
+        P = np.linalg.inv(CtC + reg)
 
         # Transform: feat_new = P @ (feat - mean)
-        centered = X - mean  # (n_cam, D)
         transformed = centered @ P.T  # (n_cam, D)
 
         # L2-normalise
@@ -179,3 +179,26 @@ def cross_camera_augment(
     )
 
     return out
+
+
+def iterative_fac(
+    embeddings: np.ndarray,
+    camera_ids: List[str],
+    epochs: int = 2,
+    knn: int = 20,
+    learning_rate: float = 0.5,
+    beta: float = 0.08,
+) -> np.ndarray:
+    """Run FAC iteratively (AIC21 uses 2-3 epochs).
+
+    Each epoch refines cross-camera features using increasingly clean
+    neighbours from the previous epoch.
+    """
+    result = embeddings
+    for ep in range(epochs):
+        result = cross_camera_augment(
+            result, camera_ids,
+            knn=knn, learning_rate=learning_rate, beta=beta,
+        )
+        logger.info(f"FAC epoch {ep + 1}/{epochs} complete")
+    return result

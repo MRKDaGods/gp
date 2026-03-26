@@ -87,12 +87,12 @@ stage2:
       # don't correspond to test camera viewpoints (IDF1 dropped 0.777→0.699)
       sie_camera_map: {}
     vehicle2:
-      enabled: false  # v26: tested ensemble TransReID+OSNet, hurt MTMC -1.6pp (0.685->0.669)
+      enabled: false  # disabled by default; enabled per-dataset for ensemble runs
       save_separate: true  # Save to embeddings_secondary.npy for stage4 fusion (preferred)
-      model_name: "osnet_x1_0"
-      weights_path: "models/reid/vehicle_osnet_veri776.pth"
-      embedding_dim: 512
-      input_size: [256, 128]
+      model_name: "resnet101_ibn_a"
+      weights_path: "models/reid/resnet101ibn_cityflowv2_384px_best.pth"
+      embedding_dim: 2048
+      input_size: [384, 384]
       clip_normalization: false
     batch_size: 64
     device: "cuda"
@@ -115,8 +115,9 @@ stage2:
     n_stripes: 3       # spatial: 3 horizontal stripes (head/torso/legs)
   pca:
     enabled: true
-    n_components: 280  # v30: 768 → 280 PCA whitening (optimal dim, IDF1=0.795)
+    n_components: 384  # v30: 768 → 280 PCA whitening (optimal dim, IDF1=0.795)
     pca_model_path: "models/reid/pca_transform.pkl"
+    secondary_pca_model_path: "models/reid/pca_transform_secondary.pkl"
   crop:
     min_area: 500
     padding_ratio: 0.1
@@ -126,6 +127,16 @@ stage2:
   # --- NEW: camera-aware batch normalisation ---
   camera_bn:
     enabled: true
+  # --- NEW: power normalization (compress magnitudes before PCA) ---
+  # alpha > 0 enables; typical values: 0.3-0.5. 0 = disabled.
+  power_norm:
+    alpha: 0.0
+  # --- Camera-specific Test-Time Adaptation (CamTTA) ---
+  # Adapts BNNeck running stats to each camera's appearance distribution
+  # before feature extraction. Requires disk-based frames (stage0 output).
+  # Only applies to TransReID models.
+  camera_tta:
+    enabled: false  # v49: implemented, off by default — test with v48 features
 
 stage3:
   faiss:
@@ -146,7 +157,7 @@ stage4:
     # --- FIC: per-camera feature whitening (AIC21 1st-place technique) ---
     fic:
       enabled: true
-      regularisation: 0.3  # v30: optimal for 280D PCA (was 3.0 for 512D)
+      regularisation: 0.1  # v30: optimal for 280D PCA (was 3.0 for 512D)
       min_samples: 5
     # --- FAC: cross-camera feature augmentation (AIC21 technique) ---
     fac:
@@ -154,6 +165,7 @@ stage4:
       knn: 20
       learning_rate: 0.5
       beta: 0.08
+      epochs: 1  # AIC21 uses 2-3 epochs for iterative refinement
     # --- Average Query Expansion (from gp-stage-2 analysis) ---
     query_expansion:
       enabled: true
@@ -172,9 +184,9 @@ stage4:
       k2: 10           # deeper expansion
       lambda_value: 0.4  # blend: 60% Jaccard + 40% original cosine
     weights:
-      appearance: 0.55
+      appearance: 0.70
       hsv: 0.25
-      spatiotemporal: 0.20
+      spatiotemporal: 0.05
       # --- Per-class weight overrides (SOTA TransReID CLIP) ---
       person:
         appearance: 0.70   # TransReID CLIP person: mAP 90.5% — very strong
@@ -217,6 +229,28 @@ stage4:
     reciprocal_best_match:
       enabled: false  # v27: hurts MTMC badly (0.684→0.665, IDSw 33→208)
       min_similarity: 0.20   # absolute floor (prevent garbage links)
+    # --- CSLS hubness reduction ---
+    # Penalizes embeddings with high average similarity to their neighbors.
+    # Reduces "universal hub" false positives (high-recall, low-precision centroids).
+    csls:
+      enabled: false  # cheap post-processing; try k=10 with 384D features
+      k: 10
+    # --- Cluster post-verification ---
+    # After graph clustering, ejects members whose mean similarity to the cluster
+    # is below min_connectivity.  Catches false transitive merges (A→B→C, A≁C).
+    cluster_verify:
+      enabled: false
+      min_connectivity: 0.30
+    # --- Sub-cluster temporal splitting (AIC21 technique) ---
+    # Splits clusters at "silence" gaps: time windows where NO member tracklet
+    # is active AND the cross-gap avg cosine similarity is below split_threshold.
+    # Targets conflation: two similar-looking vehicles at different times merged
+    # into one trajectory.  Conservative: only splits when both gap and similarity
+    # criteria are met simultaneously.
+    temporal_split:
+      enabled: false  # v49: implemented, off by default — test with min_gap=60
+      min_gap: 60.0         # minimum silence duration (seconds) to consider split
+      split_threshold: 0.50  # split if cross-gap avg cosine sim < this
     # --- Iterative gallery expansion for orphan tracklets (legacy, disabled when hierarchical is on) ---
     gallery_expansion:
       enabled: true
@@ -243,6 +277,7 @@ stage4:
     camera_bias:
       enabled: false  # v30: hurts with 280D PCA (-0.7pp)
       iterations: 1
+      cid_bias_npy_path: ""
     # --- Zone-based transition scoring (AIC21/22 SOTA) ---
     zone_model:
       enabled: false  # v30: neutral/harmful with 280D PCA
