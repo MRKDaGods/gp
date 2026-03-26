@@ -287,6 +287,10 @@ export async function getTracklets(
   return fetchApi(`/tracklets${params}`);
 }
 
+export async function getMatchedSummary(runId: string): Promise<any> {
+  return fetchApi(`/runs/${runId}/matched_summary`);
+}
+
 export async function getTrajectories(
   runId: string
 ): Promise<ApiResponse<GlobalTrajectory[]>> {
@@ -335,6 +339,23 @@ export async function searchByTracklet(
   return fetchApi('/search/tracklet', {
     method: 'POST',
     body: JSON.stringify({ trackletId, cameraId, topK }),
+  });
+}
+
+export async function searchTracklet(options: {
+  trackletId: number;
+  probeVideoId: string;
+  galleryRunId: string;
+  topK?: number;
+}): Promise<ApiResponse<{ rank: number; score: number; cameraId: string; trackletId: number; globalId: number | null; runId: string }[]>> {
+  return fetchApi('/search/tracklet', {
+    method: 'POST',
+    body: JSON.stringify({
+      trackletId: options.trackletId,
+      probeVideoId: options.probeVideoId,
+      galleryRunId: options.galleryRunId,
+      topK: options.topK ?? 20,
+    }),
   });
 }
 
@@ -554,8 +575,10 @@ export interface DatasetFolder {
   cameraCount: number;
   videosFound: number;
   alreadyProcessed: boolean;
+  hasGallery: boolean;
   isProcessing: boolean;
   runId: string | null;
+  galleryRunId: string | null;
 }
 
 export async function getDatasets(): Promise<ApiResponse<DatasetFolder[]>> {

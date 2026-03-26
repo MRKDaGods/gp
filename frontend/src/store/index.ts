@@ -18,6 +18,7 @@ import type {
 
 interface PipelineState {
   runId: string | null;
+  galleryRunId: string | null;
   stages: StageProgress[];
   isRunning: boolean;
   currentStage: StageNumber;
@@ -25,6 +26,7 @@ interface PipelineState {
 
   // Actions
   setRunId: (id: string | null) => void;
+  setGalleryRunId: (id: string | null) => void;
   updateStageProgress: (stage: StageNumber, progress: Partial<StageProgress>) => void;
   setCurrentStage: (stage: StageNumber) => void;
   setIsRunning: (running: boolean) => void;
@@ -46,12 +48,15 @@ export const usePipelineStore = create<PipelineState>()(
   devtools(
     (set) => ({
       runId: null,
+      galleryRunId: null,
       stages: [...initialStages],
       isRunning: false,
       currentStage: 0,
       error: null,
 
       setRunId: (id) => set({ runId: id }),
+
+      setGalleryRunId: (id) => set({ galleryRunId: id }),
 
       updateStageProgress: (stage, progress) =>
         set((state) => ({
@@ -69,6 +74,7 @@ export const usePipelineStore = create<PipelineState>()(
       reset: () =>
         set({
           runId: null,
+          galleryRunId: null,
           stages: [...initialStages],
           isRunning: false,
           currentStage: 0,

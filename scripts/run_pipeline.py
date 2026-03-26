@@ -199,6 +199,22 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
                         # Load gallery stage 2
                         gal_embeddings, gal_index_map = load_embeddings(gallery_dir / "stage2")
                         gal_hsv_matrix = load_hsv_features(gallery_dir / "stage2")
+
+                        # Dimension compatibility check — probe and gallery must share the
+                        # same embedding dimension (same ReID model).  If they differ, skip
+                        # the gallery merge rather than crash with a cryptic numpy error.
+                        if features and gal_embeddings.shape[1] != features[0].embedding.shape[0]:
+                            probe_dim = features[0].embedding.shape[0]
+                            gal_dim = gal_embeddings.shape[1]
+                            console.print(
+                                f"[yellow]  ⚠ Gallery embedding dim ({gal_dim}) ≠ probe dim "
+                                f"({probe_dim}) — skipping gallery merge. "
+                                f"Re-compute the gallery with the same ReID model.[/yellow]"
+                            )
+                            raise ValueError(
+                                f"Embedding dimension mismatch: gallery={gal_dim}, probe={probe_dim}"
+                            )
+
                         gal_features = [
                             TrackletFeatures(
                                 track_id=m["track_id"],
@@ -229,18 +245,24 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
                                 t.camera_id = new_cam_id
                             new_tracklets_by_camera[new_cam_id] = tracklets
 
-                        # Merge
-                        features = gal_features + new_features
-                        new_tracklets_by_camera.update(gal_tracklets_by_camera)
-                        tracklets_by_camera = new_tracklets_by_camera
-
-                        console.print(f"  [cyan]Merged query features with gallery: total {len(features)} features[/cyan]")
+                        # Merge — do this last so features is never half-mutated on error
+                        merged_features = gal_features + new_features
+                        merged_tracklets = dict(new_tracklets_by_camera)
+                        merged_tracklets.update(gal_tracklets_by_camera)
 
                         # Re-run Stage 3 in memory for the combined set
                         combined_out = output_base / "stage3_combined"
-                        faiss_index, metadata_store = run_stage3(
-                            cfg, features, tracklets_by_camera, output_dir=combined_out
+                        combined_faiss, combined_meta = run_stage3(
+                            cfg, merged_features, merged_tracklets, output_dir=combined_out
                         )
+
+                        # Only commit to the merged state after everything succeeded
+                        features = merged_features
+                        tracklets_by_camera = merged_tracklets
+                        faiss_index = combined_faiss
+                        metadata_store = combined_meta
+
+                        console.print(f"  [cyan]Merged query features with gallery: total {len(features)} features[/cyan]")
                     except Exception as e:
                         console.print(f"[red]Failed to load or merge global gallery: {e}[/red]")
 

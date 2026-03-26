@@ -155,8 +155,6 @@ export function UploadStage() {
   };
 
   const handleSelectAndProceed = async (video: VideoFile) => {
-    const cameraId = inferCameraId(video);
-
     setCurrentVideo(video);
     setRunId(null);
     setIsRunning(true);
@@ -169,7 +167,7 @@ export function UploadStage() {
     try {
       const response = await runStage(1, {
         videoId: video.id,
-        cameraId,
+        config: { tracker: "deepocsort" },
       });
 
       const runId = (response.data as any)?.runId ?? (response.data as any)?.id ?? null;

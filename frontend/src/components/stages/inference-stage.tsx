@@ -119,7 +119,7 @@ export function InferenceStage() {
   const { selectedIds, detections } = useDetectionStore();
   const { setCurrentStage, locationFilter, setLocationFilter, dateTimeRange, setDateTimeRange } =
     useSessionStore();
-  const { runId, setRunId, setIsRunning, updateStageProgress, stages } = usePipelineStore();
+  const { runId, setRunId, galleryRunId: storeGalleryRunId, setGalleryRunId, setIsRunning, updateStageProgress, stages } = usePipelineStore();
   const { currentVideo, videos, setCurrentVideo } = useVideoStore();
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -213,85 +213,64 @@ export function InferenceStage() {
     const useDataset = selectedDataset && selectedDataset !== "__uploaded__";
     const selectedDs = useDataset ? datasets.find((d) => d.name === selectedDataset) : null;
 
-    const datasetPrefix = useDataset ? `${selectedDataset.toUpperCase()}_` : null;
-    const datasetVideo = datasetPrefix
-      ? videos.find((v) => `${v.name} ${v.path}`.toUpperCase().includes(datasetPrefix))
-      : null;
-    const effectiveVideo = useDataset ? (datasetVideo ?? currentVideo) : currentVideo;
+    // Stage 2/3 ALWAYS runs on the PROBE (uploaded) video so we get its feature vector.
+    // The dataset only contributes its galleryRunId for cross-camera matching.
+    const probeVideo = currentVideo;
+    const probeRunId = runId; // set by stage 1 in upload-stage
 
-    // Fast-path: if a dataset folder is already precomputed, reuse it instead of rerunning stages 2/3.
-    if (useDataset && selectedDs?.alreadyProcessed && selectedDs.runId) {
-      setRunId(selectedDs.runId);
-      setIsRunning(false);
-
-      if (effectiveVideo) {
-        setCurrentVideo(effectiveVideo);
-      }
-
-      updateStageProgress(2, {
-        status: "completed",
-        progress: 100,
-        message: "Using cached embeddings/index from dataset run",
-      });
-      updateStageProgress(3, {
-        status: "completed",
-        progress: 100,
-        message: "Using cached embeddings/index from dataset run",
-      });
-      setCurrentStage(4);
-      return;
-    }
-
-    if (!effectiveVideo) {
+    if (!probeVideo) {
       updateStageProgress(2, {
         status: "error",
         progress: 100,
-        message: useDataset
-          ? "No video found for selected dataset scene. Select a matching video first."
-          : "No video selected. Go back to Upload.",
+        message: "No probe video selected. Go back to Upload.",
       });
       return;
     }
 
-    const cameraId = useDataset
-      ? inferCameraIdFromVideo(effectiveVideo, `${selectedDataset.toUpperCase()}_c001`)
-      : inferCameraId();
-    const effectiveRunId = useDataset
-      ? (selectedDs?.runId ?? `dataset_precompute_${selectedDataset.toLowerCase()}`)
-      : (runId ?? undefined);
-    const effectiveVideoId = effectiveVideo.id;
+    if (!probeRunId) {
+      updateStageProgress(2, {
+        status: "error",
+        progress: 100,
+        message: "Run Stage 1 (Detection & Tracking) on your uploaded video first.",
+      });
+      return;
+    }
+
+    // If gallery is already precomputed, store its runId immediately.
+    if (useDataset && selectedDs?.galleryRunId) {
+      setGalleryRunId(selectedDs.galleryRunId);
+    }
+
+    const cameraId = inferCameraId(); // probe camera (from currentVideo path/name)
 
     setIsProcessing(true);
     setIsRunning(true);
 
     try {
       setProcessStep(1);
-      updateStageProgress(2, { status: "running", progress: 0, message: "Queueing Stage 2..." });
+      updateStageProgress(2, { status: "running", progress: 0, message: "Extracting feature vectors from selected tracklet..." });
 
       const modelPath = REID_MODELS.find((m) => m.id === selectedModel)?.path
         ?? "models/reid/transreid_cityflowv2_best.pth";
 
       const stage2Response = await runStage(2, {
-        runId: effectiveRunId,
-        videoId: effectiveVideoId,
+        runId: probeRunId,
+        videoId: probeVideo.id,
         cameraId,
-        config: {
-          reid_model_path: modelPath,
-          ...(useDataset ? { datasetName: selectedDataset } : {}),
-        },
+        config: { reid_model_path: modelPath },
       });
-      const stage2RunId = (stage2Response.data as any)?.runId ?? effectiveRunId;
+      const stage2RunId = (stage2Response.data as any)?.runId ?? probeRunId;
       if (stage2RunId) {
         setRunId(stage2RunId);
         await pollStageStatus(stage2RunId, 2);
       }
 
       setProcessStep(2);
-      updateStageProgress(3, { status: "running", progress: 0, message: "Queueing Stage 3..." });
+      updateStageProgress(3, { status: "running", progress: 0, message: "Building search index..." });
 
       const stage3Response = await runStage(3, {
-        runId: stage2RunId ?? effectiveRunId,
-        videoId: effectiveVideoId,
+        runId: stage2RunId ?? probeRunId,
+        videoId: probeVideo.id,
         cameraId,
       });
       const stage3RunId = (stage3Response.data as any)?.runId ?? stage2RunId;
@@ -300,9 +279,22 @@ export function InferenceStage() {
         await pollStageStatus(stage3RunId, 3);
       }
 
-      if (effectiveVideo) {
-        setCurrentVideo(effectiveVideo);
+      setCurrentVideo(probeVideo);
+
+      // If gallery not already set, discover available datasets now.
+      if (!storeGalleryRunId && !(useDataset && selectedDs?.galleryRunId)) {
+        try {
+          const dsResp: any = await getDatasets();
+          const dsList: DatasetFolder[] = Array.isArray(dsResp?.data) ? dsResp.data : [];
+          const bestDs = useDataset
+            ? dsList.find((d) => d.name === selectedDataset)
+            : dsList.find((d) => d.hasGallery);
+          if (bestDs?.galleryRunId) {
+            setGalleryRunId(bestDs.galleryRunId);
+          }
+        } catch (_) { /* non-fatal */ }
       }
+
       setCurrentStage(4);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Inference failed";

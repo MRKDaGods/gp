@@ -15,6 +15,7 @@ import {
   Camera,
   ArrowRight,
   Car,
+  RefreshCw,
 } from "lucide-react";
 import { cn, formatDuration, getCameraColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ import {
   useVideoStore,
   useDetectionStore,
 } from "@/store";
-import { getTracklets, getTrajectories, runStage, getPipelineStatus, queryTimeline } from "@/lib/api";
+import { getTracklets, getTrajectories, runStage, getPipelineStatus, queryTimeline, getMatchedSummary } from "@/lib/api";
 import type { TimelineTrack, TrajectorySegment } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
@@ -69,7 +70,7 @@ export function TimelineStage() {
     unconfirmTrack,
     removeTrack,
   } = useTimelineStore();
-  const { runId, updateStageProgress, stages } = usePipelineStore();
+  const { runId, galleryRunId, updateStageProgress, stages } = usePipelineStore();
   const { setCurrentStage } = useSessionStore();
   const { currentVideo } = useVideoStore();
   const { selectedIds } = useDetectionStore();
@@ -80,6 +81,7 @@ export function TimelineStage() {
   const [splitCount, setSplitCount] = useState(6);
   const [showProgress, setShowProgress] = useState(true);
   const [triggerReload, setTriggerReload] = useState(0);
+  const [matchedFallbackActive, setMatchedFallbackActive] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
 
   type CameraLaneSegment = TrajectorySegment & {
@@ -143,13 +145,32 @@ export function TimelineStage() {
     return Math.max(best, 0);
   };
 
-  // Use real track span when available; only fall back to video duration when empty.
-  const totalDuration = Math.max(
-    tracks.length > 0 ? Math.max(...tracks.map((track) => track.endTime)) : (currentVideo?.duration ?? 0),
-    1
-  );
+  // Compute the trimmed timeline window: throw away silence before first detection
+  // and after last detection. Each camera's activity is a [start, end] interval;
+  // we take the union span so the ruler covers exactly the vehicle's presence.
+  const { timelineStart, timelineEnd, totalDuration } = (() => {
+    if (tracks.length === 0) {
+      const dur = Math.max(currentVideo?.duration ?? 1, 1);
+      return { timelineStart: 0, timelineEnd: dur, totalDuration: dur };
+    }
+    let minStart = Infinity;
+    let maxEnd = -Infinity;
+    tracks.forEach((track) => {
+      const segs = track.segments && track.segments.length > 0
+        ? track.segments
+        : [{ start: track.startTime, end: track.endTime }];
+      segs.forEach((s) => {
+        if (s.start < minStart) minStart = s.start;
+        if (s.end > maxEnd) maxEnd = s.end;
+      });
+    });
+    if (!isFinite(minStart)) minStart = 0;
+    if (!isFinite(maxEnd)) maxEnd = minStart + 1;
+    const dur = Math.max(maxEnd - minStart, 1);
+    return { timelineStart: minStart, timelineEnd: maxEnd, totalDuration: dur };
+  })();
 
-  // Render timeline as camera lanes: one row per camera with multiple matched segments.
+
   const cameraLanes: CameraLane[] = (() => {
     const laneMap = new Map<string, CameraLaneSegment[]>();
 
@@ -240,6 +261,50 @@ export function TimelineStage() {
   };
 
   /**
+   * Build timeline tracks from the matched/summary.json fallback.
+   * Used when normal trajectory rendering fails or returns empty rows.
+   */
+  const buildTracksFromMatchedSummary = (summary: any): TimelineTrack[] => {
+    const clips: any[] = Array.isArray(summary?.clips) ? summary.clips.filter((c: any) => c.ok) : [];
+    if (clips.length === 0) return [];
+
+    // Group by global_id → one trajectory row per global vehicle
+    const byGid = new Map<number, any[]>();
+    for (const clip of clips) {
+      const gid = Number(clip.global_id ?? 0);
+      byGid.set(gid, [...(byGid.get(gid) ?? []), clip]);
+    }
+
+    const rows: TimelineTrack[] = [];
+    byGid.forEach((clipList, gid) => {
+      const segments = clipList.map((clip: any) => ({
+        cameraId: String(clip.camera_id),
+        trackId: Number(clip.track_id),
+        globalId: gid,
+        start: Number(clip.start_time_s ?? 0),
+        end: Number(clip.end_time_s ?? (Number(clip.start_time_s ?? 0) + Number(clip.duration_s ?? 0.1))),
+        color: getCameraColor(String(clip.camera_id)),
+      }));
+      const startTime = Math.min(...segments.map((s) => s.start));
+      const endTime = Math.max(...segments.map((s) => s.end));
+      rows.push({
+        id: `fallback-${gid}`,
+        cameraId: segments[0]?.cameraId ?? "unknown",
+        trackletId: gid,
+        globalId: gid,
+        startTime,
+        endTime: Math.max(endTime, startTime + 0.1),
+        selected: false,
+        confirmed: true,
+        segments,
+        label: `G-${String(gid).padStart(4, "0")} · ${segments.length} cam${segments.length !== 1 ? "s" : ""}`,
+        confidence: Number(clipList[0]?.confidence ?? 0),
+      });
+    });
+    return rows;
+  };
+
+  /**
    * Notebook-aligned: one row per global trajectory.
    * Each row carries a `segments[]` array — one colored block per camera,
    * matching the `gp-stage-4.ipynb` multi-camera timeline visualization.
@@ -317,6 +382,7 @@ export function TimelineStage() {
         return {
           cameraId,
           trackId: Number(trackId ?? 0),
+          globalId,
           start,
           end: Math.max(end, start + 0.1),
           color: getCameraColor(cameraId),
@@ -372,8 +438,7 @@ export function TimelineStage() {
 
     const loadTracks = async () => {
       if (!currentVideo) return;
-
-      try {
+        try {
         let attemptedAssociation = false;
         const selectedTrackIds = Array.from(selectedIds).map((v) => String(v));
 
@@ -386,9 +451,11 @@ export function TimelineStage() {
         });
 
         // Query mode: resolve selected tracklets to matched trajectories on backend.
-        if (runId && selectedIds.size > 0) {
+        // Use galleryRunId (precomputed dataset) when available; fall back to probe runId.
+        const effectiveGalleryRunId = galleryRunId ?? runId;
+        if (effectiveGalleryRunId && selectedIds.size > 0) {
           attemptedAssociation = true;
-          const q1 = await queryTimeline(runId, currentVideo.id, selectedTrackIds);
+          const q1 = await queryTimeline(effectiveGalleryRunId, currentVideo.id, selectedTrackIds);
           if (cancelled) return;
 
           const q1Data: any = q1.data ?? {};
@@ -406,17 +473,40 @@ export function TimelineStage() {
 
           if (q1Traj.length > 0) {
             const rows = buildTracksFromTrajectories(q1Traj);
-            setTracks(rows);
-            updateStageProgress(4, { status: "completed", progress: 100, message: String(q1Data.message ?? "Association loaded (query-matched)") });
-            console.info("decision", "matched trajectories rendered", { rows: rows.length });
-            console.groupEnd();
-            return;
+            if (rows.length > 0) {
+              setMatchedFallbackActive(false);
+              setTracks(rows);
+              updateStageProgress(4, { status: "completed", progress: 100, message: String(q1Data.message ?? "Association loaded (query-matched)") });
+              console.info("decision", "matched trajectories rendered", { rows: rows.length });
+              console.groupEnd();
+              return;
+            }
+            // Trajectories returned but buildTracksFromTrajectories yielded nothing
+            // (likely corrupted timeline entries). Fall through to matched summary fallback.
+            console.warn("decision", "trajectories returned but building rows failed, trying matched summary fallback");
+          }
+
+          // Matched summary fallback: try outputs/{probeRunId}/matched/summary.json
+          if (runId) {
+            try {
+              const summaryResp = await getMatchedSummary(runId);
+              if (cancelled) return;
+              const fallbackRows = buildTracksFromMatchedSummary(summaryResp);
+              if (fallbackRows.length > 0) {
+                setMatchedFallbackActive(true);
+                setTracks(fallbackRows);
+                updateStageProgress(4, { status: "completed", progress: 100, message: "Showing pre-exported matched clips (fallback)" });
+                console.info("decision", "matched summary fallback rendered", { rows: fallbackRows.length });
+                console.groupEnd();
+                return;
+              }
+            } catch (_) { /* summary not available, continue */ }
           }
 
           // If stage4 artifacts are missing for this run, execute stage4 then query again.
           if (!q1Data.stage4Available) {
             updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
-            const stageResp = await runStage(4, { runId, videoId: currentVideo.id });
+            const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id });
             if (cancelled) return;
             const stage4RunId = (stageResp.data as any)?.runId ?? runId;
 
@@ -440,7 +530,7 @@ export function TimelineStage() {
             }
 
             if (!cancelled) {
-              const q2 = await queryTimeline(stage4RunId, currentVideo.id, selectedTrackIds);
+              const q2 = await queryTimeline(stage4RunId ?? effectiveGalleryRunId, currentVideo.id, selectedTrackIds);
               if (cancelled) return;
               const q2Data: any = q2.data ?? {};
               const q2Traj = Array.isArray(q2Data.trajectories) ? q2Data.trajectories : [];
@@ -656,6 +746,7 @@ export function TimelineStage() {
     const tickFps = Math.min(fps, 30);
     const increment = 1 / tickFps;
     const interval = setInterval(() => {
+      // currentTime is an offset from timelineStart (0 = first detection)
       setCurrentTime((t) => (t + increment >= totalDuration ? 0 : t + increment));
     }, 1000 / tickFps);
     return () => clearInterval(interval);
@@ -668,12 +759,23 @@ export function TimelineStage() {
 
   const stage4Progress = stages.find((s) => s.stage === 4);
 
+  // timeToPixel maps an ABSOLUTE timestamp (seconds from dataset start) to
+  // a pixel offset on the trimmed ruler (0 px = timelineStart).
   const timeToPixel = useCallback(
     (time: number) => {
       const baseWidth = 1200;
-      return (time / totalDuration) * baseWidth * zoom;
+      return ((time - timelineStart) / totalDuration) * baseWidth * zoom;
     },
-    [zoom]
+    [zoom, totalDuration, timelineStart]
+  );
+
+  // offsetToTime: inverse — pixel offset → absolute time
+  const offsetToTime = useCallback(
+    (px: number) => {
+      const baseWidth = 1200;
+      return (px / (baseWidth * zoom)) * totalDuration + timelineStart;
+    },
+    [zoom, totalDuration, timelineStart]
   );
 
   const handleTrackClick = (trackId: string) => {
@@ -735,13 +837,14 @@ export function TimelineStage() {
   // For the selected trajectory, find which cameras are active at currentTime.
   // Also determine "past" cameras (ended) and "next" cameras (not started yet)
   // to mirror the notebook visualization.
+  const absCurrentTime = timelineStart + currentTime;
   const activeCamerasForGrid = visibleCameras.map((cam) => {
     const lane = cameraLanes.find((l) => l.cameraId === cam.id);
     const laneSegments = lane?.segments ?? [];
-    const activeSegment = laneSegments.find((s) => currentTime >= s.start && currentTime <= s.end);
+    const activeSegment = laneSegments.find((s) => absCurrentTime >= s.start && absCurrentTime <= s.end);
     const isActive = Boolean(activeSegment);
-    const isPast = !activeSegment && laneSegments.length > 0 && laneSegments.every((s) => currentTime > s.end);
-    const isNext = !activeSegment && laneSegments.length > 0 && laneSegments.every((s) => currentTime < s.start);
+    const isPast = !activeSegment && laneSegments.length > 0 && laneSegments.every((s) => absCurrentTime > s.end);
+    const isNext = !activeSegment && laneSegments.length > 0 && laneSegments.every((s) => absCurrentTime < s.start);
     // Find a representative frame+bbox for this slot
     const representativeFrame = activeSegment?.representativeFrame;
     const representativeBbox = activeSegment?.representativeBbox;
@@ -754,8 +857,30 @@ export function TimelineStage() {
           color: activeSegment?.color ?? laneSegments[0]?.color,
         }
       : undefined;
-    return { ...cam, activeTrack: isActive ? trackForPreview : undefined, isPast, isNext, segment: activeSegment };
+    // Primary segment: active now, OR first segment in lane (for NEXT), OR last segment (for PAST)
+    const primarySeg = activeSegment
+      ?? (isNext ? laneSegments[0] : undefined)
+      ?? (isPast ? laneSegments[laneSegments.length - 1] : undefined);
+    return { ...cam, activeTrack: isActive ? trackForPreview : undefined, isPast, isNext, segment: activeSegment, primarySeg };
   });
+
+  // DEBUG: log what each camera cell will receive
+  if (activeCamerasForGrid.length > 0) {
+    console.log("[Timeline] activeCamerasForGrid:", activeCamerasForGrid.map(c => ({
+      id: c.id,
+      isActive: !!c.activeTrack,
+      isPast: c.isPast,
+      isNext: c.isNext,
+      primarySeg: c.primarySeg ? {
+        cameraId: c.primarySeg.cameraId,
+        trackId: c.primarySeg.trackId,
+        globalId: c.primarySeg.globalId,
+        start: c.primarySeg.start,
+        end: c.primarySeg.end,
+      } : null,
+    })));
+    console.log("[Timeline] runId =", runId);
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -771,6 +896,11 @@ export function TimelineStage() {
           <Badge variant={timelineDataSource === "real" ? "secondary" : "destructive"}>
             {timelineDataSource === "real" ? "Real Artifacts" : "No Data"}
           </Badge>
+          {matchedFallbackActive && (
+            <Badge variant="outline" className="border-yellow-500/60 text-yellow-400 bg-yellow-500/10">
+              ⚠ Fallback: pre-exported matched clips
+            </Badge>
+          )}
           <Badge variant="secondary">{shownTrajectories} trajectories</Badge>
           <Badge variant="secondary">{shownCameraLanes} camera rows</Badge>
           {selectedTrackletCount > 0 && (
@@ -784,10 +914,10 @@ export function TimelineStage() {
           <Button
               className="mr-2"
               variant="outline"
-              disabled={progress.status === "running"}
+              disabled={false}
               onClick={handleRerunAssociation}
             >
-              <RefreshCw className={cn("mr-2 h-4 w-4", progress.status === "running" && "animate-spin")} />
+              <RefreshCw className={cn("mr-2 h-4 w-4", false && "animate-spin")} />
               Rerun Association
           </Button>
           <Button onClick={handleProceed}>
@@ -892,6 +1022,10 @@ export function TimelineStage() {
                   isPast={cam.isPast}
                   isNext={cam.isNext}
                   currentTime={currentTime}
+                  absCurrentTime={absCurrentTime}
+                  isPlaying={isPlaying}
+                  primarySeg={cam.primarySeg}
+                  probeRunId={runId ?? undefined}
                   videoId={currentVideo?.id}
                   runId={runId ?? undefined}
                 />
@@ -918,7 +1052,10 @@ export function TimelineStage() {
             </div>
 
             <div className="text-sm font-mono text-muted-foreground">
-              {formatDuration(currentTime)} / {formatDuration(totalDuration)}
+              {tracks.length > 0
+                ? <>{formatDuration(timelineStart + currentTime)} / {formatDuration(timelineEnd)}<span className="ml-2 text-xs opacity-50">(+{formatDuration(currentTime)})</span></>
+                : <span className="opacity-40">Loading…</span>
+              }
             </div>
 
             <div className="flex-1">
@@ -955,22 +1092,25 @@ export function TimelineStage() {
               <div ref={timelineRef} className="p-4 min-w-max">
                 {/* Time ruler */}
                 <div className="h-6 mb-2 relative border-b border-muted">
-                  {Array.from({ length: Math.ceil(totalDuration / rulerTickInterval) + 1 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="absolute flex flex-col items-center"
-                      style={{ left: timeToPixel(i * rulerTickInterval) }}
-                    >
-                      <div className="h-3 w-px bg-muted-foreground/30" />
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        {formatDuration(i * rulerTickInterval)}
-                      </span>
-                    </div>
-                  ))}
-                  {/* Playhead on ruler */}
+                  {Array.from({ length: Math.ceil(totalDuration / rulerTickInterval) + 1 }).map((_, i) => {
+                    const absTime = timelineStart + i * rulerTickInterval;
+                    return (
+                      <div
+                        key={i}
+                        className="absolute flex flex-col items-center"
+                        style={{ left: timeToPixel(absTime) }}
+                      >
+                        <div className="h-3 w-px bg-muted-foreground/30" />
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {formatDuration(absTime)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {/* Playhead on ruler — currentTime is offset from timelineStart */}
                   <div
                     className="absolute top-0 h-3 w-0.5 bg-red-500"
-                    style={{ left: timeToPixel(currentTime) }}
+                    style={{ left: timeToPixel(timelineStart + currentTime) }}
                   />
                 </div>
 
@@ -981,10 +1121,12 @@ export function TimelineStage() {
                       key={lane.id}
                       lane={lane}
                       totalDuration={totalDuration}
+                      timelineEnd={timelineEnd}
                       isSelected={selectedLaneId === lane.id}
                       onClick={() => setSelectedLaneId(selectedLaneId === lane.id ? null : lane.id)}
                       timeToPixel={timeToPixel}
                       currentTime={currentTime}
+                      timelineStart={timelineStart}
                       videoId={currentVideo?.id}
                       runId={runId ?? undefined}
                     />
@@ -1006,6 +1148,10 @@ function CameraPreview({
   isPast,
   isNext,
   currentTime,
+  absCurrentTime,
+  isPlaying,
+  primarySeg,
+  probeRunId,
   videoId,
   runId,
 }: {
@@ -1014,9 +1160,68 @@ function CameraPreview({
   isPast?: boolean;
   isNext?: boolean;
   currentTime: number;
+  absCurrentTime: number;
+  isPlaying: boolean;
+  primarySeg?: { globalId?: number; cameraId: string; trackId: number; start: number; end: number };
+  probeRunId?: string;
   videoId?: string;
   runId?: string;
 }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Derive clip URL directly from segment metadata — no async state needed.
+  // Pattern: outputs/{probeRunId}/matched/global_{gid}_cam_{cameraId}_track_{tid}.mp4
+  const clipUrl = (() => {
+    if (!probeRunId || !primarySeg) {
+      console.log(`[CameraPreview] ${camera.id}: no clip — probeRunId=${probeRunId} primarySeg=`, primarySeg);
+      return null;
+    }
+    const { globalId, cameraId, trackId } = primarySeg;
+    if (globalId == null || trackId == null) {
+      console.log(`[CameraPreview] ${camera.id}: no clip — globalId=${globalId} trackId=${trackId}`);
+      return null;
+    }
+    const filename = `global_${globalId}_cam_${cameraId}_track_${trackId}.mp4`;
+    const url = `${API_BASE}/runs/${probeRunId}/matched_clips/${filename}`;
+    console.log(`[CameraPreview] ${camera.id}: clipUrl=`, url);
+    return url;
+  })();
+
+  const clipStartSec = primarySeg?.start ?? 0;
+
+  // Seek to correct position once metadata is loaded (can't seek before this)
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !clipUrl) return;
+    const onCanPlay = () => {
+      const seekTo = Math.max(0, absCurrentTime - clipStartSec);
+      v.currentTime = seekTo;
+    };
+    v.addEventListener("canplay", onCanPlay, { once: true });
+    return () => v.removeEventListener("canplay", onCanPlay);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipUrl]); // only re-register when URL changes
+
+  // Keep video in sync with timeline playhead scrubbing
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !clipUrl) return;
+    const seekTo = Math.max(0, absCurrentTime - clipStartSec);
+    if (Math.abs(v.currentTime - seekTo) > 0.15) {
+      v.currentTime = seekTo;
+    }
+  }, [absCurrentTime, clipUrl, clipStartSec]);
+
+  // Play/pause in sync with timeline
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !clipUrl) return;
+    if (isPlaying) {
+      v.play().catch(() => {});
+    } else {
+      v.pause();
+    }
+  }, [isPlaying, clipUrl]);
   // Build a crop URL from the active track's representative frame
   const cropUrl = (() => {
     if (!isActive || !camera.activeTrack) return null;
@@ -1036,7 +1241,15 @@ function CameraPreview({
     return null;
   })();
 
-  const ringClass = isActive
+  const ringClass = clipUrl
+    ? isActive
+      ? "ring-2 ring-green-500"
+      : isPast
+      ? "ring-1 ring-orange-500/60 opacity-70"
+      : isNext
+      ? "ring-1 ring-blue-400/60 opacity-70"
+      : "opacity-50"
+    : isActive
     ? "ring-2 ring-green-500"
     : isPast
     ? "ring-1 ring-orange-400/50 opacity-50"
@@ -1049,9 +1262,20 @@ function CameraPreview({
 
   return (
     <div className={cn("relative rounded overflow-hidden transition-all", ringClass)}>
-      {/* Camera feed — actual crop or placeholder */}
+      {/* Camera feed — video clip, static crop, or placeholder */}
       <div className="absolute inset-0 bg-gradient-to-b from-slate-700 via-slate-800 to-slate-900">
-        {cropUrl ? (
+        {clipUrl ? (
+          <video
+            ref={videoRef}
+            src={clipUrl}
+            className="absolute inset-0 w-full h-full object-cover"
+            muted
+            playsInline
+            preload="auto"
+            onError={(e) => console.error(`[CameraPreview] ${camera.id}: video error`, (e.target as HTMLVideoElement).error)}
+            onLoadedData={() => console.log(`[CameraPreview] ${camera.id}: video loaded OK`)}
+          />
+        ) : cropUrl ? (
           <img
             src={cropUrl}
             alt={camera.id}
@@ -1182,10 +1406,12 @@ interface TimelineRowProps {
     }>;
   };
   totalDuration: number;
+  timelineEnd: number;
   isSelected: boolean;
   onClick: () => void;
   timeToPixel: (time: number) => number;
   currentTime: number;
+  timelineStart: number;
   videoId?: string;
   runId?: string;
 }
@@ -1194,8 +1420,10 @@ interface TimelineRowProps {
  * Camera-lane TimelineRow.
  * Renders ONE row per camera, with all matched trajectory segments on that lane.
  */
-function TimelineRow({ lane, totalDuration, isSelected, onClick, timeToPixel, currentTime, videoId, runId }: TimelineRowProps) {
-  const isCurrentlyActive = lane.segments.some((seg) => currentTime >= seg.start && currentTime <= seg.end);
+function TimelineRow({ lane, totalDuration, timelineEnd, isSelected, onClick, timeToPixel, currentTime, timelineStart, videoId, runId }: TimelineRowProps) {
+  // currentTime is offset from timelineStart; convert to absolute for segment comparisons
+  const absoluteTime = timelineStart + currentTime;
+  const isCurrentlyActive = lane.segments.some((seg) => absoluteTime >= seg.start && absoluteTime <= seg.end);
   const segments = lane.segments;
 
   return (
@@ -1206,15 +1434,15 @@ function TimelineRow({ lane, totalDuration, isSelected, onClick, timeToPixel, cu
         segments.some((s) => s.confirmed) && !isSelected && "border-green-500/30",
         isCurrentlyActive && "bg-primary/5"
       )}
-      style={{ width: timeToPixel(totalDuration) }}
+      style={{ width: timeToPixel(timelineEnd) }}
       onClick={onClick}
       title={lane.label}
     >
       {/* Per-camera colored segments — notebook-style: colored blocks arranged along the timeline */}
       {segments.map((seg, i) => {
         const segLeft = timeToPixel(seg.start);
-        const segWidth = Math.max(timeToPixel(seg.end - seg.start), 4);
-        const isSegActive = currentTime >= seg.start && currentTime <= seg.end;
+        const segWidth = Math.max(timeToPixel(seg.end) - timeToPixel(seg.start), 4);
+        const isSegActive = absoluteTime >= seg.start && absoluteTime <= seg.end;
 
         // Build crop URL for this segment's representative frame
         const cropUrl = (() => {
@@ -1266,11 +1494,11 @@ function TimelineRow({ lane, totalDuration, isSelected, onClick, timeToPixel, cu
         );
       })}
 
-      {/* Playhead indicator on this row */}
+      {/* Playhead indicator on this row — use absolute time */}
       {isCurrentlyActive && (
         <div
           className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
-          style={{ left: timeToPixel(currentTime) }}
+          style={{ left: timeToPixel(absoluteTime) }}
         />
       )}
 

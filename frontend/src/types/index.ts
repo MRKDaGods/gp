@@ -195,6 +195,7 @@ export interface WsMessage {
 export interface TrajectorySegment {
   cameraId: string;
   trackId: number;
+  globalId?: number;
   start: number;
   end: number;
   color: string;
