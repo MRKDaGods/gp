@@ -44,12 +44,14 @@ stage0:
 stage1:
   detector:
     classes: [0]               # person only
-    confidence_threshold: 0.35 # raised from 0.20 — reduces FP significantly
+    confidence_threshold: 0.55 # raised from 0.20 — reduces FP significantly
+    conf: ${.confidence_threshold}
     iou_threshold: 0.45
     img_size: 1280             # HD cameras → larger inference size helps
   tracker:
     algorithm: "botsort"
     track_buffer: 20           # at 2fps, 20 frames = 10s — reduces fragmentation
+    min_hits: 3
     match_thresh: 0.80         # slightly less strict matching
     appearance_thresh: 0.45    # tolerate larger appearance changes
     new_track_thresh: 0.50     # raised: fewer spurious new tracks
@@ -66,9 +68,12 @@ stage1:
 stage2:
   reid:
     person:
-      model_name: "resnet50_ibn_a"
-      weights_path: "models/reid/person_resnet50ibn_market1501.pth"
-      embedding_dim: 2048
+      model_name: "transreid"
+      weights_path: "models/reid/person_transreid_vit_base_market1501.pth"
+      embedding_dim: 768
+      vit_model: "vit_base_patch16_clip_224.openai"
+      num_cameras: 6
+      clip_normalization: true
       input_size: [256, 128]
     batch_size: 64
     device: "cuda:0"
@@ -82,7 +87,7 @@ stage2:
   pca:
     enabled: true
     n_components: 256
-    pca_model_path: "models/reid/pca_transform.pkl"
+    pca_model_path: "models/reid/pca_transform_person.pkl"
   crop:
     min_area: 400
     padding_ratio: 0.1
