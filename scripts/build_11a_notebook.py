@@ -61,7 +61,7 @@ def build_gpu_guard_cell() -> dict:
         print(f"CUDA   : {torch.cuda.is_available()}")
         for i in range(torch.cuda.device_count()):
             p = torch.cuda.get_device_properties(i)
-            print(f"  GPU {i}: {torch.cuda.get_device_name(i)}  ({p.total_mem/1024**3:.1f} GB)")
+            print(f"  GPU {i}: {torch.cuda.get_device_name(i)}  ({p.total_memory/1024**3:.1f} GB)")
         DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"\\nUsing device: {DEVICE}")""")
     return {
