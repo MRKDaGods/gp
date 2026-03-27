@@ -255,6 +255,10 @@ stage4:
       enabled: true
       bonus: 0.05            # additive bonus to combined score, scaled by temporal overlap ratio
       max_mean_time: 5.0     # only apply to camera pairs with mean transit time < this (seconds)
+    # --- Per-camera-pair similarity normalization (distribution-based) ---
+    camera_pair_norm:
+      enabled: false
+      min_pairs: 10  # minimum pair count per camera combination to normalize
     # --- Hierarchical centroid-based expansion (AIC21/22 SOTA) ---
     # Multi-pass matching using cluster centroids for more robust merging.
     # Replaces gallery_expansion when enabled.

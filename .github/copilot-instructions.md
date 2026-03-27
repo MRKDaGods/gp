@@ -25,6 +25,12 @@ Multi-camera multi-target tracking system (vehicles/humans) on CityFlowV2 (AI Ci
 - Similarly: `stage4.association.fic.regularisation=X`, `stage4.association.gallery_expansion.threshold=X`
 - Config loading: `default.yaml` → merge `cityflowv2.yaml` → CLI overrides
 
+### Research Findings — MUST READ
+- **Always read `docs/findings.md` before proposing experiments or changes** — it contains all dead ends, current performance, and strategic analysis
+- **Update `docs/findings.md`** whenever: new experiments produce results, new dead ends are discovered, performance numbers change, or new insights are gained
+- The findings doc is the canonical source of truth for what has been tried and what to do next
+- Before trying ANY approach, check the "Dead Ends" section to avoid repeating failed experiments
+
 ## Architecture
 
 ```
@@ -41,6 +47,7 @@ src/apps/         Streamlit dashboard, NL query, 3D sim
 scripts/          CLI entry points + helper scripts
 notebooks/kaggle/ Kaggle training notebooks (10a/10b/10c pipeline chain)
 tests/            pytest test suite
+docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED)
 ```
 
 ## Key Dependencies & Versions
@@ -74,16 +81,19 @@ tests/            pytest test suite
 
 ## Current Performance State
 - **Best Kaggle**: IDF1=0.784 (v80, 10c v44, ali369 account — min_hits=2)
-- **Historical local claim**: IDF1=0.8297 (v47 — unverifiable, predates current experiment log)
-- **SOTA target**: IDF1≈0.84 (AIC21 published)
-- **Gap**: ~5.6pp from SOTA, caused by feature quality not association tuning (220+ configs exhausted)
-- Key params (v80 best): sim_thresh=0.53, fic_reg=0.1, app_w=0.70, conflict_free_cc, min_hits=2, PCA=384D
+- **SOTA target**: IDF1≈0.8486 (AIC22 1st place)
+- **Gap**: ~6.5pp from SOTA — caused by feature quality (single model at 256px), NOT association tuning
+- **Association**: EXHAUSTED (225+ configs, all within 0.3pp of optimal)
+- **Critical blocker**: 384px model (80.14% mAP) never properly deployed — wrong checkpoint on Kaggle
+- **Secondary model**: ResNet101-IBN-a at 52.77% mAP — expected given no VeRi-776 pretraining
+- See `docs/findings.md` for full analysis, dead ends, and action plan
 
 ## Experiment History
 - **Full experiment log**: See `docs/experiment-log.md` for 225+ tracked experiments
-- Before trying ANY parameter change, check the experiment log to avoid repeating failed experiments
-- Key dead ends documented: CSLS (-34.7pp), hierarchical clustering (-1-5pp), FAC (-2.5pp), feature concat (-1.6pp), mtmc_only (-5pp)
-- Association parameters are EXHAUSTED (220+ configs). Future gains come from feature quality improvements.
+- **Research findings**: See `docs/findings.md` for dead ends, strategic analysis, and what to do next
+- Before trying ANY parameter change, check BOTH documents to avoid repeating failed experiments
+- Key dead ends: CSLS (-34.7pp), hierarchical clustering (-1-5pp), FAC (-2.5pp), reranking (always worse with current features), camera-pair norm (zero effect), SGD for ResNet (catastrophic)
+- Association parameters are EXHAUSTED. Future gains come from: deploying correct 384px model, VeRi-776 pretraining for ResNet101, CID_BIAS
 
 ## Kaggle Workflow
 - Pipeline chain: 10a (stages 0-2, GPU) → 10b (stage 3, CPU) → 10c (stages 4-5, CPU)
@@ -102,3 +112,5 @@ tests/            pytest test suite
 - Don't enable track smoothing or edge trim — neutral to harmful
 - Don't use text find/replace on raw JSON strings for Unicode — breaks JSON structure
 - Don't guess config override paths — always trace from `cfg.stageN` in the pipeline code
+- Don't repeat dead-end experiments — check `docs/findings.md` first
+- Don't compare ResNet101-IBN-a mAP to VeRi-776 baselines — our eval is on CityFlowV2 (different dataset, 128 vs 576 IDs)

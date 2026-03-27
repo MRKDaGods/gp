@@ -334,6 +334,49 @@ def run_stage4(
 
     logger.info(f"Combined similarity pairs: {len(combined_sim)}")
 
+    # Step 5a: Per-camera-pair similarity normalization.
+    # Center each camera-pair distribution on the global mean of eligible pairs
+    # to reduce systematic cross-camera score bias before graph construction.
+    pair_norm_cfg = stage_cfg.get("camera_pair_norm", {})
+    if pair_norm_cfg.get("enabled", False) and combined_sim:
+        from collections import defaultdict
+
+        min_pairs = int(pair_norm_cfg.get("min_pairs", 10))
+        pair_sims: Dict[Tuple[str, str], List[float]] = defaultdict(list)
+        for (i, j), sim in combined_sim.items():
+            pair_key = tuple(sorted((camera_ids[i], camera_ids[j])))
+            pair_sims[pair_key].append(sim)
+
+        pair_means: Dict[Tuple[str, str], float] = {}
+        eligible_means: List[float] = []
+        for pair_key, sims in pair_sims.items():
+            if len(sims) >= min_pairs:
+                mean_sim = float(np.mean(sims))
+                pair_means[pair_key] = mean_sim
+                eligible_means.append(mean_sim)
+
+        if eligible_means:
+            global_mean = float(np.mean(eligible_means))
+            adjusted = 0
+            for (i, j), sim in list(combined_sim.items()):
+                pair_key = tuple(sorted((camera_ids[i], camera_ids[j])))
+                pair_mean = pair_means.get(pair_key)
+                if pair_mean is None:
+                    continue
+                combined_sim[(i, j)] = sim + (global_mean - pair_mean)
+                adjusted += 1
+
+            logger.info(
+                "Camera-pair normalization: adjusted "
+                f"{adjusted} pairs across {len(pair_means)} camera combos "
+                f"(global_mean={global_mean:.3f}, min_pairs={min_pairs})"
+            )
+        else:
+            logger.info(
+                "Camera-pair normalization skipped: no camera pairs met "
+                f"min_pairs={min_pairs}"
+            )
+
     # Step 5b: Camera distance bias adjustment (iterative)
     camera_bias_cfg = stage_cfg.get("camera_bias", {})
     if camera_bias_cfg.get("enabled", False):
