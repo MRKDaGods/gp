@@ -115,30 +115,46 @@ def build_mount_weights_cell() -> dict:
         PROJECT = Path("/kaggle/working/gp")
         os.chdir(str(PROJECT))
 
-        WEIGHTS_DIR = Path("/kaggle/input/mtmc-weights")
-        if not WEIGHTS_DIR.exists():
-            raise FileNotFoundError(f"Weights dataset not found at {WEIGHTS_DIR}")
+        # Try both possible mount paths
+        WEIGHTS_INPUT = None
+        for candidate in [
+            Path("/kaggle/input/datasets/mrkdagods/mtmc-weights"),
+            Path("/kaggle/input/mtmc-weights"),
+        ]:
+            if candidate.exists():
+                WEIGHTS_INPUT = candidate
+                break
 
-        # Copy model files to project
-        models_dst = PROJECT / "models"
-        for subdir in ["reid", "detection", "tracker"]:
-            src = WEIGHTS_DIR / "models" / subdir
-            dst = models_dst / subdir
-            if src.exists():
-                dst.mkdir(parents=True, exist_ok=True)
-                for f in src.iterdir():
-                    if f.is_file():
-                        dst_file = dst / f.name
-                        if not dst_file.exists():
-                            shutil.copy2(str(f), str(dst_file))
-                            print(f"  Copied {subdir}/{f.name} ({f.stat().st_size/1024**2:.1f} MB)")
-                        else:
-                            print(f"  Already exists: {subdir}/{f.name}")
+        if WEIGHTS_INPUT is None:
+            # List what's available
+            inp = Path("/kaggle/input")
+            if inp.exists():
+                print("Available inputs:")
+                for p in sorted(inp.rglob("*"))[:30]:
+                    print(f"  {p}")
+            raise FileNotFoundError("Weights dataset not found - attach mrkdagods/mtmc-weights")
 
-        # Verify critical person model
-        person_model = models_dst / "reid" / "person_transreid_vit_base_market1501.pth"
+        print(f"Weights found at: {WEIGHTS_INPUT}")
+
+        # Copy models/ tree
+        MODELS_DST = PROJECT / "models"
+        if MODELS_DST.is_symlink():
+            MODELS_DST.unlink()
+        if MODELS_DST.exists():
+            shutil.rmtree(MODELS_DST)
+
+        print(f"Copying models from {WEIGHTS_INPUT} ...")
+        shutil.copytree(str(WEIGHTS_INPUT), str(MODELS_DST))
+
+        # Verify critical person model exists
+        person_model = MODELS_DST / "reid" / "person_transreid_vit_base_market1501.pth"
         assert person_model.exists(), f"Person ReID model not found at {person_model}"
-        print(f"\\nPerson ReID model: {person_model} ({person_model.stat().st_size/1024**2:.1f} MB)")""")
+        print(f"Person ReID: {person_model.name} ({person_model.stat().st_size/1024**2:.1f} MB)")
+
+        # List all copied models
+        for f in sorted(MODELS_DST.rglob("*")):
+            if f.is_file():
+                print(f"  {f.relative_to(MODELS_DST)} ({f.stat().st_size/1024**2:.1f} MB)")""")
     return {
         "cell_type": "code",
         "metadata": {},
@@ -146,7 +162,6 @@ def build_mount_weights_cell() -> dict:
         "outputs": [],
         "source": to_source(code),
     }
-
 
 def build_mount_wildtrack_cell() -> dict:
     code = dedent("""\
