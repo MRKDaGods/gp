@@ -80,7 +80,7 @@ print(f"\\nUsing device: {DEVICE}")'''
 
 
 CLONE_INSTALL_BASE = '''\
-REPO_URL = "https://github.com/abdoibrahim257/MTC-repo.git"
+REPO_URL = "https://github.com/MRKDaGods/gp.git"
 PROJECT = Path("/kaggle/working/gp")
 
 if not PROJECT.exists():

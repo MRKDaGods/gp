@@ -1,5 +1,5 @@
 {
-  "id": "ali369/mtmc-11b-wildtrack-stage-3",
+  "id": "mrkdagods/mtmc-11b-wildtrack-stage-3",
   "title": "MTMC 11b - WILDTRACK Stage 3 (FAISS Indexing)",
   "code_file": "mtmc-11b-wildtrack-stage-3.ipynb",
   "language": "python",
@@ -11,6 +11,6 @@
   "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": [
-    "ali369/mtmc-11a-wildtrack-stages-0-2"
+    "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid"
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "id": "ali369/mtmc-11c-wildtrack-stages-4-5",
+  "id": "mrkdagods/mtmc-11c-wildtrack-stages-4-5",
   "title": "MTMC 11c - WILDTRACK Stages 4-5 (Association + Eval)",
   "code_file": "mtmc-11c-wildtrack-stages-4-5.ipynb",
   "language": "python",
@@ -11,6 +11,6 @@
   "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": [
-    "ali369/mtmc-11b-wildtrack-stage-3"
+    "mrkdagods/mtmc-11b-wildtrack-stage-3"
   ]
 }

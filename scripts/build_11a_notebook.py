@@ -79,7 +79,7 @@ def build_clone_install_cell() -> dict:
         from pathlib import Path
 
         # Clone repository
-        REPO_URL = "https://github.com/abdoibrahim257/MTC-repo.git"
+        REPO_URL = "https://github.com/MRKDaGods/gp.git"
         PROJECT = Path("/kaggle/working/gp")
 
         if not PROJECT.exists():
