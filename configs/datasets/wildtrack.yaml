@@ -44,26 +44,30 @@ stage0:
 stage1:
   detector:
     classes: [0]               # person only
-    confidence_threshold: 0.55 # raised from 0.20 — reduces FP significantly
+    confidence_threshold: 0.35 # lowered to keep more detections at 2fps
     conf: ${.confidence_threshold}
     iou_threshold: 0.45
     img_size: 1280             # HD cameras → larger inference size helps
   tracker:
     algorithm: "botsort"
-    track_buffer: 20           # at 2fps, 20 frames = 10s — reduces fragmentation
-    min_hits: 3
-    match_thresh: 0.80         # slightly less strict matching
-    appearance_thresh: 0.45    # tolerate larger appearance changes
-    new_track_thresh: 0.50     # raised: fewer spurious new tracks
-  min_tracklet_length: 3       # 3 frames = 1.5s at 2fps
+    track_buffer: 60           # at 2fps, 60 frames = 30s — very forgiving for occlusion
+    track_high_thresh: 0.35    # match new_track_thresh for BotSort high-confidence split
+    track_low_thresh: 0.05     # keep low for lost-track recovery
+    new_track_thresh: 0.35     # accept tracks sooner at low frame rate
+    max_age: 60                # match track_buffer for long low-fps gaps
+    max_obs: 65                # slightly above max_age per BaseTracker guidance
+    min_hits: 1
+    match_thresh: 0.85         # more permissive matching at 2fps
+    appearance_thresh: 0.30    # much more tolerant at 2fps
+  min_tracklet_length: 2       # keep more short tracklets for later association
   min_tracklet_area: 400       # outdoor, people can be small
   interpolation:
     enabled: true
-    max_gap: 8                 # at 2fps, 8 frames = 4s max gap
+    max_gap: 20                # at 2fps, 20 frames = 10s max gap
   intra_merge:
     enabled: true
-    max_time_gap: 8.0          # raised: more aggressive merge at 2fps
-    max_iou_distance: 0.6
+    max_time_gap: 20.0         # wider merge window for low-fps track breaks
+    max_iou_distance: 0.75
 
 stage2:
   reid:
