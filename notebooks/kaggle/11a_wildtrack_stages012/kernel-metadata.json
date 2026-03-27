@@ -1,0 +1,18 @@
+{
+  "id": "ali369/mtmc-11a-wildtrack-stages-0-2",
+  "title": "MTMC 11a - WILDTRACK Stages 0-2 (Tracking + ReID)",
+  "code_file": "mtmc-11a-wildtrack-stages-0-2.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights",
+    "aryashah2k/large-scale-multicamera-detection-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

@@ -1,0 +1,16 @@
+{
+  "id": "ali369/mtmc-11b-wildtrack-stage-3",
+  "title": "MTMC 11b - WILDTRACK Stage 3 (FAISS Indexing)",
+  "code_file": "mtmc-11b-wildtrack-stage-3.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [
+    "ali369/mtmc-11a-wildtrack-stages-0-2"
+  ]
+}

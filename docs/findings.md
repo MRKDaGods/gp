@@ -2,7 +2,9 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
-## Current Performance (Last Updated: 2026-03-27)
+## Current Performance (Last Updated: 2026-03-28)
+
+### Vehicle Pipeline (CityFlowV2)
 
 | Metric | Value | Notes |
 |--------|:-----:|-------|
@@ -13,6 +15,15 @@
 | **Secondary Model (ResNet101-IBN-a)** | mAP=52.77% | On CityFlowV2 eval split, ImageNet→CityFlowV2 only |
 | **384px ViT (09b v2)** | mAP=80.14% | Trained, **checkpoint on Kaggle is v1 (44.9%)** — v2 never uploaded |
 | **Association configs tested** | 225+ | All within 0.3pp of optimal |
+
+### Person Pipeline (WILDTRACK) — NEW
+
+| Metric | Value | Notes |
+|--------|:-----:|-------|
+| **Best IDF1** | **36.8%** | Exp 1, conf=0.55, min_len=8, min_hits=3 |
+| **Best MOTA** | **11.8%** | Same run (up from -28.1% after frame ID bug fix) |
+| **ReID Model** | TransReID ViT-B/16 CLIP | Market1501 pretrained, not fine-tuned on WILDTRACK |
+| **Status** | Early exploration | Extreme fragmentation, low detector precision |
 
 ## Gap Decomposition
 
@@ -62,6 +73,30 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 | **3** | CID_BIAS per camera-pair calibration | +0.5-1.0pp | NOT STARTED |
 | **4** | Box-grained matching (per-detection features) | +0.5-1.5pp | NOT STARTED |
 | **5** | Re-enable reranking after feature upgrade | +0.5-1.0pp | Blocked by #1/#2 |
+
+## Person Pipeline (WILDTRACK) — New Initiative
+
+### Baseline Performance
+
+| Run | Config Changes | Tracklets | MTMC IDF1 | IDF1 | MOTA |
+|-----|---------------|-----------|-----------|------|------|
+| Baseline (run_20260327_211115) | Default wildtrack.yaml | 1,339 | 0.176 | 0.316 | -0.281 |
+| Exp 1 (run_20260327_224721) | conf=0.55, min_len=8, min_hits=3, match=0.75, merge_gap=40 | 819 | 0.233 | 0.368 | 0.118 |
+| Exp 2 (run_20260327_231511) | conf=0.65, min_len=12, fresh PCA, rerank=off, sim=0.40, louvain=2.0, app=0.90 | INCOMPLETE (interrupted) | — | — | — |
+
+### Key Discoveries (Person Pipeline)
+1. **Frame ID off-by-one bug (FIXED)**: WILDTRACK GT was being written with 0-based frame IDs, but predictions use 1-based. Fixed in `scripts/prepare_dataset.py`. This single fix contributed +39.9pp MOTA improvement.
+2. **Extreme tracklet fragmentation**: 1,339 tracklets for ~20 people in baseline. Increasing min_hits and min_tracklet_length helped reduce to 819.
+3. **Over-detection**: Person detector has low precision (~0.33, 13K FP). Need higher confidence threshold.
+4. **PCA model potentially wrong distribution**: Person PCA was trained on vehicle features. Moved to .bak to force refit on WILDTRACK data.
+5. **ReID model**: Using TransReID ViT-Base/16 CLIP pretrained on Market1501 (person-specific). Not fine-tuned on WILDTRACK.
+6. **All GPU-intensive pipeline stages must run on Kaggle, not locally** (local GTX 1050 Ti too slow).
+
+### Person Pipeline Next Steps
+- Set up person pipeline stages 0-2 on Kaggle (GPU-intensive)
+- Run stages 3-5 on Kaggle too (via notebook chain) for convenience
+- Fine-tune person ReID on WILDTRACK or EPFL data if better features needed
+- Try conf=0.70+ to reduce false positives further
 
 ## Conclusive Dead Ends (DO NOT RETRY)
 

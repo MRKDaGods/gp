@@ -199,7 +199,7 @@ def prepare_wildtrack(root: Path, output: Path):
     clipped_count = 0
     skipped_count = 0
 
-    for frame_id, json_path in enumerate(json_files):
+    for frame_id, json_path in enumerate(json_files, start=1):
 
         with open(json_path, "r") as f:
             annotations = json.load(f)

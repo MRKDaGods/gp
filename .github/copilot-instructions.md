@@ -5,6 +5,13 @@ Multi-camera multi-target tracking system (vehicles/humans) on CityFlowV2 (AI Ci
 
 ## Critical Rules (NEVER violate)
 
+### GPU Pipeline Execution
+- **NEVER** run GPU-intensive pipeline stages (0, 1, 2) locally — the local machine has a GTX 1050 Ti which is too slow and starves other work
+- ALL GPU-intensive work (detection, tracking, feature extraction, ReID training) MUST run on Kaggle
+- Local machine is ONLY for: code editing, pushing notebooks, monitoring Kaggle kernels, and running CPU-only stages (3, 4, 5) on small datasets
+- The virtual environment MUST be used for any local Python: `.venv` (Python 3.11.9), NOT system Python 3.13
+- Activate with: `.\.venv\Scripts\activate`
+
 ### Notebook Editing
 - **NEVER** use `replace_string_in_file` on `.ipynb` files — it edits VS Code's in-memory buffer but may NOT save to disk
 - For `.ipynb` edits: use `json.load() → modify → json.dump()` via a Python script
