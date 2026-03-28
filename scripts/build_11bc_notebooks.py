@@ -87,10 +87,49 @@ if not PROJECT.exists():
     subprocess.check_call(["git", "clone", "--depth", "1", REPO_URL, str(PROJECT)])
 os.chdir(str(PROJECT))
 
-subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-e", ".", "--no-deps"])
-subprocess.check_call([sys.executable, "-m", "pip", "install", "-q",
-    "faiss-cpu>=1.7", "omegaconf>=2.3", "networkx>=3.1",
-    "scipy", "scikit-learn", "click", "tqdm"])'''
+def pip(*args):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", *args])
+
+try:
+    import faiss; print(f"faiss ok ({faiss.__version__})")
+except ImportError:
+    try: pip("faiss-gpu")
+    except Exception: pip("faiss-cpu")
+
+try:
+    import trackeval; print("trackeval ok")
+except ImportError:
+    pip("git+https://github.com/JonathonLuiten/TrackEval.git")
+
+pip("motmetrics", "loguru", "omegaconf", "rich", "networkx>=3.1", "click",
+    "numpy", "scipy", "pandas", "scikit-learn")
+subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps", "-q"],
+                      cwd=str(PROJECT))'''
+
+
+DEPENDENCY_VALIDATION = '''\
+FAILED = []
+_checks = [
+    ("faiss", "faiss"),
+    ("motmetrics", "motmetrics"),
+    ("loguru", "loguru"),
+    ("omegaconf", "omegaconf"),
+    ("networkx", "networkx"),
+    ("sklearn", "sklearn"),
+    ("numpy", "numpy"),
+    ("pandas", "pandas"),
+    ("trackeval", "trackeval"),
+]
+for label, mod in _checks:
+    try:
+        __import__(mod)
+        print(f"  \\u2713 {label}")
+    except ImportError as e:
+        print(f"  \\u2717 {label}: {e}")
+        FAILED.append(label)
+if FAILED:
+    raise RuntimeError(f"Missing modules: {FAILED} -- fix pip installs above")
+print("\\n\\u2713 All required modules importable")'''
 
 
 # ============================================================================
@@ -122,8 +161,9 @@ def build_11b() -> dict:
     # Cell 3: Clone + install
     cells.append(md_cell("## 1. Clone Repo & Install Dependencies"))
     cells.append(code_cell(
-        CLONE_INSTALL_BASE + '\nprint("\\u2713 Dependencies installed")'
+        CLONE_INSTALL_BASE + '\nprint("\\n\\u2713 Dependencies installed")'
     ))
+    cells.append(code_cell(DEPENDENCY_VALIDATION))
 
     # Cell 4: Extract 11a checkpoint
     cells.append(md_cell("## 2. Load Checkpoint from 11a"))
@@ -131,23 +171,30 @@ def build_11b() -> dict:
 DATA_OUT = Path("/tmp/pipeline_outputs")
 DATA_OUT.mkdir(parents=True, exist_ok=True)
 
+def print_deep_listing(root, max_depth=3, prefix=""):
+    root = Path(root)
+    for item in sorted(root.iterdir()):
+        print(f"{prefix}{item.name}{'/' if item.is_dir() else ''}")
+        if item.is_dir() and len(prefix) < max_depth * 2:
+            try:
+                print_deep_listing(item, max_depth, prefix + "  ")
+            except PermissionError:
+                print(f"{prefix}  [permission denied]")
+
+
+print("=== /kaggle/input/ deep listing ===")
+print_deep_listing(Path("/kaggle/input"))
+
 # Find 11a output
 INPUT_11A = None
-for candidate in [
-    Path("/kaggle/input/mtmc-11a-wildtrack-stages-0-2"),
-    Path("/kaggle/input/mtmc-11a-wildtrack-stages-0-2-tracking-reid"),
-]:
-    if candidate.exists():
-        INPUT_11A = candidate
-        break
+for ckpt_file in Path("/kaggle/input").rglob("checkpoint.tar.gz"):
+    INPUT_11A = ckpt_file.parent
+    print(f"Found checkpoint at: {ckpt_file}")
+    break
 
 if INPUT_11A is None:
-    for d in Path("/kaggle/input").iterdir():
-        if (d / "checkpoint.tar.gz").exists():
-            INPUT_11A = d
-            break
-
-if INPUT_11A is None:
+    print("=== /kaggle/input/ deep listing ===")
+    print_deep_listing(Path("/kaggle/input"))
     raise FileNotFoundError("11a output not found in /kaggle/input/")
 
 ckpt = INPUT_11A / "checkpoint.tar.gz"
@@ -288,11 +335,9 @@ def build_11c() -> dict:
     # Cell 3: Clone + install
     cells.append(md_cell("## 1. Clone Repo & Install Dependencies"))
     cells.append(code_cell(
-        CLONE_INSTALL_BASE
-        + '\nsubprocess.check_call([sys.executable, "-m", "pip", "install", "-q",\n'
-        '    "motmetrics", "lap"])\n'
-        'print("\\u2713 Dependencies installed")'
+        CLONE_INSTALL_BASE + '\nprint("\\n\\u2713 Dependencies installed")'
     ))
+    cells.append(code_cell(DEPENDENCY_VALIDATION))
 
     # Cell 4: Extract 11b checkpoint
     cells.append(md_cell("## 2. Load Checkpoint from 11b"))
@@ -300,20 +345,29 @@ def build_11c() -> dict:
 DATA_OUT = Path("/tmp/pipeline_outputs")
 DATA_OUT.mkdir(parents=True, exist_ok=True)
 
+def print_deep_listing(root, max_depth=3, prefix=""):
+    root = Path(root)
+    for item in sorted(root.iterdir()):
+        print(f"{prefix}{item.name}{'/' if item.is_dir() else ''}")
+        if item.is_dir() and len(prefix) < max_depth * 2:
+            try:
+                print_deep_listing(item, max_depth, prefix + "  ")
+            except PermissionError:
+                print(f"{prefix}  [permission denied]")
+
+
+print("=== /kaggle/input/ deep listing ===")
+print_deep_listing(Path("/kaggle/input"))
+
 INPUT_11B = None
-for candidate in [
-    Path("/kaggle/input/mtmc-11b-wildtrack-stage-3"),
-    Path("/kaggle/input/mtmc-11b-wildtrack-stage-3-faiss-indexing"),
-]:
-    if candidate.exists():
-        INPUT_11B = candidate
-        break
+for ckpt_file in Path("/kaggle/input").rglob("checkpoint.tar.gz"):
+    INPUT_11B = ckpt_file.parent
+    print(f"Found checkpoint at: {ckpt_file}")
+    break
+
 if INPUT_11B is None:
-    for d in Path("/kaggle/input").iterdir():
-        if (d / "checkpoint.tar.gz").exists():
-            INPUT_11B = d
-            break
-if INPUT_11B is None:
+    print("=== /kaggle/input/ deep listing ===")
+    print_deep_listing(Path("/kaggle/input"))
     raise FileNotFoundError("11b output not found in /kaggle/input/")
 
 ckpt = INPUT_11B / "checkpoint.tar.gz"

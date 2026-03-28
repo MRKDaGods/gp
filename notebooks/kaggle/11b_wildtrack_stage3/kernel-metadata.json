@@ -1,5 +1,5 @@
 {
-  "id": "mrkdagods/mtmc-11b-wildtrack-stage-3",
+  "id": "mrkdagods/mtmc-11b-wildtrack-stage-3-faiss-indexing",
   "title": "MTMC 11b - WILDTRACK Stage 3 (FAISS Indexing)",
   "code_file": "mtmc-11b-wildtrack-stage-3.ipynb",
   "language": "python",

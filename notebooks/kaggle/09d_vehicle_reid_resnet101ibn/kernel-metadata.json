@@ -1,18 +1,19 @@
 {
-  "id": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+  "id": "yahiaakhalafallah/09d-vehicle-reid-resnet101-ibn-a-training",
   "title": "09d Vehicle ReID ResNet101-IBN-a Training",
   "code_file": "09d_vehicle_reid_resnet101ibn.ipynb",
   "language": "python",
   "kernel_type": "notebook",
-  "is_private": false,
+  "is_private": true,
   "enable_gpu": true,
+  "enable_tpu": false,
   "enable_internet": true,
-  "machine_shape": "NvidiaTeslaT4",
+  "keywords": [],
   "dataset_sources": [
     "thanhnguyenle/data-aicity-2023-track-2",
     "mrkdagods/mtmc-weights"
   ],
-  "competition_sources": [],
   "kernel_sources": [],
+  "competition_sources": [],
   "model_sources": []
 }

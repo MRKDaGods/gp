@@ -1,0 +1,28 @@
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning:
+Found GPU0 Tesla P100-PCIE-16GB which is of cuda capability 6.0.
+Minimum and Maximum cuda capability supported by this version of PyTorch is
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning:
+Please install PyTorch with a following CUDA
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning:
+Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.
+The current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning:
+Found GPU0 Tesla P100-PCIE-16GB which is of cuda capability 6.0.
+Minimum and Maximum cuda capability supported by this version of PyTorch is
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning:
+Please install PyTorch with a following CUDA
+/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py:435: UserWarning:
+Tesla P100-PCIE-16GB with CUDA capability sm_60 is not compatible with the current PyTorch installation.
+The current PyTorch install supports CUDA capabilities sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.
+P100 detected (sm_60), installing compatible PyTorch...
+papermill.exceptions.PapermillExecutionError:
+Exception encountered at "In [8]":
+AttributeError                            Traceback (most recent call last)
+----> 1 import torchvision.transforms as T
+/usr/local/lib/python3.12/dist-packages/torchvision/__init__.py in <module>
+---> 10 from torchvision import _meta_registrations, datasets, io, models, ops, transforms, utils  # usort:skip
+/usr/local/lib/python3.12/dist-packages/torchvision/_meta_registrations.py in <module>
+/usr/local/lib/python3.12/dist-packages/torchvision/_meta_registrations.py in wrapper(fn)
+---> 18         if torchvision.extension._has_ops():
+19             get_meta_lib().impl(getattr(getattr(torch.ops.torchvision, op_name), overload_name), fn)
+AttributeError: partially initialized module 'torchvision' has no attribute 'extension' (most likely due to a circular import)

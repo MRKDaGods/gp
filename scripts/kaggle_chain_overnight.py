@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
@@ -21,6 +20,13 @@ LOG_FILE = DATA_DIR / "overnight_campaign.log"
 YAHIA_TOKEN = "yahiaakhalafallah_access_token"
 ALI_TOKEN = "ali_369_access_token"
 MRK_TOKEN = "MRKDaGods__access_token"
+
+TOKEN_USERNAMES = {
+    "yahiaakhalafallah_access_token": "yahiaakhalafallah",
+    "ali_369_access_token": "ali369",
+    "MRKDaGods__access_token": "mrkdagods",
+    "gumfreddy_access_token": "gumfreddy",
+}
 
 KERNEL_09D = "yahiaakhalafallah/09d-vehicle-reid-resnet101-ibn-a-training"
 WEIGHT_FILENAME = "resnet101ibn_cityflowv2_384px_best.pth"
@@ -90,20 +96,14 @@ def truncate(text: str, limit: int = LOG_TAIL_CHARS) -> str:
 
 
 def set_kaggle_token(token_name: str) -> str:
-    """Load a Kaggle token from ~/.kaggle and update env vars for CLI and SDK use."""
+    """Set KAGGLE_API_TOKEN env var from ~/.kaggle/<token_name>."""
     token_path = Path.home() / ".kaggle" / token_name
     if not token_path.exists():
         raise FileNotFoundError(f"Kaggle token file not found: {token_path}")
 
     raw = token_path.read_text(encoding="utf-8").strip()
-    payload = json.loads(raw)
-    username = payload["username"]
-    key = payload["key"]
-
     os.environ["KAGGLE_API_TOKEN"] = raw
-    os.environ["KAGGLE_USERNAME"] = username
-    os.environ["KAGGLE_KEY"] = key
-    return username
+    return TOKEN_USERNAMES.get(token_name, "unknown")
 
 
 def is_retryable_output(text: str) -> bool:
