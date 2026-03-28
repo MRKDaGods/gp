@@ -286,23 +286,23 @@ export function UploadStage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex h-14 items-center justify-between border-b px-6">
-        <div>
+      <header className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold">Upload Video</h1>
           <p className="text-sm text-muted-foreground">
             Upload surveillance footage for analysis
           </p>
         </div>
-        <Button variant="outline" onClick={handleDemoMode}>
+        <Button className="w-fit shrink-0" variant="outline" onClick={handleDemoMode}>
           <Play className="mr-2 h-4 w-4" />
           Demo Mode
         </Button>
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
         {/* Dataset compatibility notice */}
         <Alert className="mb-6 border-blue-500/50 bg-blue-500/10">
           <Info className="h-4 w-4 text-blue-500" />
@@ -321,7 +321,7 @@ export function UploadStage() {
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </p>
-              <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="p-2 rounded border border-green-500/30 bg-green-500/10">
                   <p className="font-medium text-green-400 text-xs mb-1">✓ Recommended</p>
                   <ul className="text-xs space-y-0.5">

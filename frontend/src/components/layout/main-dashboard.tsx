@@ -57,23 +57,27 @@ export function MainDashboard() {
   const { currentStage, setCurrentStage } = useSessionStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const pipelineStages = usePipelineStore((s) => s.stages);
-  const isRunning = usePipelineStore((s) => s.isRunning);
   const [datasetView, setDatasetView] = useState(false);
 
   const stageIsRunning = (stageId: number) =>
     pipelineStages.find((s) => s.stage === stageId)?.status === "running";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-dvh max-h-dvh min-h-0 overflow-hidden bg-background">
       {/* Sidebar */}
       <aside
         className={cn(
-          "flex flex-col border-r bg-card transition-all duration-300",
+          "flex min-h-0 min-w-0 flex-shrink-0 flex-col overflow-x-hidden border-r bg-card transition-all duration-300",
           sidebarOpen ? "w-64" : "w-16"
         )}
       >
         {/* Logo */}
-        <div className="flex h-14 items-center border-b px-4">
+        <div
+          className={cn(
+            "flex h-14 shrink-0 items-center border-b",
+            sidebarOpen ? "px-4" : "justify-center px-0"
+          )}
+        >
           {sidebarOpen ? (
             <Logo size="sm" />
           ) : (
@@ -84,7 +88,7 @@ export function MainDashboard() {
         </div>
 
         {/* Navigation */}
-        <ScrollArea className="flex-1 px-2 py-4">
+        <ScrollArea className="min-h-0 flex-1 px-2 py-4">
           <nav className="flex flex-col gap-1">
             {stages.map((stage) => {
               const Icon = stage.icon;
@@ -189,10 +193,17 @@ export function MainDashboard() {
           </nav>
         </ScrollArea>
 
-        {/* Footer */}
-        <div className="border-t p-2">
-          <div className="flex items-center justify-between">
-            <div className="flex gap-1">
+        {/* Footer — when collapsed (w-16), row layout overflows; stack vertically so expand stays reachable */}
+        <div className={cn("shrink-0 border-t", sidebarOpen ? "p-2" : "px-1 py-2")}>
+          <div
+            className={cn(
+              "flex gap-1",
+              sidebarOpen
+                ? "flex-row items-center justify-between"
+                : "flex-col items-center justify-center gap-0.5"
+            )}
+          >
+            <div className={cn("flex gap-1", !sidebarOpen && "flex-col items-center")}>
               <Tooltip delayDuration={0}>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon-sm">
@@ -214,6 +225,8 @@ export function MainDashboard() {
               variant="ghost"
               size="icon-sm"
               onClick={toggleSidebar}
+              className={cn(!sidebarOpen && "shrink-0")}
+              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
             >
               {sidebarOpen ? (
                 <ChevronLeft className="h-4 w-4" />
@@ -226,13 +239,15 @@ export function MainDashboard() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-hidden flex flex-col">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <GlobalProcessingBanner />
-        <div className="flex-1 overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {datasetView ? (
             <DatasetProcessing />
           ) : (
-            <StageContent stage={currentStage} />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <StageContent stage={currentStage} />
+            </div>
           )}
         </div>
       </main>

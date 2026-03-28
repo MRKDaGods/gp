@@ -78,20 +78,20 @@ export function RefinementStage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex h-14 items-center justify-between border-b px-6">
-        <div>
+      <header className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold">Stage 5: Refinement</h1>
           <p className="text-sm text-muted-foreground">
             Select reference frames for improved search accuracy
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge variant="secondary">
             {selectedFrameCount}/{maxFrames} frames selected
           </Badge>
-          <Button onClick={handleProceed}>
+          <Button className="shrink-0" onClick={handleProceed}>
             Continue to Output
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
@@ -99,16 +99,16 @@ export function RefinementStage() {
       </header>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Left panel - Confirmed tracklets */}
-        <aside className="w-64 border-r flex flex-col">
-          <div className="p-4 border-b">
+        <aside className="flex max-h-[36vh] min-h-0 w-full shrink-0 flex-col border-b border-border lg:max-h-none lg:w-64 lg:border-b-0 lg:border-r">
+          <div className="shrink-0 border-b p-4">
             <h3 className="font-semibold">Confirmed Tracklets</h3>
             <p className="text-sm text-muted-foreground">
               {confirmedTrackList.length} reference clips
             </p>
           </div>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="min-h-0 flex-1">
             <div className="p-4 space-y-2">
               {confirmedTrackList.map((track) => (
                 <div
@@ -135,10 +135,10 @@ export function RefinementStage() {
         </aside>
 
         {/* Main area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* Frame viewer */}
-          <div className="flex-1 p-4">
-            <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {refinementCandidateFrames.slice(0, 30).map((frame) => {
                 const isSelected = refinementFrames.includes(frame.id);
                 return (
@@ -155,8 +155,8 @@ export function RefinementStage() {
           </div>
 
           {/* Playback controls */}
-          <div className="border-t p-4">
-            <div className="flex items-center gap-4">
+          <div className="shrink-0 border-t p-3 sm:p-4">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
               {/* Navigation */}
               <div className="flex items-center gap-1">
                 <Button
@@ -189,7 +189,7 @@ export function RefinementStage() {
               </div>
 
               {/* Timeline scrubber */}
-              <div className="flex-1">
+              <div className="min-w-[120px] flex-1 basis-[160px]">
                 <Slider
                   value={[currentFrameIndex]}
                   max={Math.max(refinementCandidateFrames.length - 1, 0)}
@@ -225,7 +225,7 @@ export function RefinementStage() {
               Used as ground truth for re-search
             </p>
           </div>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="min-h-0 flex-1">
             <div className="p-4">
               {refinementFrames.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">

@@ -11,6 +11,50 @@ from omegaconf import DictConfig
 from src.core.data_models import Detection
 
 
+def _patch_boxmot_unfreeze_for_numpy_arrays() -> None:
+    """Patch DeepOCSORT KF unfreeze to handle vector-shaped history entries.
+
+    BoxMOT 16 can raise:
+    "TypeError: only 0-dimensional arrays can be converted to Python scalars"
+    when historical measurements are stored as (4, 1) arrays.
+    """
+    try:
+        from boxmot.motion.kalman_filters.aabb.xysr_kf import KalmanFilterXYSR
+    except Exception:
+        return
+
+    if getattr(KalmanFilterXYSR, "_mtmc_unfreeze_patched", False):
+        return
+
+    original_unfreeze = KalmanFilterXYSR.unfreeze
+
+    def _normalize_history(history_obs):
+        from collections import deque
+
+        norm = []
+        for item in list(history_obs):
+            if item is None:
+                norm.append(None)
+                continue
+            arr = np.asarray(item)
+            # Flatten (4,1) / (1,4) / nested shapes to (4,)
+            norm.append(arr.reshape(-1))
+        return deque(norm, maxlen=history_obs.maxlen)
+
+    def patched_unfreeze(self):
+        # Normalize both live history and frozen snapshot before delegating.
+        if getattr(self, "history_obs", None) is not None:
+            self.history_obs = _normalize_history(self.history_obs)
+        if getattr(self, "attr_saved", None) is not None and isinstance(self.attr_saved, dict):
+            saved_hist = self.attr_saved.get("history_obs")
+            if saved_hist is not None:
+                self.attr_saved["history_obs"] = _normalize_history(saved_hist)
+        return original_unfreeze(self)
+
+    KalmanFilterXYSR.unfreeze = patched_unfreeze
+    KalmanFilterXYSR._mtmc_unfreeze_patched = True
+
+
 class TrackerWrapper:
     """Wraps BoxMOT trackers (BoT-SORT, Deep-OCSORT, etc.) with a unified interface.
 
@@ -33,6 +77,8 @@ class TrackerWrapper:
             raise ValueError(
                 f"Unknown tracker: {algorithm}. Supported: {self.SUPPORTED_ALGORITHMS}"
             )
+
+        _patch_boxmot_unfreeze_for_numpy_arrays()
 
         self.algorithm = algorithm
         self.device = device
@@ -99,19 +145,48 @@ class TrackerWrapper:
             if not detections:
                 dets = np.empty((0, 6), dtype=np.float32)
             else:
-                dets = np.array(
-                    [[d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3], d.confidence, d.class_id]
-                     for d in detections],
-                    dtype=np.float32,
+                rows: list[list[float]] = []
+                dropped = 0
+                for d in detections:
+                    # Some upstream libraries occasionally return shape (1, 4)
+                    # boxes. Flatten aggressively so BoxMOT always gets scalars.
+                    bbox = np.asarray(d.bbox, dtype=np.float32).reshape(-1)
+                    if bbox.size < 4:
+                        dropped += 1
+                        continue
+                    row = [
+                        float(bbox[0]),
+                        float(bbox[1]),
+                        float(bbox[2]),
+                        float(bbox[3]),
+                        float(d.confidence),
+                        float(d.class_id),
+                    ]
+                    rows.append(row)
+                dets = (
+                    np.asarray(rows, dtype=np.float32)
+                    if rows
+                    else np.empty((0, 6), dtype=np.float32)
                 )
-                # Guard against NaN/inf from detector
-                if not np.isfinite(dets).all():
-                    from loguru import logger
-                    bad_count = (~np.isfinite(dets)).any(axis=1).sum()
-                    logger.warning(f"Dropping {bad_count} non-finite detections")
-                    dets = dets[np.isfinite(dets).all(axis=1)]
+                if dropped:
+                    logger.warning(f"Dropped {dropped} malformed detections (invalid bbox shape)")
         else:
-            dets = detections
+            dets = np.asarray(detections, dtype=np.float32)
+            if dets.ndim == 1:
+                dets = dets.reshape(1, -1) if dets.size else np.empty((0, 6), dtype=np.float32)
+            elif dets.ndim > 2:
+                dets = dets.reshape(dets.shape[0], -1)
+            if dets.shape[1] < 6:
+                logger.warning(f"Received detection array with invalid shape {dets.shape}; dropping frame")
+                dets = np.empty((0, 6), dtype=np.float32)
+            else:
+                dets = dets[:, :6]
+
+        # Guard against NaN/inf from detector
+        if dets.size and not np.isfinite(dets).all():
+            bad_count = int((~np.isfinite(dets)).any(axis=1).sum())
+            logger.warning(f"Dropping {bad_count} non-finite detections")
+            dets = dets[np.isfinite(dets).all(axis=1)]
 
         tracks = self.tracker.update(dets, frame)
 

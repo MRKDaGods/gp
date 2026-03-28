@@ -3,3 +3,7 @@ uvicorn[standard]>=0.24.0
 python-multipart>=0.0.6
 websockets>=12.0
 aiofiles>=23.2.1
+
+# Pipeline subprocess (run_pipeline.py / run_stage.py)
+click>=8.1
+rich>=13.0

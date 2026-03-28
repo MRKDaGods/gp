@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   MapPin,
   Calendar,
@@ -125,6 +125,7 @@ export function InferenceStage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processStep, setProcessStep] = useState(0);
   const [selectedModel, setSelectedModel] = useState("transreid_cityflowv2_best");
+  const progressSectionRef = useRef<HTMLDivElement>(null);
 
   // Dataset folder selector
   const [datasets, setDatasets] = useState<DatasetFolder[]>([]);
@@ -151,6 +152,17 @@ export function InferenceStage() {
   useEffect(() => {
     void fetchDatasets();
   }, [fetchDatasets]);
+
+  useEffect(() => {
+    if (!isProcessing) return;
+    const id = requestAnimationFrame(() => {
+      progressSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [isProcessing]);
 
   const selectedCount = selectedIds.size;
   const selectedDetections = detections.filter((d) => selectedIds.has(d.id));
@@ -315,25 +327,27 @@ export function InferenceStage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex h-14 items-center justify-between border-b px-6">
-        <div>
+      <header className="flex shrink-0 flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold">Stage 2-3: Inference</h1>
           <p className="text-sm text-muted-foreground">
             Configure location filters and run ReID feature extraction
           </p>
         </div>
-        <Badge variant="secondary">{selectedCount} objects to process</Badge>
+        <Badge className="w-fit shrink-0" variant="secondary">
+          {selectedCount} objects to process
+        </Badge>
       </header>
 
       {/* Error banner */}
       {(stage2Progress?.status === "error" || stage3Progress?.status === "error") && (
-        <div className="border-b border-destructive/30 bg-destructive/10 px-6 py-3 flex items-center gap-3">
-          <XCircle className="h-5 w-5 text-destructive flex-shrink-0" />
-          <div>
-            <p className="font-medium text-destructive text-sm">Inference Failed</p>
-            <p className="text-xs text-muted-foreground">
+        <div className="flex shrink-0 items-start gap-3 overflow-x-auto border-b border-destructive/30 bg-destructive/10 px-4 py-3 sm:px-6">
+          <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-destructive">Inference Failed</p>
+            <p className="break-words text-xs text-muted-foreground">
               {stage2Progress?.status === "error" ? stage2Progress.message : stage3Progress?.message}
             </p>
           </div>
@@ -341,7 +355,7 @@ export function InferenceStage() {
       )}
 
       {/* Main content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Dataset source selector */}
           <Card>
@@ -469,7 +483,7 @@ export function InferenceStage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {/* Governorate */}
                 <div className="space-y-2">
                   <Label>Governorate</Label>
@@ -685,40 +699,7 @@ export function InferenceStage() {
             </CardContent>
           </Card>
 
-          {/* Processing status */}
-          {isProcessing && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Cpu className="h-5 w-5 animate-pulse" />
-                  Processing
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Stage 2 */}
-                <ProcessingStep
-                  step={1}
-                  currentStep={processStep}
-                  title="Stage 2: Feature Extraction"
-                  description="Extracting ReID embeddings using TransReID"
-                  progress={stage2Progress?.progress || 0}
-                  message={stage2Progress?.message}
-                />
-
-                {/* Stage 3 */}
-                <ProcessingStep
-                  step={2}
-                  currentStep={processStep}
-                  title="Stage 3: Indexing"
-                  description="Building FAISS vector index"
-                  progress={stage3Progress?.progress || 0}
-                  message={stage3Progress?.message}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Run button */}
+          {/* Run button — progress is below so it stays in view after click */}
           <div className="flex justify-center">
             <Button
               size="lg"
@@ -740,6 +721,38 @@ export function InferenceStage() {
               )}
             </Button>
           </div>
+
+          {/* Processing status (below run — scrollIntoView when started) */}
+          {isProcessing && (
+            <div ref={progressSectionRef} className="scroll-mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Cpu className="h-5 w-5 animate-pulse" />
+                    Processing
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <ProcessingStep
+                    step={1}
+                    currentStep={processStep}
+                    title="Stage 2: Feature Extraction"
+                    description="Extracting ReID embeddings using TransReID"
+                    progress={stage2Progress?.progress || 0}
+                    message={stage2Progress?.message}
+                  />
+                  <ProcessingStep
+                    step={2}
+                    currentStep={processStep}
+                    title="Stage 3: Indexing"
+                    description="Building FAISS vector index"
+                    progress={stage3Progress?.progress || 0}
+                    message={stage3Progress?.message}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       </div>
     </div>

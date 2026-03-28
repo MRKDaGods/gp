@@ -141,14 +141,14 @@ export function GlobalProcessingBanner() {
   // Completed state
   if (showComplete && !isRunning) {
     return (
-      <div className="border-b border-green-500/30 bg-green-500/10 px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-green-500" />
-            <span className="font-medium text-green-400">
+      <div className="border-b border-green-500/30 bg-green-500/10 px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-2 sm:items-center">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
+            <span className="shrink-0 font-medium text-green-400">
               Pipeline Complete
             </span>
-            <span className="text-sm text-green-400/70">
+            <span className="min-w-0 break-words text-sm text-green-400/70">
               {lastStatus?.message ?? "All stages finished successfully"}
             </span>
           </div>
@@ -168,12 +168,12 @@ export function GlobalProcessingBanner() {
   // Error state (sticky until dismissed)
   if (errorStage && !isRunning) {
     return (
-      <div className="border-b border-red-500/30 bg-red-500/10 px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <XCircle className="h-5 w-5 text-red-500" />
-            <span className="font-medium text-red-400">Pipeline Error</span>
-            <span className="text-sm text-red-400/70 truncate max-w-[600px]">
+      <div className="border-b border-red-500/30 bg-red-500/10 px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-2 sm:items-center">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
+            <XCircle className="h-5 w-5 shrink-0 text-red-500" />
+            <span className="shrink-0 font-medium text-red-400">Pipeline Error</span>
+            <span className="min-w-0 max-w-full break-words text-sm text-red-400/70">
               {errorStage.message}
             </span>
           </div>
@@ -197,7 +197,7 @@ export function GlobalProcessingBanner() {
     <div className="border-b border-primary/30 bg-primary/5">
       {/* Collapsed / slim bar */}
       <div
-        className="flex items-center justify-between px-6 py-2 cursor-pointer"
+        className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-2 sm:px-6"
         onClick={() => setExpanded((e) => !e)}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -240,13 +240,13 @@ export function GlobalProcessingBanner() {
       </div>
 
       {/* Progress bar (always visible) */}
-      <div className="px-6 pb-1">
+      <div className="px-4 pb-1 sm:px-6">
         <Progress value={overallProgress} className="h-1.5" />
       </div>
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="px-6 pb-3 pt-1">
+        <div className="px-4 pb-3 pt-1 sm:px-6">
           <div className="flex flex-wrap gap-2">
             {[0, 1, 2, 3, 4].map((stageNum) => {
               if (totalStages <= 1 && stageNum > 0) return null;

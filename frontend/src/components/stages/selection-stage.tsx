@@ -62,6 +62,11 @@ export function SelectionStage() {
   const [tracklets, setTracklets] = useState<TrackletSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Selection stage always uses multi-select so users can pick multiple tracklets
+  useEffect(() => {
+    setMultiSelectMode(true);
+  }, [setMultiSelectMode]);
+
   const fetchTracklets = useCallback(async () => {
     if (!currentVideo) return;
     setLoading(true);
@@ -148,20 +153,20 @@ export function SelectionStage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex h-14 items-center justify-between border-b px-6">
-        <div>
+      <header className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold">Stage 2: Tracklet Selection</h1>
           <p className="text-sm text-muted-foreground">
             Select vehicle tracklets to track across cameras
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge variant="outline">
             {selectedIds.size} of {tracklets.length} selected
           </Badge>
-          <Button onClick={handleProceed} disabled={selectedIds.size === 0}>
+          <Button className="shrink-0" onClick={handleProceed} disabled={selectedIds.size === 0}>
             Run Inference
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
@@ -169,14 +174,14 @@ export function SelectionStage() {
       </header>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden xl:flex-row">
         {/* Main selection area */}
-        <div className="flex-1 p-6 overflow-auto">
+        <div className="min-h-[200px] min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 xl:min-h-0">
           {/* Controls */}
           <Card className="mb-6">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-wrap items-center gap-4 sm:gap-6">
                   <div className="flex items-center gap-2">
                     <Checkbox
                       id="multi-select"
@@ -201,7 +206,7 @@ export function SelectionStage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex shrink-0 flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={selectAll}>
                     <CheckCircle2 className="mr-2 h-4 w-4" />
                     Select All
@@ -222,7 +227,7 @@ export function SelectionStage() {
               <p className="text-sm">Run detection first (Stage 1) to generate tracklets.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {tracklets.map((tracklet) => {
                 const isSelected = selectedIds.has(String(tracklet.id));
                 return (
@@ -240,8 +245,8 @@ export function SelectionStage() {
         </div>
 
         {/* Sidebar - Selected summary */}
-        <aside className="w-80 border-l flex flex-col">
-          <div className="p-4 border-b">
+        <aside className="flex max-h-[40vh] min-h-0 w-full shrink-0 flex-col border-t border-border xl:max-h-none xl:w-80 xl:border-l xl:border-t-0">
+          <div className="shrink-0 border-b p-4">
             <h3 className="font-semibold flex items-center gap-2">
               <Layers className="h-4 w-4" />
               Selected Tracklets
@@ -251,7 +256,7 @@ export function SelectionStage() {
             </p>
           </div>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="min-h-0 flex-1">
             <div className="p-4 space-y-4">
               {Object.entries(groupedSelected).map(([className, items]) => (
                 <div key={className}>
@@ -290,7 +295,7 @@ export function SelectionStage() {
           </ScrollArea>
 
           {/* Action footer */}
-          <div className="p-4 border-t">
+          <div className="shrink-0 border-t p-4">
             <Button
               className="w-full"
               onClick={handleProceed}

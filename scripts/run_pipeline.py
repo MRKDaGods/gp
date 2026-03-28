@@ -20,7 +20,7 @@ from rich.panel import Panel
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.config import load_config, save_config
+from src.core.config import apply_cpu_when_no_cuda, load_config, save_config
 from src.core.logging_utils import setup_logging
 
 console = Console()
@@ -39,6 +39,12 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
 
     # Load config
     cfg = load_config(config, overrides=list(override), dataset_config=dataset_config)
+    if apply_cpu_when_no_cuda(cfg):
+        console.print(Panel(
+            "[yellow]No CUDA device found (or PyTorch has no GPU build). "
+            "Stages 1–2 will use CPU — runs are much slower.[/yellow]",
+            title="Device",
+        ))
 
     # Setup run directory
     run_name = cfg.project.get("run_name") or f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

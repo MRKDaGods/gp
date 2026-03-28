@@ -29,6 +29,14 @@ function normalizeVideoFile(raw: any): VideoFile {
   };
 }
 
+/** Map API confidence to 0–1 for UI (handles 0–100 percent from some sources). */
+function normalizeConfidence(raw: unknown): number {
+  let c = Number(raw ?? 0);
+  if (!Number.isFinite(c)) return 0;
+  if (c > 1.5) c = c / 100;
+  return Math.min(Math.max(c, 0), 1);
+}
+
 function normalizeDetections(rawList: any[]): Detection[] {
   return rawList.map((d, idx) => {
     const bboxArr = Array.isArray(d.bbox) ? d.bbox : null;
@@ -41,10 +49,12 @@ function normalizeDetections(rawList: any[]): Detection[] {
           y2: Number(d.bbox?.y2 ?? (d.bbox?.y ?? 0) + (d.bbox?.height ?? 0)),
         };
 
+    const confRaw = d.confidence ?? d.score ?? d.detectionConfidence;
+
     return {
       id: String(d.id ?? `det-${idx}`),
       bbox: bboxObj,
-      confidence: Number(d.confidence ?? 0),
+      confidence: normalizeConfidence(confRaw),
       classId: Number(d.classId ?? -1),
       className: String(d.className ?? 'vehicle'),
       frameId: Number(d.frameId ?? 0),
@@ -289,6 +299,50 @@ export async function getTracklets(
 
 export async function getMatchedSummary(runId: string): Promise<any> {
   return fetchApi(`/runs/${runId}/matched_summary`);
+}
+
+/** Sampled frames for timeline tracklet preview (full frame + bbox sync). */
+export interface TrackletSequenceFrame {
+  frameId: number;
+  bbox: number[];
+  timeRel: number;
+  timestamp: number | null;
+}
+
+export interface TrackletSequencePayload {
+  width: number;
+  height: number;
+  cameraId: string;
+  trackId: number;
+  frames: TrackletSequenceFrame[];
+}
+
+export async function getTrackletSequence(
+  runId: string,
+  cameraId: string,
+  trackId: number,
+  maxFrames = 64
+): Promise<TrackletSequencePayload> {
+  const q = new URLSearchParams({
+    cameraId,
+    trackId: String(trackId),
+    max_frames: String(maxFrames),
+  });
+  return fetchApi<TrackletSequencePayload>(
+    `/runs/${encodeURIComponent(runId)}/tracklet_sequence?${q.toString()}`
+  );
+}
+
+export function getRunFullFrameUrl(
+  runId: string,
+  cameraId: string,
+  frameId: number
+): string {
+  const q = new URLSearchParams({
+    cameraId,
+    frameId: String(frameId),
+  });
+  return `${API_BASE}/runs/${encodeURIComponent(runId)}/full_frame?${q.toString()}`;
 }
 
 export async function getTrajectories(

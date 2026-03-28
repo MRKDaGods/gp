@@ -165,7 +165,7 @@ export const useDetectionStore = create<DetectionState>()(
     (set, get) => ({
       detections: [],
       selectedIds: new Set(),
-      multiSelectMode: false,
+      multiSelectMode: true,
       hoveredId: null,
 
       setDetections: (detections) =>

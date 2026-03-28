@@ -281,16 +281,16 @@ export function OutputStage() {
   }, [trajectories]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex h-14 items-center justify-between border-b px-6">
-        <div>
+      <header className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold">Stage 6: Results & Export</h1>
           <p className="text-sm text-muted-foreground">
             CityFlowV2 tracking results visualization
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge variant={dataSource === "real" ? "secondary" : "destructive"}>
             {dataSource === "real" ? "Real Artifacts" : "No Data"}
           </Badge>
@@ -298,7 +298,7 @@ export function OutputStage() {
             <CheckCircle2 className="h-3 w-3 mr-1" />
             Pipeline Complete
           </Badge>
-          <Button variant="outline" onClick={handleExportTracklets} disabled={!runId || isExporting}>
+          <Button className="shrink-0" variant="outline" onClick={handleExportTracklets} disabled={!runId || isExporting}>
             <Download className="mr-2 h-4 w-4" />
             Export Results
           </Button>
@@ -307,19 +307,19 @@ export function OutputStage() {
 
       {/* Error banner */}
       {error && (
-        <div className="border-b border-destructive/30 bg-destructive/10 px-6 py-3 flex items-center gap-3">
-          <Route className="h-5 w-5 text-destructive flex-shrink-0" />
-          <div>
-            <p className="font-medium text-destructive text-sm">Failed to load output data</p>
-            <p className="text-xs text-muted-foreground">{error}</p>
+        <div className="flex shrink-0 items-start gap-3 overflow-x-auto border-b border-destructive/30 bg-destructive/10 px-4 py-3 sm:px-6">
+          <Route className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-destructive">Failed to load output data</p>
+            <p className="break-words text-xs text-muted-foreground">{error}</p>
           </div>
         </div>
       )}
 
       {/* Main content with tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <div className="border-b px-6">
-          <TabsList className="h-12">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0 overflow-x-auto border-b px-4 sm:px-6">
+          <TabsList className="inline-flex h-auto min-h-12 w-max max-w-full flex-wrap gap-1 py-2">
             <TabsTrigger value="video" className="gap-2">
               <Film className="h-4 w-4" />
               Summarized Video
@@ -340,8 +340,8 @@ export function OutputStage() {
         </div>
 
         {/* Video tab */}
-        <TabsContent value="video" className="flex-1 flex overflow-hidden m-0">
-          <div className="flex-1 p-4">
+        <TabsContent value="video" className="m-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
             {/* Video player */}
             <div className="relative aspect-video bg-slate-900 rounded-lg overflow-hidden mb-4 border border-border">
               {streamUrl ? (
@@ -461,8 +461,8 @@ export function OutputStage() {
           </div>
 
           {/* Sidebar */}
-          <aside className="w-72 border-l p-4 bg-muted/20">
-            <h3 className="font-semibold mb-4">Export Settings</h3>
+          <aside className="w-full shrink-0 border-t border-border bg-muted/20 p-4 lg:w-72 lg:border-l lg:border-t-0">
+            <h3 className="mb-4 font-semibold">Export Settings</h3>
             <div className="space-y-6">
               <div className="space-y-2">
                 <Label>Playback Speed</Label>
@@ -506,11 +506,11 @@ export function OutputStage() {
         </TabsContent>
 
         {/* Grid tab */}
-        <TabsContent value="grid" className="flex-1 flex overflow-hidden m-0">
-          <div className="flex-1 p-4 overflow-auto">
+        <TabsContent value="grid" className="m-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <div className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto p-4">
             <div
-              className="grid gap-2"
-              style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}
+              className="grid min-w-0 gap-2"
+              style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))` }}
             >
               {camerasForGrid.slice(0, gridSize * Math.ceil(camerasForGrid.length / gridSize)).map((cam, i) => (
                 <GridCell key={cam.id} camera={cam} index={i} />
@@ -519,8 +519,8 @@ export function OutputStage() {
           </div>
 
           {/* Sidebar */}
-          <aside className="w-72 border-l p-4 bg-muted/20">
-            <h3 className="font-semibold mb-4">Grid Settings</h3>
+          <aside className="w-full shrink-0 border-t border-border bg-muted/20 p-4 lg:w-72 lg:border-l lg:border-t-0">
+            <h3 className="mb-4 font-semibold">Grid Settings</h3>
             <div className="space-y-6">
               <div className="space-y-2">
                 <div className="flex justify-between">
@@ -552,9 +552,9 @@ export function OutputStage() {
         </TabsContent>
 
         {/* Map tab (future) */}
-        <TabsContent value="map" className="flex-1 flex overflow-hidden m-0">
-          <div className="flex-1 p-4">
-            <Card className="h-full flex items-center justify-center">
+        <TabsContent value="map" className="m-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-auto p-4">
+            <Card className="flex h-full min-h-[200px] items-center justify-center">
               <div className="text-center">
                 <MapIcon className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
                 <h3 className="text-lg font-semibold mb-2">Map View Coming Soon</h3>
@@ -568,8 +568,8 @@ export function OutputStage() {
         </TabsContent>
 
         {/* Stats tab */}
-        <TabsContent value="stats" className="flex-1 overflow-auto m-0 p-6">
-          <div className="grid grid-cols-4 gap-4 mb-6">
+        <TabsContent value="stats" className="m-0 min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               icon={Camera}
               label="Cameras"

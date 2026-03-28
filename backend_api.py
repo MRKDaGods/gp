@@ -610,6 +610,21 @@ _STAGE_LINE_RE = re.compile(r"Stage\s+(\d)")
 _CAMERA_LINE_RE = re.compile(r"Processing camera\s+([\w_]+)")
 
 
+def _cuda_available_for_pipeline() -> bool:
+    """Match subprocess torch CUDA visibility (same check as src.core.config)."""
+    try:
+        from src.core.config import is_torch_cuda_available
+
+        return is_torch_cuda_available()
+    except Exception:
+        try:
+            import torch
+
+            return bool(torch.cuda.is_available())
+        except Exception:
+            return False
+
+
 def _build_pipeline_cmd(
     stages: str,
     run_id: str,
@@ -621,6 +636,8 @@ def _build_pipeline_cmd(
     tracker: str | None = None,
 ) -> list[str]:
     """Build the subprocess command for run_pipeline.py."""
+    # Default YAML assumes CUDA; force CPU overrides when this machine has no GPU.
+    effective_use_cpu = use_cpu or not _cuda_available_for_pipeline()
     cmd = [
         _PIPELINE_PYTHON,
         "scripts/run_pipeline.py",
@@ -641,7 +658,7 @@ def _build_pipeline_cmd(
         cmd.extend(["--override", f"stage0.cameras=[{camera_id}]"])
     if smoke_test:
         cmd.append("--smoke-test")
-    if use_cpu:
+    if effective_use_cpu:
         cmd.extend([
             "--override", "stage1.detector.device=cpu",
             "--override", "stage1.tracker.device=cpu",
@@ -899,6 +916,33 @@ def _stage0_frame_path(run_id: str, camera_id: str, frame_id: int) -> Optional[P
             return jpg
         if png.exists():
             return png
+    return None
+
+
+def _resolve_stage0_camera_dir(run_id: str, camera_id: str) -> Optional[Path]:
+    """Directory with extracted stage0 frames for a camera (primary run, then dataset precompute)."""
+    cam = _normalize_camera_id(str(camera_id))
+    primary = OUTPUT_DIR / run_id / "stage0" / cam
+    if primary.is_dir():
+        return primary
+    if OUTPUT_DIR.exists():
+        for pre_root in sorted(OUTPUT_DIR.glob("dataset_precompute_s*"), reverse=True):
+            d = pre_root / "stage0" / cam
+            if d.is_dir():
+                return d
+    legacy = OUTPUT_DIR / "dataset_precompute_s01" / "stage0" / cam
+    if legacy.is_dir():
+        return legacy
+    return None
+
+
+def _frame_image_path_in_dir(stage0_cam_dir: Path, frame_id: int) -> Optional[Path]:
+    jpg = stage0_cam_dir / f"frame_{frame_id:06d}.jpg"
+    if jpg.exists():
+        return jpg
+    png = stage0_cam_dir / f"frame_{frame_id:06d}.png"
+    if png.exists():
+        return png
     return None
 
 
@@ -1282,6 +1326,26 @@ def _materialize_import_tree(extracted_root: Path, run_dir: Path) -> None:
             shutil.copy2(child, destination)
 
 
+def _confidence_for_tracklet_frame(frame: Dict[str, Any], tracklet: Dict[str, Any]) -> float:
+    """Return detection confidence for API/UI.
+
+    Interpolated gap-fill frames are stored with confidence 0 in stage1 JSON; for display
+    we substitute the mean confidence of real (non-zero) frames in the same tracklet.
+    """
+    c = float(frame.get("confidence", 0.0))
+    if c > 1e-6:
+        return c
+    frames = tracklet.get("frames") or []
+    vals = [
+        float(f.get("confidence", 0.0))
+        for f in frames
+        if float(f.get("confidence", 0.0)) > 1e-6
+    ]
+    if vals:
+        return float(sum(vals) / len(vals))
+    return 0.0
+
+
 def _tracklets_to_detections(tracklets: List[Dict[str, Any]], frame_id: Optional[int]) -> List[Dict[str, Any]]:
     detections: List[Dict[str, Any]] = []
 
@@ -1302,7 +1366,7 @@ def _tracklets_to_detections(tracklets: List[Dict[str, Any]], frame_id: Optional
                     "bbox": frame.get("bbox", [0, 0, 0, 0]),
                     "classId": class_id,
                     "className": class_name,
-                    "confidence": float(frame.get("confidence", 0.0)),
+                    "confidence": _confidence_for_tracklet_frame(frame, tracklet),
                     "frameId": this_frame_id,
                     "trackId": track_id,
                 }
@@ -1359,6 +1423,57 @@ async def delete_video(video_id: str):
 
     return {"success": True, "data": None}
 
+def _transcode_to_mp4(src: Path, dst: Path) -> bool:
+    """Transcode a non-MP4 video to browser-friendly H.264 MP4.
+
+    Tries ffmpeg first (fast, good quality).  Falls back to OpenCV
+    (always available in this project) so the UI works even without ffmpeg.
+    Returns True on success.
+    """
+    # --- Attempt 1: ffmpeg ---
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if ffmpeg_bin:
+        try:
+            r = subprocess.run(
+                [ffmpeg_bin, "-y", "-i", str(src), "-c:v", "libx264",
+                 "-preset", "fast", "-crf", "23", "-an", str(dst)],
+                capture_output=True, timeout=600,
+            )
+            if r.returncode == 0 and dst.exists() and dst.stat().st_size > 0:
+                return True
+            dst.unlink(missing_ok=True)
+        except Exception:
+            dst.unlink(missing_ok=True)
+
+    # --- Attempt 2: OpenCV re-encode (mp4v → .mp4) ---
+    if not _HAS_CV2:
+        return False
+    try:
+        cap = cv2.VideoCapture(str(src))
+        if not cap.isOpened():
+            return False
+        fps = cap.get(cv2.CAP_PROP_FPS) or 10
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        tmp = dst.with_suffix(".tmp.mp4")
+        writer = cv2.VideoWriter(str(tmp), fourcc, fps, (w, h))
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            writer.write(frame)
+        cap.release()
+        writer.release()
+        if tmp.exists() and tmp.stat().st_size > 0:
+            tmp.replace(dst)
+            return True
+        tmp.unlink(missing_ok=True)
+    except Exception:
+        dst.unlink(missing_ok=True)
+    return False
+
+
 @app.get("/api/videos/stream/{video_id}")
 async def stream_video(video_id: str):
     """Stream video file (transcodes AVI to MP4 for browser playback)"""
@@ -1367,22 +1482,13 @@ async def stream_video(video_id: str):
     video_path = Path(uploaded_videos[video_id]["path"])
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video file not available for streaming")
-    # Browsers can't play AVI (MPEG-4 Part 2). Transcode to MP4 (H.264) on first request.
     if video_path.suffix.lower() in {".avi", ".mkv", ".mov", ".m4v"} and video_path.suffix.lower() != ".mp4":
         cache_dir = Path("uploads/.transcode_cache")
         cache_dir.mkdir(parents=True, exist_ok=True)
         mp4_path = cache_dir / f"{video_id}.mp4"
         if not mp4_path.exists():
-            try:
-                result = subprocess.run(
-                    ["ffmpeg", "-y", "-i", str(video_path), "-c:v", "libx264",
-                     "-preset", "fast", "-crf", "23", "-an", str(mp4_path)],
-                    capture_output=True, timeout=300,
-                )
-                if result.returncode != 0 or not mp4_path.exists():
-                    raise RuntimeError(result.stderr.decode(errors="ignore")[-500:])
-            except Exception as e:
-                # Fallback: serve the raw file and let browser try
+            ok = _transcode_to_mp4(video_path, mp4_path)
+            if not ok:
                 return FileResponse(str(video_path), media_type="video/x-msvideo")
         return FileResponse(str(mp4_path), media_type="video/mp4")
     return FileResponse(str(video_path), media_type="video/mp4")
@@ -1573,7 +1679,7 @@ async def get_all_detections(video_id: str):
                 "bbox": frame.get("bbox", [0, 0, 0, 0]),
                 "classId": class_id,
                 "className": class_name,
-                "confidence": float(frame.get("confidence", 0.0)),
+                "confidence": _confidence_for_tracklet_frame(frame, tracklet),
                 "frameId": int(fid),
                 "trackId": track_id,
             }
@@ -1601,6 +1707,52 @@ async def get_frame_with_detections(video_id: str, frame_id: int):
             "detections": detections_response["data"]
         }
     }
+
+# ============================================================================
+# Frame Image Serving (for detection stage video display)
+# ============================================================================
+
+@app.get("/api/frames/{video_id}/{frame_id}")
+async def get_frame_image(video_id: str, frame_id: int):
+    """Serve a single video frame as a JPEG image.
+
+    The detection-stage UI uses this to display frames when the browser
+    cannot play the original video format (e.g. AVI).
+    """
+    if not _HAS_CV2:
+        raise HTTPException(status_code=500, detail="OpenCV not available")
+    if video_id not in uploaded_videos:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # Prefer pre-extracted stage0 frames (fast, no video seek)
+    run_id = video_to_latest_run.get(video_id)
+    if run_id:
+        camera_id = _detect_camera_for_video(uploaded_videos.get(video_id, {}), None)
+        fp = _stage0_frame_path(run_id, camera_id or "", frame_id)
+        if fp and fp.exists():
+            return FileResponse(str(fp), media_type="image/jpeg",
+                                headers={"Cache-Control": "public, max-age=3600"})
+
+    # Fallback: decode from original video
+    video_path = Path(uploaded_videos[video_id]["path"])
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail="Video file missing")
+
+    cap = cv2.VideoCapture(str(video_path))
+    try:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
+        ret, frame = cap.read()
+        if not ret or frame is None:
+            raise HTTPException(status_code=404, detail=f"Frame {frame_id} not found")
+        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        return StreamingResponse(
+            io.BytesIO(buf.tobytes()),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+    finally:
+        cap.release()
+
 
 # ============================================================================
 # Vehicle Crop Images
@@ -1715,6 +1867,116 @@ async def get_crop_from_run(
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=86400"},
     )
+
+
+@app.get("/api/runs/{run_id}/full_frame")
+async def get_run_full_frame(
+    run_id: str,
+    cameraId: str = "",
+    frameId: int = 0,
+):
+    """Serve a full stage0 frame (not cropped) for timeline tracklet overlay."""
+    if not cameraId:
+        raise HTTPException(status_code=400, detail="cameraId is required")
+    d = _resolve_stage0_camera_dir(run_id, cameraId)
+    if d is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No stage0 directory for run '{run_id}' and camera '{cameraId}'",
+        )
+    fp = _frame_image_path_in_dir(d, int(frameId))
+    if fp is None:
+        raise HTTPException(status_code=404, detail=f"Frame {frameId} not found under {d}")
+    mt = "image/jpeg" if fp.suffix.lower() == ".jpg" else "image/png"
+    return FileResponse(
+        str(fp),
+        media_type=mt,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/api/runs/{run_id}/tracklet_sequence")
+async def get_tracklet_sequence(
+    run_id: str,
+    cameraId: str = "",
+    trackId: int = -1,
+    max_frames: int = 64,
+):
+    """Sampled frame ids + bboxes for a stage1 tracklet (timeline preview sync)."""
+    if not cameraId or int(trackId) < 0:
+        raise HTTPException(status_code=400, detail="cameraId and trackId are required")
+    run_dir = OUTPUT_DIR / run_id
+    if not run_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+
+    cam_norm = _normalize_camera_id(cameraId)
+    tracklet: Optional[Dict[str, Any]] = None
+    for t in _load_all_stage1_tracklets(run_dir):
+        if int(t.get("track_id", -1)) != int(trackId):
+            continue
+        if _normalize_camera_id(str(t.get("camera_id", ""))) == cam_norm:
+            tracklet = t
+            break
+    if tracklet is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No tracklet track_id={trackId} for camera {cam_norm} in run {run_id}",
+        )
+
+    frames = tracklet.get("frames") if isinstance(tracklet.get("frames"), list) else []
+    if not frames:
+        return {
+            "width": 0,
+            "height": 0,
+            "cameraId": cam_norm,
+            "trackId": int(trackId),
+            "frames": [],
+        }
+
+    mf = max(8, min(int(max_frames), 120))
+    step = max(1, (len(frames) + mf - 1) // mf)
+    sampled = frames[::step]
+    n = len(sampled)
+
+    stage_dir = _resolve_stage0_camera_dir(run_id, cam_norm)
+    img_w, img_h = 0, 0
+    if stage_dir is not None and _HAS_CV2:
+        for fr in sampled:
+            fid = int(fr.get("frame_id", fr.get("frameId", -1)))
+            if fid < 0:
+                continue
+            p = _frame_image_path_in_dir(stage_dir, fid)
+            if p is None:
+                continue
+            img = cv2.imread(str(p))
+            if img is not None:
+                img_h, img_w = img.shape[:2]
+                break
+
+    out_frames: List[Dict[str, Any]] = []
+    for i, fr in enumerate(sampled):
+        bbox = fr.get("bbox")
+        if not isinstance(bbox, list) or len(bbox) != 4:
+            bbox = [0.0, 0.0, 0.0, 0.0]
+        fid = int(fr.get("frame_id", fr.get("frameId", -1)))
+        ts = fr.get("timestamp")
+        time_rel = 0.0 if n <= 1 else float(i) / float(n - 1)
+        out_frames.append(
+            {
+                "frameId": fid,
+                "bbox": [float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])],
+                "timeRel": time_rel,
+                "timestamp": float(ts) if ts is not None else None,
+            }
+        )
+
+    return {
+        "width": int(img_w),
+        "height": int(img_h),
+        "cameraId": cam_norm,
+        "trackId": int(trackId),
+        "frames": out_frames,
+    }
 
 
 # ============================================================================
@@ -3180,14 +3442,21 @@ async def get_matched_summary(run_id: str):
 @app.get("/api/runs/{run_id}/matched_clips/{filename}")
 async def get_matched_clip(run_id: str, filename: str):
     """Serve a matched clip mp4 from outputs/{run_id}/matched/ for in-browser playback."""
-    # Prevent path traversal — only allow the bare filename, no slashes or dots leading out
     safe_name = Path(filename).name
     if safe_name != filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     clip_path = OUTPUT_DIR / run_id / "matched" / safe_name
     if not clip_path.exists() or not clip_path.is_file():
         raise HTTPException(status_code=404, detail=f"Clip not found: {filename}")
-    return FileResponse(str(clip_path), media_type="video/mp4")
+    # Clips are written with mp4v (MPEG-4 Part 2) which browsers can't play.
+    # Transcode to H.264 on first request, then cache the result.
+    cache_dir = OUTPUT_DIR / run_id / "matched" / ".browser_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached = cache_dir / safe_name
+    if not cached.exists():
+        if not _transcode_to_mp4(clip_path, cached):
+            return FileResponse(str(clip_path), media_type="video/mp4")
+    return FileResponse(str(cached), media_type="video/mp4")
 
 
 @app.get("/api/datasets")

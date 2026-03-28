@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+  type SyntheticEvent,
+} from "react";
 import {
   Play,
   Pause,
@@ -23,7 +32,72 @@ import {
   usePipelineStore,
   useSessionStore,
 } from "@/store";
-import { getDetections, getAllDetections, getPipelineStatus, getVideoStreamUrl } from "@/lib/api";
+import {
+  getDetections,
+  getAllDetections,
+  getPipelineStatus,
+  getFrameUrl,
+  getVideoStreamUrl,
+} from "@/lib/api";
+import type { VideoFile } from "@/types";
+import { DoubleBufferedFrameImg } from "@/components/ui/double-buffered-img";
+
+/** Stable FPS for frame index ↔ time mapping (fallback 25 when metadata is missing). */
+function effectivePlaybackFps(video: VideoFile | null): number {
+  if (!video) return 25;
+  const f = video.fps;
+  return f > 0 ? Math.min(Math.max(f, 1), 120) : 25;
+}
+
+/** Align frame index with decoded media time using real duration (avoids fps-metadata mismatch → sticky boxes). */
+function timeToFrameIndex(tSec: number, durationSec: number, totalFrames: number): number {
+  const maxF = Math.max(0, totalFrames - 1);
+  if (maxF <= 0) return 0;
+  if (!(durationSec > 0) || !Number.isFinite(durationSec)) return 0;
+  const u = Math.min(1, Math.max(0, tSec / durationSec));
+  return Math.min(maxF, Math.round(u * maxF));
+}
+
+function frameIndexToTimeSec(
+  frame: number,
+  durationSec: number,
+  totalFrames: number,
+  fallbackFps: number
+): number {
+  const maxF = Math.max(0, totalFrames - 1);
+  if (maxF <= 0) return 0;
+  if (durationSec > 0 && Number.isFinite(durationSec)) {
+    return (frame / maxF) * durationSec;
+  }
+  return frame / fallbackFps;
+}
+
+/** Isolated `<video>` so parent frame updates don’t reconcile the media element (smoother decode/paint). */
+const DetectionStreamVideo = memo(function DetectionStreamVideo({
+  streamUrl,
+  videoRef,
+  onLoadedMetadata,
+  onStreamError,
+}: {
+  streamUrl: string;
+  videoRef: Ref<HTMLVideoElement>;
+  onLoadedMetadata: (e: SyntheticEvent<HTMLVideoElement>) => void;
+  onStreamError: () => void;
+}) {
+  return (
+    <video
+      ref={videoRef}
+      src={streamUrl}
+      className="absolute inset-0 z-0 h-full w-full object-fill transform-gpu"
+      muted
+      loop
+      playsInline
+      preload="auto"
+      onLoadedMetadata={onLoadedMetadata}
+      onError={onStreamError}
+    />
+  );
+});
 
 export function DetectionStage() {
   const { currentVideo, currentFrame, setCurrentFrame, isPlaying, setIsPlaying } =
@@ -38,11 +112,31 @@ export function DetectionStage() {
   const [totalFrames, setTotalFrames] = useState(100);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
-  const [videoFallback, setVideoFallback] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 450 });
   const detectionCacheRef = useRef<Map<number, typeof detections>>(new Map());
+  const videoRef = useRef<HTMLVideoElement>(null);
+  /** JPEG frame-by-frame path when /videos/stream fails or unsupported. */
+  const [useFrameFallback, setUseFrameFallback] = useState(false);
+
+  const playbackFps = useMemo(() => effectivePlaybackFps(currentVideo), [currentVideo]);
+
+  const handleStreamMeta = useCallback(
+    (e: SyntheticEvent<HTMLVideoElement>) => {
+      const v = e.currentTarget;
+      const dur = v.duration;
+      if (dur && isFinite(dur) && currentVideo) {
+        const fps = effectivePlaybackFps(currentVideo);
+        setTotalFrames(Math.max(1, Math.floor(dur * fps)));
+      }
+    },
+    [currentVideo]
+  );
+
+  const handleStreamError = useCallback(() => setUseFrameFallback(true), []);
+
+  const frameSyncRef = useRef(currentFrame);
+  frameSyncRef.current = currentFrame;
 
   const stage1Progress = stages.find((s) => s.stage === 1);
 
@@ -83,13 +177,12 @@ export function DetectionStage() {
 
       setVideoError(null);
       setErrorDetail(null);
-      setVideoFallback(false);
       setIsLoading(true);
       setIsPlaying(false);
 
-      // Set totalFrames from metadata immediately (will be refined when video loads)
+      // Set totalFrames from metadata immediately (refined from <video> metadata when stream loads)
       if (currentVideo) {
-        const fps = Math.max(currentVideo.fps || 10, 1);
+        const fps = effectivePlaybackFps(currentVideo);
         setTotalFrames(Math.max(Math.floor(currentVideo.duration * fps), 1));
         setVideoSize({ width: currentVideo.width || 1920, height: currentVideo.height || 1080 });
       }
@@ -224,111 +317,136 @@ export function DetectionStage() {
     if (!currentVideo || isLoading) return;
     const cached = detectionCacheRef.current.get(currentFrame);
     if (cached) {
+      const prev = useDetectionStore.getState().detections;
+      if (prev === cached) return;
       setDetections(cached);
     } else if (detectionCacheRef.current.size > 0) {
-      // Cache loaded but no data for this frame → empty
+      const prev = useDetectionStore.getState().detections;
+      if (prev.length === 0) return;
       setDetections([]);
     }
-    // If cache is empty we haven't bulk-loaded yet; the initial load effect
-    // will populate it.
   }, [currentVideo, currentFrame, isLoading, setDetections]);
 
-  // Keep store frame synced with video playback time.
   useEffect(() => {
-    const videoElement = videoRef.current;
-    if (!videoElement || !currentVideo) return;
+    setUseFrameFallback(false);
+  }, [currentVideo?.id]);
 
-    const onLoadedMetadata = () => {
-      const videoWidth = videoElement.videoWidth || currentVideo.width || 1920;
-      const videoHeight = videoElement.videoHeight || currentVideo.height || 1080;
-      setVideoSize({ width: videoWidth, height: videoHeight });
+  useEffect(() => {
+    const max = Math.max(0, totalFrames - 1);
+    if (currentFrame > max) {
+      setCurrentFrame(max);
+    }
+  }, [totalFrames, currentFrame, setCurrentFrame]);
 
-      const fps = Math.max(currentVideo.fps || 10, 1);
-      const frames = Math.max(Math.floor(videoElement.duration * fps), 1);
-      setTotalFrames(frames);
-    };
+  // Play/pause native video when not using JPEG fallback
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !currentVideo || useFrameFallback) return;
+    if (isPlaying) {
+      void v.play().catch(() => setUseFrameFallback(true));
+    } else {
+      v.pause();
+    }
+  }, [isPlaying, currentVideo, useFrameFallback]);
 
-    const onTimeUpdate = () => {
-      const fps = Math.max(currentVideo.fps || 10, 1);
-      const frame = Math.min(Math.floor(videoElement.currentTime * fps), Math.max(totalFrames - 1, 0));
-      if (frame !== currentFrame) {
-        setCurrentFrame(frame);
+  // While playing with stream: lock bbox/detection updates to decoded video frames (smoothest sync).
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !currentVideo || useFrameFallback || !isPlaying) return;
+    let lastEmitted = -1;
+    let vfcId = 0;
+
+    const tick = (timeSec?: number) => {
+      const t = timeSec ?? v.currentTime;
+      const dur = v.duration;
+      const maxF = Math.max(0, totalFrames - 1);
+      const f =
+        dur > 0 && Number.isFinite(dur)
+          ? timeToFrameIndex(t, dur, totalFrames)
+          : Math.min(maxF, Math.max(0, Math.floor(t * playbackFps + 1e-6)));
+      if (f !== lastEmitted) {
+        lastEmitted = f;
+        setCurrentFrame(f);
       }
     };
 
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
-    const onEnded = () => setIsPlaying(false);
-    const onError = () => {
-      setVideoFallback(true);
-      // Set totalFrames from metadata so slider works in fallback mode
-      if (currentVideo) {
-        const fps = Math.max(currentVideo.fps || 10, 1);
-        setTotalFrames(Math.max(Math.floor(currentVideo.duration * fps), 1));
-        setVideoSize({ width: currentVideo.width || 1920, height: currentVideo.height || 1080 });
+    if (typeof v.requestVideoFrameCallback === "function") {
+      const onFrame: VideoFrameRequestCallback = (_now, metadata) => {
+        const mt = metadata?.mediaTime;
+        tick(typeof mt === "number" && Number.isFinite(mt) ? mt : undefined);
+        vfcId = v.requestVideoFrameCallback(onFrame);
+      };
+      vfcId = v.requestVideoFrameCallback(onFrame);
+      return () => {
+        if (typeof v.cancelVideoFrameCallback === "function") {
+          v.cancelVideoFrameCallback(vfcId);
+        }
+      };
+    }
+
+    let raf = 0;
+    const onRaf = () => {
+      tick();
+      raf = requestAnimationFrame(onRaf);
+    };
+    raf = requestAnimationFrame(onRaf);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying, currentVideo, useFrameFallback, playbackFps, totalFrames, setCurrentFrame]);
+
+  // JPEG fallback: advance frames with rAF + accumulated time (smoother than setInterval)
+  useEffect(() => {
+    if (!isPlaying || !currentVideo || !useFrameFallback) return;
+    let acc = 0;
+    let last = performance.now();
+    let raf = 0;
+    let idx = frameSyncRef.current;
+    const frameMs = 1000 / playbackFps;
+    const step = () => {
+      const now = performance.now();
+      acc += now - last;
+      last = now;
+      let advanced = false;
+      while (acc >= frameMs) {
+        acc -= frameMs;
+        idx = idx + 1 >= totalFrames ? 0 : idx + 1;
+        advanced = true;
       }
+      if (advanced) {
+        setCurrentFrame(idx);
+      }
+      raf = requestAnimationFrame(step);
     };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying, currentVideo, useFrameFallback, totalFrames, playbackFps, setCurrentFrame]);
 
-    videoElement.addEventListener("loadedmetadata", onLoadedMetadata);
-    videoElement.addEventListener("timeupdate", onTimeUpdate);
-    videoElement.addEventListener("play", onPlay);
-    videoElement.addEventListener("pause", onPause);
-    videoElement.addEventListener("ended", onEnded);
-    videoElement.addEventListener("error", onError);
+  // When paused, keep the hidden video aligned with the current frame (scrubber / step)
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !currentVideo || useFrameFallback) return;
+    if (isPlaying) return;
+    const t = frameIndexToTimeSec(currentFrame, v.duration, totalFrames, playbackFps);
+    if (Number.isFinite(t) && Math.abs(v.currentTime - t) > 0.001) {
+      v.currentTime = t;
+    }
+  }, [currentFrame, isPlaying, currentVideo, useFrameFallback, playbackFps, totalFrames]);
 
-    return () => {
-      videoElement.removeEventListener("loadedmetadata", onLoadedMetadata);
-      videoElement.removeEventListener("timeupdate", onTimeUpdate);
-      videoElement.removeEventListener("play", onPlay);
-      videoElement.removeEventListener("pause", onPause);
-      videoElement.removeEventListener("ended", onEnded);
-      videoElement.removeEventListener("error", onError);
-    };
-  }, [currentVideo, currentFrame, setCurrentFrame, setIsPlaying, totalFrames]);
+  const seekToFrame = useCallback(
+    (frame: number) => {
+      const boundedFrame = Math.min(Math.max(frame, 0), Math.max(totalFrames - 1, 0));
+      setCurrentFrame(boundedFrame);
+      const v = videoRef.current;
+      if (v && !useFrameFallback) {
+        v.currentTime = frameIndexToTimeSec(boundedFrame, v.duration, totalFrames, playbackFps);
+      }
+    },
+    [totalFrames, playbackFps, useFrameFallback, setCurrentFrame]
+  );
 
-  const seekToFrame = (frame: number) => {
-    const boundedFrame = Math.min(Math.max(frame, 0), Math.max(totalFrames - 1, 0));
-    setCurrentFrame(boundedFrame);
-
-    if (videoFallback || !currentVideo || !videoRef.current) return;
-    const fps = Math.max(currentVideo.fps || 10, 1);
-    videoRef.current.currentTime = boundedFrame / fps;
-  };
-
-  const togglePlayback = async () => {
+  const togglePlayback = () => {
     if (!currentVideo || isLoading) return;
-
-    if (videoFallback) {
-      setIsPlaying(!isPlaying);
-      return;
-    }
-
-    if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      try {
-        await videoRef.current.play();
-      } catch {
-        // Fall back to timer-based playback
-        setVideoFallback(true);
-        setIsPlaying(true);
-      }
-      return;
-    }
-
-    videoRef.current.pause();
+    setIsPlaying(!isPlaying);
   };
-
-  // Timer-based frame advancement for fallback mode
-  useEffect(() => {
-    if (!videoFallback || !isPlaying || !currentVideo) return;
-    const fps = Math.max(currentVideo.fps || 10, 1);
-    let frame = currentFrame;
-    const interval = setInterval(() => {
-      frame = frame + 1 >= totalFrames ? 0 : frame + 1;
-      setCurrentFrame(frame);
-    }, 1000 / fps);
-    return () => clearInterval(interval);
-  }, [videoFallback, isPlaying, currentVideo, totalFrames, setCurrentFrame]);
 
   const handleProceed = () => {
     if (selectedIds.size > 0) {
@@ -342,36 +460,36 @@ export function DetectionStage() {
     detections.filter((d) => d.classId === classId).length;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex h-14 items-center justify-between border-b px-6">
-        <div>
+      <header className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
           <h1 className="text-lg font-semibold">Stage 1: Vehicle Detection</h1>
           <p className="text-sm text-muted-foreground">
             YOLOv26 + Deep OC-SORT on CityFlowV2 footage
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge variant="secondary">
             {detections.length} vehicles detected
           </Badge>
           <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
             {selectedIds.size} selected
           </Badge>
-          <Button onClick={handleProceed} disabled={selectedIds.size === 0}>
+          <Button className="shrink-0" onClick={handleProceed} disabled={selectedIds.size === 0}>
             Continue to Selection
           </Button>
         </div>
       </header>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Video area */}
-        <div className="flex-1 flex flex-col p-4">
+        <div className="flex min-h-[200px] min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:min-h-0">
           {/* Video container - CityFlow camera view */}
           <div
             ref={containerRef}
-            className="relative flex-1 bg-black rounded-lg overflow-hidden border border-border"
+            className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-black"
           >
             {!hasVideo ? (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
@@ -398,34 +516,35 @@ export function DetectionStage() {
               </div>
             ) : (
               <>
-                {videoFallback ? (
-                  <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-                    {/* Synthetic camera feed background */}
-                    <svg className="absolute inset-0 w-full h-full opacity-15" preserveAspectRatio="none">
-                      <line x1="50%" y1="25%" x2="15%" y2="100%" stroke="white" strokeWidth="1.5" />
-                      <line x1="50%" y1="25%" x2="85%" y2="100%" stroke="white" strokeWidth="1.5" />
-                      <line x1="50%" y1="25%" x2="50%" y2="100%" stroke="#fbbf24" strokeWidth="1.5" strokeDasharray="8,6" />
-                      <line x1="0%" y1="65%" x2="100%" y2="65%" stroke="white" strokeWidth="0.5" strokeDasharray="12,8" />
-                    </svg>
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08),transparent_70%)]" />
-                  </div>
-                ) : (
-                  <video
-                    ref={videoRef}
-                    src={currentVideo ? getVideoStreamUrl(currentVideo.id) : undefined}
-                    className="absolute inset-0 h-full w-full object-fill"
-                    preload="metadata"
-                    muted
-                    playsInline
+                {/* Prefer streamed MP4 for smooth playback; JPEG strips on stream failure (e.g. codec). */}
+                {currentVideo && !useFrameFallback && (
+                  <DetectionStreamVideo
+                    streamUrl={getVideoStreamUrl(currentVideo.id)}
+                    videoRef={videoRef}
+                    onLoadedMetadata={handleStreamMeta}
+                    onStreamError={handleStreamError}
+                  />
+                )}
+                {currentVideo && useFrameFallback && (
+                  <DoubleBufferedFrameImg
+                    src={getFrameUrl(currentVideo.id, currentFrame)}
+                    alt={`Frame ${currentFrame}`}
+                    className="object-fill"
+                    imgDecoding="async"
                   />
                 )}
 
-                <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute inset-0 z-[1] pointer-events-none">
                   <div className="absolute top-0 left-0 right-0 flex justify-between items-start p-3 bg-gradient-to-b from-black/70 to-transparent">
                     <div>
                       <div className="flex items-center gap-2">
-                        <div className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50" />
-                        <span className="text-white text-sm font-mono font-medium">
+                        <div
+                          className={cn(
+                            "h-2.5 w-2.5 rounded-full bg-red-500 shadow-lg shadow-red-500/50",
+                            !isPlaying && "animate-pulse"
+                          )}
+                        />
+                        <span className="max-w-[min(100%,18rem)] truncate text-sm font-mono font-medium text-white sm:max-w-md">
                           {currentVideo?.name ?? "Selected video"}
                         </span>
                         <Badge variant="secondary" className="text-[10px] bg-white/10 text-white border-white/20">
@@ -438,7 +557,9 @@ export function DetectionStage() {
                         {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
                       </div>
                       <div className="text-white/50 text-[10px] font-mono">
-                        {videoSize.width}x{videoSize.height} @ {currentVideo?.fps || 10}fps | Frame {currentFrame}
+                        {videoSize.width}x{videoSize.height} @ {playbackFps.toFixed(playbackFps >= 10 ? 0 : 1)}fps
+                        {" "}
+                        | Frame {currentFrame}
                       </div>
                     </div>
                   </div>
@@ -466,8 +587,8 @@ export function DetectionStage() {
                   </div>
                 </div>
 
-                {/* Bounding boxes overlay */}
-                <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
+                {/* Bounding boxes overlay — above frame stack (imgs use z-1/z-2) */}
+                <div className="absolute inset-0 z-[5]" style={{ pointerEvents: "none" }}>
                   {detections.map((detection) => {
                     const isSelected = selectedIds.has(detection.id);
                     const isHovered = hoveredId === detection.id;
@@ -483,7 +604,8 @@ export function DetectionStage() {
                       <div
                         key={detection.id}
                         className={cn(
-                          "absolute border-2 cursor-pointer transition-all duration-150",
+                          "absolute border-2 cursor-pointer",
+                          !isPlaying && "transition-all duration-150",
                           isSelected
                             ? "border-green-500 bg-green-500/20 shadow-lg shadow-green-500/30"
                             : "border-red-500 bg-red-500/10",
@@ -552,8 +674,8 @@ export function DetectionStage() {
           </div>
 
           {/* Video controls */}
-          <div className="mt-4 flex items-center gap-4 p-3 bg-muted/30 rounded-lg">
-            <div className="flex items-center gap-1">
+          <div className="mt-4 flex shrink-0 flex-wrap items-center gap-3 rounded-lg bg-muted/30 p-3 sm:gap-4">
+            <div className="flex shrink-0 items-center gap-1">
               <Button variant="ghost" size="icon" onClick={() => seekToFrame(0)} disabled={isLoading || !hasVideo}>
                 <SkipBack className="h-4 w-4" />
               </Button>
@@ -575,7 +697,7 @@ export function DetectionStage() {
               </Button>
             </div>
 
-            <div className="flex-1">
+            <div className="min-w-[120px] flex-1 basis-[160px]">
               <Slider
                 value={[currentFrame]}
                 max={Math.max(totalFrames - 1, 0)}
@@ -585,21 +707,21 @@ export function DetectionStage() {
               />
             </div>
 
-            <div className="text-sm text-muted-foreground font-mono min-w-[100px] text-right">
+            <div className="shrink-0 text-right font-mono text-sm text-muted-foreground">
               {currentFrame}/{Math.max(totalFrames - 1, 0)} frames
             </div>
           </div>
         </div>
 
         {/* Sidebar - Detection list */}
-        <aside className="w-80 border-l flex flex-col bg-muted/20">
-          <div className="p-4 border-b bg-muted/30">
+        <aside className="flex max-h-[42vh] min-h-0 w-full shrink-0 flex-col border-t border-border bg-muted/20 lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
+          <div className="shrink-0 border-b bg-muted/30 p-4">
             <h3 className="font-semibold">Detected Vehicles</h3>
             <p className="text-sm text-muted-foreground">
               Click boxes or list items to select
             </p>
           </div>
-          <div className="flex-1 overflow-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
             <div className="space-y-2">
               {detections.map((detection) => {
                 const isSelected = selectedIds.has(detection.id);
@@ -654,7 +776,7 @@ export function DetectionStage() {
           </div>
 
           {/* Selection summary */}
-          <div className="p-4 border-t bg-muted/30">
+          <div className="shrink-0 border-t bg-muted/30 p-4">
             <div className="flex justify-between items-center mb-3">
               <span className="text-sm text-muted-foreground">Selected</span>
               <Badge variant={selectedIds.size > 0 ? "default" : "secondary"}>
