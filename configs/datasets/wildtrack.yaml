@@ -51,14 +51,14 @@ stage1:
   tracker:
     algorithm: "botsort"
     track_buffer: 120          # at 2fps, 120 frames = 60s
-    track_high_thresh: 0.55
+    track_high_thresh: 0.25   # let BoT-SORT see all detections
     track_low_thresh: 0.10
-    new_track_thresh: 0.55
+    new_track_thresh: 0.25    # allow new track creation
     max_age: 120
-    max_obs: 65                # slightly above max_age per BaseTracker guidance
+    max_obs: 460              # give the tracker more observation history
     min_hits: 2
     match_thresh: 0.60
-    appearance_thresh: 0.30
+    appearance_thresh: 0.25   # trust appearance more
   min_tracklet_length: 5
   min_tracklet_area: 400       # outdoor, people can be small
   interpolation:
