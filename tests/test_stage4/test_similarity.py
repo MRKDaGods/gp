@@ -147,3 +147,70 @@ class TestLengthWeighting:
         assert abs(score_no_lw - score_none) < 1e-6, (
             f"power=0 should match no-num_frames: {score_no_lw:.6f} vs {score_none:.6f}"
         )
+
+
+class TestTemporalOverlap:
+    def test_overlap_bonus_applies_without_pair_prior_for_overlapping_fov(self):
+        st = SpatioTemporalValidator(
+            camera_transitions=None,
+            max_time_gap=60,
+            min_time_gap=0,
+        )
+        hsv = np.ones((2, 16), dtype=np.float32) / 4.0
+        result = compute_combined_similarity(
+            appearance_sim={(0, 1): 0.8},
+            hsv_features=hsv,
+            start_times=[0.0, 5.0],
+            end_times=[10.0, 12.0],
+            camera_ids=["cam_a", "cam_b"],
+            class_ids=[2, 2],
+            st_validator=st,
+            weights={
+                "appearance": 1.0, "hsv": 0.0, "spatiotemporal": 0.0,
+                "vehicle": {"appearance": 1.0, "hsv": 0.0, "spatiotemporal": 0.0},
+            },
+            temporal_overlap_cfg={"enabled": True, "bonus": 0.15, "max_mean_time": 5.0},
+        )
+        assert result[(0, 1)] == pytest.approx(0.9071428571428571)
+
+    def test_overlap_min_ratio_filters_cross_camera_pair(self):
+        st = _make_st_validator()
+        hsv = np.ones((2, 16), dtype=np.float32) / 4.0
+        result = compute_combined_similarity(
+            appearance_sim={(0, 1): 0.8},
+            hsv_features=hsv,
+            start_times=[0.0, 9.0],
+            end_times=[10.0, 19.0],
+            camera_ids=["cam_a", "cam_b"],
+            class_ids=[2, 2],
+            st_validator=st,
+            weights={
+                "appearance": 1.0, "hsv": 0.0, "spatiotemporal": 0.0,
+                "vehicle": {"appearance": 1.0, "hsv": 0.0, "spatiotemporal": 0.0},
+            },
+            temporal_overlap_cfg={"enabled": True, "min_ratio": 0.3},
+        )
+        assert result == {}
+
+    def test_overlap_min_ratio_does_not_filter_same_camera_pair(self):
+        st = SpatioTemporalValidator(
+            camera_transitions=None,
+            max_time_gap=60,
+            min_time_gap=0,
+        )
+        hsv = np.ones((2, 16), dtype=np.float32) / 4.0
+        result = compute_combined_similarity(
+            appearance_sim={(0, 1): 0.8},
+            hsv_features=hsv,
+            start_times=[0.0, 9.0],
+            end_times=[10.0, 10.0],
+            camera_ids=["cam_a", "cam_a"],
+            class_ids=[2, 2],
+            st_validator=st,
+            weights={
+                "appearance": 1.0, "hsv": 0.0, "spatiotemporal": 0.0,
+                "vehicle": {"appearance": 1.0, "hsv": 0.0, "spatiotemporal": 0.0},
+            },
+            temporal_overlap_cfg={"enabled": True, "min_ratio": 0.3},
+        )
+        assert result[(0, 1)] == pytest.approx(0.8)

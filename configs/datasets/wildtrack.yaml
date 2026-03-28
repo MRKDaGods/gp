@@ -107,15 +107,20 @@ stage4:
     query_expansion:
       enabled: true
       k: 5
-      alpha: 1.0
+      alpha: 5.0
     mutual_nn:
       enabled: true
       top_k_per_query: 8
     reranking:
-      enabled: true
+      enabled: false
       k1: 25
       k2: 8
       lambda_value: 0.35
+    temporal_overlap:
+      enabled: true
+      bonus: 0.15
+      max_mean_time: 5.0
+      min_ratio: 0.3
     weights:
       appearance: 0.5
       hsv: 0.3
@@ -129,12 +134,13 @@ stage4:
       min_time_gap: 0          # overlapping FOV → same-time sightings valid
       camera_transitions: null
     graph:
-      similarity_threshold: 0.30   # lowered: allow more cross-camera merging (40 people, 7 cams)
+      similarity_threshold: 0.55
+      max_component_size: 8
       algorithm: "community_detection"
       louvain_resolution: 1.5      # lowered: coarser clusters → fewer final trajectories
     gallery_expansion:
       enabled: true
-      threshold: 0.35              # lowered: absorb more orphan tracklets
+      threshold: 0.50
       max_rounds: 3                # extra round to catch remaining orphans
 
 stage5:
