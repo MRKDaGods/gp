@@ -115,22 +115,25 @@ def run_stage2(
     multiscale_raw = stage_cfg.reid.get("multiscale_sizes", [])
     multiscale_sizes = [tuple(s) for s in multiscale_raw] if multiscale_raw else []
     quality_temperature = float(stage_cfg.reid.get("quality_temperature", 3.0))
+    has_person_classes = any(class_id in PERSON_CLASSES for class_id in cfg.stage0.target_classes)
 
     # --- Load ReID models (person and vehicle) ---
-    person_reid = ReIDModel(
-        model_name=stage_cfg.reid.person.model_name,
-        weights_path=stage_cfg.reid.person.weights_path,
-        embedding_dim=stage_cfg.reid.person.embedding_dim,
-        input_size=tuple(stage_cfg.reid.person.input_size),
-        device=stage_cfg.reid.device,
-        half=stage_cfg.reid.half,
-        flip_augment=flip_augment,
-        color_augment=color_augment,
-        multiscale_sizes=multiscale_sizes,
-        num_cameras=stage_cfg.reid.person.get("num_cameras", 0),
-        vit_model=stage_cfg.reid.person.get("vit_model", "vit_base_patch16_clip_224.openai"),
-        clip_normalization=stage_cfg.reid.person.get("clip_normalization", None),
-    )
+    person_reid: Optional[ReIDModel] = None
+    if has_person_classes:
+        person_reid = ReIDModel(
+            model_name=stage_cfg.reid.person.model_name,
+            weights_path=stage_cfg.reid.person.weights_path,
+            embedding_dim=stage_cfg.reid.person.embedding_dim,
+            input_size=tuple(stage_cfg.reid.person.input_size),
+            device=stage_cfg.reid.device,
+            half=stage_cfg.reid.half,
+            flip_augment=flip_augment,
+            color_augment=color_augment,
+            multiscale_sizes=multiscale_sizes,
+            num_cameras=stage_cfg.reid.person.get("num_cameras", 0),
+            vit_model=stage_cfg.reid.person.get("vit_model", "vit_base_patch16_clip_224.openai"),
+            clip_normalization=stage_cfg.reid.person.get("clip_normalization", None),
+        )
 
     _vehicle_weights = stage_cfg.reid.vehicle.weights_path
     _vehicle_fallback = stage_cfg.reid.vehicle.get("weights_fallback")
