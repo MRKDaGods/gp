@@ -106,10 +106,13 @@ def _build_resnet101_ibn_a(last_stride: int = 1, pretrained: bool = True) -> nn.
         )
         load_result = base.load_state_dict(state_dict, strict=False)
         expected_missing = {"fc.weight", "fc.bias"}
-        if set(load_result.missing_keys) != expected_missing:
+        unexpected_missing = sorted(
+            key for key in load_result.missing_keys if key not in expected_missing
+        )
+        if unexpected_missing:
             raise RuntimeError(
                 "Unexpected missing keys when loading ResNet101-IBN-a weights: "
-                f"{load_result.missing_keys}"
+                f"{unexpected_missing}"
             )
         if load_result.unexpected_keys:
             raise RuntimeError(
