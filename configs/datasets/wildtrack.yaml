@@ -75,9 +75,9 @@ stage2:
       model_name: "transreid"
       weights_path: "models/reid/person_transreid_vit_base_market1501.pth"
       embedding_dim: 768
-      vit_model: "vit_base_patch16_clip_224.openai"
+      vit_model: "vit_base_patch16_224"
       num_cameras: 6
-      clip_normalization: true
+      clip_normalization: false
       input_size: [256, 128]
     batch_size: 64
     device: "cuda:0"

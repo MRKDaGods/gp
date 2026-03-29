@@ -65,9 +65,9 @@ stage2:
       weights_path: "models/reid/person_transreid_vit_base_market1501.pth"
       embedding_dim: 768
       input_size: [256, 128]  # [H, W] — matches NB07 training
-      vit_model: "vit_base_patch16_clip_224.openai"
+      vit_model: "vit_base_patch16_224"
       num_cameras: 6    # Market-1501 pretrained person weights were trained with 6 cameras
-      clip_normalization: true
+      clip_normalization: false
     vehicle:
       model_name: "transreid"
       weights_path: "models/reid/transreid_cityflowv2_best.pth"
