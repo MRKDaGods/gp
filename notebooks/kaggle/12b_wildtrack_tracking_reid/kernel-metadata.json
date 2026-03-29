@@ -1,0 +1,22 @@
+{
+  "id": "ali369/12b-wildtrack-mvdetr-tracking-reid",
+  "title": "12b WILDTRACK MVDeTr Tracking ReID",
+  "code_file": "12b_wildtrack_tracking_reid.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "keywords": [],
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights",
+    "aryashah2k/large-scale-multicamera-detection-dataset"
+  ],
+  "kernel_sources": [
+    "ali369/12a-wildtrack-mvdetr-training"
+  ],
+  "competition_sources": [],
+  "model_sources": []
+}

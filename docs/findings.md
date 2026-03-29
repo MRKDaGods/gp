@@ -2,7 +2,7 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
-## Current Performance (Last Updated: 2026-03-28)
+## Current Performance (Last Updated: 2026-03-29)
 
 ### Vehicle Pipeline (CityFlowV2)
 
@@ -13,7 +13,9 @@
 | **Gap to SOTA** | 6.46pp | Feature quality, not association |
 | **Primary Model (ViT-B/16 CLIP 256px)** | mAP=80.14% | On CityFlowV2 eval split |
 | **Secondary Model (ResNet101-IBN-a)** | mAP=52.77% | On CityFlowV2 eval split, ImageNet→CityFlowV2 only |
+| **Secondary Model VeRi-776 pretrain (09e v2)** | mAP=62.52% | On VeRi-776 test set, ready for CityFlowV2 fine-tuning |
 | **384px ViT (09b v2)** | mAP=80.14% | Trained, **checkpoint on Kaggle is v1 (44.9%)** — v2 never uploaded |
+| **09f CityFlowV2 fine-tune** | RUNNING | VeRi-776-pretrained ResNet101-IBN-a, target mAP 68-75% |
 | **Association configs tested** | 225+ | All within 0.3pp of optimal |
 
 **⚠️ Metric Disambiguation (Vehicle Pipeline):**
@@ -28,8 +30,9 @@
 |--------|:-----:|-------|
 | **Best IDF1** | **36.8%** | Exp 1, conf=0.55, min_len=8, min_hits=3 |
 | **Best MOTA** | **11.8%** | Same run (up from -28.1% after frame ID bug fix) |
+| **Best Detector (MVDeTr 12a v11)** | MODA=92.0% | WILDTRACK, surpasses paper's reported 91.5% MODA |
 | **ReID Model** | TransReID ViT-B/16 CLIP | Market1501 pretrained, not fine-tuned on WILDTRACK |
-| **Status** | Early exploration | Extreme fragmentation, low detector precision |
+| **Status** | Detector training complete; tracking/ReID running | 12a complete, 12b running on Kaggle T4 |
 
 ## Gap Decomposition
 
@@ -58,6 +61,8 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 
 **Fix**: Train ResNet101-IBN-a on VeRi-776 FIRST, then fine-tune on CityFlowV2 (same pattern as the ViT).
 
+**Status update (2026-03-29)**: VeRi-776 pretraining is now complete in 09e with mAP=62.52% on the VeRi-776 test set. CityFlowV2 fine-tuning is underway in 09f.
+
 ## What SOTA Does Differently
 
 | Pattern | AIC22 1st | AIC22 2nd | AIC21 1st | We have? |
@@ -75,10 +80,52 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 | Priority | Action | Expected Impact | Status |
 |:--------:|--------|:---------------:|--------|
 | **1** | Upload correct 09b v2 384px checkpoint & deploy in pipeline | +1.0-2.5pp | **NOT DONE** — wrong checkpoint on Kaggle |
-| **2** | Train ResNet101-IBN-a on VeRi-776 → fine-tune CityFlowV2 | +1.5-2.5pp (via ensemble) | NOT STARTED |
+| **2** | Train ResNet101-IBN-a on VeRi-776 → fine-tune CityFlowV2 | +1.5-2.5pp (via ensemble) | **IN PROGRESS** — 09e complete, 09f running |
 | **3** | CID_BIAS per camera-pair calibration | +0.5-1.0pp | NOT STARTED |
 | **4** | Box-grained matching (per-detection features) | +0.5-1.5pp | NOT STARTED |
-| **5** | Re-enable reranking after feature upgrade | +0.5-1.0pp | Blocked by #1/#2 |
+| **5** | Re-enable reranking after feature upgrade | +0.5-1.0pp | Blocked by #1 and 09f completion |
+
+Association tuning remains exhausted (225+ configs tested). All remaining meaningful gains are expected to come from feature quality, detector quality, or camera-aware priors rather than more stage-4 parameter sweeps.
+
+## Latest Experiment Results (2026-03-29)
+
+### Completed
+
+#### 09e — VeRi-776 Pretraining
+- **Kernel**: `ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain` v2, T4 GPU
+- **Task**: ResNet101-IBN-a pretrained on VeRi-776 dataset (576 IDs, ~50k images)
+- **Config**: 384x384, 120 epochs, triplet+center loss, cosine scheduler, fp16
+- **Result**: Best mAP = 62.52% on VeRi-776 test set
+- **Runtime**: ~3.4 hours (12,206 seconds)
+- **Artifacts**: `best_model.pth` (525MB), 13 epoch checkpoints
+- **Next**: Fine-tune on CityFlowV2 in 09f
+
+#### 12a — MVDeTr WILDTRACK Training
+- **Kernel**: `ali369/12a-wildtrack-mvdetr-training` v11, T4 GPU
+- **Task**: MVDeTr ground-plane multi-view detection on WILDTRACK (7 cameras)
+- **Config**: ResNet18 backbone, deform_trans world features, 10 epochs, batch_size 1
+- **Results**:
+	- Epoch 1: MODA 69.4%, MODP 79.4%, Precision 98.2%, Recall 70.7%
+	- Epoch 5: MODA 89.4%, MODP 79.6%, Precision 97.6%, Recall 91.6%
+	- Epoch 10: MODA 92.0%, MODP 81.9%, Precision 96.5%, Recall 95.5%
+- **Outcome**: Surpasses the MVDeTr paper's reported 91.5% MODA on WILDTRACK
+- **Runtime**: ~2.5 hours (9,130 seconds)
+- **Artifacts**: `MultiviewDetector.pth`, `test.txt` (ground-plane detections), `log.txt`
+- **Next**: Feed detections into tracking pipeline in 12b
+
+### Running
+
+#### 09f — CityFlowV2 Fine-tuning
+- **Kernel**: `ali369/09f-resnet101ibn-cityflowv2` v1, T4 GPU
+- **Task**: Fine-tune VeRi-776-pretrained ResNet101-IBN-a on CityFlowV2
+- **Config**: 384x384, 60 epochs, ID+Triplet+Circle loss, differential LR (backbone 7e-6, classifier 7e-4)
+- **Target**: mAP 68-75% on CityFlowV2 (up from 52.77% without VeRi pretraining)
+
+#### 12b — WILDTRACK Tracking + ReID
+- **Kernel**: `ali369/12b-wildtrack-mvdetr-tracking-reid` v1, T4 GPU
+- **Task**: Ground-plane tracking on MVDeTr detections plus person ReID feature extraction
+- **Approach**: Hungarian matching in world coordinates, TransReID person features
+- **Target**: IDF1 60-80% with ground-plane fusion tracking
 
 ## Person Pipeline (WILDTRACK) — New Initiative
 
@@ -105,10 +152,10 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 7. **Kaggle chain currently regresses vs local best**: Same stage-1 thresholds but fixed 11c association settings and possible runtime differences produced 911 tracklets and lower MTMC/per-camera IDF1 than local Exp 1.
 
 ### Person Pipeline Next Steps
-- Set up person pipeline stages 0-2 on Kaggle (GPU-intensive)
-- Run stages 3-5 on Kaggle too (via notebook chain) for convenience
-- Fine-tune person ReID on WILDTRACK or EPFL data if better features needed
-- Try conf=0.70+ to reduce false positives further
+- Complete 12b and measure IDF1/MOTA/HOTA from ground-plane detections
+- If tracking quality is still limited, fine-tune person ReID on WILDTRACK or EPFL data
+- Compare MVDeTr-driven tracking against the current per-camera detector baseline
+- Keep GPU-intensive person stages on Kaggle only
 
 ## Conclusive Dead Ends (DO NOT RETRY)
 
@@ -158,7 +205,9 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 - 09d v17: mAP=29.6% (wrong recipe: lr=3.5e-4 + circle_weight=0.5)
 - 09d v18 ali369: mAP=52.77% (AdamW lr=1e-3, best so far)
 - 09d v18 mrkdagods: mAP=30.27% (SGD lr=0.008, failed catastrophically)
+- 09e v2: VeRi-776 pretraining complete, mAP=62.52% on VeRi-776 test set (384x384, 120 epochs, triplet+center, cosine, fp16)
+- 09f v1: CityFlowV2 fine-tuning running from 09e weights (384x384, 60 epochs, ID+Triplet+Circle, differential LR)
 
 ## Key Insight
 
-**The system is NOT broken.** It's operating at the ceiling of single-model 256px architecture. The codebase is architecturally ready for 84%+ (multi-model support, score fusion, separate PCA all exist). The problem is purely feature quality — deploying the correct 384px model and training a competent second backbone with VeRi-776 pretraining. This is an ML training problem, not a software engineering problem.
+**The system is NOT broken.** It's operating at the ceiling of current deployed feature quality, and association tuning is already exhausted. The codebase is architecturally ready for 84%+ (multi-model support, score fusion, separate PCA all exist). The remaining path is feature quality: deploy the correct 384px ViT checkpoint, finish 09f CityFlowV2 fine-tuning from the new 09e VeRi-776 pretrain, and then revisit ensemble/reranking with stronger embeddings. This is an ML training problem, not a software engineering problem.
