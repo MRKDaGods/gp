@@ -1,0 +1,18 @@
+{
+  "id": "mrkdagods/12a-wildtrack-mvdetr-training",
+  "title": "12a WILDTRACK MVDeTr Training",
+  "code_file": "12a_wildtrack_mvdetr.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights",
+    "aryashah2k/large-scale-multicamera-detection-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

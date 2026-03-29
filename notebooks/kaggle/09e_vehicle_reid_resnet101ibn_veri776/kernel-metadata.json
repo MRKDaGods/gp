@@ -1,0 +1,20 @@
+{
+  "id": "ali369/09e-vehicle-reid-resnet101ibn-veri776-pretrain",
+  "title": "09e Vehicle ReID ResNet101-IBN-a VeRi-776 Pretrain",
+  "code_file": "09e_vehicle_reid_resnet101ibn_veri776.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "keywords": [],
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights",
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}

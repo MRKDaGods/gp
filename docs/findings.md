@@ -16,6 +16,12 @@
 | **384px ViT (09b v2)** | mAP=80.14% | Trained, **checkpoint on Kaggle is v1 (44.9%)** — v2 never uploaded |
 | **Association configs tested** | 225+ | All within 0.3pp of optimal |
 
+**⚠️ Metric Disambiguation (Vehicle Pipeline):**
+- **MTMC IDF1 = 78.4%** — Official metric, comparable to AIC22 SOTA (84.86%). Uses single global accumulator with globally-unique GT IDs. This is the number that matters.
+- **IDF1 = 79.8%** — Single-accumulator IDF1 from TrackEval. Slightly higher than MTMC IDF1 due to evaluation protocol differences.
+- **GLOBAL IDF1 = 80.5%** — Per-camera accumulators merged. NOT comparable to SOTA. Higher because it separates per-camera evaluation. CamTTA boosts this but hurts MTMC IDF1.
+- All current best numbers use GT-assisted metrics (`gt_frame_clip=true`, `gt_zone_filter=true`) which inflate scores by 1-3pp vs clean evaluation.
+
 ### Person Pipeline (WILDTRACK) — NEW
 
 | Metric | Value | Notes |

@@ -87,9 +87,11 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - Tracklets: list of dicts with `camera_id`, `track_id`, `frames`, `boxes`, `embeddings`
 
 ## Current Performance State
-- **Best Kaggle**: IDF1=0.784 (v80, 10c v44, ali369 account — min_hits=2)
+- **Best Kaggle MTMC IDF1**: 0.784 (v80/v44, ali369, min_hits=2) — official metric, comparable to SOTA
+- **Best IDF1 (single-acc)**: 0.798 (v41) — NOT the same as MTMC IDF1
+- **Best GLOBAL IDF1**: 0.805 (v85) — NOT comparable to SOTA (per-camera accumulators)
 - **SOTA target**: IDF1≈0.8486 (AIC22 1st place)
-- **Gap**: ~6.5pp from SOTA — caused by feature quality (single model at 256px), NOT association tuning
+- **Gap**: ~6.5pp MTMC IDF1 from SOTA — all three metrics are different, only MTMC IDF1 is comparable to AIC22
 - **Association**: EXHAUSTED (225+ configs, all within 0.3pp of optimal)
 - **Critical blocker**: 384px model (80.14% mAP) never properly deployed — wrong checkpoint on Kaggle
 - **Secondary model**: ResNet101-IBN-a at 52.77% mAP — expected given no VeRi-776 pretraining
