@@ -209,11 +209,31 @@ def build_transreid(
             state_dict = state_dict["state_dict"]
         elif "model" in state_dict:
             state_dict = state_dict["model"]
+        elif "model_state_dict" in state_dict:
+            state_dict = state_dict["model_state_dict"]
 
         # Strip module. prefix (from DataParallel)
         state_dict = {
             k.replace("module.", "", 1): v for k, v in state_dict.items()
         }
+
+        # Remap 09p-style TransReIDViT keys to pipeline TransReID keys.
+        remap_prefixes = {
+            "bottleneck.": "bn.",
+            "classifier.": "cls_head.",
+        }
+        remapped = {}
+        for key, value in state_dict.items():
+            new_key = key
+            for old_prefix, new_prefix in remap_prefixes.items():
+                if key.startswith(old_prefix):
+                    new_key = new_prefix + key[len(old_prefix):]
+                    break
+            if new_key == "sie.camera_embed.weight":
+                new_key = "sie_embed"
+                value = value.unsqueeze(1)
+            remapped[new_key] = value
+        state_dict = remapped
 
         # ------------------------------------------------------------------
         # Handle shape mismatches between checkpoint and model:
