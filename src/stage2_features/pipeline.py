@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 import cv2
 import numpy as np
 from loguru import logger
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from src.core.constants import PERSON_CLASSES, VEHICLE_CLASSES
 from src.core.data_models import Tracklet, TrackletFeatures
@@ -115,7 +115,12 @@ def run_stage2(
     multiscale_raw = stage_cfg.reid.get("multiscale_sizes", [])
     multiscale_sizes = [tuple(s) for s in multiscale_raw] if multiscale_raw else []
     quality_temperature = float(stage_cfg.reid.get("quality_temperature", 3.0))
-    has_person_classes = any(class_id in PERSON_CLASSES for class_id in cfg.stage0.target_classes)
+    target_classes = OmegaConf.select(cfg, "dataset.target_classes", default=None)
+    if target_classes is None:
+        target_classes = OmegaConf.select(cfg, "stage0.target_classes", default=None)
+    has_person_classes = target_classes is None or any(
+        class_id in PERSON_CLASSES for class_id in target_classes
+    )
 
     # --- Load ReID models (person and vehicle) ---
     person_reid: Optional[ReIDModel] = None
