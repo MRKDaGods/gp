@@ -47,14 +47,14 @@ interface TrackletSummary {
 }
 
 export function SelectionStage() {
-  const {
-    selectedIds,
-    toggleSelection,
+    const {
+    selectedTrackIds,          
+    toggleTrackSelection,      
     selectAll,
     deselectAll,
     multiSelectMode,
     setMultiSelectMode,
-    setDetectionsKeepSelection,
+    setDetections,             
   } = useDetectionStore();
   const { setCurrentStage } = useSessionStore();
   const { currentVideo } = useVideoStore();
@@ -67,7 +67,7 @@ export function SelectionStage() {
     setMultiSelectMode(true);
   }, [setMultiSelectMode]);
 
-  const fetchTracklets = useCallback(async () => {
+    const fetchTracklets = useCallback(async () => {
     if (!currentVideo) return;
     setLoading(true);
     try {
@@ -75,60 +75,18 @@ export function SelectionStage() {
       const data = resp?.data ?? resp;
       const list: TrackletSummary[] = Array.isArray(data) ? data : [];
       setTracklets(list);
-
-      // Map stage-1 detection IDs ("det-{trackId}-{frameId}") to tracklet IDs
-      const prevSelected = useDetectionStore.getState().selectedIds;
-      const trackIdSet = new Set<string>();
-      prevSelected.forEach((detId) => {
-        const m = detId.match(/^det-(\d+)-/);
-        if (m) trackIdSet.add(m[1]);
-        else trackIdSet.add(detId); // already a plain tracklet id
-      });
-
-      // Build new detections keyed by tracklet id
-      const newDetections = list.map((t) => ({
-        id: String(t.id),
-        bbox: {
-          x1: t.representativeBbox?.[0] ?? 0,
-          y1: t.representativeBbox?.[1] ?? 0,
-          x2: t.representativeBbox?.[2] ?? 0,
-          y2: t.representativeBbox?.[3] ?? 0,
-        },
-        confidence: t.confidence,
-        classId: t.classId ?? 2,
-        className: t.className ?? "vehicle",
-        frameId: t.representativeFrame ?? t.startFrame ?? 0,
-      }));
-
-      // Set detections and manually restore matched selections
-      setDetectionsKeepSelection(newDetections);
-
-      // Re-select tracklets whose track_id was selected in stage 1
-      const matchedIds = newDetections
-        .filter((d) => trackIdSet.has(d.id))
-        .map((d) => d.id);
-      if (matchedIds.length > 0) {
-        // Enable multi-select so toggleSelection adds instead of replacing
-        setMultiSelectMode(true);
-        matchedIds.forEach((id) => {
-          if (!useDetectionStore.getState().selectedIds.has(id)) {
-            toggleSelection(id);
-          }
-        });
-      }
     } catch {
       setTracklets([]);
     } finally {
       setLoading(false);
     }
-  }, [currentVideo, setDetectionsKeepSelection, setMultiSelectMode, toggleSelection]);
+  }, [currentVideo]);
 
   useEffect(() => {
     void fetchTracklets();
   }, [fetchTracklets]);
 
-  const selectedTracklets = tracklets.filter((t) => selectedIds.has(String(t.id)));
-
+  const selectedTracklets = tracklets.filter((t) => selectedTrackIds.has(t.id));
   // Group selected by class
   const groupedSelected = selectedTracklets.reduce((acc, t) => {
     const cls = t.className ?? "vehicle";
@@ -138,7 +96,7 @@ export function SelectionStage() {
   }, {} as Record<string, TrackletSummary[]>);
 
   const handleProceed = () => {
-    if (selectedIds.size > 0) {
+    if (selectedTrackIds.size > 0) {
       setCurrentStage(3);
     }
   };
@@ -164,9 +122,9 @@ export function SelectionStage() {
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge variant="outline">
-            {selectedIds.size} of {tracklets.length} selected
+            {selectedTrackIds.size} of {tracklets.length} selected
           </Badge>
-          <Button className="shrink-0" onClick={handleProceed} disabled={selectedIds.size === 0}>
+          <Button className="shrink-0" onClick={handleProceed} disabled={selectedTrackIds.size === 0}>
             Run Inference
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
@@ -229,14 +187,14 @@ export function SelectionStage() {
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {tracklets.map((tracklet) => {
-                const isSelected = selectedIds.has(String(tracklet.id));
-                return (
+                  const isSelected = selectedTrackIds.has(tracklet.id);          // ← number, not String()
+                  return (
                   <TrackletCard
                     key={tracklet.id}
                     tracklet={tracklet}
                     videoId={currentVideo?.id}
                     isSelected={isSelected}
-                    onToggle={() => toggleSelection(String(tracklet.id))}
+                    onToggle={() => toggleTrackSelection(tracklet.id)}
                   />
                 );
               })}
@@ -252,7 +210,7 @@ export function SelectionStage() {
               Selected Tracklets
             </h3>
             <p className="text-sm text-muted-foreground">
-              {selectedIds.size} tracklets will be tracked
+              {selectedTrackIds.size} tracklets will be tracked
             </p>
           </div>
 
@@ -284,7 +242,7 @@ export function SelectionStage() {
                 </div>
               ))}
 
-              {selectedIds.size === 0 && (
+              {selectedTrackIds.size === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <MousePointer2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>No tracklets selected</p>
@@ -299,9 +257,9 @@ export function SelectionStage() {
             <Button
               className="w-full"
               onClick={handleProceed}
-              disabled={selectedIds.size === 0}
+              disabled={selectedTrackIds.size === 0}
             >
-              Continue with {selectedIds.size} tracklets
+              Continue with {selectedTrackIds.size} tracklets
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>

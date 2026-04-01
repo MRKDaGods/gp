@@ -89,7 +89,7 @@ export function TimelineStage() {
   const { runId, galleryRunId, updateStageProgress, stages } = usePipelineStore();
   const { setCurrentStage } = useSessionStore();
   const { currentVideo } = useVideoStore();
-  const { selectedIds } = useDetectionStore();
+  const { selectedTrackIds: selectedTrackIdSet } = useDetectionStore();
 
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -446,22 +446,22 @@ export function TimelineStage() {
     const loadTracks = async () => {
         try {
         let attemptedAssociation = false;
-        const selectedTrackIds = Array.from(selectedIds).map((v) => String(v));
+        const selectedTrackIdsArr = Array.from(selectedTrackIdSet).map((v) => String(v));
 
         console.groupCollapsed("[Stage4][Timeline] loadTracks");
         console.info("context", {
           runId,
           videoId: currentVideo.id,
-          selectedTrackletCount: selectedTrackIds.length,
-          selectedTrackIds,
+          selectedTrackletCount: selectedTrackIdsArr.length,
+          selectedTrackIds: selectedTrackIdsArr,
         });
 
         // Query mode: resolve selected tracklets to matched trajectories on backend.
         // Use galleryRunId (precomputed dataset) when available; fall back to probe runId.
         const effectiveGalleryRunId = galleryRunId ?? runId;
-        if (effectiveGalleryRunId && selectedIds.size > 0) {
+        if (effectiveGalleryRunId && selectedTrackIdSet.size > 0) {
           attemptedAssociation = true;
-          const q1 = await queryTimeline(effectiveGalleryRunId, currentVideo.id, selectedTrackIds);
+          const q1 = await queryTimeline(effectiveGalleryRunId, currentVideo.id, selectedTrackIdsArr);
           if (cancelled) return;
 
           const q1Data: any = q1.data ?? {};
@@ -536,7 +536,7 @@ export function TimelineStage() {
             }
 
             if (!cancelled) {
-              const q2 = await queryTimeline(stage4RunId ?? effectiveGalleryRunId, currentVideo.id, selectedTrackIds);
+              const q2 = await queryTimeline(stage4RunId ?? effectiveGalleryRunId, currentVideo.id, selectedTrackIdsArr);
               if (cancelled) return;
               const q2Data: any = q2.data ?? {};
               const q2Traj = Array.isArray(q2Data.trajectories) ? q2Data.trajectories : [];
@@ -671,7 +671,7 @@ export function TimelineStage() {
 
         // Only suppress fallback when association was actually attempted.
         // If we ran association but found nothing, just fallback anyway so the timeline isn't completely empty and broken.
-        if (attemptedAssociation && selectedIds.size > 0) {
+        if (attemptedAssociation && selectedTrackIdSet.size > 0) {
           // Keep strict query behavior (do not show unrelated trajectories), but
           // avoid a blank timeline by falling back to only the selected stage-1 tracklets.
           const fallbackResp = await getTracklets(undefined, currentVideo.id);
@@ -679,9 +679,8 @@ export function TimelineStage() {
           let fallbackSummary = Array.isArray(fallbackResp.data) ? fallbackResp.data : [];
 
           const selectedTrackNums = new Set<number>();
-          selectedIds.forEach((raw) => {
-            const parsed = parseSelectedTrackId(String(raw));
-            if (parsed !== null) selectedTrackNums.add(parsed);
+          selectedTrackIdSet.forEach((trackId) => {
+            selectedTrackNums.add(trackId); 
           });
           fallbackSummary = fallbackSummary.filter((item: any) => selectedTrackNums.has(Number(item.id)));
 
@@ -713,11 +712,10 @@ export function TimelineStage() {
         let summary = Array.isArray(response.data) ? response.data : [];
 
         // Filter to only selected tracklets from Stage 2
-        if (selectedIds.size > 0) {
+        if (selectedTrackIdSet.size > 0) {
           const selectedTrackNums = new Set<number>();
-          selectedIds.forEach((raw) => {
-            const parsed = parseSelectedTrackId(String(raw));
-            if (parsed !== null) selectedTrackNums.add(parsed);
+          selectedTrackIdSet.forEach((trackId) => {
+            selectedTrackNums.add(trackId);
           });
           summary = summary.filter((item: any) => selectedTrackNums.has(Number(item.id)));
         }
@@ -745,7 +743,7 @@ export function TimelineStage() {
       cancelled = true;
       setTracksLoading(false);
     };
-  }, [currentVideo, runId, selectedIds, setTracks, triggerReload]);
+  }, [currentVideo, runId, selectedTrackIdSet, setTracks, triggerReload]);
 
   // Playback: fixed UI rate so we don't re-render the whole stage at source video FPS.
   useEffect(() => {
@@ -833,7 +831,7 @@ export function TimelineStage() {
   // For summary badge: how many trajectories are shown vs total selected tracklets
   const shownTrajectories = tracks.length;
   const shownCameraLanes = cameraLanes.length;
-  const selectedTrackletCount = selectedIds.size;
+  const selectedTrackletCount = selectedTrackIdSet.size;
 
   // Dynamic time ruler tick interval: keep ~10–15 ticks on screen regardless of duration
   const rulerTickInterval = totalDuration <= 30 ? 5 : totalDuration <= 120 ? 10 : totalDuration <= 600 ? 30 : 60;

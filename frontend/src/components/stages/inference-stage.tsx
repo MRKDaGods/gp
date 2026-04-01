@@ -116,7 +116,7 @@ const locationData = {
 };
 
 export function InferenceStage() {
-  const { selectedIds, detections } = useDetectionStore();
+  const { selectedTrackIds, detections } = useDetectionStore();
   const { setCurrentStage, locationFilter, setLocationFilter, dateTimeRange, setDateTimeRange } =
     useSessionStore();
   const { runId, setRunId, galleryRunId: storeGalleryRunId, setGalleryRunId, setIsRunning, updateStageProgress, stages } = usePipelineStore();
@@ -164,8 +164,10 @@ export function InferenceStage() {
     return () => cancelAnimationFrame(id);
   }, [isProcessing]);
 
-  const selectedCount = selectedIds.size;
-  const selectedDetections = detections.filter((d) => selectedIds.has(d.id));
+  const selectedCount = selectedTrackIds.size;
+  const selectedDetections = detections.filter(
+    (d) => d.trackId != null && selectedTrackIds.has(d.trackId)
+  );
 
   const stage2Progress = stages.find((s) => s.stage === 2);
   const stage3Progress = stages.find((s) => s.stage === 3);

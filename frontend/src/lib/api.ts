@@ -58,6 +58,7 @@ function normalizeDetections(rawList: any[]): Detection[] {
       classId: Number(d.classId ?? -1),
       className: String(d.className ?? 'vehicle'),
       frameId: Number(d.frameId ?? 0),
+      trackId: Number(d.trackId ?? d.track_id ?? -1),  
       selected: Boolean(d.selected),
     };
   });

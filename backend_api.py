@@ -37,6 +37,37 @@ try:
     _HAS_CV2 = True
 except ImportError:
     _HAS_CV2 = False
+    
+def _safe_reid_batch_size() -> int:
+    """Determine a safe ReID batch size based on available GPU VRAM.
+
+    TransReID ViT-Base FP32 with flip augmentation uses roughly:
+      - ~400MB base model
+      - ~80MB per image in batch (attention matrices + activations)
+    
+    We reserve 2GB for the OS display driver + other processes on Windows.
+    """
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return 4
+        
+        total_vram_gb = torch.cuda.get_device_properties(0).total_mem / (1024 ** 3)
+        free_vram_gb = torch.cuda.mem_get_info(0)[0] / (1024 ** 3)
+        
+        # Use free VRAM if available, else estimate from total
+        available = min(free_vram_gb, total_vram_gb - 2.0)  # reserve 2GB
+        
+        if available >= 8.0:
+            return 32
+        elif available >= 4.0:
+            return 16
+        elif available >= 2.0:
+            return 8
+        else:
+            return 4
+    except Exception:
+        return 8  # safe default
 
 # Use venv Python for pipeline subprocesses so all ML dependencies are available.
 # Falls back to sys.executable when running inside the venv already.
@@ -636,7 +667,6 @@ def _build_pipeline_cmd(
     tracker: str | None = None,
 ) -> list[str]:
     """Build the subprocess command for run_pipeline.py."""
-    # Default YAML assumes CUDA; force CPU overrides when this machine has no GPU.
     effective_use_cpu = use_cpu or not _cuda_available_for_pipeline()
     cmd = [
         _PIPELINE_PYTHON,
@@ -666,7 +696,15 @@ def _build_pipeline_cmd(
             "--override", "stage1.tracker.half=false",
             "--override", "stage2.reid.device=cpu",
             "--override", "stage2.reid.half=false",
+            "--override", "stage2.reid.batch_size=4",
         ])
+    else:
+        # ── GPU safety: prevent VRAM exhaustion freezing Windows ──
+        if _sys.platform == "win32":
+            cmd.extend([
+                "--override", "stage2.reid.half=false",
+                "--override", f"stage2.reid.batch_size={_safe_reid_batch_size()}",
+            ])
     if reid_model_path:
         cmd.extend([
             "--override", f"stage2.reid.vehicle.weights_path={reid_model_path}",
@@ -2124,7 +2162,6 @@ def _build_selected_tracklet_summaries(
 
 def _resolve_probe_run_id_for_video(video_id: str, selected_nums: set[int]) -> Optional[str]:
     """Resolve the best probe run for a video id.
-
     Prefers a run that actually contains the selected track ids in stage-1
     tracklets. This avoids stale in-memory mappings after backend restarts.
     """

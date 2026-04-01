@@ -102,8 +102,8 @@ const DetectionStreamVideo = memo(function DetectionStreamVideo({
 export function DetectionStage() {
   const { currentVideo, currentFrame, setCurrentFrame, isPlaying, setIsPlaying } =
     useVideoStore();
-  const { detections, setDetections, selectedIds, toggleSelection, hoveredId, setHoveredId } =
-    useDetectionStore();
+   const {detections,setDetections,selectedTrackIds,toggleTrackSelection,hoveredId,setHoveredId,}
+    = useDetectionStore();
   const { runId, stages, updateStageProgress, setIsRunning } = usePipelineStore();
   const { setCurrentStage } = useSessionStore();
 
@@ -449,7 +449,7 @@ export function DetectionStage() {
   };
 
   const handleProceed = () => {
-    if (selectedIds.size > 0) {
+    if (selectedTrackIds.size > 0) {
       setCurrentStage(2);
     }
   };
@@ -474,9 +474,9 @@ export function DetectionStage() {
             {detections.length} vehicles detected
           </Badge>
           <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
-            {selectedIds.size} selected
+            {selectedTrackIds.size} selected
           </Badge>
-          <Button className="shrink-0" onClick={handleProceed} disabled={selectedIds.size === 0}>
+          <Button className="shrink-0" onClick={handleProceed} disabled={selectedTrackIds.size === 0}>
             Continue to Selection
           </Button>
         </div>
@@ -581,7 +581,7 @@ export function DetectionStage() {
                         </span>
                       </span>
                       <span className="text-green-400">
-                        {selectedIds.size} selected for tracking
+                        {selectedTrackIds.size} selected for tracking
                       </span>
                     </div>
                   </div>
@@ -590,7 +590,7 @@ export function DetectionStage() {
                 {/* Bounding boxes overlay — above frame stack (imgs use z-1/z-2) */}
                 <div className="absolute inset-0 z-[5]" style={{ pointerEvents: "none" }}>
                   {detections.map((detection) => {
-                    const isSelected = selectedIds.has(detection.id);
+                    const isSelected = selectedTrackIds.has(detection.trackId);
                     const isHovered = hoveredId === detection.id;
                     const style = bboxToStyle(
                       detection.bbox,
@@ -618,7 +618,7 @@ export function DetectionStage() {
                           height: style.height,
                           pointerEvents: "auto",
                         }}
-                        onClick={() => toggleSelection(detection.id)}
+                        onClick={() => toggleTrackSelection(detection.trackId)}
                         onMouseEnter={() => setHoveredId(detection.id)}
                         onMouseLeave={() => setHoveredId(null)}
                       >
@@ -724,8 +724,8 @@ export function DetectionStage() {
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
             <div className="space-y-2">
               {detections.map((detection) => {
-                const isSelected = selectedIds.has(detection.id);
-                const isHovered = hoveredId === detection.id;
+              const isSelected = selectedTrackIds.has(detection.trackId); 
+              const isHovered = hoveredId === detection.id;
                 return (
                   <div
                     key={detection.id}
@@ -736,7 +736,7 @@ export function DetectionStage() {
                         : "border-transparent bg-background/50 hover:bg-background",
                       isHovered && "ring-1 ring-primary"
                     )}
-                    onClick={() => toggleSelection(detection.id)}
+                    onClick={() => toggleTrackSelection(detection.trackId)}
                     onMouseEnter={() => setHoveredId(detection.id)}
                     onMouseLeave={() => setHoveredId(null)}
                   >
@@ -779,17 +779,17 @@ export function DetectionStage() {
           <div className="shrink-0 border-t bg-muted/30 p-4">
             <div className="flex justify-between items-center mb-3">
               <span className="text-sm text-muted-foreground">Selected</span>
-              <Badge variant={selectedIds.size > 0 ? "default" : "secondary"}>
-                {selectedIds.size} / {detections.length}
+              <Badge variant={selectedTrackIds.size > 0 ? "default" : "secondary"}>
+                {selectedTrackIds.size} / {detections.length}
               </Badge>
             </div>
             <Button
               className="w-full"
               onClick={handleProceed}
-              disabled={selectedIds.size === 0}
+              disabled={selectedTrackIds.size === 0}
             >
-              {selectedIds.size > 0
-                ? `Track ${selectedIds.size} Vehicle${selectedIds.size > 1 ? 's' : ''}`
+              {selectedTrackIds.size > 0
+                ? `Track ${selectedTrackIds.size} Vehicle${selectedTrackIds.size > 1 ? 's' : ''}`
                 : "Select vehicles to continue"
               }
             </Button>

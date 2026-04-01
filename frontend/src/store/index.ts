@@ -145,7 +145,10 @@ export const useVideoStore = create<VideoState>()(
 
 interface DetectionState {
   detections: Detection[];
+  /** @deprecated Use selectedTrackIds for persistent selection */
   selectedIds: Set<string>;
+  /** Track-level selection — persists across frame changes */
+  selectedTrackIds: Set<number>;
   multiSelectMode: boolean;
   hoveredId: string | null;
 
@@ -153,6 +156,8 @@ interface DetectionState {
   setDetections: (detections: Detection[]) => void;
   setDetectionsKeepSelection: (detections: Detection[]) => void;
   toggleSelection: (id: string) => void;
+  /** Toggle selection by trackId (persistent across frames) */
+  toggleTrackSelection: (trackId: number) => void;
   selectAll: () => void;
   deselectAll: () => void;
   setMultiSelectMode: (enabled: boolean) => void;
@@ -165,45 +170,75 @@ export const useDetectionStore = create<DetectionState>()(
     (set, get) => ({
       detections: [],
       selectedIds: new Set(),
+      selectedTrackIds: new Set(),
       multiSelectMode: true,
       hoveredId: null,
 
+      // Update detections WITHOUT clearing track selections
       setDetections: (detections) =>
-        set({ detections, selectedIds: new Set() }),
+        set({ detections }),
 
       setDetectionsKeepSelection: (detections) =>
-        set((state) => {
-          const validIds = new Set(detections.map((d) => d.id));
-          const kept = new Set([...state.selectedIds].filter((id) => validIds.has(id)));
-          return { detections, selectedIds: kept };
-        }),
+        set({ detections }),
 
+      // Legacy: toggle by detection.id (frame-specific)
       toggleSelection: (id) =>
         set((state) => {
-          const newSet = new Set(state.selectedIds);
+          // Extract trackId from detection id format "det-{trackId}-{frameId}"
+          const det = state.detections.find((d) => d.id === id);
+          const trackId = det?.trackId;
+          if (trackId === undefined || trackId === null) return state;
+
+          const newTrackIds = new Set(state.selectedTrackIds);
           if (state.multiSelectMode) {
-            if (newSet.has(id)) {
-              newSet.delete(id);
+            if (newTrackIds.has(trackId)) {
+              newTrackIds.delete(trackId);
             } else {
-              newSet.add(id);
+              newTrackIds.add(trackId);
             }
           } else {
-            if (newSet.has(id)) {
+            if (newTrackIds.has(trackId)) {
+              newTrackIds.clear();
+            } else {
+              newTrackIds.clear();
+              newTrackIds.add(trackId);
+            }
+          }
+          return { selectedTrackIds: newTrackIds };
+        }),
+
+      // Toggle by trackId directly (persistent across frames)
+      toggleTrackSelection: (trackId) =>
+        set((state) => {
+          const newSet = new Set(state.selectedTrackIds);
+          if (state.multiSelectMode) {
+            if (newSet.has(trackId)) {
+              newSet.delete(trackId);
+            } else {
+              newSet.add(trackId);
+            }
+          } else {
+            if (newSet.has(trackId)) {
               newSet.clear();
             } else {
               newSet.clear();
-              newSet.add(id);
+              newSet.add(trackId);
             }
           }
-          return { selectedIds: newSet };
+          return { selectedTrackIds: newSet };
         }),
 
       selectAll: () =>
         set((state) => ({
-          selectedIds: new Set(state.detections.map((d) => d.id)),
+          selectedTrackIds: new Set(
+            state.detections
+              .map((d) => d.trackId)
+              .filter((id): id is number => id != null)
+          ),
         })),
 
-      deselectAll: () => set({ selectedIds: new Set() }),
+      deselectAll: () =>
+        set({ selectedIds: new Set(), selectedTrackIds: new Set() }),
 
       setMultiSelectMode: (enabled) => set({ multiSelectMode: enabled }),
 
@@ -211,7 +246,9 @@ export const useDetectionStore = create<DetectionState>()(
 
       getSelectedDetections: () => {
         const state = get();
-        return state.detections.filter((d) => state.selectedIds.has(d.id));
+        return state.detections.filter(
+          (d) => d.trackId != null && state.selectedTrackIds.has(d.trackId)
+        );
       },
     }),
     { name: 'detection-store' }

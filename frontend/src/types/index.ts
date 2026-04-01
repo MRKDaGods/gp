@@ -32,6 +32,7 @@ export interface Detection {
   classId: number;
   className: string;
   frameId: number;
+  trackId: number; 
   selected?: boolean;
 }
 
