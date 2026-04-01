@@ -2,6 +2,7 @@
 data/
 models/
 outputs/
+preprocessed_datasets/
 
 # Accidentally-downloaded artifacts from kaggle kernels output
 checkpoint.tar.gz
