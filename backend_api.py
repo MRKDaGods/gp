@@ -98,6 +98,7 @@ video_to_latest_run: Dict[str, str] = {}
 # Configuration
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
+PREPROCESSED_DIR = Path("preprocessed_datasets")
 TIMELINE_DEBUG_LOG = OUTPUT_DIR / "timeline_query_debug.log"
 CITYFLOW_DIR = Path("data/raw/cityflowv2")
 DATASET_DIR = Path("dataset")
@@ -106,6 +107,7 @@ DEMO_VIDEO_FALLBACK = Path("S02_c008.avi")  # Real CityFlowV2 footage
 ENABLE_KAGGLE_IMPORT = os.getenv("MTMC_ENABLE_KAGGLE_IMPORT", "1").strip().lower() in {"1", "true", "yes", "on"}
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
+PREPROCESSED_DIR.mkdir(exist_ok=True)
 RUN_ID_LOCK = threading.Lock()
 
 
@@ -152,10 +154,10 @@ def _resolve_run_id(requested_run_id: Optional[str]) -> str:
     return _allocate_numeric_run_id()
 
 
-def _write_run_context(run_id: str, payload: Dict[str, Any]) -> None:
+def _write_run_context(run_id: str, payload: Dict[str, Any], base_dir: Path = OUTPUT_DIR) -> None:
     """Persist lightweight run metadata to help auditing and dataset discovery."""
     try:
-        run_dir = OUTPUT_DIR / run_id
+        run_dir = base_dir / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         context = {
             "runId": run_id,
@@ -165,6 +167,28 @@ def _write_run_context(run_id: str, payload: Dict[str, Any]) -> None:
         (run_dir / "run_context.json").write_text(json.dumps(context, indent=2), encoding="utf-8")
     except Exception as exc:
         print(f"[WARN] Failed to write run_context.json for run {run_id}: {exc}", flush=True)
+
+
+def _dataset_run_id(folder_name: str) -> str:
+    """Stable run id for dataset pre-processing outputs."""
+    return f"dataset_precompute_{str(folder_name).strip().lower()}"
+
+
+def _resolve_run_dir(run_id: str, prefer_preprocessed: bool = False) -> Path:
+    """Resolve a run directory across outputs/ and preprocessed_datasets/."""
+    rid = str(run_id or "").strip()
+    if prefer_preprocessed:
+        primary = PREPROCESSED_DIR / rid
+        secondary = OUTPUT_DIR / rid
+    else:
+        primary = OUTPUT_DIR / rid
+        secondary = PREPROCESSED_DIR / rid
+
+    if primary.exists():
+        return primary
+    if secondary.exists():
+        return secondary
+    return primary
 
 
 def _probe_video_metadata(file_path: Path) -> Dict[str, Any]:
@@ -403,7 +427,7 @@ PRECOMPUTE_RUN_ID = "dataset_precompute_s01"
 async def _background_precompute_dataset() -> None:
     """Run the full pipeline (stages 0-4) on the S01 dataset at startup.
 
-    Results are stored under outputs/dataset_precompute_s01/ and linked to each
+    Results are stored under preprocessed_datasets/dataset_precompute_s01/ and linked to each
     S01 camera video so the UI can display real detections immediately.
     If a previous precompute run already has stage1 artifacts, skip re-running.
     """
@@ -411,7 +435,7 @@ async def _background_precompute_dataset() -> None:
     if not dataset_s01.exists():
         return
 
-    run_dir = OUTPUT_DIR / PRECOMPUTE_RUN_ID
+    run_dir = PREPROCESSED_DIR / PRECOMPUTE_RUN_ID
     # Check if stage1 is already done
     if any((run_dir / "stage1").glob("tracklets_*.json")):
         # Already computed — just link each S01 camera video to this run
@@ -427,7 +451,7 @@ async def _background_precompute_dataset() -> None:
             "scripts/run_pipeline.py",
             "--config", "configs/default.yaml",
             "--stages", "0,1,2,3,4",
-            "--override", f"project.output_dir={OUTPUT_DIR.as_posix()}",
+            "--override", f"project.output_dir={PREPROCESSED_DIR.as_posix()}",
             "--override", f"project.run_name={PRECOMPUTE_RUN_ID}",
             "--override", f"stage0.input_dir={dataset_s01.as_posix()}",
         ]
@@ -572,8 +596,13 @@ def _parse_selected_track_nums(raw_ids: List[str]) -> set[int]:
     return selected
 
 
-def _prepare_input_for_run(run_id: str, source_video_path: Path, camera_id: str) -> Path:
-    run_input_dir = OUTPUT_DIR / run_id / "input" / camera_id
+def _prepare_input_for_run(
+    run_id: str,
+    source_video_path: Path,
+    camera_id: str,
+    output_root: Path = OUTPUT_DIR,
+) -> Path:
+    run_input_dir = output_root / run_id / "input" / camera_id
     run_input_dir.mkdir(parents=True, exist_ok=True)
 
     target_video_path = run_input_dir / source_video_path.name
@@ -582,9 +611,9 @@ def _prepare_input_for_run(run_id: str, source_video_path: Path, camera_id: str)
     return run_input_dir.parent
 
 
-def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path) -> Path:
-    """Copy dataset input videos into outputs/{run_id}/input/ for full run reproducibility."""
-    run_input_root = OUTPUT_DIR / run_id / "input"
+def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path, output_root: Path = OUTPUT_DIR) -> Path:
+    """Copy dataset input videos into {output_root}/{run_id}/input/ for full run reproducibility."""
+    run_input_root = output_root / run_id / "input"
     run_input_root.mkdir(parents=True, exist_ok=True)
 
     copied: List[Dict[str, str]] = []
@@ -600,7 +629,7 @@ def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path) -> Path:
                 continue
             dst = camera_dir / src.name
             shutil.copy2(src, dst)
-            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(OUTPUT_DIR / run_id).as_posix())})
+            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(output_root / run_id).as_posix())})
 
     # Fallback: if videos are directly inside the dataset folder.
     if not copied:
@@ -611,7 +640,7 @@ def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path) -> Path:
                 continue
             dst = misc_dir / src.name
             shutil.copy2(src, dst)
-            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(OUTPUT_DIR / run_id).as_posix())})
+            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(output_root / run_id).as_posix())})
 
     manifest = {
         "sourceDatasetPath": str(dataset_path),
@@ -665,6 +694,7 @@ def _build_pipeline_cmd(
     use_cpu: bool = False,
     reid_model_path: str | None = None,
     tracker: str | None = None,
+    output_root: Path = OUTPUT_DIR,
 ) -> list[str]:
     """Build the subprocess command for run_pipeline.py."""
     effective_use_cpu = use_cpu or not _cuda_available_for_pipeline()
@@ -676,7 +706,7 @@ def _build_pipeline_cmd(
         "--stages",
         stages,
         "--override",
-        f"project.output_dir={OUTPUT_DIR.as_posix()}",
+        f"project.output_dir={output_root.as_posix()}",
         "--override",
         f"project.run_name='{run_id}'",
         "--override",
@@ -720,6 +750,7 @@ async def _run_pipeline_streaming(
     run_id: str,
     cmd: list[str],
     stage_nums: list[int],
+    output_root: Path = OUTPUT_DIR,
 ) -> Dict[str, Any]:
     """Run a pipeline subprocess using threads so it works on any asyncio event
     loop (including Windows SelectorEventLoop where create_subprocess_exec raises
@@ -824,7 +855,7 @@ async def _run_pipeline_streaming(
             _handle_line(payload)
 
     returncode = await future
-    run_dir = OUTPUT_DIR / run_id
+    run_dir = output_root / run_id
 
     if returncode != 0:
         stderr_tail = "\n".join(log_lines[-80:])[-4000:]
@@ -848,6 +879,7 @@ async def _run_pipeline_stages(
     smoke_test: bool = False,
     reid_model_path: Optional[str] = None,
     tracker: Optional[str] = None,
+    output_root: Path = OUTPUT_DIR,
 ) -> Dict[str, Any]:
     """Run one or more pipeline stages via subprocess with streaming progress."""
     video_meta = uploaded_videos[video_id]
@@ -855,7 +887,7 @@ async def _run_pipeline_stages(
     if not source_video_path.exists():
         raise FileNotFoundError(f"Video file does not exist: {source_video_path}")
 
-    input_dir = _prepare_input_for_run(run_id, source_video_path, camera_id)
+    input_dir = _prepare_input_for_run(run_id, source_video_path, camera_id, output_root=output_root)
 
     stage_nums = [int(s.strip()) for s in stages.split(",")]
 
@@ -868,9 +900,10 @@ async def _run_pipeline_stages(
         use_cpu=use_cpu,
         reid_model_path=reid_model_path,
         tracker=tracker,
+        output_root=output_root,
     )
 
-    return await _run_pipeline_streaming(run_id, cmd, stage_nums)
+    return await _run_pipeline_streaming(run_id, cmd, stage_nums, output_root=output_root)
 
 
 def _run_dir_for_video(video_id: str) -> Optional[Path]:
@@ -919,7 +952,8 @@ def _load_all_stage1_tracklets(run_dir: Path) -> List[Dict[str, Any]]:
 
 def _find_tracklet_in_run(run_id: str, track_id: int, preferred_camera_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Find a stage1 tracklet by id (and optionally camera) inside a run."""
-    run_dir = OUTPUT_DIR / run_id
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
     tracklets = _load_all_stage1_tracklets(run_dir)
     preferred_norm = _normalize_camera_id(preferred_camera_id) if preferred_camera_id else None
 
@@ -943,8 +977,11 @@ def _find_tracklet_in_run(run_id: str, track_id: int, preferred_camera_id: Optio
 
 def _stage0_frame_path(run_id: str, camera_id: str, frame_id: int) -> Optional[Path]:
     """Resolve a frame image path from stage0 artifacts for run/camera/frame."""
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    resolved_run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
     candidates = [
-        OUTPUT_DIR / run_id / "stage0" / camera_id,
+        resolved_run_dir / "stage0" / camera_id,
+        PREPROCESSED_DIR / "dataset_precompute_s01" / "stage0" / camera_id,
         OUTPUT_DIR / "dataset_precompute_s01" / "stage0" / camera_id,
     ]
     for run_stage0 in candidates:
@@ -960,14 +997,24 @@ def _stage0_frame_path(run_id: str, camera_id: str, frame_id: int) -> Optional[P
 def _resolve_stage0_camera_dir(run_id: str, camera_id: str) -> Optional[Path]:
     """Directory with extracted stage0 frames for a camera (primary run, then dataset precompute)."""
     cam = _normalize_camera_id(str(camera_id))
-    primary = OUTPUT_DIR / run_id / "stage0" / cam
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
+    primary = run_dir / "stage0" / cam
     if primary.is_dir():
         return primary
+    if PREPROCESSED_DIR.exists():
+        for pre_root in sorted(PREPROCESSED_DIR.glob("dataset_precompute_s*"), reverse=True):
+            d = pre_root / "stage0" / cam
+            if d.is_dir():
+                return d
     if OUTPUT_DIR.exists():
         for pre_root in sorted(OUTPUT_DIR.glob("dataset_precompute_s*"), reverse=True):
             d = pre_root / "stage0" / cam
             if d.is_dir():
                 return d
+    legacy_pre = PREPROCESSED_DIR / "dataset_precompute_s01" / "stage0" / cam
+    if legacy_pre.is_dir():
+        return legacy_pre
     legacy = OUTPUT_DIR / "dataset_precompute_s01" / "stage0" / cam
     if legacy.is_dir():
         return legacy
@@ -1123,10 +1170,11 @@ def _export_matched_clips(probe_run_id: str, gallery_run_id: str, trajectories: 
 
     out_dir = OUTPUT_DIR / probe_run_id / "matched"
     out_dir.mkdir(parents=True, exist_ok=True)
+    gallery_run_dir = _resolve_run_dir(gallery_run_id, prefer_preprocessed=True)
 
     # Resolve dataset name from the gallery run's context or config.
     dataset_name: str = gallery_run_id
-    gallery_ctx_path = OUTPUT_DIR / gallery_run_id / "run_context.json"
+    gallery_ctx_path = gallery_run_dir / "run_context.json"
     if gallery_ctx_path.exists():
         try:
             ctx = json.loads(gallery_ctx_path.read_text(encoding="utf-8"))
@@ -1137,7 +1185,7 @@ def _export_matched_clips(probe_run_id: str, gallery_run_id: str, trajectories: 
         # Fall back to config.yaml project.run_name
         try:
             import re as _re
-            cfg_text = (OUTPUT_DIR / gallery_run_id / "config.yaml").read_text(encoding="utf-8")
+            cfg_text = (gallery_run_dir / "config.yaml").read_text(encoding="utf-8")
             m = _re.search(r"run_name\s*:\s*(\S+)", cfg_text)
             if m:
                 dataset_name = m.group(1)
@@ -1145,7 +1193,6 @@ def _export_matched_clips(probe_run_id: str, gallery_run_id: str, trajectories: 
             pass
 
     # Load gallery stage1 tracklets indexed by (camera, track_id).
-    gallery_run_dir = OUTPUT_DIR / gallery_run_id
     gallery_tracklets: Dict[tuple, Dict[str, Any]] = {}
     for t in _load_all_stage1_tracklets(gallery_run_dir):
         cam = _normalize_camera_id(str(t.get("camera_id", "")))
@@ -1857,16 +1904,20 @@ async def get_crop_from_run(
     if not _HAS_CV2:
         raise HTTPException(status_code=500, detail="OpenCV not available")
 
-    run_dir = OUTPUT_DIR / run_id / "stage0" / cameraId
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed) / "stage0" / cameraId
     if not run_dir.exists():
         # Fallback to the main dataset global gallery precomputed folder
-        fallback_dir = OUTPUT_DIR / "dataset_precompute_s01" / "stage0" / cameraId
-        if fallback_dir.exists():
-            run_dir = fallback_dir
+        fallback_pre = PREPROCESSED_DIR / "dataset_precompute_s01" / "stage0" / cameraId
+        fallback_out = OUTPUT_DIR / "dataset_precompute_s01" / "stage0" / cameraId
+        if fallback_pre.exists():
+            run_dir = fallback_pre
+        elif fallback_out.exists():
+            run_dir = fallback_out
         else:
             raise HTTPException(
                 status_code=404, 
-                detail=f"Run/camera frames not found. Looked in '{run_dir}' and fallback '{fallback_dir}' for cameraId '{cameraId}'."
+                detail=f"Run/camera frames not found. Looked in '{run_dir}', fallback '{fallback_pre}', and fallback '{fallback_out}' for cameraId '{cameraId}'."
             )
 
     # Try both .jpg and .png frame files
@@ -1943,7 +1994,8 @@ async def get_tracklet_sequence(
     """Sampled frame ids + bboxes for a stage1 tracklet (timeline preview sync)."""
     if not cameraId or int(trackId) < 0:
         raise HTTPException(status_code=400, detail="cameraId and trackId are required")
-    run_dir = OUTPUT_DIR / run_id
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
     if not run_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
 
@@ -2091,7 +2143,9 @@ async def get_tracklets(cameraId: Optional[str] = None, videoId: Optional[str] =
 @app.get("/api/trajectories/{run_id}")
 async def get_trajectories(run_id: str):
     """Get global trajectories from stage4 artifact if available."""
-    traj_path = OUTPUT_DIR / run_id / "stage4" / "global_trajectories.json"
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
+    traj_path = run_dir / "stage4" / "global_trajectories.json"
     if not traj_path.exists():
         return {"success": True, "data": []}
 
@@ -2429,7 +2483,8 @@ async def query_timeline(request: TimelineQueryRequest):
         "selectedTrackletsSourceRun": probe_run_id_for_summaries,
     }
 
-    traj_path = OUTPUT_DIR / request.runId / "stage4" / "global_trajectories.json"
+    gallery_run_dir = _resolve_run_dir(request.runId, prefer_preprocessed=True)
+    traj_path = gallery_run_dir / "stage4" / "global_trajectories.json"
     if not traj_path.exists():
         selected_summaries = _build_selected_tracklet_summaries(probe_run_id_for_summaries, selected_nums)
         if selected_nums and not selected_summaries:
@@ -2498,7 +2553,7 @@ async def query_timeline(request: TimelineQueryRequest):
     if selected_nums:
         probe_run_id = probe_run_id_for_summaries
         probe_stage2_dir = OUTPUT_DIR / probe_run_id / "stage2"
-        gallery_stage2_dir = OUTPUT_DIR / request.runId / "stage2"
+        gallery_stage2_dir = gallery_run_dir / "stage2"
 
         probe_emb_path = probe_stage2_dir / "embeddings.npy"
         probe_idx_path = probe_stage2_dir / "embedding_index.json"
@@ -2586,22 +2641,28 @@ async def query_timeline(request: TimelineQueryRequest):
                     diag["probeFrameCount"] = len(probe_indices)
 
                     if probe_indices:
-                        probe_feats = probe_emb[probe_indices].astype(np.float32, copy=False)
-                        probe_norms = np.linalg.norm(probe_feats, axis=1, keepdims=True)
-                        probe_feats = probe_feats / np.maximum(probe_norms, 1e-8)
+                        # Group probe embeddings by track_id for per-track matching.
+                        # Matching each track independently prevents unrelated
+                        # tracks from diluting similarity scores.
+                        per_track_probes: Dict[int, tuple] = {}  # tid -> (feats, class_id)
+                        for sel_tid in selected_nums:
+                            tidx = [i for i, x in enumerate(probe_idx) if int(x.get("track_id", -1)) == sel_tid]
+                            if not tidx:
+                                continue
+                            feats = probe_emb[tidx].astype(np.float32, copy=False)
+                            norms = np.linalg.norm(feats, axis=1, keepdims=True)
+                            feats = feats / np.maximum(norms, 1e-8)
+                            cls = probe_idx[tidx[0]].get("class_id")
+                            per_track_probes[sel_tid] = (feats, int(cls) if cls is not None else None)
 
-                        # Infer dominant class from probe metadata when available.
-                        probe_classes: List[int] = []
-                        for i in probe_indices:
-                            c = probe_idx[i].get("class_id")
-                            if c is not None:
-                                probe_classes.append(int(c))
-                        dominant_probe_class = None
-                        if probe_classes:
-                            dominant_probe_class = max(set(probe_classes), key=probe_classes.count)
-                        diag["probeClassId"] = dominant_probe_class
+                        diag["probeClassId"] = None
+                        if per_track_probes:
+                            all_classes = [c for _, (_, c) in per_track_probes.items() if c is not None]
+                            if all_classes:
+                                diag["probeClassId"] = max(set(all_classes), key=all_classes.count)
 
                         scored_trajectories: List[tuple[float, Dict[str, Any]]] = []
+                        seen_traj_ids: set = set()
                         for traj in trajectories:
                             tracklets = traj.get("tracklets", []) if isinstance(traj, dict) else []
                             t_indices: List[int] = []
@@ -2619,36 +2680,49 @@ async def query_timeline(request: TimelineQueryRequest):
                             if not t_indices:
                                 continue
 
-                            # Enforce class consistency to reduce false positives.
-                            if dominant_probe_class is not None and t_classes:
-                                dominant_traj_class = max(set(t_classes), key=t_classes.count)
-                                if dominant_traj_class != dominant_probe_class:
-                                    continue
-
                             t_feats = gallery_emb[t_indices].astype(np.float32, copy=False)
                             t_norms = np.linalg.norm(t_feats, axis=1, keepdims=True)
                             t_feats = t_feats / np.maximum(t_norms, 1e-8)
 
-                            # Frame-level similarity (probe frames vs trajectory frames)
-                            sim_mat = np.dot(probe_feats, t_feats.T)
-                            # Notebook-style robust ensemble score:
-                            # - mean best-match per probe frame
-                            # - and a conservative lower quantile check.
-                            best_per_probe = sim_mat.max(axis=1)
-                            mean_best = float(np.mean(best_per_probe))
-                            p25_best = float(np.percentile(best_per_probe, 25))
+                            # Match each selected track independently against this trajectory.
+                            for sel_tid, (probe_feats, probe_cls) in per_track_probes.items():
+                                # Enforce per-track class consistency.
+                                if probe_cls is not None and t_classes:
+                                    dominant_traj_class = max(set(t_classes), key=t_classes.count)
+                                    if dominant_traj_class != probe_cls:
+                                        continue
 
-                            # Strict match gate: avoid "similar but not same car".
-                            if mean_best >= 0.82 and p25_best >= 0.74:
-                                score = mean_best
-                                traj["confidence"] = score
-                                traj["matchEvidence"] = {
-                                    "meanBestFrameSimilarity": round(mean_best, 4),
-                                    "p25BestFrameSimilarity": round(p25_best, 4),
-                                    "probeFrames": int(probe_feats.shape[0]),
-                                    "trajectoryFrames": int(t_feats.shape[0]),
-                                }
-                                scored_trajectories.append((score, traj))
+                                sim_mat = np.dot(probe_feats, t_feats.T)
+                                best_per_probe = sim_mat.max(axis=1)
+                                mean_best = float(np.mean(best_per_probe))
+                                p25_best = float(np.percentile(best_per_probe, 25))
+
+                                # Adaptive match gate: with very few probe frames
+                                # the similarity estimate is inherently noisier, so
+                                # relax the threshold proportionally.
+                                n_probe = int(probe_feats.shape[0])
+                                if n_probe <= 3:
+                                    mean_thresh, p25_thresh = 0.78, 0.70
+                                elif n_probe <= 6:
+                                    mean_thresh, p25_thresh = 0.80, 0.72
+                                else:
+                                    mean_thresh, p25_thresh = 0.82, 0.74
+                                if mean_best >= mean_thresh and p25_best >= p25_thresh:
+                                    traj_gid = traj.get("global_id")
+                                    if traj_gid in seen_traj_ids:
+                                        continue
+                                    seen_traj_ids.add(traj_gid)
+                                    import copy as _copy
+                                    matched_traj = _copy.copy(traj)
+                                    matched_traj["confidence"] = mean_best
+                                    matched_traj["matchEvidence"] = {
+                                        "meanBestFrameSimilarity": round(mean_best, 4),
+                                        "p25BestFrameSimilarity": round(p25_best, 4),
+                                        "probeFrames": int(probe_feats.shape[0]),
+                                        "trajectoryFrames": int(t_feats.shape[0]),
+                                        "matchedProbeTrackId": sel_tid,
+                                    }
+                                    scored_trajectories.append((mean_best, matched_traj))
 
                         scored_trajectories.sort(key=lambda x: x[0], reverse=True)
                         diag["visual_matches_scored"] = len(scored_trajectories)
@@ -2834,10 +2908,11 @@ async def search_by_tracklet(request: SearchRequest):
     if not gallery_run_id:
         raise HTTPException(status_code=400, detail="No galleryRunId provided. Select a preprocessed dataset first.")
 
-    gallery_stage2_dir = OUTPUT_DIR / gallery_run_id / "stage2"
+    gallery_run_dir = _resolve_run_dir(gallery_run_id, prefer_preprocessed=True)
+    gallery_stage2_dir = gallery_run_dir / "stage2"
     gallery_emb_path = gallery_stage2_dir / "embeddings.npy"
     gallery_idx_path = gallery_stage2_dir / "embedding_index.json"
-    traj_path = OUTPUT_DIR / gallery_run_id / "stage4" / "global_trajectories.json"
+    traj_path = gallery_run_dir / "stage4" / "global_trajectories.json"
 
     if not gallery_emb_path.exists() or not gallery_idx_path.exists():
         raise HTTPException(status_code=400, detail="Gallery embeddings not found. Process the dataset (Stage 2-4) first.")
@@ -2929,7 +3004,8 @@ async def search_by_tracklet(request: SearchRequest):
 @app.get("/api/evaluation/{run_id}")
 async def get_evaluation_results(run_id: str):
     """Get evaluation metrics from artifact if available, else compute a lightweight summary."""
-    run_dir = OUTPUT_DIR / run_id
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="Run not found")
 
@@ -2972,7 +3048,8 @@ async def get_evaluation_results(run_id: str):
 @app.post("/api/visualization/summary/{run_id}")
 async def generate_summary_video(run_id: str, _config: Optional[Dict[str, Any]] = Body(default=None)):
     """Return URL for summary video artifact if present, otherwise fallback to source stream."""
-    run_dir = OUTPUT_DIR / run_id
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="Run not found")
 
@@ -3013,7 +3090,8 @@ async def export_trajectories(run_id: str, format: str = "json"):
     if fmt not in {"json", "csv", "mot"}:
         raise HTTPException(status_code=400, detail="format must be one of: json, csv, mot")
 
-    run_dir = OUTPUT_DIR / run_id
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="Run not found")
 
@@ -3077,7 +3155,8 @@ async def export_trajectories(run_id: str, format: str = "json"):
 async def download_export_file(run_id: str, filename: str):
     """Download an exported or generated run artifact by filename."""
     safe_name = Path(filename).name
-    run_dir = OUTPUT_DIR / run_id
+    prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+    run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="Run not found")
 
@@ -3299,6 +3378,9 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
         if not camera_id:
             camera_id = _detect_camera_for_video(uploaded_videos[video_id], None)
 
+        prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+        run_output_root = PREPROCESSED_DIR if prefer_preprocessed else OUTPUT_DIR
+
         active_runs[run_id]["cameraId"] = camera_id
 
         if stage == 1:
@@ -3314,6 +3396,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 use_cpu=use_cpu,
                 smoke_test=smoke_test,
                 tracker=tracker,
+                output_root=run_output_root,
             )
 
             video_to_latest_run[video_id] = run_id
@@ -3328,7 +3411,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
         if stage in (2, 3):
             # Run stages 2 and 3 together (feature extraction + indexing)
             # If stage 2 artifacts already exist (from a previous stage 2 run), only run stage 3
-            run_dir = OUTPUT_DIR / run_id
+            run_dir = _resolve_run_dir(run_id, prefer_preprocessed=prefer_preprocessed)
             stage2_done = (run_dir / "stage2" / "embeddings.npy").exists()
 
             if stage == 3 and stage2_done:
@@ -3348,6 +3431,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 use_cpu=use_cpu,
                 smoke_test=smoke_test,
                 reid_model_path=reid_model_path,
+                output_root=run_output_root,
             )
 
             active_runs[run_id]["status"] = "completed"
@@ -3369,6 +3453,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 camera_id=camera_id,
                 use_cpu=use_cpu,
                 smoke_test=smoke_test,
+                output_root=run_output_root,
             )
 
             active_runs[run_id]["status"] = "completed"
@@ -3390,6 +3475,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
             camera_id=camera_id,
             use_cpu=use_cpu,
             smoke_test=smoke_test,
+            output_root=run_output_root,
         )
 
         active_runs[run_id]["status"] = "completed"
@@ -3425,6 +3511,9 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
         if not camera_id:
             camera_id = _detect_camera_for_video(uploaded_videos[video_id], None)
 
+        prefer_preprocessed = str(run_id).lower().startswith("dataset_precompute_")
+        run_output_root = PREPROCESSED_DIR if prefer_preprocessed else OUTPUT_DIR
+
         active_runs[run_id]["cameraId"] = camera_id
 
         # Run stages 0,1,2,3,4 in one subprocess call
@@ -3439,6 +3528,7 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
             use_cpu=use_cpu,
             smoke_test=smoke_test,
             reid_model_path=reid_model_path,
+            output_root=run_output_root,
         )
 
         video_to_latest_run[video_id] = run_id
@@ -3518,9 +3608,11 @@ async def list_datasets():
                 "hasVideo": has_video,
             })
         dataset_key = folder.name.lower()
-        candidate_runs: List[tuple[float, str, Path]] = []
-        if OUTPUT_DIR.exists():
-            for run_dir in OUTPUT_DIR.iterdir():
+        candidate_runs: List[tuple[int, int, float, str, Path, bool, bool]] = []
+        for run_root in (PREPROCESSED_DIR, OUTPUT_DIR):
+            if not run_root.exists():
+                continue
+            for run_dir in run_root.iterdir():
                 if not run_dir.is_dir():
                     continue
                 run_id = run_dir.name
@@ -3542,24 +3634,35 @@ async def list_datasets():
                             pass
 
                 if matched:
-                    candidate_runs.append((run_dir.stat().st_mtime, run_id, run_dir))
+                    already_processed_candidate = (run_dir / "stage1").exists() and any(
+                        (run_dir / "stage1").glob("tracklets_*.json")
+                    )
+                    has_gallery_candidate = (
+                        already_processed_candidate
+                        and (run_dir / "stage2" / "embeddings.npy").exists()
+                        and (run_dir / "stage2" / "embedding_index.json").exists()
+                        and (run_dir / "stage4" / "global_trajectories.json").exists()
+                    )
+                    # Prefer complete gallery artifacts first, then processed runs,
+                    # then preprocessed_datasets root, then newest mtime.
+                    quality = 2 if has_gallery_candidate else (1 if already_processed_candidate else 0)
+                    root_priority = 1 if run_root == PREPROCESSED_DIR else 0
+                    candidate_runs.append((
+                        quality,
+                        root_priority,
+                        run_dir.stat().st_mtime,
+                        run_id,
+                        run_dir,
+                        already_processed_candidate,
+                        has_gallery_candidate,
+                    ))
 
-        candidate_runs.sort(key=lambda x: x[0], reverse=True)
-        latest_run_id = candidate_runs[0][1] if candidate_runs else None
-        latest_run_dir = candidate_runs[0][2] if candidate_runs else None
+        candidate_runs.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+        latest_run_id = candidate_runs[0][3] if candidate_runs else None
+        latest_run_dir = candidate_runs[0][4] if candidate_runs else None
 
-        already_processed = False
-        has_gallery = False
-        if latest_run_dir is not None:
-            already_processed = (latest_run_dir / "stage1").exists() and any(
-                (latest_run_dir / "stage1").glob("tracklets_*.json")
-            )
-            has_gallery = (
-                already_processed
-                and (latest_run_dir / "stage2" / "embeddings.npy").exists()
-                and (latest_run_dir / "stage2" / "embedding_index.json").exists()
-                and (latest_run_dir / "stage4" / "global_trajectories.json").exists()
-            )
+        already_processed = candidate_runs[0][5] if candidate_runs else False
+        has_gallery = candidate_runs[0][6] if candidate_runs else False
 
         # Check if currently processing any run for this dataset folder.
         is_processing = any(
@@ -3590,7 +3693,7 @@ async def process_dataset(folder: str, background_tasks: BackgroundTasks):
     if not dataset_path.exists() or not dataset_path.is_dir():
         raise HTTPException(status_code=404, detail=f"Dataset folder '{folder}' not found")
 
-    run_id = _resolve_run_id(None)
+    run_id = _dataset_run_id(folder)
 
     # Prevent duplicate concurrent runs for the same dataset folder.
     for run in active_runs.values():
@@ -3616,6 +3719,7 @@ async def process_dataset(folder: str, background_tasks: BackgroundTasks):
             "datasetFolder": folder,
             "datasetPath": str(dataset_path),
         },
+        base_dir=PREPROCESSED_DIR,
     )
 
     background_tasks.add_task(_execute_dataset_pipeline, run_id, dataset_path, folder)
@@ -3628,18 +3732,19 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
         stage_nums = [0, 1, 2, 3, 4]
         active_runs[run_id]["message"] = "Preparing run-local dataset input copy..."
         active_runs[run_id]["progress"] = 1
-        input_dir = _prepare_dataset_input_for_run(run_id, dataset_path)
+        input_dir = _prepare_dataset_input_for_run(run_id, dataset_path, output_root=PREPROCESSED_DIR)
 
         cmd = _build_pipeline_cmd(
             stages="0,1,2,3,4",
             run_id=run_id,
             input_dir=input_dir.as_posix(),
+            output_root=PREPROCESSED_DIR,
         )
 
         active_runs[run_id]["message"] = "Running Ingestion & Pre-Processing..."
         active_runs[run_id]["progress"] = 2
 
-        run_meta = await _run_pipeline_streaming(run_id, cmd, stage_nums)
+        run_meta = await _run_pipeline_streaming(run_id, cmd, stage_nums, output_root=PREPROCESSED_DIR)
 
         # Link all videos in this dataset folder to this run
         scene_prefix = folder_name.upper()  # e.g. "S01"

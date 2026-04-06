@@ -95,6 +95,30 @@ export function TrackletFrameView({
   imgClassName?: string;
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
+  const bboxRef = useRef(bbox);
+  bboxRef.current = bbox;
+  const [display, setDisplay] = useState(() => ({ src, bbox: [...bbox] }));
+
+  useEffect(() => {
+    let cancelled = false;
+    const loader = new Image();
+    loader.onload = () => {
+      if (!cancelled) {
+        const b = bboxRef.current;
+        setDisplay({ src, bbox: [...b] });
+      }
+    };
+    loader.onerror = () => {
+      if (!cancelled) {
+        const b = bboxRef.current;
+        setDisplay({ src, bbox: [...b] });
+      }
+    };
+    loader.src = src;
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
 
   const computeLayout = useCallback((el: HTMLImageElement | null) => {
     if (!el || el.naturalWidth <= 0 || el.naturalHeight <= 0) return null;
@@ -120,7 +144,7 @@ export function TrackletFrameView({
 
   useLayoutEffect(() => {
     syncLayout();
-  }, [src, bbox, syncLayout]);
+  }, [display.src, display.bbox, syncLayout]);
 
   useEffect(() => {
     const el = imgRef.current;
@@ -128,14 +152,14 @@ export function TrackletFrameView({
     const ro = new ResizeObserver(() => syncLayout());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [src, syncLayout]);
+  }, [display.src, syncLayout]);
 
   const onLoad = (e: SyntheticEvent<HTMLImageElement>) => {
     const L = computeLayout(e.currentTarget);
     setLayout((prev) => (L ? L : prev));
   };
 
-  const bx = bbox;
+  const bx = display.bbox;
   const bw = bx.length === 4 ? bx[2] - bx[0] : 0;
   const bh = bx.length === 4 ? bx[3] - bx[1] : 0;
   const valid = bx.length === 4 && bw > 1e-3 && bh > 1e-3;
@@ -143,14 +167,14 @@ export function TrackletFrameView({
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 w-full min-w-0 items-center justify-center bg-black",
+        "flex h-full min-h-0 w-full min-w-0 items-center justify-center bg-transparent",
         className
       )}
     >
       <div className="relative inline-block max-h-full max-w-full">
         <img
           ref={imgRef}
-          src={src}
+          src={display.src}
           alt=""
           className={cn(imgClassName, "block h-auto max-h-full w-auto max-w-full object-contain")}
           draggable={false}
