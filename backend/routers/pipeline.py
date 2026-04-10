@@ -2,9 +2,10 @@ import asyncio
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, WebSocket
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, WebSocket
 
 from backend.config import OUTPUT_DIR
+from backend.dependencies import get_app_state
 from backend.models.requests import PipelineRunRequest
 from backend.services.pipeline_service import (
     _resolve_run_id,
@@ -13,7 +14,7 @@ from backend.services.pipeline_service import (
     execute_stage,
 )
 from backend.services.video_service import _detect_camera_for_video
-from backend.state import active_runs, uploaded_videos
+from backend.state import AppState
 
 router = APIRouter()
 
@@ -23,6 +24,7 @@ async def run_stage(
     stage: int,
     background_tasks: BackgroundTasks,
     request: Optional[PipelineRunRequest] = Body(default=None),
+    state: AppState = Depends(get_app_state),
 ):
     """Run a specific pipeline stage"""
     try:
@@ -43,14 +45,14 @@ async def run_stage(
         resolved_camera_id = None
         video_name = None
         if video_id:
-            if video_id not in uploaded_videos:
+            if video_id not in state.uploaded_videos:
                 raise HTTPException(status_code=404, detail="Video not found")
-            resolved_camera_id = _detect_camera_for_video(uploaded_videos[video_id], camera_id)
-            video_name = uploaded_videos[video_id].get("name")
+            resolved_camera_id = _detect_camera_for_video(state.uploaded_videos[video_id], camera_id)
+            video_name = state.uploaded_videos[video_id].get("name")
 
         dataset_name = config.get("datasetName") or None
 
-        active_runs[run_id] = {
+        state.active_runs[run_id] = {
             "id": run_id,
             "runId": run_id,
             "stage": stage,
@@ -92,7 +94,7 @@ async def run_stage(
                 "tracker": tracker,
             },
         )
-        return {"success": True, "data": active_runs[run_id]}
+        return {"success": True, "data": state.active_runs[run_id]}
     except HTTPException:
         raise
     except Exception as e:
@@ -100,10 +102,13 @@ async def run_stage(
 
 
 @router.post("/api/pipeline/run")
-async def run_full_pipeline(background_tasks: BackgroundTasks):
+async def run_full_pipeline(
+    background_tasks: BackgroundTasks,
+    state: AppState = Depends(get_app_state),
+):
     """Run full pipeline"""
     run_id = _resolve_run_id(None)
-    active_runs[run_id] = {
+    state.active_runs[run_id] = {
         "id": run_id,
         "runId": run_id,
         "status": "running",
@@ -117,34 +122,38 @@ async def run_full_pipeline(background_tasks: BackgroundTasks):
     }
     _write_run_context(run_id, {"source": "pipeline-run-full"})
     background_tasks.add_task(execute_full_pipeline, run_id, {})
-    return {"success": True, "data": active_runs[run_id]}
+    return {"success": True, "data": state.active_runs[run_id]}
 
 
 @router.get("/api/pipeline/status/{run_id}")
-async def get_pipeline_status(run_id: str):
+async def get_pipeline_status(run_id: str, state: AppState = Depends(get_app_state)):
     """Get pipeline execution status"""
-    if run_id not in active_runs:
+    if run_id not in state.active_runs:
         raise HTTPException(status_code=404, detail="Run not found")
-    return {"success": True, "data": active_runs[run_id]}
+    return {"success": True, "data": state.active_runs[run_id]}
 
 
 @router.post("/api/pipeline/cancel/{run_id}")
-async def cancel_pipeline(run_id: str):
+async def cancel_pipeline(run_id: str, state: AppState = Depends(get_app_state)):
     """Cancel pipeline execution"""
-    if run_id not in active_runs:
+    if run_id not in state.active_runs:
         raise HTTPException(status_code=404, detail="Run not found")
-    active_runs[run_id]["status"] = "cancelled"
+    state.active_runs[run_id]["status"] = "cancelled"
     return {"success": True, "data": None}
 
 
 @router.websocket("/api/ws/pipeline/{run_id}")
-async def websocket_pipeline_updates(websocket: WebSocket, run_id: str):
+async def websocket_pipeline_updates(
+    websocket: WebSocket,
+    run_id: str,
+    state: AppState = Depends(get_app_state),
+):
     """WebSocket for pipeline progress updates"""
     await websocket.accept()
     try:
         while True:
-            if run_id in active_runs:
-                await websocket.send_json(active_runs[run_id])
+            if run_id in state.active_runs:
+                await websocket.send_json(state.active_runs[run_id])
             await asyncio.sleep(1)
     except Exception as e:
         print(f"WebSocket error: {e}")

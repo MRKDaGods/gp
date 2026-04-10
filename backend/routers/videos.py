@@ -2,19 +2,23 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from backend.config import UPLOAD_DIR, VIDEO_EXTENSIONS
+from backend.dependencies import get_app_state
 from backend.services.clip_service import _transcode_to_mp4
 from backend.services.video_service import _build_video_record
-from backend.state import uploaded_videos
+from backend.state import AppState
 
 router = APIRouter()
 
 
 @router.post("/api/videos/upload")
-async def upload_video(video: UploadFile = File(...)):
+async def upload_video(
+    video: UploadFile = File(...),
+    state: AppState = Depends(get_app_state),
+):
     """Upload a video file"""
     try:
         video_id = str(uuid.uuid4())
@@ -24,34 +28,34 @@ async def upload_video(video: UploadFile = File(...)):
             content = await video.read()
             f.write(content)
 
-        uploaded_videos[video_id] = _build_video_record(video_id, video_path)
+        state.uploaded_videos[video_id] = _build_video_record(video_id, video_path)
 
-        return {"success": True, "data": uploaded_videos[video_id]}
+        return {"success": True, "data": state.uploaded_videos[video_id]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/api/videos")
-async def get_videos():
+async def get_videos(state: AppState = Depends(get_app_state)):
     """Get all uploaded videos"""
-    return {"success": True, "data": list(uploaded_videos.values())}
+    return {"success": True, "data": list(state.uploaded_videos.values())}
 
 
 @router.get("/api/videos/{video_id}")
-async def get_video(video_id: str):
+async def get_video(video_id: str, state: AppState = Depends(get_app_state)):
     """Get video details"""
-    if video_id not in uploaded_videos:
+    if video_id not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
-    return {"success": True, "data": uploaded_videos[video_id]}
+    return {"success": True, "data": state.uploaded_videos[video_id]}
 
 
 @router.delete("/api/videos/{video_id}")
-async def delete_video(video_id: str):
+async def delete_video(video_id: str, state: AppState = Depends(get_app_state)):
     """Delete a video"""
-    if video_id not in uploaded_videos:
+    if video_id not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    video = uploaded_videos.pop(video_id)
+    video = state.uploaded_videos.pop(video_id)
     if os.path.exists(video["path"]):
         os.remove(video["path"])
 
@@ -59,11 +63,11 @@ async def delete_video(video_id: str):
 
 
 @router.get("/api/videos/stream/{video_id}")
-async def stream_video(video_id: str):
+async def stream_video(video_id: str, state: AppState = Depends(get_app_state)):
     """Stream video file (transcodes AVI to MP4 for browser playback)"""
-    if video_id not in uploaded_videos:
+    if video_id not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
-    video_path = Path(uploaded_videos[video_id]["path"])
+    video_path = Path(state.uploaded_videos[video_id]["path"])
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video file not available for streaming")
     if video_path.suffix.lower() in {".avi", ".mkv", ".mov", ".m4v"} and video_path.suffix.lower() != ".mp4":

@@ -1,8 +1,9 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.config import OUTPUT_DIR
+from backend.dependencies import get_app_state
 from backend.services.tracklet_service import (
     _confidence_for_tracklet_frame,
     _load_tracklets,
@@ -13,24 +14,24 @@ from backend.services.video_service import (
     _detect_camera_for_video,
     _parse_gt_detections,
 )
-from backend.state import active_runs, uploaded_videos, video_to_latest_run
+from backend.state import AppState
 
 router = APIRouter()
 
 
 @router.get("/api/detections/{video_id}")
-async def get_detections(video_id: str, frameId: Optional[int] = None):
+async def get_detections(video_id: str, frameId: Optional[int] = None, state: AppState = Depends(get_app_state)):
     """Get detections for a video/frame from real stage1 outputs."""
-    if video_id not in uploaded_videos:
+    if video_id not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
 
     run_dir = _run_dir_for_video(video_id)
-    run_id = video_to_latest_run.get(video_id)
+    run_id = state.video_to_latest_run.get(video_id)
     camera_id = None
-    if run_id and run_id in active_runs:
-        camera_id = active_runs[run_id].get("cameraId")
+    if run_id and run_id in state.active_runs:
+        camera_id = state.active_runs[run_id].get("cameraId")
     if camera_id is None:
-        camera_id = _detect_camera_for_video(uploaded_videos[video_id], None)
+        camera_id = _detect_camera_for_video(state.uploaded_videos[video_id], None)
 
     if run_dir is None:
         gt_dets = _parse_gt_detections(camera_id, frameId)
@@ -48,18 +49,18 @@ async def get_detections(video_id: str, frameId: Optional[int] = None):
 
 
 @router.get("/api/detections/{video_id}/all")
-async def get_all_detections(video_id: str):
+async def get_all_detections(video_id: str, state: AppState = Depends(get_app_state)):
     """Return every detection for every frame, grouped by frame number."""
-    if video_id not in uploaded_videos:
+    if video_id not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
 
     run_dir = _run_dir_for_video(video_id)
-    run_id = video_to_latest_run.get(video_id)
+    run_id = state.video_to_latest_run.get(video_id)
     camera_id = None
-    if run_id and run_id in active_runs:
-        camera_id = active_runs[run_id].get("cameraId")
+    if run_id and run_id in state.active_runs:
+        camera_id = state.active_runs[run_id].get("cameraId")
     if camera_id is None:
-        camera_id = _detect_camera_for_video(uploaded_videos[video_id], None)
+        camera_id = _detect_camera_for_video(state.uploaded_videos[video_id], None)
 
     if run_dir is None:
         return {"success": True, "data": {}}

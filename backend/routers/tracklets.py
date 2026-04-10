@@ -1,34 +1,35 @@
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.config import OUTPUT_DIR
+from backend.dependencies import get_app_state
 from backend.services.tracklet_service import (
     _load_all_stage1_tracklets,
     _load_tracklets,
     _run_dir_for_video,
 )
 from backend.services.video_service import _detect_camera_for_video
-from backend.state import uploaded_videos, video_to_latest_run
+from backend.state import AppState
 
 router = APIRouter()
 
 
 @router.get("/api/tracklets")
-async def get_tracklets(cameraId: Optional[str] = None, videoId: Optional[str] = None):
+async def get_tracklets(cameraId: Optional[str] = None, videoId: Optional[str] = None, state: AppState = Depends(get_app_state)):
     """Get tracklets from latest real stage1 output."""
     print(f"\n[UI Request] Get Tracklets: cameraId={cameraId}, videoId={videoId}")
     if not videoId:
         return {"success": True, "data": []}
-    if videoId not in uploaded_videos:
+    if videoId not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
 
     run_dir = _run_dir_for_video(videoId)
     if run_dir is None:
         return {"success": True, "data": []}
 
-    resolved_camera_id = cameraId or _detect_camera_for_video(uploaded_videos[videoId], None)
+    resolved_camera_id = cameraId or _detect_camera_for_video(state.uploaded_videos[videoId], None)
     tracklets = _load_tracklets(resolved_camera_id, run_dir)
 
     if not tracklets:

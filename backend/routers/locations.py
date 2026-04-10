@@ -1,10 +1,11 @@
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from backend.config import CITYFLOW_DIR
+from backend.dependencies import get_app_state
 from backend.services.video_service import _extract_camera_id
-from backend.state import uploaded_videos
+from backend.state import AppState
 
 router = APIRouter()
 
@@ -70,11 +71,11 @@ async def get_zones(city_id: str):
 
 
 @router.get("/api/cameras")
-async def get_cameras(zoneId: Optional[str] = None):
+async def get_cameras(zoneId: Optional[str] = None, state: AppState = Depends(get_app_state)):
     """Get cameras discovered from current videos and cityflow directory."""
     camera_ids: set = set()
 
-    for video in uploaded_videos.values():
+    for video in state.uploaded_videos.values():
         cam = _extract_camera_id(str(video.get("name", ""))) or _extract_camera_id(
             str(video.get("path", ""))
         )

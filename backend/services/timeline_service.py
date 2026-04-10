@@ -36,7 +36,6 @@ from backend.services.video_service import (
     _normalize_camera_id,
     _parse_selected_track_nums,
 )
-from backend.state import video_to_latest_run
 
 
 class TimelineService:

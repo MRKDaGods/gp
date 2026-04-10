@@ -1,11 +1,12 @@
 import io
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from backend.config import _HAS_CV2, OUTPUT_DIR
-from backend.state import uploaded_videos
+from backend.dependencies import get_app_state
+from backend.state import AppState
 
 if _HAS_CV2:
     import cv2
@@ -21,14 +22,15 @@ async def get_crop(
     y1: float = 0,
     x2: float = 0,
     y2: float = 0,
+    state: AppState = Depends(get_app_state),
 ):
     """Extract a cropped vehicle image from a video frame."""
     if not _HAS_CV2:
         raise HTTPException(status_code=500, detail="OpenCV not available")
-    if video_id not in uploaded_videos:
+    if video_id not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    video_path = Path(uploaded_videos[video_id]["path"])
+    video_path = Path(state.uploaded_videos[video_id]["path"])
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video file missing")
 

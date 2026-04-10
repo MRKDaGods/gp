@@ -4,10 +4,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from backend.config import ENABLE_KAGGLE_IMPORT, OUTPUT_DIR
+from backend.dependencies import get_app_state
 from backend.services.clip_service import _transcode_to_mp4
 from backend.services.pipeline_service import (
     _materialize_import_tree,
@@ -15,7 +16,7 @@ from backend.services.pipeline_service import (
     _write_run_context,
 )
 from backend.services.video_service import _detect_camera_for_video
-from backend.state import active_runs, uploaded_videos, video_to_latest_run
+from backend.state import AppState
 
 router = APIRouter()
 
@@ -55,6 +56,7 @@ async def import_kaggle_run_artifacts(
     runId: Optional[str] = Form(default=None),
     videoId: Optional[str] = Form(default=None),
     cameraId: Optional[str] = Form(default=None),
+    state: AppState = Depends(get_app_state),
 ):
     """Import Kaggle-generated artifacts zip into local outputs for demo visualization."""
     if not ENABLE_KAGGLE_IMPORT:
@@ -65,7 +67,7 @@ async def import_kaggle_run_artifacts(
     if not artifactsZip.filename or not artifactsZip.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="artifactsZip must be a .zip file")
 
-    if videoId and videoId not in uploaded_videos:
+    if videoId and videoId not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
 
     run_id = _resolve_run_id(runId)
@@ -89,10 +91,10 @@ async def import_kaggle_run_artifacts(
 
     resolved_camera = None
     if videoId:
-        resolved_camera = _detect_camera_for_video(uploaded_videos[videoId], cameraId)
-        video_to_latest_run[videoId] = run_id
+        resolved_camera = _detect_camera_for_video(state.uploaded_videos[videoId], cameraId)
+        state.video_to_latest_run[videoId] = run_id
 
-    active_runs[run_id] = {
+    state.active_runs[run_id] = {
         "id": run_id,
         "runId": run_id,
         "stage": 6,
@@ -117,4 +119,4 @@ async def import_kaggle_run_artifacts(
         },
     )
 
-    return {"success": True, "data": active_runs[run_id]}
+    return {"success": True, "data": state.active_runs[run_id]}

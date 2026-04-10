@@ -3,21 +3,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from backend.config import DATASET_DIR, OUTPUT_DIR, VIDEO_EXTENSIONS
+from backend.dependencies import get_app_state
 from backend.services.pipeline_service import (
     _execute_dataset_pipeline,
     _resolve_run_id,
     _write_run_context,
 )
-from backend.state import active_runs
+from backend.state import AppState
 
 router = APIRouter()
 
 
 @router.get("/api/datasets")
-async def list_datasets():
+async def list_datasets(state: AppState = Depends(get_app_state)):
     """List available dataset folders under dataset/ with camera info."""
     results: List[Dict[str, Any]] = []
     if not DATASET_DIR.exists():
@@ -79,7 +80,7 @@ async def list_datasets():
         is_processing = any(
             r.get("status") == "running"
             and str(r.get("datasetFolder", "")).lower() == dataset_key
-            for r in active_runs.values()
+            for r in state.active_runs.values()
         )
 
         results.append(
@@ -103,7 +104,7 @@ async def list_datasets():
 
 
 @router.post("/api/datasets/{folder}/process")
-async def process_dataset(folder: str, background_tasks: BackgroundTasks):
+async def process_dataset(folder: str, background_tasks: BackgroundTasks, state: AppState = Depends(get_app_state)):
     """Trigger full pipeline (stages 0-4) on a dataset folder."""
     dataset_path = DATASET_DIR / folder
     if not dataset_path.exists() or not dataset_path.is_dir():
@@ -111,11 +112,11 @@ async def process_dataset(folder: str, background_tasks: BackgroundTasks):
 
     run_id = _resolve_run_id(None)
 
-    for run in active_runs.values():
+    for run in state.active_runs.values():
         if run.get("status") == "running" and str(run.get("datasetFolder", "")).lower() == folder.lower():
             return {"success": True, "data": run, "message": "Already processing"}
 
-    active_runs[run_id] = {
+    state.active_runs[run_id] = {
         "id": run_id,
         "runId": run_id,
         "status": "running",
@@ -137,4 +138,4 @@ async def process_dataset(folder: str, background_tasks: BackgroundTasks):
     )
 
     background_tasks.add_task(_execute_dataset_pipeline, run_id, dataset_path, folder)
-    return {"success": True, "data": active_runs[run_id]}
+    return {"success": True, "data": state.active_runs[run_id]}

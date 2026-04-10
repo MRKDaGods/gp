@@ -1,11 +1,12 @@
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from backend.config import OUTPUT_DIR
+from backend.dependencies import get_app_state
 from backend.services.tracklet_service import _load_all_stage1_tracklets
-from backend.state import video_to_latest_run
+from backend.state import AppState
 
 router = APIRouter()
 
@@ -57,6 +58,7 @@ async def get_evaluation_results(run_id: str):
 async def generate_summary_video(
     run_id: str,
     _config: Optional[Dict[str, Any]] = Body(default=None),
+    state: AppState = Depends(get_app_state),
 ):
     """Return URL for summary video artifact if present, otherwise fallback to source stream."""
     run_dir = OUTPUT_DIR / run_id
@@ -74,14 +76,12 @@ async def generate_summary_video(
             }
 
     video_id = None
-    for vid, linked_run in video_to_latest_run.items():
+    for vid, linked_run in state.video_to_latest_run.items():
         if linked_run == run_id:
             video_id = vid
             break
 
-    from backend.state import uploaded_videos  # local import avoids circular at module level
-
-    if video_id and video_id in uploaded_videos:
+    if video_id and video_id in state.uploaded_videos:
         return {
             "success": True,
             "data": {"videoUrl": f"/api/videos/stream/{video_id}"},

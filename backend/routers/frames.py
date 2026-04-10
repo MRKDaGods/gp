@@ -2,10 +2,11 @@ import io
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
 from backend.config import _HAS_CV2, OUTPUT_DIR
+from backend.dependencies import get_app_state
 from backend.services.clip_service import (
     _frame_image_path_in_dir,
     _resolve_stage0_camera_dir,
@@ -13,7 +14,7 @@ from backend.services.clip_service import (
 )
 from backend.services.tracklet_service import _load_all_stage1_tracklets
 from backend.services.video_service import _detect_camera_for_video, _normalize_camera_id
-from backend.state import uploaded_videos, video_to_latest_run
+from backend.state import AppState
 
 if _HAS_CV2:
     import cv2
@@ -22,12 +23,12 @@ router = APIRouter()
 
 
 @router.get("/api/frames/{video_id}/{frame_id}/detections")
-async def get_frame_with_detections(video_id: str, frame_id: int):
+async def get_frame_with_detections(video_id: str, frame_id: int, state: AppState = Depends(get_app_state)):
     """Get frame with detections"""
     from backend.routers.detections import get_detections  # local import to avoid circular
 
-    detections_response = await get_detections(video_id, frame_id)
-    camera_id = _detect_camera_for_video(uploaded_videos.get(video_id, {}), None)
+    detections_response = await get_detections(video_id, frame_id, state=state)
+    camera_id = _detect_camera_for_video(state.uploaded_videos.get(video_id, {}), None)
     return {
         "success": True,
         "data": {
@@ -36,8 +37,8 @@ async def get_frame_with_detections(video_id: str, frame_id: int):
                 "cameraId": camera_id,
                 "timestamp": frame_id * 0.033,
                 "framePath": f"/api/frames/{video_id}/{frame_id}",
-                "width": uploaded_videos[video_id]["width"],
-                "height": uploaded_videos[video_id]["height"],
+                "width": state.uploaded_videos[video_id]["width"],
+                "height": state.uploaded_videos[video_id]["height"],
             },
             "detections": detections_response["data"],
         },
@@ -45,16 +46,16 @@ async def get_frame_with_detections(video_id: str, frame_id: int):
 
 
 @router.get("/api/frames/{video_id}/{frame_id}")
-async def get_frame_image(video_id: str, frame_id: int):
+async def get_frame_image(video_id: str, frame_id: int, state: AppState = Depends(get_app_state)):
     """Serve a single video frame as a JPEG image."""
     if not _HAS_CV2:
         raise HTTPException(status_code=500, detail="OpenCV not available")
-    if video_id not in uploaded_videos:
+    if video_id not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    run_id = video_to_latest_run.get(video_id)
+    run_id = state.video_to_latest_run.get(video_id)
     if run_id:
-        camera_id = _detect_camera_for_video(uploaded_videos.get(video_id, {}), None)
+        camera_id = _detect_camera_for_video(state.uploaded_videos.get(video_id, {}), None)
         fp = _stage0_frame_path(run_id, camera_id or "", frame_id)
         if fp and fp.exists():
             return FileResponse(
@@ -63,7 +64,7 @@ async def get_frame_image(video_id: str, frame_id: int):
                 headers={"Cache-Control": "public, max-age=3600"},
             )
 
-    video_path = Path(uploaded_videos[video_id]["path"])
+    video_path = Path(state.uploaded_videos[video_id]["path"])
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video file missing")
 

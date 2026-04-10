@@ -2,25 +2,26 @@ import json
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.config import OUTPUT_DIR
+from backend.dependencies import get_app_state
 from backend.models.requests import SearchRequest
 from backend.services.video_service import _normalize_camera_id
-from backend.state import uploaded_videos, video_to_latest_run
+from backend.state import AppState
 
 router = APIRouter()
 
 
 @router.post("/api/search/tracklet")
-async def search_by_tracklet(request: SearchRequest):
+async def search_by_tracklet(request: SearchRequest, state: AppState = Depends(get_app_state)):
     """Search the gallery for vehicles visually similar to the selected probe tracklet."""
     print(f"\n[UI Request] Search tracklet payload: {request.dict()}")
     top_k = max(1, min(request.topK, 200))
 
     probe_video_id = request.probeVideoId
-    if probe_video_id and probe_video_id in uploaded_videos:
-        probe_run_id = video_to_latest_run.get(probe_video_id)
+    if probe_video_id and probe_video_id in state.uploaded_videos:
+        probe_run_id = state.video_to_latest_run.get(probe_video_id)
     else:
         probe_run_id = None
 

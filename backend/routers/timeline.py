@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.models.requests import TimelineQueryRequest
 from backend.repositories import InMemoryDatasetRepository
@@ -7,25 +7,26 @@ from backend.services.debug_service import _export_timeline_debug_bundle
 from backend.services.logging_service import _timeline_debug
 from backend.services.timeline_service import TimelineService
 from backend.services.video_service import _parse_selected_track_nums
-from backend.state import uploaded_videos, video_to_latest_run
+from backend.dependencies import get_app_state
+from backend.state import AppState
 from backend.config import OUTPUT_DIR
 
 router = APIRouter()
 
 
 @router.post("/api/timeline/query")
-async def query_timeline(request: TimelineQueryRequest):
+async def query_timeline(request: TimelineQueryRequest, state: AppState = Depends(get_app_state)):
     """Resolve selected Stage-2 tracklets into Stage-4 matched trajectories."""
     _timeline_debug("[UI Request] Timeline Query payload:", request.dict())
 
-    if request.videoId not in uploaded_videos:
+    if request.videoId not in state.uploaded_videos:
         raise HTTPException(status_code=404, detail="Video not found")
 
     request_payload = request.dict()
 
-    repo = InMemoryDatasetRepository(uploaded_videos, video_to_latest_run, OUTPUT_DIR)
+    repo = InMemoryDatasetRepository(state.uploaded_videos, state.video_to_latest_run, OUTPUT_DIR)
     service = TimelineService(repo)
-    response_payload = service.query(request, uploaded_videos)
+    response_payload = service.query(request, state.uploaded_videos)
 
     # ── I/O side-effects (stay in router) ───────────────────────────────
     debug_bundle_path = _export_timeline_debug_bundle(request_payload, response_payload)
