@@ -80,3 +80,5 @@ run_metadata.json
 *.mp4
 explorer_output.txt
 planner_output.txt
+/dataset
+/uploads

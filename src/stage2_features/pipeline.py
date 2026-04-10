@@ -116,30 +116,67 @@ def run_stage2(
     multiscale_sizes = [tuple(s) for s in multiscale_raw] if multiscale_raw else []
     quality_temperature = float(stage_cfg.reid.get("quality_temperature", 3.0))
 
-    # --- Load ReID models (person and vehicle) ---
-    person_reid = ReIDModel(
-        model_name=stage_cfg.reid.person.model_name,
-        weights_path=stage_cfg.reid.person.weights_path,
-        embedding_dim=stage_cfg.reid.person.embedding_dim,
-        input_size=tuple(stage_cfg.reid.person.input_size),
-        device=stage_cfg.reid.device,
-        half=stage_cfg.reid.half,
-        flip_augment=flip_augment,
-        color_augment=color_augment,
-        multiscale_sizes=multiscale_sizes,
-        num_cameras=stage_cfg.reid.person.get("num_cameras", 0),
-        vit_model=stage_cfg.reid.person.get("vit_model", "vit_base_patch16_clip_224.openai"),
-        clip_normalization=stage_cfg.reid.person.get("clip_normalization", None),
+    def _resolve_weights_path(
+        primary_path: Optional[str],
+        fallback_path: Optional[str],
+        label: str,
+    ) -> Optional[str]:
+        """Resolve model weights path with optional fallback.
+
+        Returns None when neither path exists, allowing model-specific pretrained init.
+        """
+        if primary_path and Path(primary_path).exists():
+            return primary_path
+        if fallback_path and Path(fallback_path).exists():
+            if primary_path:
+                logger.warning(
+                    f"Primary {label} weights not found: {primary_path}. "
+                    f"Using fallback: {fallback_path}"
+                )
+            return fallback_path
+        if primary_path:
+            logger.warning(
+                f"{label} weights not found: {primary_path}. "
+                "Falling back to model pretrained initialization"
+            )
+        return None
+
+    has_person_tracklets = any(
+        t.class_id in PERSON_CLASSES
+        for tracklets in tracklets_by_camera.values()
+        for t in tracklets
     )
 
-    _vehicle_weights = stage_cfg.reid.vehicle.weights_path
-    _vehicle_fallback = stage_cfg.reid.vehicle.get("weights_fallback")
-    if _vehicle_fallback and not Path(_vehicle_weights).exists() and Path(_vehicle_fallback).exists():
-        logger.warning(
-            f"Primary vehicle weights not found: {_vehicle_weights}. "
-            f"Using fallback: {_vehicle_fallback}"
+    # --- Load ReID models (person and vehicle) ---
+    person_reid: Optional[ReIDModel] = None
+    if has_person_tracklets:
+        person_weights = _resolve_weights_path(
+            stage_cfg.reid.person.weights_path,
+            stage_cfg.reid.person.get("weights_fallback"),
+            label="person ReID",
         )
-        _vehicle_weights = _vehicle_fallback
+        person_reid = ReIDModel(
+            model_name=stage_cfg.reid.person.model_name,
+            weights_path=person_weights,
+            embedding_dim=stage_cfg.reid.person.embedding_dim,
+            input_size=tuple(stage_cfg.reid.person.input_size),
+            device=stage_cfg.reid.device,
+            half=stage_cfg.reid.half,
+            flip_augment=flip_augment,
+            color_augment=color_augment,
+            multiscale_sizes=multiscale_sizes,
+            num_cameras=stage_cfg.reid.person.get("num_cameras", 0),
+            vit_model=stage_cfg.reid.person.get("vit_model", "vit_base_patch16_clip_224.openai"),
+            clip_normalization=stage_cfg.reid.person.get("clip_normalization", None),
+        )
+    else:
+        logger.info("No person-class tracklets detected; skipping person ReID model initialization")
+
+    _vehicle_weights = _resolve_weights_path(
+        stage_cfg.reid.vehicle.weights_path,
+        stage_cfg.reid.vehicle.get("weights_fallback"),
+        label="vehicle ReID",
+    )
     vehicle_reid = ReIDModel(
         model_name=stage_cfg.reid.vehicle.model_name,
         weights_path=_vehicle_weights,
@@ -292,6 +329,13 @@ def run_stage2(
 
             # Select ReID model based on class
             if tracklet.class_id in PERSON_CLASSES:
+                if person_reid is None:
+                    logger.warning(
+                        f"Person tracklet encountered without initialized person model "
+                        f"(camera={camera_id}, track_id={tracklet.track_id}); skipping"
+                    )
+                    dropped_no_embedding += 1
+                    continue
                 reid = person_reid
                 reid2 = None
                 sie_cam_id = None  # Person model doesn't use SIE camera map

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Image,
   X,
@@ -23,12 +23,23 @@ import { Separator } from "@/components/ui/separator";
 import {
   useTimelineStore,
   useSessionStore,
+  usePipelineStore,
+  useVideoStore,
 } from "@/store";
+import {
+  getTrackletSequence,
+  getRunFullFrameUrl,
+  getMatchedAlternatives,
+} from "@/lib/api";
+import { TrackletFrameView } from "@/components/ui/double-buffered-img";
+import type { TimelineTrack } from "@/types";
 
 
 
 export function RefinementStage() {
-  const { tracks, confirmedTracks } = useTimelineStore();
+  const { tracks, setTracks } = useTimelineStore();
+  const { runId, galleryRunId } = usePipelineStore();
+  const { currentVideo } = useVideoStore();
   const {
     refinementFrames,
     addRefinementFrame,
@@ -40,25 +51,105 @@ export function RefinementStage() {
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [framesLoading, setFramesLoading] = useState(false);
+  const [reSearchRunning, setReSearchRunning] = useState(false);
+  const [reSearchStatus, setReSearchStatus] = useState<string | null>(null);
+  const [refinementCandidateFrames, setRefinementCandidateFrames] = useState<Array<{
+    id: string;
+    frameId: number;
+    timestamp: number;
+    cameraId: string;
+    trackId: number;
+    imageUrl?: string;
+    bbox?: number[];
+  }>>([]);
 
   const confirmedTrackList = tracks.filter((t) => t.confirmed);
   const selectedFrameCount = refinementFrames.length;
   const maxFrames = 16;
+  const cropRunId = galleryRunId ?? runId ?? null;
 
-  // Build frames from confirmed tracks (real data, no mocks)
-  const refinementCandidateFrames = useMemo(() => {
-    if (confirmedTrackList.length === 0) return [];
-    return confirmedTrackList.flatMap((track) => {
-      const numFrames = Math.max(1, Math.round((track.endTime - track.startTime) * 2));
-      return Array.from({ length: Math.min(numFrames, 10) }, (_, i) => ({
-        id: `${track.id}-frame-${i}`,
-        frameId: Math.round(track.startTime * 10 + i * ((track.endTime - track.startTime) * 10 / Math.max(numFrames, 1))),
-        timestamp: track.startTime + i * ((track.endTime - track.startTime) / Math.max(numFrames, 1)),
-        cameraId: track.cameraId,
-        thumbnail: undefined as string | undefined,
-      }));
-    });
-  }, [confirmedTrackList]);
+  const frameById = useMemo(() => {
+    const m = new Map<string, (typeof refinementCandidateFrames)[number]>();
+    for (const f of refinementCandidateFrames) m.set(f.id, f);
+    return m;
+  }, [refinementCandidateFrames]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFrames = async () => {
+      if (!cropRunId || confirmedTrackList.length === 0) {
+        if (!cancelled) setRefinementCandidateFrames([]);
+        return;
+      }
+
+      setFramesLoading(true);
+      const rows: Array<{
+        id: string;
+        frameId: number;
+        timestamp: number;
+        cameraId: string;
+        trackId: number;
+        imageUrl?: string;
+        bbox?: number[];
+      }> = [];
+
+      for (const track of confirmedTrackList) {
+        try {
+          const sequence = await getTrackletSequence(cropRunId, track.cameraId, track.trackletId, 16);
+          if (cancelled) return;
+
+          const samples = Array.isArray(sequence.frames) ? sequence.frames.slice(0, 8) : [];
+          if (samples.length > 0) {
+            for (const sample of samples) {
+              const start = Number(track.startTime ?? 0);
+              const end = Number(track.endTime ?? start + 0.1);
+              const rel = Number(sample.timeRel ?? 0);
+              rows.push({
+                id: `${track.id}-frame-${sample.frameId}`,
+                frameId: sample.frameId,
+                timestamp: Number.isFinite(sample.timestamp as number)
+                  ? Number(sample.timestamp)
+                  : start + rel * Math.max(end - start, 0.1),
+                cameraId: track.cameraId,
+                trackId: track.trackletId,
+                imageUrl: getRunFullFrameUrl(cropRunId, track.cameraId, sample.frameId),
+                bbox: Array.isArray(sample.bbox) ? sample.bbox : undefined,
+              });
+            }
+            continue;
+          }
+        } catch {
+          // Fall through to representative frame fallback below.
+        }
+
+        if (track.representativeFrame != null) {
+          rows.push({
+            id: `${track.id}-rep-${track.representativeFrame}`,
+            frameId: Number(track.representativeFrame),
+            timestamp: Number(track.startTime ?? 0),
+            cameraId: track.cameraId,
+            trackId: track.trackletId,
+            imageUrl: getRunFullFrameUrl(cropRunId, track.cameraId, Number(track.representativeFrame)),
+            bbox: Array.isArray(track.representativeBbox) ? track.representativeBbox : undefined,
+          });
+        }
+      }
+
+      if (!cancelled) {
+        setRefinementCandidateFrames(rows.slice(0, 64));
+        setCurrentFrameIndex((v) => Math.min(v, Math.max(rows.length - 1, 0)));
+      }
+      if (!cancelled) setFramesLoading(false);
+    };
+
+    void loadFrames();
+    return () => {
+      cancelled = true;
+      setFramesLoading(false);
+    };
+  }, [cropRunId, confirmedTrackList]);
 
   const handleFrameSelect = (frameId: string) => {
     if (refinementFrames.includes(frameId)) {
@@ -69,8 +160,129 @@ export function RefinementStage() {
   };
 
   const handleReSearch = () => {
-    // Trigger re-search with selected frames
-    console.log("Re-searching with frames:", refinementFrames);
+    void (async () => {
+      if (reSearchRunning) return;
+      if (!runId) {
+        setReSearchStatus("No active run to refine.");
+        return;
+      }
+
+      const selected = refinementFrames
+        .map((id) => frameById.get(id))
+        .filter((f): f is NonNullable<typeof f> => Boolean(f));
+
+      if (selected.length === 0) {
+        setReSearchStatus("Select at least one frame first.");
+        return;
+      }
+
+      setReSearchRunning(true);
+      setReSearchStatus("Running re-search on selected frames...");
+
+      try {
+        const anchorMap = new Map<string, { cameraId: string; trackId: number }>();
+        for (const s of selected) {
+          anchorMap.set(`${s.cameraId}:${s.trackId}`, {
+            cameraId: s.cameraId,
+            trackId: s.trackId,
+          });
+        }
+        const anchors = Array.from(anchorMap.values());
+
+        const batches = await Promise.all(
+          anchors.map(async (a) => {
+            const resp = await getMatchedAlternatives(runId, {
+              topK: 5,
+              anchorCameraId: a.cameraId,
+              anchorTrackId: a.trackId,
+            });
+            return resp.alternatives;
+          })
+        );
+
+        type Agg = {
+          scoreSum: number;
+          count: number;
+          alt: any;
+        };
+        const agg = new Map<string, Agg>();
+        for (const alternatives of batches) {
+          for (const alt of alternatives) {
+            const key = `${alt.cameraId}:${alt.trackId}`;
+            const prev = agg.get(key);
+            if (!prev) {
+              agg.set(key, {
+                scoreSum: Number(alt.score ?? 0),
+                count: 1,
+                alt,
+              });
+            } else {
+              prev.scoreSum += Number(alt.score ?? 0);
+              prev.count += 1;
+              if (Number(alt.score ?? 0) > Number(prev.alt?.score ?? 0)) {
+                prev.alt = alt;
+              }
+            }
+          }
+        }
+
+        const refinedRows = Array.from(agg.values())
+          .map((x) => ({
+            avgScore: x.count > 0 ? x.scoreSum / x.count : Number(x.alt?.score ?? 0),
+            alt: x.alt,
+          }))
+          .sort((a, b) => b.avgScore - a.avgScore)
+          .slice(0, 24);
+
+        const refinedTracks: TimelineTrack[] = refinedRows.map((row, idx) => {
+          const alt = row.alt;
+          const start = Number.isFinite(alt.startTime) ? Number(alt.startTime) : 0;
+          const endRaw = Number.isFinite(alt.endTime) ? Number(alt.endTime) : start + 0.1;
+          const end = Math.max(endRaw, start + 0.1);
+          const seg = {
+            cameraId: alt.cameraId,
+            trackId: Number(alt.trackId),
+            globalId: alt.globalId ?? undefined,
+            start,
+            end,
+            color: getCameraColor(alt.cameraId),
+            representativeFrame: alt.representativeFrame,
+            representativeBbox: alt.representativeBbox,
+          };
+
+          return {
+            id: `refined-${alt.cameraId}-${alt.trackId}-${idx}`,
+            cameraId: alt.cameraId,
+            trackletId: Number(alt.trackId),
+            globalId: alt.globalId ?? undefined,
+            startTime: start,
+            endTime: end,
+            selected: false,
+            confirmed: true,
+            representativeFrame: alt.representativeFrame,
+            representativeBbox: alt.representativeBbox,
+            segments: [seg],
+            label: alt.label ?? `Refined · ${alt.cameraId} · track ${alt.trackId}`,
+            confidence: row.avgScore,
+            className: alt.className ?? "vehicle",
+          };
+        });
+
+        if (refinedTracks.length > 0) {
+          setTracks(refinedTracks);
+          clearRefinementFrames();
+          setReSearchStatus(
+            `Re-search complete: ${refinedTracks.length} refined candidates from ${selected.length} selected frame(s).`
+          );
+        } else {
+          setReSearchStatus("No refined matches were found from selected frames.");
+        }
+      } catch (err: any) {
+        setReSearchStatus(String(err?.message ?? "Re-search failed"));
+      } finally {
+        setReSearchRunning(false);
+      }
+    })();
   };
 
   const handleProceed = () => {
@@ -138,6 +350,9 @@ export function RefinementStage() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* Frame viewer */}
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4">
+            {framesLoading && (
+              <p className="mb-3 text-xs text-muted-foreground">Loading refinement frames...</p>
+            )}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {refinementCandidateFrames.slice(0, 30).map((frame) => {
                 const isSelected = refinementFrames.includes(frame.id);
@@ -243,9 +458,18 @@ export function RefinementStage() {
                         key={frameId}
                         className="relative aspect-video bg-muted rounded-md overflow-hidden group"
                       >
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Image className="h-6 w-6 text-muted-foreground/50" />
-                        </div>
+                        {frame.imageUrl ? (
+                          <img
+                            src={frame.imageUrl}
+                            alt={`${frame.cameraId} frame ${frame.frameId}`}
+                            className="absolute inset-0 h-full w-full object-cover"
+                            draggable={false}
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Image className="h-6 w-6 text-muted-foreground/50" />
+                          </div>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -268,13 +492,16 @@ export function RefinementStage() {
 
           {/* Actions */}
           <div className="p-4 border-t space-y-2">
+            {reSearchStatus && (
+              <p className="text-xs text-muted-foreground">{reSearchStatus}</p>
+            )}
             <Button
               className="w-full"
               onClick={handleReSearch}
-              disabled={refinementFrames.length === 0}
+              disabled={refinementFrames.length === 0 || reSearchRunning || !currentVideo}
             >
               <Search className="mr-2 h-4 w-4" />
-              Re-Search with Selected
+              {reSearchRunning ? "Re-searching..." : "Re-Search with Selected"}
             </Button>
             <Button
               variant="outline"
@@ -298,6 +525,8 @@ interface FrameCardProps {
     frameId: number;
     timestamp: number;
     cameraId: string;
+    imageUrl?: string;
+    bbox?: number[];
   };
   isSelected: boolean;
   onSelect: () => void;
@@ -317,10 +546,22 @@ function FrameCard({ frame, isSelected, onSelect, disabled }: FrameCardProps) {
       )}
       onClick={() => !disabled && onSelect()}
     >
-      {/* Thumbnail placeholder */}
-      <div className="absolute inset-0 bg-muted flex items-center justify-center">
-        <Image className="h-8 w-8 text-muted-foreground/30" />
-      </div>
+      {frame.imageUrl ? (
+        frame.bbox ? (
+          <TrackletFrameView src={frame.imageUrl} bbox={frame.bbox} />
+        ) : (
+          <img
+            src={frame.imageUrl}
+            alt={`${frame.cameraId} frame ${frame.frameId}`}
+            className="absolute inset-0 h-full w-full object-cover"
+            draggable={false}
+          />
+        )
+      ) : (
+        <div className="absolute inset-0 bg-muted flex items-center justify-center">
+          <Image className="h-8 w-8 text-muted-foreground/30" />
+        </div>
+      )}
 
       {/* Selection indicator */}
       {isSelected && (

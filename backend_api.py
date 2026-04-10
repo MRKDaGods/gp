@@ -1110,15 +1110,22 @@ def _export_selected_clips(run_id: str, selected_ids: set) -> None:
     print(f"[selected] Exported {len(manifest)} clip(s) to {out_dir}", flush=True)
 
 
-def _export_matched_clips(probe_run_id: str, gallery_run_id: str, trajectories: List[Dict[str, Any]]) -> None:
+def _export_matched_clips(
+        probe_run_id: str,
+        gallery_run_id: str,
+        trajectories: List[Dict[str, Any]],
+        ranked_candidates: Optional[List[Tuple[float, Dict[str, Any]]]] = None,
+        top_k_alternatives: int = 5,
+) -> None:
     """Export cropped mp4 clips for every tracklet in matched trajectories into
     outputs/{probe_run_id}/matched/.
 
     Files:
       global_{id}_cam_{camera}_track_{tid}.mp4  — one clip per matched tracklet
       summary.json                               — human-readable match summary
+            top5_alternatives/*.mp4                    — top unmatched candidates
     """
-    if not trajectories:
+    if not trajectories and not ranked_candidates:
         return
 
     out_dir = OUTPUT_DIR / probe_run_id / "matched"
@@ -1214,6 +1221,89 @@ def _export_matched_clips(probe_run_id: str, gallery_run_id: str, trajectories: 
             })
 
     ok_clips = [c for c in clips if c.get("ok")]
+
+    # Export up to top-k "near miss" alternatives in a dedicated subfolder.
+    # These are ranked candidates that were not rendered as matched trajectories.
+    matched_keys = {
+        (_normalize_camera_id(str(c.get("camera_id", ""))), int(c.get("track_id", -1)))
+        for c in clips
+        if int(c.get("track_id", -1)) >= 0
+    }
+    matched_global_ids = {
+        str(tr.get("global_id", tr.get("id", "")))
+        for tr in trajectories
+    }
+
+    alternatives_subfolder = "top5_alternatives"
+    alternatives_dir = out_dir / alternatives_subfolder
+    alternatives_dir.mkdir(parents=True, exist_ok=True)
+    alternatives: List[Dict[str, Any]] = []
+
+    target_alts = max(1, min(int(top_k_alternatives), 20))
+    if ranked_candidates:
+        ranked_sorted = sorted(ranked_candidates, key=lambda x: float(x[0]), reverse=True)
+        for score, candidate in ranked_sorted:
+            ok_count = sum(1 for a in alternatives if a.get("ok"))
+            if ok_count >= target_alts:
+                break
+
+            gid_raw = candidate.get("global_id", candidate.get("id", ""))
+            gid = str(gid_raw)
+            if gid in matched_global_ids:
+                continue
+
+            # Prefer first valid non-query tracklet for this candidate trajectory.
+            candidate_tracklets = candidate.get("tracklets") if isinstance(candidate.get("tracklets"), list) else []
+            exported = False
+            for tr in candidate_tracklets:
+                cam_raw = str(tr.get("camera_id") or tr.get("cameraId") or "")
+                if cam_raw.startswith("query_"):
+                    continue
+                cam = _normalize_camera_id(cam_raw)
+                tid = int(tr.get("track_id") or tr.get("trackId") or -1)
+                if tid < 0 or not cam:
+                    continue
+
+                key = (cam, tid)
+                if key in matched_keys:
+                    continue
+
+                gallery_tracklet = gallery_tracklets.get(key)
+                if gallery_tracklet is None:
+                    continue
+
+                safe_cam = cam.replace("/", "_").replace("\\", "_")
+                rank_num = ok_count + 1
+                out_file = alternatives_dir / f"alt_{rank_num:02d}_global_{gid}_cam_{safe_cam}_track_{tid}.mp4"
+                ok, msg = _export_tracklet_clip(gallery_run_id, gallery_tracklet, out_file)
+
+                cam_set = {
+                    _normalize_camera_id(str(tt.get("camera_id") or tt.get("cameraId") or ""))
+                    for tt in candidate_tracklets
+                    if str(tt.get("camera_id") or tt.get("cameraId") or "")
+                }
+                cam_set = {c for c in cam_set if c and not c.startswith("query_")}
+
+                alternatives.append({
+                    "rank": rank_num,
+                    "global_id": int(gid_raw) if str(gid_raw).isdigit() else gid_raw,
+                    "camera_id": cam,
+                    "track_id": tid,
+                    "score": round(float(score), 4),
+                    "confidence": round(float(candidate.get("confidence", score)), 4),
+                    "num_cameras": len(cam_set),
+                    "file": out_file.name,
+                    "ok": ok,
+                    "msg": msg,
+                })
+
+                if ok:
+                    exported = True
+                break
+
+            if not exported:
+                continue
+
     summary = {
         "generatedAt": datetime.now().isoformat(),
         "probeRunId": probe_run_id,
@@ -1225,6 +1315,9 @@ def _export_matched_clips(probe_run_id: str, gallery_run_id: str, trajectories: 
         "totalCameras": len(cameras_seen),
         "cameras": sorted(cameras_seen),
         "clips": clips,
+        "topAlternativesSubfolder": alternatives_subfolder,
+        "topAlternativesCount": sum(1 for a in alternatives if a.get("ok")),
+        "topAlternatives": alternatives,
     }
 
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -2495,6 +2588,7 @@ async def query_timeline(request: TimelineQueryRequest):
     diag["trajectoryCount"] = len(trajectories)
 
     filtered: List[Dict[str, Any]] = []
+    ranked_candidates_for_export: List[Tuple[float, Dict[str, Any]]] = []
     if selected_nums:
         probe_run_id = probe_run_id_for_summaries
         probe_stage2_dir = OUTPUT_DIR / probe_run_id / "stage2"
@@ -2601,7 +2695,8 @@ async def query_timeline(request: TimelineQueryRequest):
                             dominant_probe_class = max(set(probe_classes), key=probe_classes.count)
                         diag["probeClassId"] = dominant_probe_class
 
-                        scored_trajectories: List[tuple[float, Dict[str, Any]]] = []
+                        scored_trajectories: List[Tuple[float, Dict[str, Any]]] = []
+                        all_scored_trajectories: List[Tuple[float, Dict[str, Any]]] = []
                         for traj in trajectories:
                             tracklets = traj.get("tracklets", []) if isinstance(traj, dict) else []
                             t_indices: List[int] = []
@@ -2638,21 +2733,26 @@ async def query_timeline(request: TimelineQueryRequest):
                             mean_best = float(np.mean(best_per_probe))
                             p25_best = float(np.percentile(best_per_probe, 25))
 
+                            score = mean_best
+                            traj["confidence"] = score
+                            traj["matchEvidence"] = {
+                                "meanBestFrameSimilarity": round(mean_best, 4),
+                                "p25BestFrameSimilarity": round(p25_best, 4),
+                                "probeFrames": int(probe_feats.shape[0]),
+                                "trajectoryFrames": int(t_feats.shape[0]),
+                            }
+                            all_scored_trajectories.append((score, traj))
+
                             # Strict match gate: avoid "similar but not same car".
                             if mean_best >= 0.82 and p25_best >= 0.74:
-                                score = mean_best
-                                traj["confidence"] = score
-                                traj["matchEvidence"] = {
-                                    "meanBestFrameSimilarity": round(mean_best, 4),
-                                    "p25BestFrameSimilarity": round(p25_best, 4),
-                                    "probeFrames": int(probe_feats.shape[0]),
-                                    "trajectoryFrames": int(t_feats.shape[0]),
-                                }
                                 scored_trajectories.append((score, traj))
 
                         scored_trajectories.sort(key=lambda x: x[0], reverse=True)
+                        all_scored_trajectories.sort(key=lambda x: x[0], reverse=True)
                         diag["visual_matches_scored"] = len(scored_trajectories)
+                        diag["visual_candidates_scored"] = len(all_scored_trajectories)
                         filtered = [traj for _, traj in scored_trajectories]
+                        ranked_candidates_for_export = all_scored_trajectories
                     else:
                         diag["search_mode"] = "probe_not_found"
 
@@ -2797,10 +2897,16 @@ async def query_timeline(request: TimelineQueryRequest):
         except Exception as _sc_err:
             print(f"[selected] clip export failed: {_sc_err}", flush=True)
 
-    # Export matched clips so you can visually verify what the timeline will show.
-    if filtered and probe_run_id_for_summaries:
+    # Export matched clips + top alternatives so you can visually verify timeline results.
+    if probe_run_id_for_summaries and (filtered or ranked_candidates_for_export):
         try:
-            _export_matched_clips(probe_run_id_for_summaries, request.runId, filtered)
+            _export_matched_clips(
+                probe_run_id_for_summaries,
+                request.runId,
+                filtered,
+                ranked_candidates=ranked_candidates_for_export,
+                top_k_alternatives=5,
+            )
         except Exception as _mc_err:
             print(f"[matched] clip export failed: {_mc_err}", flush=True)
 
@@ -3476,6 +3582,334 @@ async def get_matched_summary(run_id: str):
     return json.loads(summary_path.read_text(encoding="utf-8"))
 
 
+def _safe_name_token(value: str) -> str:
+    txt = str(value or "").strip()
+    if not txt:
+        return "unknown"
+    return re.sub(r"[^a-zA-Z0-9_-]+", "_", txt)
+
+
+def _build_tracklet_lookup(run_id: str) -> Dict[Tuple[str, int], Dict[str, Any]]:
+    lookup: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    run_dir = OUTPUT_DIR / run_id
+    for t in _load_all_stage1_tracklets(run_dir):
+        cam = _normalize_camera_id(str(t.get("camera_id", "")))
+        tid = int(t.get("track_id", -1))
+        if cam and tid >= 0 and (cam, tid) not in lookup:
+            lookup[(cam, tid)] = t
+    return lookup
+
+
+def _build_tracklet_embedding_bank(run_id: str) -> Dict[Tuple[str, int], np.ndarray]:
+    bank: Dict[Tuple[str, int], np.ndarray] = {}
+    stage2_dir = OUTPUT_DIR / run_id / "stage2"
+    emb_path = stage2_dir / "embeddings.npy"
+    idx_path = stage2_dir / "embedding_index.json"
+    if not emb_path.exists() or not idx_path.exists():
+        return bank
+
+    emb = np.load(emb_path)
+    with open(idx_path, "r", encoding="utf-8") as f:
+        idx = json.load(f)
+
+    if not isinstance(idx, list) or emb.ndim != 2 or emb.shape[0] == 0:
+        return bank
+
+    groups: Dict[Tuple[str, int], List[int]] = {}
+    for i, row in enumerate(idx):
+        cam = _normalize_camera_id(str(row.get("camera_id", "")))
+        tid = int(row.get("track_id", -1))
+        if not cam or tid < 0:
+            continue
+        groups.setdefault((cam, tid), []).append(i)
+
+    for key, rows in groups.items():
+        vec = emb[rows].mean(axis=0).astype(np.float32, copy=False)
+        n = float(np.linalg.norm(vec))
+        if n <= 1e-8:
+            continue
+        bank[key] = vec / n
+
+    return bank
+
+
+def _build_tracklet_global_map(
+    run_id: str,
+) -> Tuple[
+    Dict[Tuple[str, int], Optional[int]],
+    Dict[int, int],
+    Dict[Tuple[str, int], Dict[str, float]],
+]:
+    key_to_gid: Dict[Tuple[str, int], Optional[int]] = {}
+    gid_to_cam_count: Dict[int, int] = {}
+    key_to_span: Dict[Tuple[str, int], Dict[str, float]] = {}
+    traj_path = OUTPUT_DIR / run_id / "stage4" / "global_trajectories.json"
+    if not traj_path.exists():
+        return key_to_gid, gid_to_cam_count, key_to_span
+
+    try:
+        trajectories = json.loads(traj_path.read_text(encoding="utf-8"))
+    except Exception:
+        return key_to_gid, gid_to_cam_count, key_to_span
+
+    if not isinstance(trajectories, list):
+        return key_to_gid, gid_to_cam_count, key_to_span
+
+    for traj in trajectories:
+        try:
+            gid_raw = traj.get("global_id", traj.get("globalId"))
+            gid = int(gid_raw) if gid_raw is not None else None
+        except Exception:
+            gid = None
+
+        tracklets = traj.get("tracklets") if isinstance(traj.get("tracklets"), list) else []
+        timeline = traj.get("timeline") if isinstance(traj.get("timeline"), list) else []
+        cams: set = set()
+        for tr in tracklets:
+            cam = _normalize_camera_id(str(tr.get("camera_id") or tr.get("cameraId") or ""))
+            tid = int(tr.get("track_id") or tr.get("trackId") or -1)
+            if not cam or tid < 0:
+                continue
+            key_to_gid[(cam, tid)] = gid
+            cams.add(cam)
+
+        for tl in timeline:
+            cam = _normalize_camera_id(str(tl.get("camera_id") or tl.get("cameraId") or ""))
+            tid = int(tl.get("track_id") or tl.get("trackId") or -1)
+            if not cam or tid < 0:
+                continue
+            start = float(tl.get("start", 0.0) or 0.0)
+            end = float(tl.get("end", start) or start)
+            key_to_span[(cam, tid)] = {
+                "start": start,
+                "end": max(end, start + 0.1),
+            }
+
+        if gid is not None and cams:
+            gid_to_cam_count[gid] = len(cams)
+
+    return key_to_gid, gid_to_cam_count, key_to_span
+
+
+@app.get("/api/runs/{run_id}/matched_alternatives")
+async def get_matched_alternatives(
+    run_id: str,
+    topK: int = 5,
+    anchorCameraId: str = "",
+    anchorTrackId: Optional[int] = None,
+    excludeGlobalId: Optional[int] = None,
+    excludeCameraId: str = "",
+    excludeTrackId: Optional[int] = None,
+):
+    """Return top alternatives exported under matched/top5_alternatives/ for timeline selection."""
+    summary_path = OUTPUT_DIR / run_id / "matched" / "summary.json"
+    if not summary_path.exists():
+        raise HTTPException(status_code=404, detail=f"No matched summary for run {run_id}")
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    k = max(1, min(int(topK), 20))
+    anchor_cam_norm = _normalize_camera_id(anchorCameraId) if anchorCameraId else ""
+    anchor_tid = int(anchorTrackId) if anchorTrackId is not None else None
+
+    # Preferred mode: per-anchor alternatives computed from stage2 embeddings.
+    if anchor_cam_norm and anchor_tid is not None and anchor_tid >= 0:
+        gallery_run_id = str(summary.get("datasetRunId") or "").strip() or run_id
+        bank = _build_tracklet_embedding_bank(gallery_run_id)
+        anchor_key = (anchor_cam_norm, anchor_tid)
+        anchor_vec = bank.get(anchor_key)
+        if anchor_vec is None:
+            return {
+                "runId": run_id,
+                "totalCameras": int(summary.get("totalCameras", 0) or 0),
+                "cameras": summary.get("cameras", []),
+                "subfolder": "top5_alternatives/by_track",
+                "alternatives": [],
+                "mode": "per_track",
+                "message": "Anchor track embedding not found in gallery stage2 index",
+            }
+
+        key_to_gid, gid_to_cam_count, key_to_span = _build_tracklet_global_map(gallery_run_id)
+        lookup = _build_tracklet_lookup(gallery_run_id)
+        scored: List[Tuple[float, Tuple[str, int], Optional[int]]] = []
+
+        for key, vec in bank.items():
+            if key == anchor_key:
+                continue
+            gid = key_to_gid.get(key)
+            if excludeGlobalId is not None and gid is not None and int(gid) == int(excludeGlobalId):
+                continue
+            score = float(np.dot(anchor_vec, vec))
+            scored.append((score, key, gid))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        top_root = OUTPUT_DIR / run_id / "matched" / "top5_alternatives"
+        anchor_folder = f"{_safe_name_token(anchor_cam_norm)}_{int(anchor_tid)}"
+        anchor_dir = top_root / "by_track" / anchor_folder
+        anchor_dir.mkdir(parents=True, exist_ok=True)
+
+        alternatives: List[Dict[str, Any]] = []
+        for score, key, gid in scored:
+            if len(alternatives) >= k:
+                break
+            cam, tid = key
+            tracklet = lookup.get(key)
+            if tracklet is None:
+                continue
+
+            gid_token = f"_g{gid}" if gid is not None else ""
+            filename = f"alt_{len(alternatives) + 1:02d}_cam_{_safe_name_token(cam)}_track_{int(tid)}{gid_token}.mp4"
+            clip_rel = (Path("by_track") / anchor_folder / filename).as_posix()
+            out_file = top_root / clip_rel
+
+            if out_file.exists():
+                ok, msg = True, "cached"
+            else:
+                ok, msg = _export_tracklet_clip(gallery_run_id, tracklet, out_file)
+
+            if not ok:
+                continue
+
+            frames = tracklet.get("frames") if isinstance(tracklet.get("frames"), list) else []
+            rep_frame = None
+            rep_bbox = None
+            if frames:
+                mid = frames[len(frames) // 2]
+                rep_frame = int(mid.get("frame_id", mid.get("frameId", -1)))
+                bbox = mid.get("bbox")
+                if isinstance(bbox, list) and len(bbox) == 4:
+                    rep_bbox = [float(v) for v in bbox]
+
+            if (cam, tid) in key_to_span:
+                start_s = float(key_to_span[(cam, tid)]["start"])
+                end_s = float(key_to_span[(cam, tid)]["end"])
+            elif frames:
+                ts = [float(fr.get("timestamp", 0.0) or 0.0) for fr in frames]
+                start_s = float(min(ts)) if ts else 0.0
+                end_s = float(max(ts)) if ts else start_s + 0.1
+                end_s = max(end_s, start_s + 0.1)
+            else:
+                start_s = 0.0
+                end_s = 0.1
+
+            gid_label = int(gid) if gid is not None else 0
+            label = f"G-{str(gid_label).zfill(4)} · {cam} · track {int(tid)}"
+
+            alternatives.append({
+                "rank": len(alternatives) + 1,
+                "global_id": gid,
+                "camera_id": cam,
+                "track_id": int(tid),
+                "score": round(float(score), 4),
+                "confidence": round(float(score), 4),
+                "num_cameras": gid_to_cam_count.get(int(gid), 1) if gid is not None else 1,
+                "class_name": str(tracklet.get("class_name", "vehicle")),
+                "start_time_s": round(float(start_s), 4),
+                "end_time_s": round(float(end_s), 4),
+                "representative_frame": rep_frame,
+                "representative_bbox": rep_bbox,
+                "label": label,
+                "clip_path": clip_rel,
+                "ok": True,
+                "msg": msg,
+            })
+
+        return {
+            "runId": run_id,
+            "totalCameras": int(summary.get("totalCameras", 0) or 0),
+            "cameras": summary.get("cameras", []),
+            "subfolder": "top5_alternatives/by_track",
+            "alternatives": alternatives,
+            "mode": "per_track",
+            "anchor": {
+                "cameraId": anchor_cam_norm,
+                "trackId": int(anchor_tid),
+            },
+        }
+
+    # Legacy mode: run-level alternatives list (fallback).
+    alternatives = summary.get("topAlternatives") if isinstance(summary.get("topAlternatives"), list) else []
+    if not alternatives:
+        # Backward compatibility for old summaries without topAlternatives.
+        raw_clips = summary.get("clips") if isinstance(summary.get("clips"), list) else []
+        alternatives = [
+            {
+                "rank": idx + 1,
+                "global_id": c.get("global_id"),
+                "camera_id": c.get("camera_id"),
+                "track_id": c.get("track_id"),
+                "score": float(c.get("confidence") or 0),
+                "confidence": float(c.get("confidence") or 0),
+                "num_cameras": 1,
+                "clip_path": c.get("file"),
+                "ok": bool(c.get("ok")),
+                "msg": c.get("msg"),
+            }
+            for idx, c in enumerate(raw_clips)
+            if isinstance(c, dict)
+        ]
+
+    exclude_cam_norm = _normalize_camera_id(excludeCameraId) if excludeCameraId else ""
+    filtered: List[Dict[str, Any]] = []
+    for alt in alternatives:
+        try:
+            alt_gid = alt.get("global_id")
+            alt_cam = _normalize_camera_id(str(alt.get("camera_id", "")))
+            alt_tid = int(alt.get("track_id", -1))
+        except Exception:
+            continue
+
+        if excludeGlobalId is not None and alt_gid is not None:
+            try:
+                if int(alt_gid) == int(excludeGlobalId):
+                    continue
+            except Exception:
+                if str(alt_gid) == str(excludeGlobalId):
+                    continue
+        if excludeTrackId is not None and alt_tid == int(excludeTrackId):
+            if not exclude_cam_norm or alt_cam == exclude_cam_norm:
+                continue
+
+        filtered.append(alt)
+
+    filtered.sort(
+        key=lambda x: float(x.get("score", x.get("confidence", 0)) or 0),
+        reverse=True,
+    )
+
+    return {
+        "runId": run_id,
+        "totalCameras": int(summary.get("totalCameras", 0) or 0),
+        "cameras": summary.get("cameras", []),
+        "subfolder": str(summary.get("topAlternativesSubfolder", "top5_alternatives")),
+        "alternatives": filtered[:k],
+        "mode": "legacy",
+    }
+
+
+@app.get("/api/runs/{run_id}/matched_alternatives/{clip_relpath:path}")
+async def get_matched_alternative_clip(run_id: str, clip_relpath: str):
+    """Serve one top-alternative clip from outputs/{run_id}/matched/top5_alternatives/."""
+    rel = Path(str(clip_relpath))
+    if rel.is_absolute() or ".." in rel.parts:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    alt_dir = (OUTPUT_DIR / run_id / "matched" / "top5_alternatives").resolve()
+    clip_path = (alt_dir / rel).resolve()
+    if alt_dir not in clip_path.parents:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not clip_path.exists() or not clip_path.is_file():
+        raise HTTPException(status_code=404, detail=f"Alternative clip not found: {clip_relpath}")
+
+    cache_dir = clip_path.parent / ".browser_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached = cache_dir / clip_path.name
+    if not cached.exists():
+        if not _transcode_to_mp4(clip_path, cached):
+            return FileResponse(str(clip_path), media_type="video/mp4")
+    return FileResponse(str(cached), media_type="video/mp4")
+
+
 @app.get("/api/runs/{run_id}/matched_clips/{filename}")
 async def get_matched_clip(run_id: str, filename: str):
     """Serve a matched clip mp4 from outputs/{run_id}/matched/ for in-browser playback."""
@@ -3484,7 +3918,43 @@ async def get_matched_clip(run_id: str, filename: str):
         raise HTTPException(status_code=400, detail="Invalid filename")
     clip_path = OUTPUT_DIR / run_id / "matched" / safe_name
     if not clip_path.exists() or not clip_path.is_file():
-        raise HTTPException(status_code=404, detail=f"Clip not found: {filename}")
+        # Lazy-generate missing matched clip when possible.
+        # This is needed for swapped/pinned timeline options that reference a
+        # valid (global, camera, track) tuple not pre-exported in matched/.
+        m = re.match(r"^global_(.+?)_cam_(.+?)_track_(\d+)\.mp4$", safe_name)
+        if m:
+            cam_token = str(m.group(2))
+            tid = int(m.group(3))
+            cam_norm = _normalize_camera_id(cam_token)
+
+            # Resolve gallery run from matched summary first; fallback to probe run.
+            gallery_run_id = run_id
+            summary_path = OUTPUT_DIR / run_id / "matched" / "summary.json"
+            if summary_path.exists():
+                try:
+                    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                    ds_run = str(summary.get("datasetRunId") or "").strip()
+                    if ds_run:
+                        gallery_run_id = ds_run
+                except Exception:
+                    pass
+
+            # Find the source tracklet from stage1 and export to matched/ clip path.
+            lookup = _build_tracklet_lookup(gallery_run_id)
+            src_tracklet = lookup.get((cam_norm, tid))
+            if src_tracklet is not None:
+                try:
+                    clip_path.parent.mkdir(parents=True, exist_ok=True)
+                    ok, _msg = _export_tracklet_clip(gallery_run_id, src_tracklet, clip_path)
+                    if not ok:
+                        raise HTTPException(status_code=404, detail=f"Clip not found: {filename}")
+                except HTTPException:
+                    raise
+                except Exception:
+                    raise HTTPException(status_code=404, detail=f"Clip not found: {filename}")
+
+        if not clip_path.exists() or not clip_path.is_file():
+            raise HTTPException(status_code=404, detail=f"Clip not found: {filename}")
     # Clips are written with mp4v (MPEG-4 Part 2) which browsers can't play.
     # Transcode to H.264 on first request, then cache the result.
     cache_dir = OUTPUT_DIR / run_id / "matched" / ".browser_cache"

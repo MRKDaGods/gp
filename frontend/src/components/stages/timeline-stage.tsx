@@ -51,8 +51,11 @@ import {
   getPipelineStatus,
   queryTimeline,
   getMatchedSummary,
+  getMatchedAlternatives,
+  getMatchedAlternativeClipUrl,
   getTrackletSequence,
   getRunFullFrameUrl,
+  type MatchedAlternative,
   type TrackletSequenceFrame,
 } from "@/lib/api";
 import type { TimelineTrack, TrajectorySegment } from "@/types";
@@ -99,6 +102,12 @@ export function TimelineStage() {
   const [triggerReload, setTriggerReload] = useState(0);
   const [matchedFallbackActive, setMatchedFallbackActive] = useState(false);
   const [tracksLoading, setTracksLoading] = useState(false);
+  const [topAlternatives, setTopAlternatives] = useState<MatchedAlternative[]>([]);
+  const [alternativesLoading, setAlternativesLoading] = useState(false);
+  const [alternativesError, setAlternativesError] = useState<string | null>(null);
+  const [alternativesCameraCount, setAlternativesCameraCount] = useState(0);
+  const [alternativeHistoryByTrackId, setAlternativeHistoryByTrackId] = useState<Record<string, MatchedAlternative[]>>({});
+  const [currentAlternativeByTrackId, setCurrentAlternativeByTrackId] = useState<Record<string, MatchedAlternative>>({});
   const timelineRef = useRef<HTMLDivElement>(null);
 
   type CameraLaneSegment = TrajectorySegment & {
@@ -759,6 +768,201 @@ export function TimelineStage() {
     setCurrentTime((t) => Math.min(t, totalDuration));
   }, [totalDuration]);
 
+  const selectedTrack = useMemo(
+    () => tracks.find((track) => track.id === selectedTrackId) ?? null,
+    [tracks, selectedTrackId]
+  );
+
+  const buildAlternativeFromTrack = useCallback(
+    (track: TimelineTrack, source?: MatchedAlternative): MatchedAlternative => ({
+      // Keep old main tracklet preview playable after swapping to an alternative.
+      // Matched export naming: global_{gid}_cam_{camera}_track_{tid}.mp4
+      previewUrl: source?.previewUrl
+        ?? (
+          runId && track.globalId != null
+            ? `${API_BASE}/runs/${encodeURIComponent(runId)}/matched_clips/${encodeURIComponent(
+                `global_${track.globalId}_cam_${String(track.cameraId).replace(/[/\\]/g, "_")}_track_${track.trackletId}.mp4`
+              )}`
+            : undefined
+        ),
+      rank: 0,
+      globalId: track.globalId ?? null,
+      cameraId: track.cameraId,
+      trackId: track.trackletId,
+      score: Number(track.confidence ?? 0),
+      confidence: Number(track.confidence ?? 0),
+      numCameras: track.segments ? new Set(track.segments.map((s) => s.cameraId)).size : 1,
+      className: track.className,
+      startTime: track.startTime,
+      endTime: track.endTime,
+      representativeFrame: track.representativeFrame,
+      representativeBbox: track.representativeBbox,
+      label: track.label,
+      clipPath: source?.clipPath ?? "",
+      ok: true,
+      message: "Pinned previous main tracklet",
+    }),
+    [runId]
+  );
+
+  const mergeWithHistoryAlternatives = useCallback(
+    (
+      list: MatchedAlternative[],
+      selected: TimelineTrack,
+      history: MatchedAlternative[]
+    ): MatchedAlternative[] => {
+      const selectedKey = `${selected.cameraId}:${selected.trackletId}`;
+      const keyToIndex = new Map<string, number>();
+      const merged: MatchedAlternative[] = [];
+
+      const mediaScore = (item: MatchedAlternative): number => {
+        return item.previewUrl || item.clipPath ? 1 : 0;
+      };
+
+      const pushIfValid = (item: MatchedAlternative) => {
+        const key = `${item.cameraId}:${item.trackId}`;
+        if (key === selectedKey) return;
+
+        const existingIdx = keyToIndex.get(key);
+        if (existingIdx == null) {
+          keyToIndex.set(key, merged.length);
+          merged.push(item);
+          return;
+        }
+
+        // Keep whichever duplicate has playable media metadata.
+        const existing = merged[existingIdx];
+        if (mediaScore(item) > mediaScore(existing)) {
+          merged[existingIdx] = item;
+        }
+      };
+
+      // Keep user swap history first so prior "main" tracklet always remains selectable.
+      history.forEach(pushIfValid);
+      list.forEach(pushIfValid);
+
+      return merged.slice(0, 5).map((a, i) => ({ ...a, rank: i + 1 }));
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!runId || !selectedTrack) {
+      setTopAlternatives([]);
+      setAlternativesCameraCount(0);
+      setAlternativesError(null);
+      setAlternativesLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setAlternativesLoading(true);
+    setAlternativesError(null);
+
+    void (async () => {
+      try {
+        const history = selectedTrackId ? (alternativeHistoryByTrackId[selectedTrackId] ?? []) : [];
+        const payload = await getMatchedAlternatives(runId, {
+          topK: 5,
+          anchorCameraId: selectedTrack.cameraId,
+          anchorTrackId: selectedTrack.trackletId,
+          excludeGlobalId: selectedTrack.globalId,
+          excludeCameraId: selectedTrack.cameraId,
+          excludeTrackId: selectedTrack.trackletId,
+        });
+        if (cancelled) return;
+        setAlternativesCameraCount(payload.totalCameras);
+
+        const playable = payload.alternatives
+          .filter((item) => item.ok && Boolean(item.clipPath))
+          .slice(0, 5);
+        setTopAlternatives(mergeWithHistoryAlternatives(playable, selectedTrack, history));
+      } catch (err: any) {
+        if (cancelled) return;
+        const history = selectedTrackId ? (alternativeHistoryByTrackId[selectedTrackId] ?? []) : [];
+        setTopAlternatives(mergeWithHistoryAlternatives([], selectedTrack, history));
+        const msg = String(err?.message ?? "");
+        if (msg.includes("404")) {
+          setAlternativesCameraCount(0);
+          setAlternativesError("No alternatives exported for this run yet.");
+        } else {
+          setAlternativesCameraCount(0);
+          setAlternativesError("Failed to load alternatives for selected tracklet.");
+        }
+      } finally {
+        if (!cancelled) setAlternativesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, selectedTrack, selectedTrackId, alternativeHistoryByTrackId, mergeWithHistoryAlternatives]);
+
+  const handleApplyAlternative = useCallback(
+    (alt: MatchedAlternative) => {
+      if (!selectedTrack || !selectedTrackId) return;
+
+      const selectedKey = `${selectedTrack.cameraId}:${selectedTrack.trackletId}`;
+      const sourceForCurrent =
+        currentAlternativeByTrackId[selectedTrackId]
+        ?? topAlternatives.find((x) => `${x.cameraId}:${x.trackId}` === selectedKey);
+
+      setAlternativeHistoryByTrackId((prev) => {
+        const current = prev[selectedTrackId] ?? [];
+        const candidate = buildAlternativeFromTrack(selectedTrack, sourceForCurrent);
+        const candidateKey = `${candidate.cameraId}:${candidate.trackId}`;
+        const deduped = [candidate, ...current.filter((x) => `${x.cameraId}:${x.trackId}` !== candidateKey)];
+        return {
+          ...prev,
+          [selectedTrackId]: deduped.slice(0, 8),
+        };
+      });
+
+      setCurrentAlternativeByTrackId((prev) => ({
+        ...prev,
+        [selectedTrackId]: alt,
+      }));
+
+      const start = Number.isFinite(alt.startTime) ? Number(alt.startTime) : selectedTrack.startTime;
+      const endCandidate = Number.isFinite(alt.endTime) ? Number(alt.endTime) : selectedTrack.endTime;
+      const end = Math.max(endCandidate, start + 0.1);
+
+      const seg = {
+        cameraId: alt.cameraId,
+        trackId: alt.trackId,
+        globalId: alt.globalId ?? undefined,
+        start,
+        end,
+        color: getCameraColor(alt.cameraId),
+        representativeFrame: alt.representativeFrame,
+        representativeBbox: alt.representativeBbox,
+      };
+
+      const updated = tracks.map((t) => {
+        if (t.id !== selectedTrackId) return t;
+        const fallbackLabel = `G-${String(alt.globalId ?? 0).padStart(4, "0")} · ${alt.cameraId} · track ${alt.trackId}`;
+        return {
+          ...t,
+          cameraId: alt.cameraId,
+          trackletId: alt.trackId,
+          globalId: alt.globalId ?? undefined,
+          startTime: start,
+          endTime: end,
+          segments: [seg],
+          representativeFrame: alt.representativeFrame,
+          representativeBbox: alt.representativeBbox,
+          label: alt.label ?? fallbackLabel,
+          className: alt.className ?? t.className,
+          confidence: Number.isFinite(alt.score) ? alt.score : t.confidence,
+        };
+      });
+
+      setTracks(updated);
+    },
+    [buildAlternativeFromTrack, currentAlternativeByTrackId, selectedTrack, selectedTrackId, setTracks, topAlternatives, tracks]
+  );
+
 
   const stage4Progress = stages.find((s) => s.stage === 4);
 
@@ -1002,6 +1206,50 @@ export function TimelineStage() {
                     onClick={() => handleTrackClick(track.id)}
                     onConfirm={() => handleConfirmToggle(track.id, track.confirmed)}
                     onRemove={() => removeTrack(track.id)}
+                  />
+                ))}
+              </div>
+            )}
+
+            <Separator className="my-3" />
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium">Top 5 Alternatives</h4>
+              {selectedTrack ? (
+                <Badge variant="outline" className="text-[10px]">
+                  {selectedTrack.cameraId} · #{selectedTrack.trackletId} · {alternativesCameraCount || "-"} cams
+                </Badge>
+              ) : null}
+            </div>
+
+            {!selectedTrack ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Select a trajectory to load alternatives from matched/top5_alternatives.
+              </p>
+            ) : alternativesLoading ? (
+              <div className="mt-2 flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                <span className="text-xs">Loading top alternatives…</span>
+              </div>
+            ) : alternativesError ? (
+              <p className="mt-2 text-xs text-muted-foreground">{alternativesError}</p>
+            ) : topAlternatives.length === 0 ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                No alternative clips were found for this selection.
+              </p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {topAlternatives.map((alt) => (
+                  <AlternativeTrackletItem
+                    key={`${alt.rank}-${alt.cameraId}-${alt.trackId}-${alt.clipPath}`}
+                    alternative={alt}
+                    videoUrl={
+                      alt.previewUrl
+                        ? alt.previewUrl
+                        : runId && alt.clipPath
+                        ? getMatchedAlternativeClipUrl(runId, alt.clipPath)
+                        : ""
+                    }
+                    onUse={() => handleApplyAlternative(alt)}
                   />
                 ))}
               </div>
@@ -1587,6 +1835,56 @@ function TrackletItem({ track, isSelected, onClick, onConfirm, onRemove }: Track
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AlternativeTrackletItem({
+  alternative,
+  videoUrl,
+  onUse,
+}: {
+  alternative: MatchedAlternative;
+  videoUrl: string;
+  onUse: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-border/60 bg-muted/20 p-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold text-blue-400">ALT #{alternative.rank}</span>
+        <span className="text-[10px] tabular-nums text-muted-foreground">
+          score {(alternative.score * 100).toFixed(1)}%
+        </span>
+      </div>
+
+      {videoUrl ? (
+        <video
+          src={videoUrl}
+          className="mb-2 h-20 w-full rounded object-cover"
+          controls
+          muted
+          playsInline
+          preload="metadata"
+        />
+      ) : null}
+
+      <div className="space-y-0.5 text-[10px] text-muted-foreground">
+        <p className="font-mono text-foreground/90">
+          {alternative.cameraId} · track {alternative.trackId}
+        </p>
+        <p>
+          global {alternative.globalId ?? "?"} · {Math.max(1, alternative.numCameras)} cams
+        </p>
+      </div>
+
+      <Button
+        variant="outline"
+        size="sm"
+        className="mt-2 h-6 w-full text-[10px]"
+        onClick={onUse}
+      >
+        Use In Timeline
+      </Button>
     </div>
   );
 }
