@@ -17,7 +17,7 @@ from backend.config import (
     UPLOAD_DIR,
     VIDEO_EXTENSIONS,
 )
-from backend.state import uploaded_videos, video_to_latest_run
+from backend.state import app_state
 
 if _HAS_CV2:
     import cv2  # noqa: F401 — imported for type-checker; used via _HAS_CV2 guard
@@ -131,7 +131,7 @@ def _register_video_path(file_path: Path) -> None:
     if not file_path.exists() or file_path.suffix.lower() not in VIDEO_EXTENSIONS:
         return
     video_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(file_path.resolve())))
-    uploaded_videos[video_id] = _build_video_record(video_id, file_path)
+    app_state.uploaded_videos[video_id] = _build_video_record(video_id, file_path)
 
 
 def _build_virtual_video_record(camera_id: str, seqinfo_path: Path, fallback_video: Path) -> Dict[str, Any]:
@@ -209,7 +209,7 @@ def _parse_gt_detections(camera_id: str, frame_id: Optional[int] = None) -> List
 
 def _scan_startup_videos() -> None:
     """Load existing local videos so UI can show real footage after restart."""
-    uploaded_videos.clear()
+    app_state.uploaded_videos.clear()
 
     for file_path in UPLOAD_DIR.glob("*"):
         _register_video_path(file_path)
@@ -228,7 +228,7 @@ def _scan_startup_videos() -> None:
     if CITYFLOW_DIR.exists():
         fallback = DEMO_VIDEO_FALLBACK if DEMO_VIDEO_FALLBACK.exists() else Path("")
         registered_cameras = set()
-        for v in uploaded_videos.values():
+        for v in app_state.uploaded_videos.values():
             cam = _extract_camera_id(str(v.get("name", ""))) or _extract_camera_id(str(v.get("path", "")))
             if cam:
                 registered_cameras.add(cam)
@@ -242,7 +242,7 @@ def _scan_startup_videos() -> None:
             camera_id = cam_dir.name.upper()
             if camera_id not in registered_cameras:
                 rec = _build_virtual_video_record(camera_id, seqinfo, fallback)
-                uploaded_videos[rec["id"]] = rec
+                app_state.uploaded_videos[rec["id"]] = rec
 
     if OUTPUT_DIR.exists():
         latest_by_video: Dict[str, tuple] = {}
@@ -260,7 +260,7 @@ def _scan_startup_videos() -> None:
                 pass
 
         for vid_id, (_, run_id) in latest_by_video.items():
-            video_to_latest_run[vid_id] = run_id
+            app_state.video_to_latest_run[vid_id] = run_id
 
 
 def _extract_camera_id(raw: str) -> Optional[str]:

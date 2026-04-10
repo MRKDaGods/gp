@@ -30,12 +30,12 @@ from backend.services.video_service import (
     _extract_camera_id,
     _safe_reid_batch_size,
 )
-from backend.state import active_runs, uploaded_videos, video_to_latest_run, RUN_ID_LOCK
+from backend.state import app_state
 
 
 def _allocate_numeric_run_id() -> str:
     """Allocate the next numeric run id under outputs/ (1, 2, 3, ...)."""
-    with RUN_ID_LOCK:
+    with app_state.run_id_lock:
         max_num = 0
         try:
             for child in OUTPUT_DIR.iterdir():
@@ -225,24 +225,24 @@ async def _run_pipeline_streaming(
             completed_stages += 1
             pct = min(int((completed_stages / total_stages) * 95), 95)
             cameras_seen.clear()
-            if run_id in active_runs:
-                active_runs[run_id]["progress"] = pct
-                active_runs[run_id]["message"] = f"Running {stage_label}..."
-                active_runs[run_id]["currentStageName"] = stage_label
-                active_runs[run_id]["currentStageNum"] = stage_num
-                active_runs[run_id]["completedStages"] = completed_stages
-                active_runs[run_id]["totalStages"] = total_stages
+            if run_id in app_state.active_runs:
+                app_state.active_runs[run_id]["progress"] = pct
+                app_state.active_runs[run_id]["message"] = f"Running {stage_label}..."
+                app_state.active_runs[run_id]["currentStageName"] = stage_label
+                app_state.active_runs[run_id]["currentStageNum"] = stage_num
+                app_state.active_runs[run_id]["completedStages"] = completed_stages
+                app_state.active_runs[run_id]["totalStages"] = total_stages
 
         cm = _CAMERA_LINE_RE.search(line)
-        if cm and run_id in active_runs:
+        if cm and run_id in app_state.active_runs:
             cam_id = cm.group(1)
             if cam_id not in cameras_seen:
                 cameras_seen.append(cam_id)
             cam_index = cameras_seen.index(cam_id) + 1
-            active_runs[run_id]["currentCamera"] = cam_id
-            active_runs[run_id]["camerasProcessed"] = cam_index
-            stage_name = active_runs[run_id].get("currentStageName", "Processing")
-            active_runs[run_id]["message"] = (
+            app_state.active_runs[run_id]["currentCamera"] = cam_id
+            app_state.active_runs[run_id]["camerasProcessed"] = cam_index
+            stage_name = app_state.active_runs[run_id].get("currentStageName", "Processing")
+            app_state.active_runs[run_id]["message"] = (
                 f"{stage_name} — camera {cam_id} ({cam_index} processed)"
             )
 
@@ -321,7 +321,7 @@ async def _run_pipeline_stages(
     tracker: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run one or more pipeline stages via subprocess with streaming progress."""
-    video_meta = uploaded_videos[video_id]
+    video_meta = app_state.uploaded_videos[video_id]
     source_video_path = Path(video_meta["path"]).resolve()
     if not source_video_path.exists():
         raise FileNotFoundError(f"Video file does not exist: {source_video_path}")
@@ -376,10 +376,10 @@ async def _background_precompute_dataset() -> None:
 
     run_dir = OUTPUT_DIR / PRECOMPUTE_RUN_ID
     if any((run_dir / "stage1").glob("tracklets_*.json")):
-        for vid_id, vid_meta in list(uploaded_videos.items()):
+        for vid_id, vid_meta in list(app_state.uploaded_videos.items()):
             cam_id = _extract_camera_id(str(vid_meta.get("path", "")))
             if cam_id and cam_id.startswith("S01_"):
-                video_to_latest_run[vid_id] = PRECOMPUTE_RUN_ID
+                app_state.video_to_latest_run[vid_id] = PRECOMPUTE_RUN_ID
         return
 
     try:
@@ -407,10 +407,10 @@ async def _background_precompute_dataset() -> None:
             print(f"[PRECOMPUTE] Pipeline failed: {err}")
             return
 
-        for vid_id, vid_meta in list(uploaded_videos.items()):
+        for vid_id, vid_meta in list(app_state.uploaded_videos.items()):
             cam_id = _extract_camera_id(str(vid_meta.get("path", "")))
             if cam_id and cam_id.startswith("S01_"):
-                video_to_latest_run[vid_id] = PRECOMPUTE_RUN_ID
+                app_state.video_to_latest_run[vid_id] = PRECOMPUTE_RUN_ID
 
         print(
             f"[PRECOMPUTE] S01 pipeline complete — "
@@ -424,7 +424,7 @@ async def _background_precompute_dataset() -> None:
 async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
     """Execute a real pipeline stage for a selected video."""
     try:
-        if run_id not in active_runs:
+        if run_id not in app_state.active_runs:
             return
 
         video_id = config.get("videoId")
@@ -434,17 +434,17 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
         reid_model_path = config.get("reidModelPath")
         tracker = str(config.get("tracker") or "deepocsort")
 
-        if not video_id or video_id not in uploaded_videos:
+        if not video_id or video_id not in app_state.uploaded_videos:
             raise RuntimeError(f"Stage {stage} requires a valid videoId")
 
         if not camera_id:
-            camera_id = _detect_camera_for_video(uploaded_videos[video_id], None)
+            camera_id = _detect_camera_for_video(app_state.uploaded_videos[video_id], None)
 
-        active_runs[run_id]["cameraId"] = camera_id
+        app_state.active_runs[run_id]["cameraId"] = camera_id
 
         if stage == 1:
-            active_runs[run_id]["message"] = f"Running detection & tracking for {camera_id}..."
-            active_runs[run_id]["progress"] = 10
+            app_state.active_runs[run_id]["message"] = f"Running detection & tracking for {camera_id}..."
+            app_state.active_runs[run_id]["progress"] = 10
 
             run_meta = await _run_pipeline_stages(
                 run_id=run_id,
@@ -456,13 +456,13 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 tracker=tracker,
             )
 
-            video_to_latest_run[video_id] = run_id
+            app_state.video_to_latest_run[video_id] = run_id
             _persist_probe_link(video_id, run_id)
-            active_runs[run_id]["status"] = "completed"
-            active_runs[run_id]["progress"] = 100
-            active_runs[run_id]["message"] = "Detection & tracking complete"
-            active_runs[run_id]["runDir"] = run_meta["runDir"]
-            active_runs[run_id]["completedAt"] = datetime.now().isoformat()
+            app_state.active_runs[run_id]["status"] = "completed"
+            app_state.active_runs[run_id]["progress"] = 100
+            app_state.active_runs[run_id]["message"] = "Detection & tracking complete"
+            app_state.active_runs[run_id]["runDir"] = run_meta["runDir"]
+            app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
             return
 
         if stage in (2, 3):
@@ -471,12 +471,12 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
 
             if stage == 3 and stage2_done:
                 stages_to_run = "3"
-                active_runs[run_id]["message"] = "Running indexing (embeddings already extracted)..."
+                app_state.active_runs[run_id]["message"] = "Running indexing (embeddings already extracted)..."
             else:
                 stages_to_run = "2,3"
-                active_runs[run_id]["message"] = "Running feature extraction & indexing..."
+                app_state.active_runs[run_id]["message"] = "Running feature extraction & indexing..."
 
-            active_runs[run_id]["progress"] = 10
+            app_state.active_runs[run_id]["progress"] = 10
 
             run_meta = await _run_pipeline_stages(
                 run_id=run_id,
@@ -488,16 +488,16 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 reid_model_path=reid_model_path,
             )
 
-            active_runs[run_id]["status"] = "completed"
-            active_runs[run_id]["progress"] = 100
-            active_runs[run_id]["message"] = f"Stage {stage} complete"
-            active_runs[run_id]["runDir"] = run_meta["runDir"]
-            active_runs[run_id]["completedAt"] = datetime.now().isoformat()
+            app_state.active_runs[run_id]["status"] = "completed"
+            app_state.active_runs[run_id]["progress"] = 100
+            app_state.active_runs[run_id]["message"] = f"Stage {stage} complete"
+            app_state.active_runs[run_id]["runDir"] = run_meta["runDir"]
+            app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
             return
 
         if stage == 4:
-            active_runs[run_id]["message"] = "Running cross-camera association..."
-            active_runs[run_id]["progress"] = 10
+            app_state.active_runs[run_id]["message"] = "Running cross-camera association..."
+            app_state.active_runs[run_id]["progress"] = 10
 
             run_meta = await _run_pipeline_stages(
                 run_id=run_id,
@@ -508,16 +508,16 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 smoke_test=smoke_test,
             )
 
-            active_runs[run_id]["status"] = "completed"
-            active_runs[run_id]["progress"] = 100
-            active_runs[run_id]["message"] = "Association complete"
-            active_runs[run_id]["runDir"] = run_meta["runDir"]
-            active_runs[run_id]["completedAt"] = datetime.now().isoformat()
+            app_state.active_runs[run_id]["status"] = "completed"
+            app_state.active_runs[run_id]["progress"] = 100
+            app_state.active_runs[run_id]["message"] = "Association complete"
+            app_state.active_runs[run_id]["runDir"] = run_meta["runDir"]
+            app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
             return
 
         stage_name = {5: "evaluation", 6: "visualization"}.get(stage, str(stage))
-        active_runs[run_id]["message"] = f"Running {stage_name}..."
-        active_runs[run_id]["progress"] = 10
+        app_state.active_runs[run_id]["message"] = f"Running {stage_name}..."
+        app_state.active_runs[run_id]["progress"] = 10
 
         run_meta = await _run_pipeline_stages(
             run_id=run_id,
@@ -528,9 +528,9 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
             smoke_test=smoke_test,
         )
 
-        active_runs[run_id]["status"] = "completed"
-        active_runs[run_id]["progress"] = 100
-        active_runs[run_id]["completedAt"] = datetime.now().isoformat()
+        app_state.active_runs[run_id]["status"] = "completed"
+        app_state.active_runs[run_id]["progress"] = 100
+        app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
 
     except BaseException as e:
         tb = _traceback.format_exc()
@@ -538,11 +538,11 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
         err_msg = str(e) or f"({err_type} with no message)"
         full_error = f"{err_type}: {err_msg}"
         print(f"[PIPELINE ERROR] run={run_id} stage={stage}\n{tb}", flush=True)
-        if run_id in active_runs:
-            active_runs[run_id]["status"] = "error"
-            active_runs[run_id]["error"] = full_error
-            active_runs[run_id]["errorDetail"] = tb[-3000:]
-            active_runs[run_id]["message"] = f"Stage {stage} failed — {full_error[:300]}"
+        if run_id in app_state.active_runs:
+            app_state.active_runs[run_id]["status"] = "error"
+            app_state.active_runs[run_id]["error"] = full_error
+            app_state.active_runs[run_id]["errorDetail"] = tb[-3000:]
+            app_state.active_runs[run_id]["message"] = f"Stage {stage} failed — {full_error[:300]}"
         if isinstance(e, (asyncio.CancelledError, KeyboardInterrupt)):
             raise
 
@@ -556,16 +556,16 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
         use_cpu = bool(config.get("useCpu", False))
         reid_model_path = config.get("reidModelPath")
 
-        if not video_id or video_id not in uploaded_videos:
+        if not video_id or video_id not in app_state.uploaded_videos:
             raise RuntimeError("Full pipeline requires a valid videoId")
 
         if not camera_id:
-            camera_id = _detect_camera_for_video(uploaded_videos[video_id], None)
+            camera_id = _detect_camera_for_video(app_state.uploaded_videos[video_id], None)
 
-        active_runs[run_id]["cameraId"] = camera_id
+        app_state.active_runs[run_id]["cameraId"] = camera_id
 
-        active_runs[run_id]["message"] = "Running full pipeline (stages 0-4)..."
-        active_runs[run_id]["progress"] = 5
+        app_state.active_runs[run_id]["message"] = "Running full pipeline (stages 0-4)..."
+        app_state.active_runs[run_id]["progress"] = 5
 
         run_meta = await _run_pipeline_stages(
             run_id=run_id,
@@ -577,13 +577,13 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
             reid_model_path=reid_model_path,
         )
 
-        video_to_latest_run[video_id] = run_id
+        app_state.video_to_latest_run[video_id] = run_id
         _persist_probe_link(video_id, run_id)
-        active_runs[run_id]["status"] = "completed"
-        active_runs[run_id]["progress"] = 100
-        active_runs[run_id]["message"] = "Full pipeline complete"
-        active_runs[run_id]["runDir"] = run_meta["runDir"]
-        active_runs[run_id]["completedAt"] = datetime.now().isoformat()
+        app_state.active_runs[run_id]["status"] = "completed"
+        app_state.active_runs[run_id]["progress"] = 100
+        app_state.active_runs[run_id]["message"] = "Full pipeline complete"
+        app_state.active_runs[run_id]["runDir"] = run_meta["runDir"]
+        app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
 
     except BaseException as e:
         tb = _traceback.format_exc()
@@ -591,11 +591,11 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
         err_msg = str(e) or f"({err_type} with no message)"
         full_error = f"{err_type}: {err_msg}"
         print(f"[PIPELINE ERROR] full-pipeline run={run_id}\n{tb}", flush=True)
-        if run_id in active_runs:
-            active_runs[run_id]["status"] = "error"
-            active_runs[run_id]["error"] = full_error
-            active_runs[run_id]["errorDetail"] = tb[-3000:]
-            active_runs[run_id]["message"] = f"Pipeline failed — {full_error[:300]}"
+        if run_id in app_state.active_runs:
+            app_state.active_runs[run_id]["status"] = "error"
+            app_state.active_runs[run_id]["error"] = full_error
+            app_state.active_runs[run_id]["errorDetail"] = tb[-3000:]
+            app_state.active_runs[run_id]["message"] = f"Pipeline failed — {full_error[:300]}"
         if isinstance(e, (asyncio.CancelledError, KeyboardInterrupt)):
             raise
 
@@ -604,8 +604,8 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
     """Background task: run stages 0-4 on a full dataset folder."""
     try:
         stage_nums = [0, 1, 2, 3, 4]
-        active_runs[run_id]["message"] = "Preparing run-local dataset input copy..."
-        active_runs[run_id]["progress"] = 1
+        app_state.active_runs[run_id]["message"] = "Preparing run-local dataset input copy..."
+        app_state.active_runs[run_id]["progress"] = 1
         input_dir = _prepare_dataset_input_for_run(run_id, dataset_path)
 
         cmd = _build_pipeline_cmd(
@@ -614,25 +614,25 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
             input_dir=input_dir.as_posix(),
         )
 
-        active_runs[run_id]["message"] = "Running Ingestion & Pre-Processing..."
-        active_runs[run_id]["progress"] = 2
+        app_state.active_runs[run_id]["message"] = "Running Ingestion & Pre-Processing..."
+        app_state.active_runs[run_id]["progress"] = 2
 
         run_meta = await _run_pipeline_streaming(run_id, cmd, stage_nums)
 
         scene_prefix = folder_name.upper()
-        for vid_id, vid_meta in list(uploaded_videos.items()):
+        for vid_id, vid_meta in list(app_state.uploaded_videos.items()):
             cam_id = _extract_camera_id(str(vid_meta.get("path", "")))
             if cam_id and cam_id.startswith(f"{scene_prefix}_"):
-                video_to_latest_run[vid_id] = run_id
+                app_state.video_to_latest_run[vid_id] = run_id
 
-        active_runs[run_id]["status"] = "completed"
-        active_runs[run_id]["progress"] = 100
-        active_runs[run_id]["message"] = f"Pipeline complete for {folder_name}"
-        active_runs[run_id]["runDir"] = run_meta["runDir"]
-        active_runs[run_id]["completedAt"] = datetime.now().isoformat()
+        app_state.active_runs[run_id]["status"] = "completed"
+        app_state.active_runs[run_id]["progress"] = 100
+        app_state.active_runs[run_id]["message"] = f"Pipeline complete for {folder_name}"
+        app_state.active_runs[run_id]["runDir"] = run_meta["runDir"]
+        app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
 
     except Exception as e:
-        if run_id in active_runs:
-            active_runs[run_id]["status"] = "error"
-            active_runs[run_id]["error"] = str(e)
-            active_runs[run_id]["message"] = f"Error: {str(e)[:200]}"
+        if run_id in app_state.active_runs:
+            app_state.active_runs[run_id]["status"] = "error"
+            app_state.active_runs[run_id]["error"] = str(e)
+            app_state.active_runs[run_id]["message"] = f"Error: {str(e)[:200]}"
