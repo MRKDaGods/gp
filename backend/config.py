@@ -60,3 +60,12 @@ _STAGE_NAMES = {
 _STAGE_LINE_RE = re.compile(r"Stage\s+(\d)")
 # Regex to detect per-camera processing lines
 _CAMERA_LINE_RE = re.compile(r"Processing camera\s+([\w_]+)")
+
+# ── Timeline / ReID similarity thresholds ─────────────────────────────────
+# Applied in TimelineService._score_trajectories(); both conditions must hold
+# for a trajectory to be considered a visual match.
+SIMILARITY_THRESHOLD_MEAN: float = 0.82
+SIMILARITY_THRESHOLD_P25: float = 0.74
+
+# PCA model used to project probe embeddings when probe_dim > gallery_dim
+PCA_MODEL_PATH = Path("models/reid/pca_transform.pkl")
