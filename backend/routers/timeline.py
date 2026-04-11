@@ -51,11 +51,12 @@ async def query_timeline(request: TimelineQueryRequest, state: AppState = Depend
             print(f"[selected] clip export failed: {_sc_err}", flush=True)
 
     matched = response_payload.get("data", {}).get("trajectories", [])
+    gallery_run_id = request.galleryRunId or request.runId
     if matched and probe_run_id:
         try:
             _export_matched_clips(
                 probe_run_id,
-                request.runId,
+                gallery_run_id,
                 matched,
                 ranked_candidates=ranked_candidates,
                 top_k_alternatives=5,

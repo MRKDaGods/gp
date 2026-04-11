@@ -371,6 +371,11 @@ def run_stage2(
     raw_matrix = np.stack(all_raw_embeddings, axis=0)  # (N, D)
     logger.info(f"Raw embedding matrix: {raw_matrix.shape}")
 
+    # Save raw (pre-BN, pre-PCA) embeddings for cross-run matching
+    raw_save_path = output_dir / "embeddings_raw.npy"
+    np.save(raw_save_path, raw_matrix.astype(np.float32))
+    logger.info(f"Raw embeddings saved: {raw_matrix.shape} -> {raw_save_path}")
+
     # 5. Camera-aware batch normalisation
     if stage_cfg.get("camera_bn", {}).get("enabled", True):
         logger.info("Applying camera-aware batch normalisation")
@@ -391,10 +396,10 @@ def run_stage2(
         # Hard minimum: n_samples must exceed n_components to form a valid covariance.
         # Use n_components itself (the mathematical minimum), no extra factor.
         min_samples_for_pca = max(50, n_components)
+        pca_path = stage_cfg.pca.pca_model_path
 
         if n_samples >= min_samples_for_pca:
             whitener = PCAWhitener(n_components=n_components)
-            pca_path = stage_cfg.pca.pca_model_path
 
             if Path(pca_path).exists():
                 whitener.load(pca_path)
@@ -416,10 +421,22 @@ def run_stage2(
                 logger.info(f"Fitted and saved PCA model to {pca_path}")
 
             embeddings = whitener.transform(raw_matrix)
+        elif Path(pca_path).exists():
+            # Too few samples to fit PCA, but a pre-trained model exists.
+            # Apply transform-only so probe embeddings match gallery dimensionality.
+            whitener = PCAWhitener(n_components=n_components)
+            whitener.load(pca_path)
+            logger.info(
+                f"Too few samples ({n_samples}) to fit PCA, "
+                f"applying pre-trained model from {pca_path} "
+                f"({n_features}D -> {whitener.n_components}D)"
+            )
+            embeddings = whitener.transform(raw_matrix)
         else:
             logger.warning(
                 f"Skipping PCA: need at least {min_samples_for_pca} samples "
-                f"for reliable {n_components}D PCA, but only have {n_samples}. "
+                f"for reliable {n_components}D PCA, but only have {n_samples}, "
+                f"and no pre-trained model found at {pca_path}. "
                 f"Using camera-BN'd embeddings directly."
             )
             embeddings = raw_matrix

@@ -117,8 +117,12 @@ class TimelineService:
             "selectedTrackletsSourceRun": probe_run_id,
         }
 
+        # ── Determine gallery run (explicit galleryRunId or same-run) ────
+        gallery_run_id = request.galleryRunId or request.runId
+        diag["galleryRunId"] = gallery_run_id
+
         # ── Stage-4 missing ──────────────────────────────────────────────
-        trajectories = self._repo.list_trajectories(request.runId)
+        trajectories = self._repo.list_trajectories(gallery_run_id)
         if trajectories is None:
             selected_summaries, probe_run_id = self._resolve_selected_summaries(
                 request, selected_nums, probe_run_id
@@ -142,11 +146,11 @@ class TimelineService:
         # ── Visual ReID scoring ──────────────────────────────────────────
         filtered: List[Dict[str, Any]] = []
         filtered, diag = self._run_visual_search(
-            request, selected_nums, probe_run_id, trajectories, diag
+            request, selected_nums, probe_run_id, gallery_run_id, trajectories, diag
         )
 
         # Fallback to exact-ID match within the same run
-        if not filtered and request.runId == probe_run_id:
+        if not filtered and gallery_run_id == probe_run_id:
             filtered = self._exact_id_fallback(
                 selected_nums, trajectories
             )
@@ -239,14 +243,60 @@ class TimelineService:
         probe_run_id: str,
         gallery_run_id: str,
     ) -> Tuple[Optional[EmbeddingArtifact], Optional[EmbeddingArtifact]]:
-        """Load probe and gallery embedding artefacts from the repository."""
-        probe = self._repo.load_embedding_artifact(probe_run_id)
-        gallery = (
-            self._repo.load_embedding_artifact(gallery_run_id)
-            if gallery_run_id != probe_run_id
-            else probe
-        )
+        """Load probe and gallery embedding artefacts from the repository.
+
+        For cross-run queries (probe != gallery), loads raw (pre-BN, pre-PCA)
+        probe embeddings and applies only PCA to avoid camera-BN distribution
+        mismatch between the two runs.
+        """
+        gallery = self._repo.load_embedding_artifact(gallery_run_id)
+
+        if gallery_run_id == probe_run_id:
+            return gallery, gallery
+
+        # Cross-run: prefer raw probe embeddings to avoid camera-BN mismatch
+        probe = self._load_raw_probe_with_pca(probe_run_id, gallery)
+        if probe is None:
+            print(f"[embed_pair] raw probe FAILED, falling back to BN'd embeddings", flush=True)
+            probe = self._repo.load_embedding_artifact(probe_run_id)
+        else:
+            print(f"[embed_pair] Using raw+PCA probe ({probe.dim}D)", flush=True)
         return probe, gallery
+
+    def _load_raw_probe_with_pca(
+        self,
+        probe_run_id: str,
+        gallery: Optional[EmbeddingArtifact],
+    ) -> Optional[EmbeddingArtifact]:
+        """Load raw probe embeddings and apply PCA-only (skip camera-BN).
+
+        Returns None if raw embeddings or PCA model don't exist.
+        """
+        stage2_dir = OUTPUT_DIR / probe_run_id / "stage2"
+        raw_path = stage2_dir / "embeddings_raw.npy"
+        idx_path = stage2_dir / "embedding_index.json"
+        if not raw_path.exists() or not idx_path.exists():
+            return None
+        if not PCA_MODEL_PATH.exists():
+            return None
+        try:
+            import json as _json
+            raw_emb = np.load(raw_path).astype(np.float32)
+            index = _json.loads(idx_path.read_text(encoding="utf-8"))
+            with open(PCA_MODEL_PATH, "rb") as fh:
+                pca_obj = pickle.load(fh)
+            projected = pca_obj.transform(raw_emb).astype(np.float32)
+            target_dim = gallery.dim if gallery else projected.shape[1]
+            if projected.shape[1] != target_dim:
+                print(f"[raw_probe_pca] dim mismatch: projected={projected.shape[1]} vs gallery={target_dim}", flush=True)
+                return None
+            print(f"[raw_probe_pca] OK: {raw_emb.shape} -> {projected.shape}", flush=True)
+            return EmbeddingArtifact(
+                run_id=probe_run_id, embeddings=projected, index=index,
+            )
+        except Exception as exc:
+            print(f"[raw_probe_pca] FAILED: {exc}", flush=True)
+            return None
 
     def _apply_pca_projection(
         self,
@@ -316,11 +366,19 @@ class TimelineService:
             extra["search_mode"] = "probe_not_found"
             return [], extra
 
-        probe_feats = probe.embeddings[probe_indices].astype(np.float32, copy=False)
-        probe_norms = np.linalg.norm(probe_feats, axis=1, keepdims=True)
-        probe_feats = probe_feats / np.maximum(probe_norms, 1e-8)
+        # Group probe rows by track_id for per-track scoring
+        probe_track_groups: Dict[int, List[int]] = {}
+        for pi in probe_indices:
+            ptid = int(probe.index[pi].get("track_id", -1))
+            probe_track_groups.setdefault(ptid, []).append(pi)
+        multi_track = len(probe_track_groups) > 1
 
-        # Determine dominant class of probe for class-gating
+        # Pre-normalize all probe features
+        all_probe_feats = probe.embeddings[probe_indices].astype(np.float32, copy=False)
+        all_probe_norms = np.linalg.norm(all_probe_feats, axis=1, keepdims=True)
+        all_probe_feats = all_probe_feats / np.maximum(all_probe_norms, 1e-8)
+
+        # Determine dominant class of probe for class-gating (single-track mode)
         probe_classes = [
             int(probe.index[i]["class_id"])
             for i in probe_indices
@@ -330,6 +388,7 @@ class TimelineService:
             max(set(probe_classes), key=probe_classes.count) if probe_classes else None
         )
         extra["probeClassId"] = dominant_probe_class
+        extra["probeTrackCount"] = len(probe_track_groups)
 
         scored: List[Tuple[float, Dict[str, Any]]] = []
         all_scored: List[Tuple[float, Dict[str, Any]]] = []
@@ -352,20 +411,61 @@ class TimelineService:
             if not t_indices:
                 continue
 
-            # Class gate: skip cross-class matches
-            if dominant_probe_class is not None and t_classes:
-                dominant_traj_class = max(set(t_classes), key=t_classes.count)
-                if dominant_traj_class != dominant_probe_class:
-                    continue
-
             t_feats = gallery.embeddings[t_indices].astype(np.float32, copy=False)
             t_norms = np.linalg.norm(t_feats, axis=1, keepdims=True)
             t_feats = t_feats / np.maximum(t_norms, 1e-8)
 
-            sim_mat = np.dot(probe_feats, t_feats.T)
-            best_per_probe = sim_mat.max(axis=1)
-            mean_best = float(np.mean(best_per_probe))
-            p25_best = float(np.percentile(best_per_probe, 25))
+            if multi_track:
+                # Per-track scoring: find the best matching probe track
+                best_track_mean = -1.0
+                best_track_p25 = -1.0
+                best_track_id = None
+                dominant_traj_class = (
+                    max(set(t_classes), key=t_classes.count) if t_classes else None
+                )
+
+                for ptid, prows in probe_track_groups.items():
+                    # Per-track class gate
+                    track_classes = [
+                        int(probe.index[r]["class_id"])
+                        for r in prows
+                        if "class_id" in probe.index[r]
+                    ]
+                    if track_classes and dominant_traj_class is not None:
+                        track_class = max(set(track_classes), key=track_classes.count)
+                        if track_class != dominant_traj_class:
+                            continue
+
+                    # Map prows to positions within probe_indices for indexing
+                    pf = probe.embeddings[prows].astype(np.float32, copy=False)
+                    pf_norms = np.linalg.norm(pf, axis=1, keepdims=True)
+                    pf = pf / np.maximum(pf_norms, 1e-8)
+
+                    sim = np.dot(pf, t_feats.T)
+                    bp = sim.max(axis=1)
+                    m = float(np.mean(bp))
+                    p = float(np.percentile(bp, 25))
+                    if m > best_track_mean:
+                        best_track_mean = m
+                        best_track_p25 = p
+                        best_track_id = ptid
+
+                if best_track_id is None:
+                    continue  # No probe track of matching class
+
+                mean_best = best_track_mean
+                p25_best = best_track_p25
+            else:
+                # Single-track: original aggregate scoring
+                if dominant_probe_class is not None and t_classes:
+                    dominant_traj_class = max(set(t_classes), key=t_classes.count)
+                    if dominant_traj_class != dominant_probe_class:
+                        continue
+
+                sim_mat = np.dot(all_probe_feats, t_feats.T)
+                best_per_probe = sim_mat.max(axis=1)
+                mean_best = float(np.mean(best_per_probe))
+                p25_best = float(np.percentile(best_per_probe, 25))
 
             # Score and deepcopy for all_scored regardless of threshold
             scored_traj = copy.deepcopy(traj)
@@ -373,9 +473,11 @@ class TimelineService:
             scored_traj["matchEvidence"] = {
                 "meanBestFrameSimilarity": round(mean_best, 4),
                 "p25BestFrameSimilarity": round(p25_best, 4),
-                "probeFrames": int(probe_feats.shape[0]),
+                "probeFrames": int(len(probe_indices)),
                 "trajectoryFrames": int(t_feats.shape[0]),
             }
+            if multi_track and best_track_id is not None:
+                scored_traj["matchEvidence"]["matchedProbeTrackId"] = best_track_id
             all_scored.append((mean_best, scored_traj))
 
             # Strict match gate: only above-threshold go into scored
@@ -398,11 +500,12 @@ class TimelineService:
         request: TimelineQueryRequest,
         selected_nums: set,
         probe_run_id: str,
+        gallery_run_id: str,
         trajectories: List[Dict[str, Any]],
         diag: Dict[str, Any],
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """Attempt visual ReID search; update diag in-place and return matches."""
-        probe, gallery = self._load_embedding_pair(probe_run_id, request.runId)
+        probe, gallery = self._load_embedding_pair(probe_run_id, gallery_run_id)
 
         diag["probeEmbeddingsAvailable"] = probe is not None
         diag["galleryEmbeddingsAvailable"] = gallery is not None
