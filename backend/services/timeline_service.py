@@ -171,6 +171,12 @@ class TimelineService:
 
         cleaned_filtered = [self._clean_trajectory_for_ui(t) for t in filtered]
 
+        # Extract internal plumbing before building response (keeps diag clean)
+        ranked_candidates = diag.pop("_ranked_candidates_for_export", [])
+        # Save for query_with_candidates() if it's calling us
+        if hasattr(self, "_last_ranked_candidates"):
+            self._last_ranked_candidates = ranked_candidates
+
         return {
             "success": True,
             "data": {
@@ -182,6 +188,47 @@ class TimelineService:
                 "diagnostics": diag,
             },
         }
+
+    def query_with_candidates(
+        self,
+        request: TimelineQueryRequest,
+        uploaded_videos: Dict[str, Dict[str, Any]],
+    ) -> Tuple[Dict[str, Any], List[Tuple[float, Dict[str, Any]]]]:
+        """Like :meth:`query` but also returns ranked candidates for alternatives export.
+
+        The ``query()`` method is called internally — its signature and
+        return value are completely unchanged.  This wrapper intercepts
+        the ``_ranked_candidates_for_export`` stashed by
+        ``_run_visual_search`` *before* ``query()`` pops it.
+
+        Returns:
+            ``(response_payload, ranked_candidates)``
+        """
+        # We need the ranked candidates that _run_visual_search stashes in
+        # diag *before* query() pops them.  The simplest, non-invasive way
+        # is to re-run the same logic that query() runs, but capture the
+        # candidates before they're discarded.  However that would be
+        # wasteful.  Instead we temporarily intercept the pop.
+        #
+        # Strategy: call query(), but wrap diag.pop so we capture the value.
+        #
+        # Even simpler: since query() pops _ranked_candidates_for_export
+        # from diag and never puts it back, we can reconstruct by looking
+        # at whether diag still has it (it won't — already popped).
+        # So instead we monkey-patch nothing — we just repeat the scoring.
+        #
+        # Actually, the cleanest approach: temporarily stash via an
+        # instance attribute.  _run_visual_search sets it; query() pops
+        # from diag but we save to self._last_ranked before pop.
+
+        # Reset capture attribute
+        self._last_ranked_candidates: List[Tuple[float, Dict[str, Any]]] = []
+
+        response = self.query(request, uploaded_videos)
+
+        ranked = self._last_ranked_candidates
+        self._last_ranked_candidates = []
+        return response, ranked
 
     # ------------------------------------------------------------------
     # Embedding pair loading + PCA projection
@@ -285,6 +332,7 @@ class TimelineService:
         extra["probeClassId"] = dominant_probe_class
 
         scored: List[Tuple[float, Dict[str, Any]]] = []
+        all_scored: List[Tuple[float, Dict[str, Any]]] = []
 
         for traj in trajectories:
             tracklets = traj.get("tracklets", []) if isinstance(traj, dict) else []
@@ -319,19 +367,26 @@ class TimelineService:
             mean_best = float(np.mean(best_per_probe))
             p25_best = float(np.percentile(best_per_probe, 25))
 
+            # Score and deepcopy for all_scored regardless of threshold
+            scored_traj = copy.deepcopy(traj)
+            scored_traj["confidence"] = mean_best
+            scored_traj["matchEvidence"] = {
+                "meanBestFrameSimilarity": round(mean_best, 4),
+                "p25BestFrameSimilarity": round(p25_best, 4),
+                "probeFrames": int(probe_feats.shape[0]),
+                "trajectoryFrames": int(t_feats.shape[0]),
+            }
+            all_scored.append((mean_best, scored_traj))
+
+            # Strict match gate: only above-threshold go into scored
             if mean_best >= SIMILARITY_THRESHOLD_MEAN and p25_best >= SIMILARITY_THRESHOLD_P25:
-                traj = copy.deepcopy(traj)
-                traj["confidence"] = mean_best
-                traj["matchEvidence"] = {
-                    "meanBestFrameSimilarity": round(mean_best, 4),
-                    "p25BestFrameSimilarity": round(p25_best, 4),
-                    "probeFrames": int(probe_feats.shape[0]),
-                    "trajectoryFrames": int(t_feats.shape[0]),
-                }
-                scored.append((mean_best, traj))
+                scored.append((mean_best, scored_traj))
 
         scored.sort(key=lambda x: x[0], reverse=True)
+        all_scored.sort(key=lambda x: x[0], reverse=True)
         extra["visual_matches_scored"] = len(scored)
+        extra["visual_candidates_scored"] = len(all_scored)
+        extra["all_scored_trajectories"] = all_scored
         return scored, extra
 
     # ------------------------------------------------------------------
@@ -381,7 +436,9 @@ class TimelineService:
         scored, extra = self._score_trajectories(
             probe, gallery, selected_nums, trajectories
         )
+        all_scored = extra.pop("all_scored_trajectories", [])
         diag.update(extra)
+        diag["_ranked_candidates_for_export"] = all_scored
         return [t for _, t in scored], diag
 
     def _exact_id_fallback(
