@@ -232,9 +232,11 @@ def _export_matched_clips(
     probe_run_id: str,
     gallery_run_id: str,
     trajectories: List[Dict[str, Any]],
+    ranked_candidates: Optional[List[Tuple[float, Dict[str, Any]]]] = None,
+    top_k_alternatives: int = 5,
 ) -> None:
     """Export cropped mp4 clips for every tracklet in matched trajectories."""
-    if not trajectories:
+    if not trajectories and not ranked_candidates:
         return
 
     from datetime import datetime
@@ -337,6 +339,90 @@ def _export_matched_clips(
         "cameras": sorted(cameras_seen),
         "clips": clips,
     }
+
+    # ── Export top-k "near miss" alternatives ──────────────────────────
+    matched_keys = {
+        (_normalize_camera_id(str(c.get("camera_id", ""))), int(c.get("track_id", -1)))
+        for c in clips
+        if int(c.get("track_id", -1)) >= 0
+    }
+    matched_global_ids = {
+        str(tr.get("global_id", tr.get("id", "")))
+        for tr in trajectories
+    }
+
+    alternatives_subfolder = "top5_alternatives"
+    alternatives_dir = out_dir / alternatives_subfolder
+    alternatives_dir.mkdir(parents=True, exist_ok=True)
+    alternatives: List[Dict[str, Any]] = []
+
+    target_alts = max(1, min(int(top_k_alternatives), 20))
+    if ranked_candidates:
+        ranked_sorted = sorted(ranked_candidates, key=lambda x: float(x[0]), reverse=True)
+        for score, candidate in ranked_sorted:
+            ok_count = sum(1 for a in alternatives if a.get("ok"))
+            if ok_count >= target_alts:
+                break
+
+            gid_raw = candidate.get("global_id", candidate.get("id", ""))
+            gid = str(gid_raw)
+            if gid in matched_global_ids:
+                continue
+
+            candidate_tracklets = candidate.get("tracklets") if isinstance(candidate.get("tracklets"), list) else []
+            exported = False
+            for tr in candidate_tracklets:
+                cam_raw = str(tr.get("camera_id") or tr.get("cameraId") or "")
+                if cam_raw.startswith("query_"):
+                    continue
+                cam = _normalize_camera_id(cam_raw)
+                tid = int(tr.get("track_id") or tr.get("trackId") or -1)
+                if tid < 0 or not cam:
+                    continue
+
+                key = (cam, tid)
+                if key in matched_keys:
+                    continue
+
+                gallery_tracklet = gallery_tracklets.get(key)
+                if gallery_tracklet is None:
+                    continue
+
+                safe_cam = cam.replace("/", "_").replace("\\", "_")
+                rank_num = ok_count + 1
+                out_file = alternatives_dir / f"alt_{rank_num:02d}_global_{gid}_cam_{safe_cam}_track_{tid}.mp4"
+                ok, msg = _export_tracklet_clip(gallery_run_id, gallery_tracklet, out_file)
+
+                cam_set = {
+                    _normalize_camera_id(str(tt.get("camera_id") or tt.get("cameraId") or ""))
+                    for tt in candidate_tracklets
+                    if str(tt.get("camera_id") or tt.get("cameraId") or "")
+                }
+                cam_set = {c for c in cam_set if c and not c.startswith("query_")}
+
+                alternatives.append({
+                    "rank": rank_num,
+                    "global_id": int(gid_raw) if str(gid_raw).isdigit() else gid_raw,
+                    "camera_id": cam,
+                    "track_id": tid,
+                    "score": round(float(score), 4),
+                    "confidence": round(float(candidate.get("confidence", score)), 4),
+                    "num_cameras": len(cam_set),
+                    "file": out_file.name,
+                    "ok": ok,
+                    "msg": msg,
+                })
+
+                if ok:
+                    exported = True
+                break
+
+            if not exported:
+                continue
+
+    summary["topAlternativesSubfolder"] = alternatives_subfolder
+    summary["topAlternativesCount"] = sum(1 for a in alternatives if a.get("ok"))
+    summary["topAlternatives"] = alternatives
 
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(

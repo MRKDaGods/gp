@@ -1,7 +1,9 @@
 """Tracklet loading, run resolution, and selected-tracklet summaries."""
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 
 from backend.config import OUTPUT_DIR
 from backend.services.logging_service import _timeline_debug
@@ -380,3 +382,111 @@ def _resolve_probe_run_id_for_video(
         {"fallbackRunId": fallback},
     )
     return fallback
+
+
+def _build_tracklet_lookup(run_id: str) -> Dict[Tuple[str, int], Dict[str, Any]]:
+    """Index all stage1 tracklets by (normalised_camera, track_id). First-seen wins."""
+    lookup: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    run_dir = OUTPUT_DIR / run_id
+    for t in _load_all_stage1_tracklets(run_dir):
+        cam = _normalize_camera_id(str(t.get("camera_id", "")))
+        tid = int(t.get("track_id", -1))
+        if cam and tid >= 0 and (cam, tid) not in lookup:
+            lookup[(cam, tid)] = t
+    return lookup
+
+
+def _build_tracklet_embedding_bank(run_id: str) -> Dict[Tuple[str, int], np.ndarray]:
+    """Mean-pool stage2 embeddings per (camera, track_id) and L2-normalise."""
+    bank: Dict[Tuple[str, int], np.ndarray] = {}
+    stage2_dir = OUTPUT_DIR / run_id / "stage2"
+    emb_path = stage2_dir / "embeddings.npy"
+    idx_path = stage2_dir / "embedding_index.json"
+    if not emb_path.exists() or not idx_path.exists():
+        return bank
+
+    emb = np.load(emb_path)
+    with open(idx_path, "r", encoding="utf-8") as f:
+        idx = json.load(f)
+
+    if not isinstance(idx, list) or emb.ndim != 2 or emb.shape[0] == 0:
+        return bank
+
+    groups: Dict[Tuple[str, int], List[int]] = {}
+    for i, row in enumerate(idx):
+        cam = _normalize_camera_id(str(row.get("camera_id", "")))
+        tid = int(row.get("track_id", -1))
+        if not cam or tid < 0:
+            continue
+        groups.setdefault((cam, tid), []).append(i)
+
+    for key, rows in groups.items():
+        vec = emb[rows].mean(axis=0).astype(np.float32, copy=False)
+        n = float(np.linalg.norm(vec))
+        if n <= 1e-8:
+            continue
+        bank[key] = vec / n
+
+    return bank
+
+
+def _build_tracklet_global_map(
+    run_id: str,
+) -> Tuple[
+    Dict[Tuple[str, int], Optional[int]],
+    Dict[int, int],
+    Dict[Tuple[str, int], Dict[str, float]],
+]:
+    """Map tracklets to global IDs, camera counts, and time spans.
+
+    Returns ``(key_to_gid, gid_to_cam_count, key_to_span)``.
+    """
+    key_to_gid: Dict[Tuple[str, int], Optional[int]] = {}
+    gid_to_cam_count: Dict[int, int] = {}
+    key_to_span: Dict[Tuple[str, int], Dict[str, float]] = {}
+    traj_path = OUTPUT_DIR / run_id / "stage4" / "global_trajectories.json"
+    if not traj_path.exists():
+        return key_to_gid, gid_to_cam_count, key_to_span
+
+    try:
+        trajectories = json.loads(traj_path.read_text(encoding="utf-8"))
+    except Exception:
+        return key_to_gid, gid_to_cam_count, key_to_span
+
+    if not isinstance(trajectories, list):
+        return key_to_gid, gid_to_cam_count, key_to_span
+
+    for traj in trajectories:
+        try:
+            gid_raw = traj.get("global_id", traj.get("globalId"))
+            gid = int(gid_raw) if gid_raw is not None else None
+        except Exception:
+            gid = None
+
+        tracklets = traj.get("tracklets") if isinstance(traj.get("tracklets"), list) else []
+        timeline = traj.get("timeline") if isinstance(traj.get("timeline"), list) else []
+        cams: set = set()
+        for tr in tracklets:
+            cam = _normalize_camera_id(str(tr.get("camera_id") or tr.get("cameraId") or ""))
+            tid = int(tr.get("track_id") or tr.get("trackId") or -1)
+            if not cam or tid < 0:
+                continue
+            key_to_gid[(cam, tid)] = gid
+            cams.add(cam)
+
+        for tl in timeline:
+            cam = _normalize_camera_id(str(tl.get("camera_id") or tl.get("cameraId") or ""))
+            tid = int(tl.get("track_id") or tl.get("trackId") or -1)
+            if not cam or tid < 0:
+                continue
+            start = float(tl.get("start", 0.0) or 0.0)
+            end = float(tl.get("end", start) or start)
+            key_to_span[(cam, tid)] = {
+                "start": start,
+                "end": max(end, start + 0.1),
+            }
+
+        if gid is not None and cams:
+            gid_to_cam_count[gid] = len(cams)
+
+    return key_to_gid, gid_to_cam_count, key_to_span

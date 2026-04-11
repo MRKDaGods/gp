@@ -320,3 +320,11 @@ def _parse_selected_track_nums(raw_ids: List[str]) -> set:
         if m:
             selected.add(int(m.group(1)))
     return selected
+
+
+def _safe_name_token(value: str) -> str:
+    """Sanitise a value for use in filenames (letters, digits, dash, underscore)."""
+    txt = str(value or "").strip()
+    if not txt:
+        return "unknown"
+    return re.sub(r"[^a-zA-Z0-9_-]+", "_", txt)
