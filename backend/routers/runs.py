@@ -52,7 +52,39 @@ async def get_matched_clip(run_id: str, filename: str):
         raise HTTPException(status_code=400, detail="Invalid filename")
     clip_path = OUTPUT_DIR / run_id / "matched" / safe_name
     if not clip_path.exists() or not clip_path.is_file():
-        raise HTTPException(status_code=404, detail=f"Clip not found: {filename}")
+        # Lazy-generate missing matched clip when possible.
+        m = re.match(r"^global_(.+?)_cam_(.+?)_track_(\d+)\.mp4$", safe_name)
+        if m:
+            cam_token = str(m.group(2))
+            tid = int(m.group(3))
+            cam_norm = _normalize_camera_id(cam_token)
+
+            gallery_run_id = run_id
+            summary_path = OUTPUT_DIR / run_id / "matched" / "summary.json"
+            if summary_path.exists():
+                try:
+                    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                    ds_run = str(summary.get("datasetRunId") or "").strip()
+                    if ds_run:
+                        gallery_run_id = ds_run
+                except Exception:
+                    pass
+
+            lookup = _build_tracklet_lookup(gallery_run_id)
+            src_tracklet = lookup.get((cam_norm, tid))
+            if src_tracklet is not None:
+                try:
+                    clip_path.parent.mkdir(parents=True, exist_ok=True)
+                    ok, _msg = _export_tracklet_clip(gallery_run_id, src_tracklet, clip_path)
+                    if not ok:
+                        raise HTTPException(status_code=404, detail=f"Clip not found: {filename}")
+                except HTTPException:
+                    raise
+                except Exception:
+                    raise HTTPException(status_code=404, detail=f"Clip not found: {filename}")
+
+        if not clip_path.exists() or not clip_path.is_file():
+            raise HTTPException(status_code=404, detail=f"Clip not found: {filename}")
     cache_dir = OUTPUT_DIR / run_id / "matched" / ".browser_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     cached = cache_dir / safe_name

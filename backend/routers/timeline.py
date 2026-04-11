@@ -26,7 +26,7 @@ async def query_timeline(request: TimelineQueryRequest, state: AppState = Depend
 
     repo = InMemoryDatasetRepository(state.uploaded_videos, state.video_to_latest_run, OUTPUT_DIR)
     service = TimelineService(repo)
-    response_payload = service.query(request, state.uploaded_videos)
+    response_payload, ranked_candidates = service.query_with_candidates(request, state.uploaded_videos)
 
     # ── I/O side-effects (stay in router) ───────────────────────────────
     debug_bundle_path = _export_timeline_debug_bundle(request_payload, response_payload)
@@ -53,7 +53,13 @@ async def query_timeline(request: TimelineQueryRequest, state: AppState = Depend
     matched = response_payload.get("data", {}).get("trajectories", [])
     if matched and probe_run_id:
         try:
-            _export_matched_clips(probe_run_id, request.runId, matched)
+            _export_matched_clips(
+                probe_run_id,
+                request.runId,
+                matched,
+                ranked_candidates=ranked_candidates,
+                top_k_alternatives=5,
+            )
         except Exception as _mc_err:
             print(f"[matched] clip export failed: {_mc_err}", flush=True)
 
