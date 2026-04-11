@@ -80,3 +80,7 @@ run_metadata.json
 *.mp4
 explorer_output.txt
 planner_output.txt
+
+# Local dataset and upload directories
+/dataset
+/uploads

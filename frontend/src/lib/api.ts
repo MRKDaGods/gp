@@ -302,6 +302,100 @@ export async function getMatchedSummary(runId: string): Promise<any> {
   return fetchApi(`/runs/${runId}/matched_summary`);
 }
 
+export interface MatchedAlternative {
+  rank: number;
+  globalId: number | null;
+  cameraId: string;
+  trackId: number;
+  score: number;
+  confidence: number;
+  numCameras: number;
+  className?: string;
+  startTime?: number;
+  endTime?: number;
+  representativeFrame?: number;
+  representativeBbox?: number[];
+  label?: string;
+  clipPath: string;
+  previewUrl?: string;
+  ok: boolean;
+  message?: string;
+}
+
+export interface MatchedAlternativesPayload {
+  runId: string;
+  totalCameras: number;
+  cameras: string[];
+  subfolder: string;
+  alternatives: MatchedAlternative[];
+}
+
+export async function getMatchedAlternatives(
+  runId: string,
+  options?: {
+    topK?: number;
+    anchorCameraId?: string;
+    anchorTrackId?: number;
+    excludeGlobalId?: number;
+    excludeCameraId?: string;
+    excludeTrackId?: number;
+  }
+): Promise<MatchedAlternativesPayload> {
+  const q = new URLSearchParams();
+  if (options?.topK != null) q.set("topK", String(options.topK));
+  if (options?.anchorCameraId) q.set("anchorCameraId", String(options.anchorCameraId));
+  if (options?.anchorTrackId != null) q.set("anchorTrackId", String(options.anchorTrackId));
+  if (options?.excludeGlobalId != null) q.set("excludeGlobalId", String(options.excludeGlobalId));
+  if (options?.excludeCameraId) q.set("excludeCameraId", String(options.excludeCameraId));
+  if (options?.excludeTrackId != null) q.set("excludeTrackId", String(options.excludeTrackId));
+
+  const raw = await fetchApi<any>(
+    `/runs/${encodeURIComponent(runId)}/matched_alternatives${q.toString() ? `?${q.toString()}` : ""}`
+  );
+
+  const alternatives = Array.isArray(raw?.alternatives)
+    ? raw.alternatives.map((item: any): MatchedAlternative => ({
+        rank: Number(item?.rank ?? 0),
+        globalId: item?.global_id == null ? null : Number(item.global_id),
+        cameraId: String(item?.camera_id ?? "unknown"),
+        trackId: Number(item?.track_id ?? -1),
+        score: Number(item?.score ?? 0),
+        confidence: Number(item?.confidence ?? 0),
+        numCameras: Number(item?.num_cameras ?? 0),
+        className: typeof item?.class_name === "string" ? item.class_name : undefined,
+        startTime: item?.start_time_s == null ? undefined : Number(item.start_time_s),
+        endTime: item?.end_time_s == null ? undefined : Number(item.end_time_s),
+        representativeFrame:
+          item?.representative_frame == null ? undefined : Number(item.representative_frame),
+        representativeBbox:
+          Array.isArray(item?.representative_bbox) && item.representative_bbox.length === 4
+            ? item.representative_bbox.map((v: any) => Number(v))
+            : undefined,
+        label: typeof item?.label === "string" ? item.label : undefined,
+        clipPath: String(item?.clip_path ?? item?.file ?? ""),
+        ok: Boolean(item?.ok),
+        message: typeof item?.msg === "string" ? item.msg : undefined,
+      }))
+    : [];
+
+  return {
+    runId: String(raw?.runId ?? runId),
+    totalCameras: Number(raw?.totalCameras ?? 0),
+    cameras: Array.isArray(raw?.cameras) ? raw.cameras.map((c: any) => String(c)) : [],
+    subfolder: String(raw?.subfolder ?? "top5_alternatives"),
+    alternatives,
+  };
+}
+
+export function getMatchedAlternativeClipUrl(runId: string, clipPath: string): string {
+  const safePath = String(clipPath)
+    .split("/")
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return `${API_BASE}/runs/${encodeURIComponent(runId)}/matched_alternatives/${safePath}`;
+}
+
 /** Sampled frames for timeline tracklet preview (full frame + bbox sync). */
 export interface TrackletSequenceFrame {
   frameId: number;
