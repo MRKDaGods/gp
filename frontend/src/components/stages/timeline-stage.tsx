@@ -63,7 +63,7 @@ import {
 import type { TimelineTrack, TrajectorySegment } from "@/types";
 import { TrackletFrameView } from "@/components/ui/double-buffered-img";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 
 /** Playhead & ruler updates/sec while playing — match typical display cadence for video-like motion. */
 const TIMELINE_PLAYHEAD_FPS = 30;

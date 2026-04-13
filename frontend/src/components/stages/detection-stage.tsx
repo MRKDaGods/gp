@@ -39,8 +39,156 @@ import {
   getFrameUrl,
   getVideoStreamUrl,
 } from "@/lib/api";
-import type { VideoFile } from "@/types";
+import type { BoundingBox, Detection, VideoFile } from "@/types";
 import { DoubleBufferedFrameImg } from "@/components/ui/double-buffered-img";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
+
+function detectionCropUrl(
+  videoId: string,
+  frameId: number,
+  bbox: BoundingBox,
+  quality: number = 92,
+  minEdge: number = 160
+): string {
+  const { x1, y1, x2, y2 } = bbox;
+  return `${API_BASE}/crops/${encodeURIComponent(videoId)}?frameId=${frameId}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&quality=${quality}&minEdge=${minEdge}&pad=0.12`;
+}
+
+/**
+ * First frame each track appears — used for sidebar thumbs only.
+ * Playback updates overlay boxes every frame; if thumbs used that data, the
+ * crop URL would change ~30×/s and flood `/api/crops` (freezing the video).
+ */
+function buildTrackThumbnailSources(
+  frameMap: Map<number, Detection[]>
+): Map<number, { frameId: number; bbox: BoundingBox }> {
+  const out = new Map<number, { frameId: number; bbox: BoundingBox }>();
+  const frames = [...frameMap.keys()].sort((a, b) => a - b);
+  for (const fi of frames) {
+    for (const d of frameMap.get(fi) ?? []) {
+      const tid = d.trackId;
+      if (!Number.isFinite(tid) || tid < 0) continue;
+      if (out.has(tid)) continue;
+      out.set(tid, {
+        frameId: fi,
+        bbox: { x1: d.bbox.x1, y1: d.bbox.y1, x2: d.bbox.x2, y2: d.bbox.y2 },
+      });
+    }
+  }
+  return out;
+}
+
+function detectionCropThumbPropsEqual(
+  prev: {
+    videoId: string;
+    classId: number;
+    isSelected: boolean;
+    cropFrameId: number;
+    cropBbox: BoundingBox;
+  },
+  next: typeof prev
+) {
+  return (
+    prev.videoId === next.videoId &&
+    prev.classId === next.classId &&
+    prev.isSelected === next.isSelected &&
+    prev.cropFrameId === next.cropFrameId &&
+    prev.cropBbox.x1 === next.cropBbox.x1 &&
+    prev.cropBbox.y1 === next.cropBbox.y1 &&
+    prev.cropBbox.x2 === next.cropBbox.x2 &&
+    prev.cropBbox.y2 === next.cropBbox.y2
+  );
+}
+
+function ClassIconFallback({
+  classId,
+  isSelected,
+}: {
+  classId: number;
+  isSelected: boolean;
+}) {
+  const cls = cn("h-6 w-6", isSelected ? "text-green-500" : "text-muted-foreground");
+  if (classId === 2) return <Car className={cls} />;
+  if (classId === 7) return <Truck className={cls} />;
+  if (classId === 5) return <Bus className={cls} />;
+  return <Car className={cls} />;
+}
+
+/**
+ * Sidebar crop thumbnails: stable crop URL per track + load only when in view.
+ */
+const DetectionCropThumb = memo(function DetectionCropThumb({
+  videoId,
+  classId,
+  isSelected,
+  cropFrameId,
+  cropBbox,
+}: {
+  videoId: string;
+  classId: number;
+  isSelected: boolean;
+  cropFrameId: number;
+  cropBbox: BoundingBox;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisible(true);
+          obs.disconnect();
+        }
+      },
+      { root: null, rootMargin: "120px", threshold: 0.01 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const url = useMemo(
+    () => detectionCropUrl(videoId, cropFrameId, cropBbox, 92, 160),
+    [videoId, cropFrameId, cropBbox]
+  );
+
+  return (
+    <div
+      ref={rootRef}
+      className={cn(
+        "relative h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-muted",
+        isSelected ? "border-green-500/70 ring-1 ring-green-500/40" : "border-border"
+      )}
+    >
+      {!visible ? (
+        <div className="h-full w-full animate-pulse bg-muted-foreground/15" aria-hidden />
+      ) : failed ? (
+        <div
+          className={cn(
+            "flex h-full w-full items-center justify-center",
+            isSelected ? "bg-green-500/20" : "bg-muted"
+          )}
+        >
+          <ClassIconFallback classId={classId} isSelected={isSelected} />
+        </div>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={url}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </div>
+  );
+}, detectionCropThumbPropsEqual);
 
 /** Stable FPS for frame index ↔ time mapping (fallback 25 when metadata is missing). */
 function effectivePlaybackFps(video: VideoFile | null): number {
@@ -115,6 +263,10 @@ export function DetectionStage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 450 });
   const detectionCacheRef = useRef<Map<number, typeof detections>>(new Map());
+  /** Stable sidebar thumb source per track (first occurrence in cached frames). */
+  const trackThumbByTrackRef = useRef<Map<number, { frameId: number; bbox: BoundingBox }>>(
+    new Map()
+  );
   const videoRef = useRef<HTMLVideoElement>(null);
   /** JPEG frame-by-frame path when /videos/stream fails or unsupported. */
   const [useFrameFallback, setUseFrameFallback] = useState(false);
@@ -152,6 +304,7 @@ export function DetectionStage() {
         const allDets = await getAllDetections(currentVideo.id);
         if (cancelled) return;
         detectionCacheRef.current = allDets;
+        trackThumbByTrackRef.current = buildTrackThumbnailSources(allDets);
         // Show detections for current frame
         setDetections(allDets.get(currentFrame) ?? []);
       } catch {
@@ -159,12 +312,17 @@ export function DetectionStage() {
         // Fallback: fetch single frame
         const response = await getDetections(currentVideo.id, currentFrame);
         if (cancelled) return;
-        setDetections(response.data ?? []);
+        const dets = response.data ?? [];
+        trackThumbByTrackRef.current = buildTrackThumbnailSources(
+          new Map([[currentFrame, dets]])
+        );
+        setDetections(dets);
       }
     };
 
     const loadInitialDetections = async () => {
       if (!currentVideo) {
+        trackThumbByTrackRef.current = new Map();
         setDetections([]);
         setIsLoading(false);
         updateStageProgress(1, {
@@ -200,6 +358,7 @@ export function DetectionStage() {
           if (cancelled) return;
           const msg = err instanceof Error ? err.message : String(err);
           setVideoError(`Failed to load detections: ${msg}`);
+          trackThumbByTrackRef.current = new Map();
           setDetections([]);
           updateStageProgress(1, {
             status: "error",
@@ -254,6 +413,7 @@ export function DetectionStage() {
             const detail = statusData?.errorDetail ? String(statusData.errorDetail) : null;
             setVideoError(errMsg);
             setErrorDetail(detail);
+            trackThumbByTrackRef.current = new Map();
             setDetections([]);
             updateStageProgress(1, {
               status: "error",
@@ -622,13 +782,6 @@ export function DetectionStage() {
                         onMouseEnter={() => setHoveredId(detection.id)}
                         onMouseLeave={() => setHoveredId(null)}
                       >
-                        {/* Vehicle silhouette inside bbox */}
-                        <div className="absolute inset-0 flex items-center justify-center opacity-40">
-                          {detection.classId === 2 && <Car className="w-1/2 h-1/2 text-white" />}
-                          {detection.classId === 7 && <Truck className="w-1/2 h-1/2 text-white" />}
-                          {detection.classId === 5 && <Bus className="w-1/2 h-1/2 text-white" />}
-                        </div>
-
                         {/* Label */}
                         <div
                           className={cn(
@@ -726,9 +879,13 @@ export function DetectionStage() {
               {detections.map((detection) => {
               const isSelected = selectedTrackIds.has(detection.trackId); 
               const isHovered = hoveredId === detection.id;
+              const thumbSrc =
+                trackThumbByTrackRef.current.get(detection.trackId) ?? null;
+              const cropFrameId = thumbSrc?.frameId ?? detection.frameId;
+              const cropBbox = thumbSrc?.bbox ?? detection.bbox;
                 return (
                   <div
-                    key={detection.id}
+                    key={`track-${detection.trackId}`}
                     className={cn(
                       "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
                       isSelected
@@ -740,14 +897,32 @@ export function DetectionStage() {
                     onMouseEnter={() => setHoveredId(detection.id)}
                     onMouseLeave={() => setHoveredId(null)}
                   >
-                    <div className={cn(
-                      "h-10 w-10 rounded flex items-center justify-center",
-                      isSelected ? "bg-green-500/20" : "bg-muted"
-                    )}>
-                      {detection.classId === 2 && <Car className={cn("h-5 w-5", isSelected ? "text-green-500" : "text-muted-foreground")} />}
-                      {detection.classId === 7 && <Truck className={cn("h-5 w-5", isSelected ? "text-green-500" : "text-muted-foreground")} />}
-                      {detection.classId === 5 && <Bus className={cn("h-5 w-5", isSelected ? "text-green-500" : "text-muted-foreground")} />}
-                    </div>
+                    {currentVideo ? (
+                      <DetectionCropThumb
+                        videoId={currentVideo.id}
+                        classId={detection.classId}
+                        isSelected={isSelected}
+                        cropFrameId={cropFrameId}
+                        cropBbox={cropBbox}
+                      />
+                    ) : (
+                      <div
+                        className={cn(
+                          "flex h-16 w-16 shrink-0 items-center justify-center rounded-md",
+                          isSelected ? "bg-green-500/20" : "bg-muted"
+                        )}
+                      >
+                        {detection.classId === 2 && (
+                          <Car className={cn("h-6 w-6", isSelected ? "text-green-500" : "text-muted-foreground")} />
+                        )}
+                        {detection.classId === 7 && (
+                          <Truck className={cn("h-6 w-6", isSelected ? "text-green-500" : "text-muted-foreground")} />
+                        )}
+                        {detection.classId === 5 && (
+                          <Bus className={cn("h-6 w-6", isSelected ? "text-green-500" : "text-muted-foreground")} />
+                        )}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium capitalize">{detection.className}</span>
