@@ -22,10 +22,11 @@ from loguru import logger
 from omegaconf import DictConfig
 
 from src.core.data_models import GlobalTrajectory, Tracklet, TrackletFeatures
-from src.core.io_utils import save_global_trajectories
+from src.core.io_utils import load_multi_query_embeddings, save_global_trajectories
 from src.stage3_indexing.faiss_index import FAISSIndex
 from src.stage3_indexing.metadata_store import MetadataStore
 from src.stage4_association.camera_bias import CameraDistanceBias, ZoneTransitionModel
+from src.stage4_association.aflink import aflink_post_association
 from src.stage4_association.fic import per_camera_whiten, cross_camera_augment, iterative_fac
 from src.stage4_association.global_trajectories import merge_tracklets_to_trajectories
 from src.stage4_association.graph_solver import GraphSolver
@@ -38,6 +39,67 @@ from src.stage4_association.similarity import (
 )
 from src.stage4_association.spatial_temporal import SpatioTemporalValidator
 from src.stage4_association.zone_scoring import ZoneScorer
+
+
+def _flatten_multi_query_embeddings(
+    mq_embeddings: List[Optional[np.ndarray]],
+    camera_ids: List[str],
+) -> tuple[Optional[np.ndarray], List[int], List[str]]:
+    """Flatten MQ arrays and repeat camera IDs per representative embedding."""
+    flattened: List[np.ndarray] = []
+    sizes: List[int] = []
+    mq_camera_ids: List[str] = []
+
+    for camera_id, mq in zip(camera_ids, mq_embeddings):
+        if mq is None:
+            continue
+        flattened.append(mq)
+        sizes.append(mq.shape[0])
+        mq_camera_ids.extend([camera_id] * mq.shape[0])
+
+    if not flattened:
+        return None, [], []
+
+    return np.concatenate(flattened, axis=0), sizes, mq_camera_ids
+
+
+def _restore_multi_query_embeddings(
+    mq_embeddings: List[Optional[np.ndarray]],
+    mq_flat: np.ndarray,
+    sizes: List[int],
+) -> None:
+    """Restore flattened MQ rows after FIC whitening."""
+    offset = 0
+    size_idx = 0
+    for idx, mq in enumerate(mq_embeddings):
+        if mq is None:
+            continue
+        size = sizes[size_idx]
+        mq_embeddings[idx] = mq_flat[offset:offset + size]
+        offset += size
+        size_idx += 1
+
+
+def _compute_multi_query_pair_similarity(
+    avg_i: np.ndarray,
+    avg_j: np.ndarray,
+    mq_i: Optional[np.ndarray],
+    mq_j: Optional[np.ndarray],
+    mq_weight: float,
+) -> float:
+    """Blend average-embedding cosine with max-of-KxK multi-query cosine."""
+    avg_sim = float(avg_i @ avg_j)
+    if mq_i is None and mq_j is None:
+        return avg_sim
+
+    if mq_i is not None and mq_j is not None:
+        mq_sim = float((mq_i @ mq_j.T).max())
+    elif mq_i is not None:
+        mq_sim = float((mq_i @ avg_j).max())
+    else:
+        mq_sim = float((avg_i @ mq_j.T).max())
+
+    return (1.0 - mq_weight) * avg_sim + mq_weight * mq_sim
 
 
 def run_stage4(
@@ -82,6 +144,20 @@ def run_stage4(
     # FIC config (used by both primary and secondary embeddings)
     fic_cfg = stage_cfg.get("fic", {})
 
+    mq_cfg = stage_cfg.get("multi_query", {})
+    mq_enabled = bool(mq_cfg.get("enabled", False))
+    mq_weight = float(mq_cfg.get("weight", 0.5))
+    mq_dir = mq_cfg.get("dir", "")
+    mq_embeddings: List[Optional[np.ndarray]] = [None] * n
+    if mq_enabled:
+        mq_input_dir = Path(mq_dir) if mq_dir else output_dir.parent / "stage2"
+        mq_embeddings = load_multi_query_embeddings(mq_input_dir, n)
+        mq_count = sum(mq is not None for mq in mq_embeddings)
+        logger.info(
+            f"Multi-query embeddings loaded: {mq_count}/{n} tracklets "
+            f"(weight={mq_weight:.2f})"
+        )
+
     # Optional: load secondary embeddings for score-level fusion.
     # Instead of concatenating features (which mixes uncalibrated spaces),
     # we compute separate appearance similarities and blend them later.
@@ -89,7 +165,7 @@ def run_stage4(
     sec_path = sec_cfg.get("path", "")
     sec_embeddings: Optional[np.ndarray] = None
     sec_weight = 0.0
-    if sec_path and Path(sec_path).exists():
+    if sec_path and float(sec_cfg.get("weight", 0.3)) > 0 and Path(sec_path).exists():
         sec_raw = np.load(sec_path).astype(np.float32)
         if sec_raw.shape[0] == n:
             sec_weight = float(sec_cfg.get("weight", 0.3))
@@ -117,6 +193,42 @@ def run_stage4(
             f"Falling back to primary-only (sec_weight=0.0)."
         )
 
+    tert_cfg = stage_cfg.get("tertiary_embeddings", {})
+    tert_path = tert_cfg.get("path", "")
+    tert_embeddings: Optional[np.ndarray] = None
+    tert_weight = 0.0
+    if tert_path and float(tert_cfg.get("weight", 0.0)) > 0 and Path(tert_path).exists():
+        tert_raw = np.load(tert_path).astype(np.float32)
+        if tert_raw.shape[0] == n:
+            tert_weight = float(tert_cfg.get("weight", 0.0))
+            tert_norms = np.linalg.norm(tert_raw, axis=1, keepdims=True)
+            tert_embeddings = tert_raw / np.maximum(tert_norms, 1e-8)
+            logger.info(
+                f"Tertiary embeddings loaded: {tert_embeddings.shape[1]}D, "
+                f"weight={tert_weight:.2f} (score-level fusion)"
+            )
+            if fic_cfg.get("enabled", False):
+                tert_embeddings = per_camera_whiten(
+                    tert_embeddings,
+                    camera_ids,
+                    regularisation=float(fic_cfg.get("regularisation", 3.0)),
+                    min_samples=int(fic_cfg.get("min_samples", 5)),
+                )
+                logger.info("Applied FIC whitening to tertiary embeddings")
+        else:
+            logger.warning(f"Tertiary embeddings shape mismatch: {tert_raw.shape[0]} vs {n}")
+    elif tert_path and float(tert_cfg.get("weight", 0.0)) > 0:
+        logger.warning(
+            f"Tertiary embeddings file not found: {tert_path}. "
+            f"Falling back to primary/secondary fusion only (tert_weight=0.0)."
+        )
+
+    if sec_weight + tert_weight > 1.0 + 1e-8:
+        raise ValueError(
+            "stage4 association ensemble weights invalid: "
+            f"secondary({sec_weight:.3f}) + tertiary({tert_weight:.3f}) must be <= 1.0"
+        )
+
     # Step 0: Per-camera feature whitening (FIC) — AIC21 1st-place technique.
     # Removes camera-specific bias (lighting, viewpoint) from embeddings.
     if fic_cfg.get("enabled", False):
@@ -126,6 +238,19 @@ def run_stage4(
             regularisation=float(fic_cfg.get("regularisation", 3.0)),
             min_samples=int(fic_cfg.get("min_samples", 5)),
         )
+
+        mq_flat, mq_sizes, mq_camera_ids = _flatten_multi_query_embeddings(
+            mq_embeddings,
+            camera_ids,
+        )
+        if mq_flat is not None:
+            mq_flat = per_camera_whiten(
+                mq_flat,
+                mq_camera_ids,
+                regularisation=float(fic_cfg.get("regularisation", 3.0)),
+                min_samples=int(fic_cfg.get("min_samples", 5)),
+            )
+            _restore_multi_query_embeddings(mq_embeddings, mq_flat, mq_sizes)
 
     # Step 0b: Cross-camera feature augmentation (FAC) — AIC21 technique.
     # Pulls each feature toward its cross-camera KNN consensus.
@@ -237,9 +362,20 @@ def run_stage4(
     exhaustive_cfg = stage_cfg.get("exhaustive_cross_camera", True)
     if exhaustive_cfg:
         min_sim = float(stage_cfg.get("exhaustive_min_similarity", 0.0))
-        candidate_pairs = _build_all_cross_camera_pairs(
-            n, embeddings, camera_ids, class_ids, min_similarity=min_sim,
-        )
+        if mq_enabled and any(mq is not None for mq in mq_embeddings):
+            candidate_pairs = _build_all_cross_camera_pairs_multi_query(
+                n,
+                embeddings,
+                mq_embeddings,
+                camera_ids,
+                class_ids,
+                min_similarity=min_sim,
+                mq_weight=mq_weight,
+            )
+        else:
+            candidate_pairs = _build_all_cross_camera_pairs(
+                n, embeddings, camera_ids, class_ids, min_similarity=min_sim,
+            )
     else:
         candidate_pairs = _build_candidate_pairs(
             n, indices, distances, top_k, camera_ids, class_ids,
@@ -248,8 +384,6 @@ def run_stage4(
 
     if not candidate_pairs:
         logger.warning("No cross-camera candidate pairs found")
-        all_tracklets = [t for tl in tracklets_by_camera.values() for t in tl]
-        return _assign_individual_ids(all_tracklets)
 
     # Step 2a: Hard temporal constraint — pre-filter pairs where the two tracklets
     # overlap in time within the SAME camera.  These are provably different identities
@@ -299,17 +433,23 @@ def run_stage4(
     else:
         appearance_sim = {(i, j): sim for i, j, sim in candidate_pairs}
 
-    # Step 3b: Score-level fusion with secondary embeddings
-    if sec_embeddings is not None and sec_weight > 0:
-        logger.info(f"Blending secondary appearance sim (weight={sec_weight:.2f})...")
+    # Step 3b: Score-level fusion with secondary/tertiary embeddings
+    if (sec_embeddings is not None and sec_weight > 0) or (tert_embeddings is not None and tert_weight > 0):
+        primary_weight = 1.0 - sec_weight - tert_weight
+        logger.info(
+            "Blending ensemble appearance sim "
+            f"(w_pri={primary_weight:.2f}, w_sec={sec_weight:.2f}, w_tert={tert_weight:.2f})..."
+        )
         blended = 0
-        for (i, j) in appearance_sim:
-            sec_sim = float(np.dot(sec_embeddings[i], sec_embeddings[j]))
-            appearance_sim[(i, j)] = (
-                (1 - sec_weight) * appearance_sim[(i, j)] + sec_weight * sec_sim
-            )
+        for (i, j), pri_sim in list(appearance_sim.items()):
+            sim = primary_weight * pri_sim
+            if sec_embeddings is not None and sec_weight > 0:
+                sim += sec_weight * float(np.dot(sec_embeddings[i], sec_embeddings[j]))
+            if tert_embeddings is not None and tert_weight > 0:
+                sim += tert_weight * float(np.dot(tert_embeddings[i], tert_embeddings[j]))
+            appearance_sim[(i, j)] = sim
             blended += 1
-        logger.info(f"Blended {blended} pairs with secondary embeddings")
+        logger.info(f"Blended {blended} pairs with ensemble embeddings")
 
     # Step 4: Spatio-temporal validation
     st_validator = SpatioTemporalValidator(
@@ -814,6 +954,21 @@ def run_stage4(
         combined_sim=combined_sim,
     )
 
+    aflink_cfg = stage_cfg.get("aflink", {})
+    if aflink_cfg.get("enabled", False):
+        trajectories = aflink_post_association(
+            trajectories=trajectories,
+            feature_to_tracklet_key=feature_to_tracklet_key,
+            tracklet_lookup=tracklet_lookup,
+            embeddings=embeddings,
+            combined_sim=combined_sim,
+            max_time_gap_frames=int(aflink_cfg.get("max_time_gap_frames", 150)),
+            max_spatial_gap_px=float(aflink_cfg.get("max_spatial_gap_px", 200.0)),
+            min_direction_cos=float(aflink_cfg.get("min_direction_cos", 0.7)),
+            min_velocity_ratio=float(aflink_cfg.get("min_velocity_ratio", 0.5)),
+            velocity_window=int(aflink_cfg.get("velocity_window", 5)),
+        )
+
     # Log confidence distribution for diagnostics
     confidences = [t.confidence for t in trajectories if t.num_cameras > 1]
     if confidences:
@@ -981,6 +1136,74 @@ def _build_all_cross_camera_pairs(
     logger.info(
         f"Exhaustive cross-camera pairs: {len(candidate_pairs)} "
         f"(min_sim={min_similarity:.2f}, {len(cameras)} cameras"
+        + (f", {skipped_cross_scene:,} cross-scene pairs blocked" if skipped_cross_scene else "")
+        + ")"
+    )
+    return candidate_pairs
+
+
+def _build_all_cross_camera_pairs_multi_query(
+    n: int,
+    embeddings: np.ndarray,
+    mq_embeddings: List[Optional[np.ndarray]],
+    camera_ids: List[str],
+    class_ids: List[int],
+    min_similarity: float = 0.0,
+    mq_weight: float = 0.5,
+) -> List[Tuple[int, int, float]]:
+    """Exhaustive cross-camera candidate generation with MQ-aware appearance.
+
+    Each pair blends the original averaged similarity with a max-of-KxK
+    multi-query similarity. If only one side has MQ embeddings, the MQ branch
+    falls back to a Kx1 max against the other tracklet's averaged embedding.
+    """
+    from collections import defaultdict
+
+    cam_to_idxs: Dict[str, List[int]] = defaultdict(list)
+    for idx, cam in enumerate(camera_ids):
+        cam_to_idxs[cam].append(idx)
+
+    cameras = sorted(cam_to_idxs.keys())
+    cam_scenes = {cam: _extract_scene(cam) for cam in cameras}
+    scene_set = set(cam_scenes.values()) - {""}
+    scene_blocking_active = len(scene_set) > 1
+    if scene_blocking_active:
+        logger.info(
+            f"Scene blocking: {len(scene_set)} scenes detected "
+            f"({', '.join(sorted(scene_set))}). Cross-scene pairs will be skipped."
+        )
+
+    candidate_pairs: List[Tuple[int, int, float]] = []
+    skipped_cross_scene = 0
+
+    for a_idx, cam_a in enumerate(cameras):
+        a_global = cam_to_idxs[cam_a]
+        scene_a = cam_scenes[cam_a]
+
+        for cam_b in cameras[a_idx + 1:]:
+            scene_b = cam_scenes[cam_b]
+            if scene_blocking_active and scene_a and scene_b and scene_a != scene_b:
+                skipped_cross_scene += len(a_global) * len(cam_to_idxs[cam_b])
+                continue
+
+            b_global = cam_to_idxs[cam_b]
+            for gi in a_global:
+                for gj in b_global:
+                    if class_ids[gi] != class_ids[gj]:
+                        continue
+                    sim = _compute_multi_query_pair_similarity(
+                        embeddings[gi],
+                        embeddings[gj],
+                        mq_embeddings[gi],
+                        mq_embeddings[gj],
+                        mq_weight,
+                    )
+                    if sim >= min_similarity:
+                        candidate_pairs.append((gi, gj, sim))
+
+    logger.info(
+        f"Exhaustive cross-camera MQ pairs: {len(candidate_pairs)} "
+        f"(min_sim={min_similarity:.2f}, mq_weight={mq_weight:.2f}, {len(cameras)} cameras"
         + (f", {skipped_cross_scene:,} cross-scene pairs blocked" if skipped_cross_scene else "")
         + ")"
     )

@@ -88,6 +88,14 @@ stage2:
       embedding_dim: 2048
       input_size: [384, 384]
       clip_normalization: false
+    vehicle3:
+      enabled: false
+      save_separate: true
+      model_name: "resnext101_ibn_a"
+      weights_path: ""
+      embedding_dim: 2048
+      input_size: [384, 384]
+      clip_normalization: false
     batch_size: 64
     device: "cuda:0"
     half: true
@@ -112,6 +120,9 @@ stage2:
     n_components: 384  # v30: 768 → 280 PCA whitening (optimal dim, IDF1=0.795)
     pca_model_path: "models/reid/pca_transform.pkl"
     secondary_pca_model_path: "models/reid/pca_transform_secondary.pkl"
+    tertiary_pca_model_path: "models/reid/pca_transform_tertiary.pkl"
+  multi_query:
+    k: 0  # 0 = disabled; when >0 keep top-K crop embeddings per tracklet
   crop:
     min_area: 500
     padding_ratio: 0.1
@@ -145,6 +156,13 @@ stage4:
     secondary_embeddings:
       path: ""       # path to secondary .npy file; empty = disabled
       weight: 0.3    # blending weight for secondary model (0.3 = 30% secondary, 70% primary)
+    tertiary_embeddings:
+      path: ""
+      weight: 0.0
+    multi_query:
+      enabled: false
+      weight: 0.5
+      dir: ""       # empty = auto-detect sibling stage2 output
     # --- FIC: per-camera feature whitening (AIC21 1st-place technique) ---
     fic:
       enabled: true
@@ -248,6 +266,13 @@ stage4:
       threshold: 0.50    # v30: optimal for 280D PCA
       max_rounds: 2
       orphan_match_threshold: 0.40  # v30: raised for 280D PCA
+    aflink:
+      enabled: true
+      max_time_gap_frames: 150
+      max_spatial_gap_px: 200.0
+      min_direction_cos: 0.7
+      min_velocity_ratio: 0.5
+      velocity_window: 5
     # --- Temporal overlap bonus for overlapping-FOV cameras ---
     # When tracklets co-exist in time across cameras with overlapping FOV,
     # this is a strong positive signal (same vehicle visible simultaneously).

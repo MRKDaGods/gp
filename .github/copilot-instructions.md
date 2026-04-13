@@ -87,29 +87,72 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - Tracklets: list of dicts with `camera_id`, `track_id`, `frames`, `boxes`, `embeddings`
 
 ## Current Performance State
-- **Best Kaggle MTMC IDF1**: 0.784 (v80/v44, ali369, min_hits=2) — official metric, comparable to SOTA
-- **Best IDF1 (single-acc)**: 0.798 (v41) — NOT the same as MTMC IDF1
-- **Best GLOBAL IDF1**: 0.805 (v85) — NOT comparable to SOTA (per-camera accumulators)
-- **SOTA target**: IDF1≈0.8486 (AIC22 1st place)
-- **Gap**: ~6.5pp MTMC IDF1 from SOTA — all three metrics are different, only MTMC IDF1 is comparable to AIC22
+
+### Vehicle Pipeline (CityFlowV2)
+- **Best Reproducible MTMC IDF1**: 0.775 (10c v52, gumfreddy, v80-restored recipe)
+- **Historical Best MTMC IDF1**: 0.784 (v80/v44, ali369) — ~1pp drift, not reproducible on current codebase
+- **SOTA target**: IDF1≈0.8486 (AIC22 1st place, 5-model ensemble)
+- **Gap to SOTA**: 7.36pp — caused by feature quality (single model), NOT association tuning
+- **Primary model**: TransReID ViT-B/16 CLIP 256px — mAP=80.14%, R1=92.27% on CityFlowV2
+- **Secondary model**: ResNet101-IBN-a — mAP=52.77% (too weak for ensemble, needs ≥65%)
 - **Association**: EXHAUSTED (225+ configs, all within 0.3pp of optimal)
-- **Critical blocker**: 384px model (80.14% mAP) never properly deployed — wrong checkpoint on Kaggle
-- **Secondary model**: ResNet101-IBN-a at 52.77% mAP — expected given no VeRi-776 pretraining
 - See `docs/findings.md` for full analysis, dead ends, and action plan
+
+### Person Pipeline (WILDTRACK)
+- **Best Ground-plane IDF1**: 0.947 (12b v14, confirmed by 12b v1)
+- **Best Ground-plane MODA**: 0.903 (12b v14)
+- **Detector**: MVDeTr ResNet18, MODA=0.921 (12a v3, best achieved)
+- **SOTA target**: IDF1≈0.953
+- **Gap to SOTA**: 0.6pp — tracker-limited (Kalman), NOT detector-limited
+- **Status**: Effectively converged — improved MODA (90.9→92.1%) did NOT improve tracking IDF1
 
 ## Experiment History
 - **Full experiment log**: See `docs/experiment-log.md` for 225+ tracked experiments
 - **Research findings**: See `docs/findings.md` for dead ends, strategic analysis, and what to do next
 - Before trying ANY parameter change, check BOTH documents to avoid repeating failed experiments
-- Key dead ends: CSLS (-34.7pp), hierarchical clustering (-1-5pp), FAC (-2.5pp), reranking (always worse with current features), camera-pair norm (zero effect), SGD for ResNet (catastrophic)
-- Association parameters are EXHAUSTED. Future gains come from: deploying correct 384px model, VeRi-776 pretraining for ResNet101, CID_BIAS
+
+### Confirmed Dead Ends (DO NOT RETRY)
+- **CSLS**: -34.7pp (catastrophic — penalizes genuine vehicle-type hubs)
+- **384px ViT deployment**: -2.8pp (captures viewpoint-specific textures that hurt cross-camera matching)
+- **CID_BIAS**: -3.3pp (overfits with only 464 GT-matched tracklets)
+- **DMT camera-aware training**: -1.4pp single-model (also 09g: 43.8% mAP, too weak)
+- **Hierarchical clustering**: -1 to -5pp (centroid averaging loses discriminative signal)
+- **FAC**: -2.5pp (cross-camera KNN consensus overwrites distinguishing details)
+- **Reranking**: Always hurts (k-reciprocal sets contain false positives with current features)
+- **Feature concatenation**: -1.6pp (mixes uncalibrated feature spaces)
+- **VeRi-776→CityFlowV2 ResNet pretrain**: 42.7% mAP (worse than direct 52.77%)
+- **Extended ResNet fine-tuning**: 50.61% mAP (degraded from 52.77%)
+- **Score-level ensemble with 52.77% secondary**: -0.1pp (secondary too weak, adds noise)
+- **Circle loss + triplet**: 16-30% mAP (conflicting gradients)
+- **SGD for ResNet**: 30.27% mAP (catastrophic — AdamW essential for small datasets)
+- **Person: improved detector→better tracking**: MODA 90.9→92.1% but IDF1 unchanged at 94.7%
+
+### What Actually Worked
+- Conflict-free CC (+0.21pp), intra-merge (+0.28pp), temporal overlap bonus (+0.9pp)
+- FIC whitening (+1-2pp), power normalization (+0.5pp), PCA 384D, AQE K=3
+- min_hits=2 (+0.2pp), Kalman tuning for person (+1.9pp IDF1)
+
+### Remaining Untried Approaches
+- Center loss for primary ViT training (never attempted)
+- GNN edge classification for association (not implemented)
+- SAM2 foreground masking before ReID (not implemented)
+- AFLink motion-based post-association linking (not implemented)
+- Network flow / min-cost-max-flow solver (not implemented)
+- Graph-based multi-view tracking for person pipeline (not implemented)
 
 ## Kaggle Workflow
 - Pipeline chain: 10a (stages 0-2, GPU) → 10b (stage 3, CPU) → 10c (stages 4-5, CPU)
 - Push: `kaggle kernels push -p notebooks/kaggle/10X_stagesNN/`
 - Logs: `python scripts/kaggle_logs.py <kernel_slug> --tail N`
 - Auth tokens in `~/.kaggle/`: abdo (gumfreddy), mrk (mrkdagods), ali369 (lolo)
-- Current account: ali369 (lolo_access_token)
+- Current active account: gumfreddy (gumfreddy_access_token) — ali369/mrkdagods tokens may be missing from ~/.kaggle/
+
+## Paper Strategy
+- A full publishability analysis and paper strategy is documented in `docs/paper-strategy.md`
+- Best paper angle: "One Model, 91% of SOTA" — efficiency + exhaustive ablation study
+- Target venues: IEEE Access, Multimedia Tools & Applications, Scientific Reports
+- Key contribution: 225+ experiments proving feature quality (not association) is the MTMC bottleneck
+- Before any paper-related work, read `docs/paper-strategy.md` for the full analysis
 
 ## Testing
 - Framework: pytest
