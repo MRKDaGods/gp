@@ -12,7 +12,7 @@
 | **Historical Best MTMC IDF1** | **78.4%** | v80, but not reproducible with the current codebase (~1pp drift) |
 | **SOTA Target** | 84.86% | AIC22 1st place |
 | **Gap to SOTA** | 7.36pp | Relative to the current reproducible best |
-| **Primary Model (ViT-B/16 CLIP 256px)** | mAP=80.14% | On CityFlowV2 eval split |
+| **Primary Model (ViT-B/16 CLIP 256px, 09 v2 aug overhaul)** | mAP=81.59% | On CityFlowV2 eval split; +1.45pp vs the prior 80.14% baseline |
 | **Secondary Model (ResNet101-IBN-a)** | mAP=52.77% | On CityFlowV2 eval split, ImageNet→CityFlowV2 only |
 | **Secondary Model VeRi-776 pretrain (09e v2)** | mAP=62.52% | On VeRi-776 test set, ready for CityFlowV2 fine-tuning |
 | **384px ViT (09b v2)** | DEAD END | Higher single-camera ReID accuracy did not transfer; MTMC IDF1 only 0.7585-0.7562 in v43-v44, -2.8pp vs 256px baseline |
@@ -30,18 +30,19 @@
 
 | Metric | Value | Notes |
 |--------|:-----:|-------|
-| **Ground-plane MODA** | **90.3%** | 12b v14 tuned Kalman tracker with interpolation on MVDeTr detections |
-| **Ground-plane IDF1** | **94.7%** | Matched again by 12b v1 on 12a v3 detections; Precision=94.5%, Recall=96.1%, IDSW=5 |
+| **Ground-plane MODA** | **90.0%** | Best converged operating point reproduced across the final 12b tracking runs |
+| **Ground-plane IDF1** | **94.7%** | Confirmed independently by 12b v1, v2, and v3; Precision=94.5%, Recall=96.1%, IDSW=5 |
 | **Best Detector (MVDeTr 12a v3)** | MODA=92.1% | Epoch 20/25, Precision=95.7%, Recall=96.6%; best WILDTRACK detector yet |
 | **12b v2 extended Kalman sweep** | MODA=90.0%, IDF1=94.7% | Wider interpolation/max_age/conf sweeps plus velocity-aware quadratic interpolation still converged to the same 5-IDSW operating point |
+| **12b v3 global optimal tracker** | MODA=88.2%, IDF1=91.2% | Sliding-window Hungarian assignment underperformed badly; immediate frame-level costs overrode the motion-prediction advantage of Kalman and produced 15 ID switches |
 | **12b v1 on 12a v3 detections** | MODA=90.0%, IDF1=94.7% | Better detections did not improve tracking; Kalman sweep converged to the same effective operating point |
 | **Previous Best Tracking Baseline** | IDF1=92.8% | 12b v9 naive tracker; new tuned Kalman run is +1.9pp |
 | **ReID Features (12b v8)** | mean cosine=0.720 | Fixed ViT backbone mismatch; range widened to [0.215, 1.000] |
 | **ReID Merge State** | No gain over baseline | Tuned Kalman tracks are already clean; merge sweep did not improve IDF1 |
 | **Gap to SOTA** | 0.6pp | Best IDF1=94.7% vs target 95.3% |
-| **Status** | Person tracking appears effectively converged at 94.7% IDF1 | 12b v1 stayed flat on better detections; further gains likely need a different tracker or stronger person ReID |
+| **Status** | FULLY CONVERGED | Kalman, naive, and global-optimal trackers tested across 59 configs; remaining path is better person appearance features or graph-based approaches |
 
-**Current person best remains 94.7% IDF1**: 12b v14 reached **IDF1=94.7%** and **MODA=90.3%** with a tuned Kalman tracker plus interpolation, improving on the previous 12b v9 naive-tracker best of **92.8%** by **+1.9pp**. A follow-up rerun on the stronger **12a v3** detector in **12b v1** converged to the same **IDF1=94.7%** with slightly lower **MODA=90.0%** using Kalman settings `max_age=2`, `min_hits=2`, `distance_gate=25.0`, `q_std=5.0`, `r_std=10.0`. The extended **12b v2** sweep widened interpolation from **[1,2,3]** to **[1,2,3,4,5]**, max_age from **[2,3,4,5]** to **[2,3,4,5,6,8]**, added confidence thresholds **[0.15, 0.20, 0.25, 0.30, 0.35]**, and tested velocity-aware quadratic interpolation, yet still selected `max_age=2`, `min_hits=2`, `distance_gate=25.0`, `q_std=5.0`, `r_std=10.0`, `interpolation_max_gap=1`, `conf_threshold=0.15` with the same **IDF1=94.7%**, **MODA=90.0%**, and **5 ID switches**. The improved detector therefore did **not** translate into better tracking, and the tracker sweep extensions also failed to move the metric, which indicates the current WILDTRACK person pipeline is tracker-limited rather than detector-limited or parameter-limited. Person IDF1 appears effectively converged at **94.7%**; further gains likely require a fundamentally different tracker or materially stronger person ReID.
+**Current person best remains 94.7% IDF1 and is now fully converged**: 12b v14 first reached **IDF1=94.7%** with a tuned Kalman tracker, and that operating point has now been independently matched by **12b v1**, **12b v2**, and **12b v3**-era validation runs around the same final configuration. The stronger **12a v3** detector did not improve tracking, broader Kalman sweeps across interpolation/max_age/confidence thresholds did not improve tracking, and the new sliding-window **GlobalOptimalTracker** regressed sharply to **IDF1=91.17%**, **MODA=88.2%**, and **15 ID switches**. Across **59 tracker configs** spanning **Kalman**, **naive**, and **global optimal** trackers, the best Kalman solutions all clustered at **IDF1=0.9467 ± 0.0004**, with confidence thresholds from **0.15-0.35** making no meaningful difference. The root cause is that global optimal assignment over-commits to immediate frame-level costs, while BoT-SORT's predictive Kalman model handles occlusions and missed detections better over time. The current WILDTRACK person pipeline is therefore **fully tracker-converged at 94.7% IDF1**. The remaining **0.6pp** gap to SOTA is most likely due to rare occlusion and re-entry failures that need better person appearance features or graph-based multi-view association, not more tracker tuning.
 
 ## Gap Decomposition
 
@@ -132,6 +133,17 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 
 ### Completed
 
+#### 09 v2 — Augmentation Overhaul + EMA (2026-04-13)
+- **Task**: Test a stronger augmentation recipe plus model EMA on the primary CityFlowV2 TransReID ViT-B/16 CLIP training path
+- **Augmentation overhaul**: Added `RandomGrayscale(p=0.1)`, stronger `ColorJitter(0.3,0.25,0.2,0.05)`, `GaussianBlur(k=5,p=0.2)`, `RandomPerspective(0.1,p=0.2)`, and a wider `RandomErasing` scale range
+- **EMA config**: Model Exponential Moving Average with `decay=0.9999`
+- **Base model result**: **mAP = 81.59%**, **+1.45pp** over the prior **80.14%** baseline
+- **Base model with reranking**: **mAP = 83.12%**
+- **EMA model result**: **mAP = 39.09%**
+- **EMA model with reranking**: **mAP = 47.76%**
+- **Analysis**: The augmentation overhaul clearly works and improves generalization. The EMA branch failed because `decay=0.9999` is too high for a 120-epoch schedule; the averaged weights converge too slowly and were still improving at epoch 120.
+- **Next**: Pipe the improved base model through the full **10a -> 10b -> 10c** chain to measure MTMC IDF1 impact. **10a v19** has already been pushed.
+
 #### 10c v46 — AFLink Motion-Based Post-Association (2026-04-13)
 - **Task**: Test AFLink as a motion-based post-association stage after the standard CityFlowV2 appearance-driven association
 - **Merge effect**: AFLink produced **57 motion-based merges**, reducing trajectories from **239 -> 182**
@@ -149,6 +161,18 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **Result**: **IDF1 = 94.7%**, **MODA = 90.0%**, **IDSW = 5**
 - **Comparison**: Identical to the prior best operating point; no sweep extension reduced ID switches below **5** or improved IDF1 beyond **0.9467**
 - **Conclusion**: Kalman tracker parameters are fully exhausted for the current person pipeline. The remaining gap is tracker-limited, not parameter-limited.
+
+#### 12b v3 — Global Optimal Tracker (2026-04-13)
+- **Task**: Implement and test a new `GlobalOptimalTracker` with sliding-window globally optimal assignment (Hungarian algorithm with a configurable window) as a possible replacement for the current Kalman tracker on WILDTRACK
+- **Global-optimal config**: `window_size=10`, `birth_death_cost=100`
+- **Sweep size**: **59 tracker configs** across **Kalman**, **naive**, and **global optimal** trackers
+- **Best Kalman result**: **IDF1 = 94.7%**, **MODA = 90.0%**, **IDSW = 5**
+- **Best naive result**: **IDF1 = 93.25%**, **MODA = 88.6%**, **IDSW = 12**
+- **Best global-optimal result**: **IDF1 = 91.17%**, **MODA = 88.2%**, **IDSW = 15**
+- **Comparison**: Global optimal was the **worst** of all three tracker families, trailing Kalman by **-3.5pp IDF1** with **3x more ID switches**
+- **Additional finding**: All tested Kalman configs clustered at **IDF1 = 0.9467 ± 0.0004**, and confidence threshold sweeps across **0.15-0.35** made no meaningful difference
+- **Root cause**: Global optimal assignment over-commits to immediate frame-level costs and loses the motion-prediction advantage of Kalman filtering. The predictive model in BoT-SORT handles occlusions and missed detections better than pure assignment optimization.
+- **Conclusion**: The person pipeline is **fully converged at IDF1=0.947**. Kalman is the optimal tracker for the current system, and further tracker architecture changes are unlikely to close the remaining **0.6pp** gap to SOTA. That gap is more likely caused by rare occlusion/re-entry cases that need stronger person appearance features or graph-based multi-view fusion, not more tracker improvements.
 
 #### 10c v52 — Vehicle v80-Restored Reproduction
 - **Task**: Re-run the vehicle pipeline with the restored v80-style association recipe on the current codebase
@@ -195,57 +219,7 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 
 ### In Progress
 
-- **09 v2**: Vehicle augmentation overhaul + EMA (**running on Kaggle**)
-- **12b v3**: Global optimal tracker (sliding-window) for person (**running on Kaggle**)
-
-#### 12b v14 — Tuned Kalman Tracking + Merge Sweep
-- **Task**: Optimize world-coordinate tracking and test whether ReID merge improves the cleaned track set
-- **Baseline naive tracker**: **IDF1 = 91.4%**, MODA = 89.1%, IDSW = 7, 42 tracks
-- **Default Kalman tracker**: **IDF1 = 88.9%**, MODA = 89.8% using the default chi-squared gate; worse than naive
-- **Best tuned Kalman**: `max_age=2`, `min_hits=2`, `distance_gate=20cm`, `q_std=8`, `r_std=8`, interpolation `gap=2` -> **IDF1 = 94.7%**, **MODA = 90.3%**, Precision = 95.8%, Recall = 95.1%, IDSW = 5, 38 tracks
-- **Comparison**: Beats the previous best 12b v9 naive tracker at **92.8% IDF1** by **+1.9pp**
-- **Merge result**: No ReID merge variant improved over the tuned-Kalman baseline; only **44 ReID features** were available and the tracker already produced clean trajectories
-- **Conclusion**: Kalman tracking works very well on WILDTRACK when the gate is tuned in metric space, but the follow-up **12b v1** rerun on stronger **12a v3** detections stayed flat at **94.7% IDF1**. Further gains now look more likely to require a fundamentally different tracker or better person ReID than more detector-only gains or aggressive merging.
-
-#### 09e — VeRi-776 Pretraining
-- **Kernel**: `ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain` v2, T4 GPU
-- **Task**: ResNet101-IBN-a pretrained on VeRi-776 dataset (576 IDs, ~50k images)
-- **Config**: 384x384, 120 epochs, triplet+center loss, cosine scheduler, fp16
-- **Result**: Best mAP = 62.52% on VeRi-776 test set
-- **Runtime**: ~3.4 hours (12,206 seconds)
-- **Artifacts**: `best_model.pth` (525MB), 13 epoch checkpoints
-- **Next**: Fine-tune on CityFlowV2 in 09f
-
-#### 12a — MVDeTr WILDTRACK Training
-- **Kernel**: `ali369/12a-wildtrack-mvdetr-training` v11, T4 GPU
-- **Task**: MVDeTr ground-plane multi-view detection on WILDTRACK (7 cameras)
-- **Config**: ResNet18 backbone, deform_trans world features, 10 epochs, batch_size 1
-- **Results**:
-	- Epoch 1: MODA 69.4%, MODP 79.4%, Precision 98.2%, Recall 70.7%
-	- Epoch 5: MODA 89.4%, MODP 79.6%, Precision 97.6%, Recall 91.6%
-	- Epoch 10: MODA 92.0%, MODP 81.9%, Precision 96.5%, Recall 95.5%
-- **Outcome**: Surpasses the MVDeTr paper's reported 91.5% MODA on WILDTRACK
-- **Runtime**: ~2.5 hours (9,130 seconds)
-- **Artifacts**: `MultiviewDetector.pth`, `test.txt` (ground-plane detections), `log.txt`
-- **Next**: Feed detections into tracking pipeline in 12b
-
-#### 09f v2 — CityFlowV2 Fine-tuning Failure
-- **Kernel**: `ali369/09f-resnet101ibn-cityflowv2` v2, T4 GPU
-- **Task**: Fine-tune VeRi-776-pretrained ResNet101-IBN-a on CityFlowV2
-- **Config**: circle_weight=1.0, batch_size=32, label_smooth=0.1, lr=7e-5
-- **Result**: **mAP = 16.2%** on CityFlowV2 eval split
-- **Outcome**: Catastrophic failure; best checkpoint was epoch 4 during warmup, then training diverged after warmup ended
-- **Root cause**: Circle loss and triplet loss produced conflicting gradients on the same feature tensor and destroyed embedding quality
-- **Follow-up**: 09f v3 launched with circle loss disabled and a corrected optimization recipe
-
-#### 09f v3 — CityFlowV2 Fine-tuning Retry Result
-- **Kernel**: `ali369/09f-resnet101ibn-cityflowv2` v3, T4 GPU
-- **Task**: Fine-tune VeRi-776-pretrained ResNet101-IBN-a on CityFlowV2 with circle loss removed
-- **Config**: batch_size=48, lr=3.5e-4 (AdamW), label_smoothing=0.05, warmup start_factor=0.1, 120 epochs, circle_weight=0.0
-- **Result**: **mAP = 42.7%** at epoch 104/120 on the CityFlowV2 eval split
-- **Outcome**: Removing circle loss fixed the catastrophic collapse from v2, but the VeRi-776→CityFlowV2 path still underperformed the direct ImageNet→CityFlowV2 recipe from 09d v18 (**52.77% mAP**)
-- **Interpretation**: VeRi-776 pretraining appears to hurt CityFlowV2 transfer for ResNet101-IBN-a, likely because the model overfits to VeRi-776's appearance distribution and does not generalize well to CityFlowV2's viewpoints and lighting
-- **Conclusion**: The secondary-model ensemble plan is not viable with this pretraining path without materially better pretraining or a broader hyperparameter search
+- **10a v19**: Running the **09 v2 augmentation-overhaul base model** through stages **0-2** to measure downstream MTMC impact in the **10a -> 10b -> 10c** chain
 
 #### Kaggle T4 Dataset Mount Structure Discovery
 - **Discovery**: On Kaggle **T4 GPU** kernels, datasets mounted under **`/kaggle/input/datasets/<owner>/<slug>/`** rather than **`/kaggle/input/<slug>/`**
@@ -324,10 +298,14 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 7. **Kaggle chain currently regresses vs local best**: Same stage-1 thresholds but fixed 11c association settings and possible runtime differences produced 911 tracklets and lower MTMC/per-camera IDF1 than local Exp 1.
 
 ### Person Pipeline Next Steps
-- Treat person tracking as effectively converged at **94.7% IDF1** under the current Kalman pipeline; **12b v1** on **12a v3** detections stayed flat
-- Further person gains likely require a fundamentally different tracker or materially stronger person ReID rather than more detector-only tuning
+- Treat person tracking as fully converged at **94.7% IDF1** under the current Kalman pipeline; **12b v1**, **12b v2**, and **12b v3** all confirmed the same ceiling
+- Further person gains likely require materially stronger person appearance features or graph-based multi-view association rather than more tracker tuning
 - Revisit merge only if person ReID quality improves materially; current Kalman tracks are already clean and merges did not help
 - Keep GPU-intensive person stages on Kaggle only
+
+## What Actually Worked
+
+- **Augmentation overhaul**: **+1.45pp mAP** on the primary vehicle ReID model via `RandomGrayscale`, `GaussianBlur`, `RandomPerspective`, stronger `ColorJitter`, and a wider `RandomErasing` range
 
 ## Conclusive Dead Ends (DO NOT RETRY)
 
@@ -354,7 +332,8 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | CLIP ViT backbone when checkpoint uses standard ViT | `norm_pre` randomly initialized, causing mode collapse (cosine sim 0.874) | 12b v5/v6 vs v8 |
 | Default Kalman tracker with chi-squared gating on WILDTRACK | Worse than naive baseline; IDF1 fell to 88.9% | 12b v14 sweep |
 | ReID merge on top of tuned WILDTRACK Kalman tracks | No improvement over baseline; tracks already clean and only 44 features matched | 12b v14 merge sweep |
-| Person: extended Kalman sweeps | No improvement; interpolation 1-5, max_age 2-8, conf 0.15-0.35, and velocity-aware quadratic interpolation all left IDF1 unchanged at 0.947 with 5 IDSW | 12b v2 |
+| Extended Kalman parameter sweeps (person) | No improvement; 59 tracker configs clustered within +-0.0004 IDF1 around the same 0.947 Kalman operating point, so the tracker parameter space is fully exhausted | 12b v1-v3 |
+| Global optimal tracker (person) | -3.5pp IDF1 vs Kalman; immediate assignment costs lost the motion-prediction advantage and produced 15 ID switches | 12b v3 |
 | K-reciprocal reranking (with current features) | Always worse | v25, v35 |
 | Camera-pair similarity normalization | Zero effect (FIC handles it) | v36 |
 | CID_BIAS (camera-pair bias matrix) | -3.3pp MTMC IDF1 on 256px features (0.751 vs 0.784) | v44 + CID_BIAS test |
@@ -363,6 +342,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | AFLink motion linking | -3.95pp MTMC IDF1; motion consistency unreliable across non-overlapping cameras and false merges dominate | 10c v46 |
 | 384px TransReID deployment | -2.8pp MTMC IDF1 despite +10pp mAP; v43=0.7585, v44=0.7562 vs v80=0.784 | 10a v43, 10a v44, v80 baseline |
 | DMT camera-aware training (87.3% mAP) | -1.4pp MTMC IDF1; v46=0.758 vs v45=0.772 | 10c v45-v46 |
+| EMA (`decay=0.9999`, 120 epochs) | mAP=39.09%; too slow to converge under the current training schedule and needs a much longer run to be viable | 09 v2 |
 | Multi-query track representation | -0.1pp; v51=0.771 vs v50=0.772 | 10c v50-v51 |
 | `concat_patch=true` (1536D features) | -0.3pp; v48=0.773 vs v45=0.775 | 10c v45, 10c v48 |
 | `concat_patch=true` + vehicle2 ensemble | -0.3pp; v49=0.769 vs v50=0.772 | 10c v49-v50 |
@@ -392,6 +372,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 ### TransReID ViT-B/16 CLIP (Primary)
 - 09b v1: mAP=44.9% (40 epochs from 256px init, too aggressive LR)
 - 09b v2: mAP=80.14%, R1=92.27% (VeRi-776 pretrained → CityFlowV2 fine-tune) ← **BEST, but wrong checkpoint on Kaggle**
+- 09 v2: mAP=81.59%, rerank mAP=83.12% with augmentation overhaul; EMA branch failed at mAP=39.09% with `decay=0.9999` over 120 epochs
 
 ### ResNet101-IBN-a (Secondary)
 - 09d v12: mAP=21.9% (IBN layer3 bug)

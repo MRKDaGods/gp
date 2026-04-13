@@ -99,12 +99,12 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - See `docs/findings.md` for full analysis, dead ends, and action plan
 
 ### Person Pipeline (WILDTRACK)
-- **Best Ground-plane IDF1**: 0.947 (12b v14, confirmed by 12b v1)
+- **Best Ground-plane IDF1**: 0.947 (confirmed across 12b v1, v2, v3; 59+ configs tested)
 - **Best Ground-plane MODA**: 0.903 (12b v14)
 - **Detector**: MVDeTr ResNet18, MODA=0.921 (12a v3, best achieved)
 - **SOTA target**: IDF1≈0.953
 - **Gap to SOTA**: 0.6pp — tracker-limited (Kalman), NOT detector-limited
-- **Status**: Effectively converged — improved MODA (90.9→92.1%) did NOT improve tracking IDF1
+- **Status**: FULLY CONVERGED — tracker-limited and exhaustively tested; Kalman, global optimal, and naive trackers all failed to beat 0.947
 
 ## Experiment History
 - **Full experiment log**: See `docs/experiment-log.md` for 225+ tracked experiments
@@ -114,6 +114,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 ### Confirmed Dead Ends (DO NOT RETRY)
 - **CSLS**: -34.7pp (catastrophic — penalizes genuine vehicle-type hubs)
 - **384px ViT deployment**: -2.8pp (captures viewpoint-specific textures that hurt cross-camera matching)
+- **AFLink motion linking**: -3.95pp MTMC IDF1 (motion consistency unreliable across non-overlapping CityFlowV2 cameras; false merges)
 - **CID_BIAS**: -3.3pp (overfits with only 464 GT-matched tracklets)
 - **DMT camera-aware training**: -1.4pp single-model (also 09g: 43.8% mAP, too weak)
 - **Hierarchical clustering**: -1 to -5pp (centroid averaging loses discriminative signal)
@@ -125,6 +126,8 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **Score-level ensemble with 52.77% secondary**: -0.1pp (secondary too weak, adds noise)
 - **Circle loss + triplet**: 16-30% mAP (conflicting gradients)
 - **SGD for ResNet**: 30.27% mAP (catastrophic — AdamW essential for small datasets)
+- **Global optimal tracker (person)**: -3.5pp IDF1 vs Kalman (assignment costs lose motion prediction advantage)
+- **Extended Kalman sweeps (person)**: 59 configs within +-0.0004 IDF1 — fully exhausted
 - **Person: improved detector→better tracking**: MODA 90.9→92.1% but IDF1 unchanged at 94.7%
 
 ### What Actually Worked
@@ -136,7 +139,6 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - Center loss for primary ViT training (never attempted)
 - GNN edge classification for association (not implemented)
 - SAM2 foreground masking before ReID (not implemented)
-- AFLink motion-based post-association linking (not implemented)
 - Network flow / min-cost-max-flow solver (not implemented)
 - Graph-based multi-view tracking for person pipeline (not implemented)
 

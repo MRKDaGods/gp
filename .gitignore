@@ -80,3 +80,5 @@ planner_output.txt
 tmp_09d_*.json
 tmp_09d_notebook_inspect.txt
 notebooks/kaggle/tmp_md5_check/
+tmp_*
+tmp_09v2_output/
