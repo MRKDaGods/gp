@@ -132,6 +132,16 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 
 ### Completed
 
+#### 10c v46 — AFLink Motion-Based Post-Association (2026-04-13)
+- **Task**: Test AFLink as a motion-based post-association stage after the standard CityFlowV2 appearance-driven association
+- **Merge effect**: AFLink produced **57 motion-based merges**, reducing trajectories from **239 -> 182**
+- **Best AFLink params**: `spatial_gap=150px`, `direction_cos=0.85`, `camera_pair_norm=on`
+- **Best result**: **MTMC IDF1 = 0.7355**, which is **down from the 0.775 baseline by -3.95pp**
+- **Within-sweep behavior**: AFLink gained roughly **+6.3pp** inside its own sweep (**0.669 -> 0.732**) when tuning `spatial_gap` and `direction_cos`
+- **Root cause**: The full re-sweep selected a different and worse base association operating point, so the AFLink-local gains did not survive end-to-end evaluation. More importantly, CityFlowV2 cameras have minimal spatial overlap, so motion consistency across non-overlapping views is unreliable. Vehicles moving in similar directions are often different identities, which caused many false cross-camera merges.
+- **Conclusion**: AFLink is harmful on **CityFlowV2** and should be treated as a **DEAD END** for this dataset. It may still be relevant on datasets with adjacent or overlapping camera views where motion continuity is physically informative.
+- **Key insight**: The within-sweep gain shows motion features carry some signal, but the false-positive merge rate remained too high at every threshold tested.
+
 #### 12b v2 — Extended Kalman Sweep (2026-04-13)
 - **Task**: Extend the WILDTRACK tracker sweep beyond the original tuned-Kalman search to test whether broader interpolation, longer track persistence, looser detection thresholds, or better interpolation dynamics can reduce the remaining 5 ID switches
 - **Sweep extensions**: interpolation **[1,2,3] -> [1,2,3,4,5]**, `max_age` **[2,3,4,5] -> [2,3,4,5,6,8]**, detection confidence **[0.15, 0.20, 0.25, 0.30, 0.35]**, plus velocity-aware quadratic interpolation
@@ -186,7 +196,6 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 ### In Progress
 
 - **09 v2**: Vehicle augmentation overhaul + EMA (**running on Kaggle**)
-- **10c v46**: AFLink motion-based post-association (**running on Kaggle**)
 - **12b v3**: Global optimal tracker (sliding-window) for person (**running on Kaggle**)
 
 #### 12b v14 — Tuned Kalman Tracking + Merge Sweep
@@ -351,6 +360,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | CID_BIAS (camera-pair bias matrix) | -3.3pp MTMC IDF1 on 256px features (0.751 vs 0.784) | v44 + CID_BIAS test |
 | confidence_threshold=0.20 | -2.8pp | v45 |
 | max_iou_distance=0.5 | -1.6pp | v47 |
+| AFLink motion linking | -3.95pp MTMC IDF1; motion consistency unreliable across non-overlapping cameras and false merges dominate | 10c v46 |
 | 384px TransReID deployment | -2.8pp MTMC IDF1 despite +10pp mAP; v43=0.7585, v44=0.7562 vs v80=0.784 | 10a v43, 10a v44, v80 baseline |
 | DMT camera-aware training (87.3% mAP) | -1.4pp MTMC IDF1; v46=0.758 vs v45=0.772 | 10c v45-v46 |
 | Multi-query track representation | -0.1pp; v51=0.771 vs v50=0.772 | 10c v50-v51 |
