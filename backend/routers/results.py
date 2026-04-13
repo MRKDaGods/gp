@@ -5,6 +5,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 
 from backend.config import OUTPUT_DIR
 from backend.dependencies import get_app_state
+from backend.services.clip_service import _generate_annotated_summary_video
 from backend.services.tracklet_service import _load_all_stage1_tracklets
 from backend.state import AppState
 
@@ -60,11 +61,12 @@ async def generate_summary_video(
     _config: Optional[Dict[str, Any]] = Body(default=None),
     state: AppState = Depends(get_app_state),
 ):
-    """Return URL for summary video artifact if present, otherwise fallback to source stream."""
+    """Return URL for summary video artifact if present, otherwise matched clips."""
     run_dir = OUTPUT_DIR / run_id
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="Run not found")
 
+    # 1. Cached stage6 summary video
     for candidate in [
         run_dir / "stage6" / "summary.mp4",
         run_dir / "stage6" / "summary_video.mp4",
@@ -75,6 +77,15 @@ async def generate_summary_video(
                 "data": {"videoUrl": f"/api/download/{run_id}/{candidate.name}"},
             }
 
+    # 2. Generate annotated summary on demand from matched tracklets + stage0 frames
+    generated = _generate_annotated_summary_video(run_id)
+    if generated and generated.exists():
+        return {
+            "success": True,
+            "data": {"videoUrl": f"/api/download/{run_id}/{generated.name}"},
+        }
+
+    # 3. Fallback: source video stream
     video_id = None
     for vid, linked_run in state.video_to_latest_run.items():
         if linked_run == run_id:
@@ -85,7 +96,7 @@ async def generate_summary_video(
         return {
             "success": True,
             "data": {"videoUrl": f"/api/videos/stream/{video_id}"},
-            "message": "Stage6 summary not found; returning source video stream.",
+            "message": "No tracking clips found; returning source video stream.",
         }
 
     return {

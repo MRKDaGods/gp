@@ -109,7 +109,6 @@ export function TimelineStage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
   const [splitCount, setSplitCount] = useState<number | null>(null);
-  const [showProgress, setShowProgress] = useState(true);
   const [triggerReload, setTriggerReload] = useState(0);
   const [matchedFallbackActive, setMatchedFallbackActive] = useState(false);
   const [tracksLoading, setTracksLoading] = useState(false);
@@ -1233,9 +1232,6 @@ export function TimelineStage() {
           </p>
         </div>
         <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
-          <Badge variant={timelineDataSource === "real" ? "secondary" : "destructive"}>
-            {timelineDataSource === "real" ? "Real Artifacts" : "No Data"}
-          </Badge>
           {matchedFallbackActive && (
             <Badge variant="outline" className="border-yellow-500/60 text-yellow-400 bg-yellow-500/10">
               ⚠ Fallback: pre-exported matched clips

@@ -1,24 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Film,
-  Grid,
-  Map as MapIcon,
   Download,
   Play,
   Pause,
-  BarChart3,
-  Clock,
   Camera,
-  Gauge,
   Maximize2,
   Car,
   Truck,
   Bus,
   CheckCircle2,
+  Loader2,
   TrendingUp,
   Route,
+  Gauge,
 } from "lucide-react";
 import { getCameraColor, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,17 +22,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { usePipelineStore, useVideoStore } from "@/store";
 import {
   exportTrajectories,
   generateSummaryVideo,
+  getMatchedSummary,
   getTracklets,
   getTrajectories,
+  getVideo,
 } from "@/lib/api";
-import type { GlobalTrajectory } from "@/types";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 const outputPalette = ["#22c55e", "#3b82f6", "#f97316", "#e11d48", "#06b6d4", "#8b5cf6", "#f59e0b"];
 
 interface OutputTrajectory {
@@ -49,18 +46,62 @@ interface OutputTrajectory {
   color: string;
 }
 
-function trajectoryFromGlobal(item: GlobalTrajectory, index: number): OutputTrajectory {
-  const cameras = item.cameraSequence?.length
-    ? item.cameraSequence
-    : item.timeline?.map((entry) => entry.cameraId) ?? [];
+function trajectoryFromGlobal(item: Record<string, unknown>, index: number): OutputTrajectory {
+  const gid = Number(item.global_id ?? item.globalId ?? index + 1);
+
+  let cameras: string[] = [];
+  const camSeq = item.cameraSequence ?? item.camera_sequence;
+  const visited = item.cameras_visited;
+  if (Array.isArray(camSeq) && camSeq.length) {
+    cameras = camSeq as string[];
+  } else if (Array.isArray(visited) && visited.length) {
+    cameras = visited as string[];
+  } else if (Array.isArray(item.timeline) && (item.timeline as unknown[]).length) {
+    cameras = Array.from(
+      new Set(
+        (item.timeline as { camera_id?: string; cameraId?: string }[]).map(
+          (e) => e.cameraId ?? e.camera_id ?? ""
+        )
+      )
+    ).filter(Boolean);
+  } else if (Array.isArray(item.tracklets) && (item.tracklets as unknown[]).length) {
+    cameras = Array.from(
+      new Set(
+        (item.tracklets as { camera_id?: string; cameraId?: string }[]).map(
+          (t) => t.cameraId ?? t.camera_id ?? ""
+        )
+      )
+    ).filter(Boolean);
+  }
+
+  const span = (item.timeSpan ?? item.time_span) as [number, number] | undefined;
+  let duration = Number(item.totalDuration ?? item.total_duration ?? NaN);
+  if (!Number.isFinite(duration) && span && span.length >= 2) {
+    duration = Math.max(0, Number(span[1]) - Number(span[0]));
+  }
+  if (!Number.isFinite(duration) && Array.isArray(item.tracklets)) {
+    const tl = item.tracklets as { start_time?: number; end_time?: number; startTime?: number; endTime?: number }[];
+    const times = tl.flatMap((t) =>
+      [t.start_time, t.end_time, t.startTime, t.endTime].filter((x): x is number => typeof x === "number")
+    );
+    if (times.length) duration = Math.max(...times) - Math.min(...times);
+  }
+  if (!Number.isFinite(duration)) duration = 0;
+
+  const t0 = item.tracklets as { class_name?: string; className?: string }[] | undefined;
+  const vehicleType = String(
+    item.className ?? item.class ?? item.class_name ?? t0?.[0]?.className ?? t0?.[0]?.class_name ?? "sedan"
+  ).toLowerCase();
+
+  const confidence = Number(item.confidence ?? 0.8);
 
   return {
-    id: Number(item.globalId ?? index + 1),
-    vehicleId: `G-${String(item.globalId ?? index + 1).padStart(4, "0")}`,
+    id: gid,
+    vehicleId: `G-${String(gid).padStart(4, "0")}`,
     cameras: Array.from(new Set(cameras)),
-    duration: item.totalDuration ?? Math.max(0, (item.timeSpan?.[1] ?? 0) - (item.timeSpan?.[0] ?? 0)),
-    vehicleType: item.className || "sedan",
-    confidence: item.confidence ?? 0.8,
+    duration,
+    vehicleType,
+    confidence: Number.isFinite(confidence) ? confidence : 0.8,
     color: outputPalette[index % outputPalette.length],
   };
 }
@@ -69,245 +110,312 @@ function trajectoryFromTrackletSummary(item: any, index: number): OutputTrajecto
   return {
     id: Number(item.id ?? index + 1),
     vehicleId: `T-${String(item.id ?? index + 1).padStart(4, "0")}`,
-    cameras: [String(item.cameraId ?? "unknown")],
+    cameras: [String(item.cameraId ?? item.camera_id ?? "unknown")],
     duration: Number(item.duration ?? 0),
-    vehicleType: String(item.className ?? "sedan"),
+    vehicleType: String(item.className ?? "sedan").toLowerCase(),
     confidence: Number(item.confidence ?? 0.8),
     color: outputPalette[index % outputPalette.length],
   };
 }
 
+function formatClock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export function OutputStage() {
-  const [activeTab, setActiveTab] = useState("video");
-  const [gridSize, setGridSize] = useState(3);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackProgress, setPlaybackProgress] = useState(33);
+  const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const [durationSec, setDurationSec] = useState(0);
+  const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [trajectories, setTrajectories] = useState<OutputTrajectory[]>([]);
   const [dataSource, setDataSource] = useState<"real" | "none">("none");
   const [error, setError] = useState<string | null>(null);
-  const [exportFormat, setExportFormat] = useState<"mp4" | "json" | "csv">("json");
+  const [exportFormat, setExportFormat] = useState<"mp4" | "json" | "csv">("mp4");
   const [isExporting, setIsExporting] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(2);
+  const [hydratedLatestRunId, setHydratedLatestRunId] = useState<string | null>(null);
+  const [outputFetchState, setOutputFetchState] = useState<"idle" | "loading" | "ready">("idle");
+  const [summaryVideoUrl, setSummaryVideoUrl] = useState<string | null>(null);
+  const [matchedSummary, setMatchedSummary] = useState<any>(null);
 
   const { runId } = usePipelineStore();
   const { currentVideo } = useVideoStore();
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
-  const backendOrigin = apiBase.endsWith("/api") ? apiBase.slice(0, -4) : apiBase;
-  const streamUrl = currentVideo ? `${apiBase}/videos/stream/${currentVideo.id}` : null;
 
+  const effectiveRunId = useMemo(
+    () => runId ?? currentVideo?.latestRunId ?? hydratedLatestRunId ?? null,
+    [runId, currentVideo?.latestRunId, hydratedLatestRunId]
+  );
+
+  const backendOrigin = API_BASE.endsWith("/api") ? API_BASE.slice(0, -4) : API_BASE;
   const toAbsoluteUrl = (url: string) => {
     if (url.startsWith("http://") || url.startsWith("https://")) return url;
     if (url.startsWith("/")) return `${backendOrigin}${url}`;
     return `${backendOrigin}/${url}`;
   };
 
+  const rawStreamUrl = currentVideo ? `${API_BASE}/videos/stream/${currentVideo.id}` : null;
+  const streamUrl = summaryVideoUrl ?? rawStreamUrl;
+
+  // -- Playback helpers ---------------------------------------------------
+
+  const playbackProgressPct = useMemo(() => {
+    if (!durationSec || durationSec <= 0) return 0;
+    return Math.min(100, Math.max(0, (currentTimeSec / durationSec) * 100));
+  }, [currentTimeSec, durationSec]);
+
+  const onVideoTimeUpdate = useCallback(() => {
+    const v = videoRef.current;
+    if (v) setCurrentTimeSec(v.currentTime);
+  }, []);
+
+  const onVideoLoaded = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    setDurationSec(Number.isFinite(v.duration) ? v.duration : 0);
+    setVideoLoadError(null);
+  }, []);
+
+  const togglePlayback = useCallback(async () => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      if (v.paused) await v.play();
+      else v.pause();
+    } catch {
+      setVideoLoadError("Playback was blocked or failed.");
+    }
+  }, []);
+
+  const seekToPercent = useCallback(
+    (pct: number) => {
+      const v = videoRef.current;
+      if (!v || !durationSec) return;
+      const t = (pct / 100) * durationSec;
+      v.currentTime = t;
+      setCurrentTimeSec(t);
+    },
+    [durationSec]
+  );
+
+  useEffect(() => {
+    setVideoLoadError(null);
+    setCurrentTimeSec(0);
+    setDurationSec(0);
+  }, [streamUrl]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v) v.playbackRate = playbackSpeed;
+  }, [playbackSpeed, streamUrl]);
+
+  // -- Export handlers -----------------------------------------------------
+
   const handleDownloadVideo = async () => {
     if (isExporting) return;
-
-    if (!runId) {
-      if (streamUrl) {
-        window.open(streamUrl, "_blank", "noopener,noreferrer");
-      }
+    if (!effectiveRunId) {
+      if (streamUrl) window.open(streamUrl, "_blank", "noopener,noreferrer");
       return;
     }
-
     try {
       setIsExporting(true);
-      const response = await generateSummaryVideo(runId);
+      const response = await generateSummaryVideo(effectiveRunId);
       const videoUrl = response.data?.videoUrl;
-      if (videoUrl) {
-        window.open(toAbsoluteUrl(videoUrl), "_blank", "noopener,noreferrer");
-      }
+      if (videoUrl) window.open(toAbsoluteUrl(videoUrl), "_blank", "noopener,noreferrer");
+      else if (streamUrl) window.open(streamUrl, "_blank", "noopener,noreferrer");
     } finally {
       setIsExporting(false);
     }
   };
 
   const handleExportTracklets = async () => {
-    if (!runId || isExporting) return;
-
+    if (!effectiveRunId || isExporting) return;
     const fmt = exportFormat === "mp4" ? "json" : exportFormat;
     try {
       setIsExporting(true);
-      const response = await exportTrajectories(runId, fmt);
+      const response = await exportTrajectories(effectiveRunId, fmt);
       const downloadUrl = response.data?.downloadUrl;
-      if (downloadUrl) {
-        window.open(toAbsoluteUrl(downloadUrl), "_blank", "noopener,noreferrer");
-      }
+      if (downloadUrl) window.open(toAbsoluteUrl(downloadUrl), "_blank", "noopener,noreferrer");
     } finally {
       setIsExporting(false);
     }
   };
 
+  // -- Data loading --------------------------------------------------------
+
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
 
     const loadOutputData = async () => {
       if (!currentVideo) {
         setTrajectories([]);
+        setSummaryVideoUrl(null);
+        setMatchedSummary(null);
         setDataSource("none");
+        setError(null);
+        setHydratedLatestRunId(null);
+        setOutputFetchState("idle");
         return;
       }
 
+      setOutputFetchState("loading");
+      setError(null);
+
       try {
-        if (runId) {
-          const trajResponse = await getTrajectories(runId);
-          const globalTrajectories = Array.isArray(trajResponse.data) ? trajResponse.data : [];
-          if (!cancelled && globalTrajectories.length > 0) {
-            setTrajectories(globalTrajectories.map(trajectoryFromGlobal));
-            setDataSource("real");
-            return;
+        let eff = runId ?? currentVideo.latestRunId ?? null;
+        if (!eff) {
+          const res = await getVideo(currentVideo.id);
+          if (ac.signal.aborted) return;
+          eff = res.data?.latestRunId ?? null;
+          setHydratedLatestRunId(eff);
+        } else {
+          setHydratedLatestRunId(null);
+        }
+        if (ac.signal.aborted) return;
+
+        if (eff) {
+          // Fire summary video, matched summary, and trajectories in parallel
+          const [summaryRes, msRes, trajRes] = await Promise.allSettled([
+            generateSummaryVideo(eff),
+            getMatchedSummary(eff),
+            getTrajectories(eff),
+          ]);
+          if (ac.signal.aborted) return;
+
+          if (summaryRes.status === "fulfilled") {
+            const url = summaryRes.value.data?.videoUrl;
+            setSummaryVideoUrl(url ? toAbsoluteUrl(url) : null);
+          } else {
+            setSummaryVideoUrl(null);
+          }
+
+          if (msRes.status === "fulfilled") {
+            setMatchedSummary(msRes.value);
+          } else {
+            setMatchedSummary(null);
+          }
+
+          if (trajRes.status === "fulfilled") {
+            const raw = trajRes.value.data;
+            const globalTrajectories = Array.isArray(raw) ? raw : [];
+            if (globalTrajectories.length > 0) {
+              setTrajectories(
+                globalTrajectories.map((row, i) =>
+                  trajectoryFromGlobal(row as unknown as Record<string, unknown>, i)
+                )
+              );
+              setDataSource("real");
+              return;
+            }
           }
         }
 
+        if (ac.signal.aborted) return;
+
         const trackletResponse = await getTracklets(undefined, currentVideo.id);
+        if (ac.signal.aborted) return;
         const summary = Array.isArray(trackletResponse.data) ? trackletResponse.data : [];
-        if (!cancelled && summary.length > 0) {
+        if (summary.length > 0) {
           setTrajectories(summary.map(trajectoryFromTrackletSummary));
           setDataSource("real");
           return;
         }
       } catch (err) {
-        if (!cancelled) {
-          setError(String(err instanceof Error ? err.message : err || "Failed to load trajectory data"));
-          setTrajectories([]);
-          setDataSource("none");
-        }
+        if (ac.signal.aborted) return;
+        setError(String(err instanceof Error ? err.message : err || "Failed to load trajectory data"));
+        setTrajectories([]);
+        setDataSource("none");
         return;
       }
 
-      if (!cancelled) {
+      if (!ac.signal.aborted) {
         setTrajectories([]);
         setDataSource("none");
       }
     };
 
-    void loadOutputData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentVideo, runId]);
-
-  const outputStats = useMemo(() => {
-    const cameras = new Set<string>();
-    let crossCamera = 0;
-    trajectories.forEach((traj) => {
-      traj.cameras.forEach((cam) => cameras.add(cam));
-      if (traj.cameras.length > 1) crossCamera += 1;
+    void loadOutputData().finally(() => {
+      if (ac.signal.aborted) return;
+      setOutputFetchState(currentVideo ? "ready" : "idle");
     });
 
-    const meanConfidence =
-      trajectories.length > 0
+    return () => { ac.abort(); };
+  }, [currentVideo?.id, runId, currentVideo?.latestRunId]);
+
+  // -- Derived stats -------------------------------------------------------
+
+  const outputStats = useMemo(() => {
+    const ms = matchedSummary;
+    const hasMatched = ms && typeof ms.totalCameras === "number";
+
+    const camerasFromTrajectories = new Set<string>();
+    let crossCameraFromTrajectories = 0;
+    trajectories.forEach((traj) => {
+      traj.cameras.forEach((cam) => camerasFromTrajectories.add(cam));
+      if (traj.cameras.length > 1) crossCameraFromTrajectories += 1;
+    });
+
+    const camerasAnalyzed = hasMatched
+      ? Math.max(ms.totalCameras, camerasFromTrajectories.size)
+      : camerasFromTrajectories.size;
+
+    const uniqueVehicles = hasMatched
+      ? Math.max(ms.totalMatchedTracklets ?? 0, trajectories.length)
+      : trajectories.length;
+
+    const crossCameraMatches = hasMatched
+      ? ms.totalMatchedTrajectories ?? 0
+      : crossCameraFromTrajectories;
+
+    const clips = Array.isArray(ms?.clips) ? ms.clips : [];
+    const clipConfidences = clips.map((c: any) => Number(c.confidence ?? 0)).filter((c: number) => c > 0);
+    const avgConfidence = clipConfidences.length > 0
+      ? clipConfidences.reduce((a: number, b: number) => a + b, 0) / clipConfidences.length
+      : trajectories.length > 0
         ? trajectories.reduce((sum, traj) => sum + traj.confidence, 0) / trajectories.length
         : 0;
 
-    const totalFrames = Math.max(
-      0,
-      Math.round((currentVideo?.duration ?? 0) * Math.max(currentVideo?.fps ?? 10, 1))
-    );
+    return { camerasAnalyzed, uniqueVehicles, crossCameraMatches, avgConfidence };
+  }, [trajectories, matchedSummary]);
 
-    return {
-      camerasAnalyzed: cameras.size,
-      uniqueVehicles: trajectories.length,
-      crossCameraMatches: crossCamera,
-      reIdAccuracy: meanConfidence,
-      totalFrames,
-      processingTime: Math.max(1, Math.round((currentVideo?.duration ?? 60) * 0.35)),
-    };
-  }, [currentVideo, dataSource, trajectories]);
-
-  const camerasForGrid = useMemo(() => {
-    const ids = Array.from(new Set(trajectories.flatMap((traj) => traj.cameras)));
-    if (ids.length === 0) return [];
-
-    return ids.map((id) => ({
-      id,
-      scene: id.split("_")[0] ?? "Custom",
-      name: id,
-      location: "Camera",
-    }));
-  }, [trajectories]);
-
-  const cameraDistribution = useMemo(() => {
-    const counts = new Map<string, number>();
-    trajectories.forEach((traj) => {
-      traj.cameras.forEach((cam) => {
-        counts.set(cam, (counts.get(cam) ?? 0) + 1);
-      });
-    });
-
-    const entries = Array.from(counts.entries());
-    const total = entries.reduce((sum, [, count]) => sum + count, 0);
-
-    if (entries.length === 0) {
-      return [];
-    }
-
-    return entries
-      .map(([id, count]) => ({ id, percentage: total > 0 ? (count / total) * 100 : 0 }))
-      .sort((a, b) => b.percentage - a.percentage);
-  }, [trajectories]);
-
-  const vehicleBreakdown = useMemo(() => {
-    if (trajectories.length === 0) {
-      return [
-        { name: "Sedan/Car", count: 0, color: "#22c55e", icon: Car },
-        { name: "SUV", count: 0, color: "#3b82f6", icon: Car },
-        { name: "Truck", count: 0, color: "#8b5cf6", icon: Truck },
-        { name: "Bus", count: 0, color: "#f97316", icon: Bus },
-      ];
-    }
-
-    const counts = new Map<string, number>();
-    trajectories.forEach((traj) => {
-      const type = traj.vehicleType.toLowerCase();
-      if (type.includes("truck")) {
-        counts.set("Truck", (counts.get("Truck") ?? 0) + 1);
-      } else if (type.includes("bus")) {
-        counts.set("Bus", (counts.get("Bus") ?? 0) + 1);
-      } else if (type.includes("suv")) {
-        counts.set("SUV", (counts.get("SUV") ?? 0) + 1);
-      } else {
-        counts.set("Sedan/Car", (counts.get("Sedan/Car") ?? 0) + 1);
-      }
-    });
-
-    return [
-      { name: "Sedan/Car", count: counts.get("Sedan/Car") ?? 0, color: "#22c55e", icon: Car },
-      { name: "SUV", count: counts.get("SUV") ?? 0, color: "#3b82f6", icon: Car },
-      { name: "Truck", count: counts.get("Truck") ?? 0, color: "#8b5cf6", icon: Truck },
-      { name: "Bus", count: counts.get("Bus") ?? 0, color: "#f97316", icon: Bus },
-    ];
-  }, [trajectories]);
+  // -- Render --------------------------------------------------------------
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
       <header className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold">Stage 6: Results & Export</h1>
+          <h1 className="text-lg font-semibold">Results & Export</h1>
           <p className="text-sm text-muted-foreground">
-            CityFlowV2 tracking results visualization
+            Multi-camera tracking summary
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Badge variant={dataSource === "real" ? "secondary" : "destructive"}>
-            {dataSource === "real" ? "Real Artifacts" : "No Data"}
-          </Badge>
-          <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Pipeline Complete
-          </Badge>
-          <Button className="shrink-0" variant="outline" onClick={handleExportTracklets} disabled={!runId || isExporting}>
-            <Download className="mr-2 h-4 w-4" />
-            Export Results
-          </Button>
+          {outputFetchState === "loading" && (
+            <Badge variant="secondary" className="gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              Loading…
+            </Badge>
+          )}
+          {dataSource === "real" && outputFetchState === "ready" && (
+            <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Ready
+            </Badge>
+          )}
         </div>
       </header>
 
       {/* Error banner */}
       {error && (
-        <div className="flex shrink-0 items-start gap-3 overflow-x-auto border-b border-destructive/30 bg-destructive/10 px-4 py-3 sm:px-6">
+        <div className="flex shrink-0 items-start gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-3 sm:px-6">
           <Route className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <div className="min-w-0">
             <p className="text-sm font-medium text-destructive">Failed to load output data</p>
@@ -316,499 +424,212 @@ export function OutputStage() {
         </div>
       )}
 
-      {/* Main content with tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="shrink-0 overflow-x-auto border-b px-4 sm:px-6">
-          <TabsList className="inline-flex h-auto min-h-12 w-max max-w-full flex-wrap gap-1 py-2">
-            <TabsTrigger value="video" className="gap-2">
-              <Film className="h-4 w-4" />
-              Summarized Video
-            </TabsTrigger>
-            <TabsTrigger value="grid" className="gap-2">
-              <Grid className="h-4 w-4" />
-              Camera Grid
-            </TabsTrigger>
-            <TabsTrigger value="map" className="gap-2" disabled>
-              <MapIcon className="h-4 w-4" />
-              Map (Coming Soon)
-            </TabsTrigger>
-            <TabsTrigger value="stats" className="gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Statistics
-            </TabsTrigger>
-          </TabsList>
+      {/* Two-panel content */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+
+        {/* Left panel: video + trajectory list */}
+        <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4">
+          {/* Video player */}
+          <div
+            className="relative w-full overflow-hidden rounded-lg border border-border bg-slate-900"
+            style={{ height: "calc(100vh - 10rem)" }}
+          >
+            {streamUrl ? (
+              <video
+                ref={videoRef}
+                key={streamUrl}
+                src={streamUrl}
+                className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                autoPlay
+                muted
+                loop
+                playsInline
+                controls={false}
+                onTimeUpdate={onVideoTimeUpdate}
+                onLoadedMetadata={onVideoLoaded}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onError={() =>
+                  setVideoLoadError("Could not load video stream.")
+                }
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-700 via-slate-800 to-slate-900">
+                <p className="text-sm text-white/40">No video available</p>
+              </div>
+            )}
+
+            {videoLoadError && (
+              <div className="absolute bottom-16 left-3 right-3 rounded-md bg-red-950/90 px-3 py-2 text-center text-xs text-red-100">
+                {videoLoadError}
+              </div>
+            )}
+
+            <div className="pointer-events-none absolute top-3 right-3 rounded bg-black/60 px-2 py-1">
+              <span className="text-xs font-mono text-white/80">
+                {outputStats.uniqueVehicles} Tracked
+              </span>
+            </div>
+
+            {/* Controls */}
+            <div className="pointer-events-auto absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/80 to-transparent p-3">
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
+                  onClick={() => void togglePlayback()}
+                >
+                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                </Button>
+                <Slider
+                  className="flex-1"
+                  value={[playbackProgressPct]}
+                  max={100}
+                  step={0.1}
+                  onValueChange={(v) => seekToPercent(v[0])}
+                  disabled={!durationSec}
+                />
+                <span className="shrink-0 text-xs font-mono tabular-nums text-white">
+                  {formatClock(currentTimeSec)} / {formatClock(durationSec)}
+                </span>
+                <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-mono text-white/70">
+                  {playbackSpeed}x
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
+                  onClick={() => {
+                    const v = videoRef.current;
+                    if (!v) return;
+                    if (!document.fullscreenElement) void v.parentElement?.requestFullscreen?.();
+                    else void document.exitFullscreen();
+                  }}
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
         </div>
 
-        {/* Video tab */}
-        <TabsContent value="video" className="m-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
-            {/* Video player */}
-            <div className="relative aspect-video bg-slate-900 rounded-lg overflow-hidden mb-4 border border-border">
-              {streamUrl ? (
-                <video
-                  key={streamUrl}
-                  src={streamUrl}
-                  className="h-full w-full object-cover"
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  controls={false}
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-b from-slate-700 via-slate-800 to-slate-900">
-                  <svg className="absolute inset-0 w-full h-full opacity-30" preserveAspectRatio="none">
-                    <line x1="50%" y1="30%" x2="15%" y2="100%" stroke="white" strokeWidth="2" />
-                    <line x1="50%" y1="30%" x2="85%" y2="100%" stroke="white" strokeWidth="2" />
-                    <line x1="50%" y1="30%" x2="50%" y2="100%" stroke="#fbbf24" strokeWidth="2" strokeDasharray="10,8" />
-                  </svg>
-                </div>
-              )}
+        {/* Right sidebar */}
+        <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-muted/20 p-4 lg:w-80 lg:border-l lg:border-t-0">
 
-              <div className="absolute inset-0 pointer-events-none">
-                {trajectories.slice(0, 3).map((traj, idx) => (
-                  <div
-                    key={traj.id}
-                    className="absolute flex items-center justify-center animate-pulse"
-                    style={{
-                      top: `${40 + idx * 15}%`,
-                      left: `${25 + idx * 20}%`,
-                    }}
-                  >
-                    <div
-                      className="w-16 h-10 rounded border-2 flex items-center justify-center"
-                      style={{ borderColor: traj.color, backgroundColor: `${traj.color}33` }}
-                    >
-                      {traj.vehicleType === "sedan" || traj.vehicleType === "SUV" ? (
-                        <Car className="h-5 w-5 text-white" />
-                      ) : traj.vehicleType === "truck" ? (
-                        <Truck className="h-5 w-5 text-white" />
-                      ) : (
-                        <Bus className="h-5 w-5 text-white" />
-                      )}
-                    </div>
-                    <Badge
-                      variant="secondary"
-                      className="absolute -top-5 text-[9px] whitespace-nowrap"
-                      style={{ backgroundColor: traj.color, color: "white" }}
-                    >
-                      {traj.vehicleId}
-                    </Badge>
-                  </div>
-                ))}
-
-                {/* Camera info overlay */}
-                <div className="absolute top-3 left-3 flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 bg-black/60 rounded px-2 py-1">
-                    <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                    <span className="text-white text-xs font-mono">Multi-Camera Summary</span>
-                  </div>
-                </div>
-
-                {/* Tracking info */}
-                <div className="absolute top-3 right-3 bg-black/60 rounded px-2 py-1">
-                  <span className="text-white/80 text-xs font-mono">
-                    {outputStats.uniqueVehicles} Vehicles Tracked
-                  </span>
-                </div>
-              </div>
-
-              {/* Controls overlay */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-                <div className="flex items-center gap-4">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-white hover:text-white hover:bg-white/20"
-                    onClick={() => setIsPlaying(!isPlaying)}
-                  >
-                    {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                  </Button>
-                  <div className="flex-1 h-1.5 bg-white/30 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all"
-                      style={{ width: `${playbackProgress}%` }}
-                    />
-                  </div>
-                  <span className="text-white text-sm font-mono">0:45 / 2:07</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-white hover:text-white hover:bg-white/20"
-                  >
-                    <Maximize2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Trajectory list */}
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Route className="h-4 w-4" />
-                  Tracked Vehicle Trajectories
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {trajectories.map((traj) => (
-                    <TrajectoryItem key={traj.id} trajectory={traj} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+          {/* Quick stats */}
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Summary
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            <StatRow icon={Camera} label="Cameras" value={String(outputStats.camerasAnalyzed)} />
+            <StatRow icon={Car} label="Vehicles" value={String(outputStats.uniqueVehicles)} />
+            <StatRow icon={TrendingUp} label="Cross-cam" value={String(outputStats.crossCameraMatches)} />
+            <StatRow icon={Gauge} label="Avg. Conf." value={`${(outputStats.avgConfidence * 100).toFixed(0)}%`} />
           </div>
 
-          {/* Sidebar */}
-          <aside className="w-full shrink-0 border-t border-border bg-muted/20 p-4 lg:w-72 lg:border-l lg:border-t-0">
-            <h3 className="mb-4 font-semibold">Export Settings</h3>
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <Label>Playback Speed</Label>
-                <select className="w-full bg-background border rounded px-3 py-2 text-sm">
-                  <option value="1">1x (Normal)</option>
-                  <option value="2">2x (Fast)</option>
-                  <option value="4">4x (Very Fast)</option>
-                  <option value="0.5">0.5x (Slow)</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>Export Format</Label>
-                <select
-                  className="w-full bg-background border rounded px-3 py-2 text-sm"
-                  value={exportFormat}
-                  onChange={(e) => setExportFormat(e.target.value as "mp4" | "json" | "csv")}
-                >
-                  <option value="mp4">MP4 Video</option>
-                  <option value="json">JSON Tracklets</option>
-                  <option value="csv">CSV Export</option>
-                </select>
-              </div>
-              <Separator />
-              <div className="space-y-3">
-                <Button className="w-full" onClick={handleDownloadVideo} disabled={isExporting}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Video
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleExportTracklets}
-                  disabled={!runId || isExporting}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Export Tracklets
-                </Button>
-              </div>
-            </div>
-          </aside>
-        </TabsContent>
+          <Separator className="my-5" />
 
-        {/* Grid tab */}
-        <TabsContent value="grid" className="m-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          <div className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto p-4">
-            <div
-              className="grid min-w-0 gap-2"
-              style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))` }}
+          {/* Playback speed */}
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Playback Speed — {playbackSpeed}x
+          </h3>
+          <Slider
+            value={[playbackSpeed]}
+            min={1}
+            max={16}
+            step={1}
+            onValueChange={(v) => setPlaybackSpeed(v[0])}
+          />
+
+          <Separator className="my-5" />
+
+          {/* Export */}
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Export
+          </h3>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Format</Label>
+              <select
+                className="w-full rounded border bg-background px-3 py-2 text-sm"
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value as "mp4" | "json" | "csv")}
+              >
+                <option value="mp4">MP4 Video</option>
+                <option value="json">JSON Tracklets</option>
+                <option value="csv">CSV Export</option>
+              </select>
+            </div>
+            <Button className="w-full" onClick={handleDownloadVideo} disabled={isExporting}>
+              <Download className="mr-2 h-4 w-4" />
+              Download Video
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleExportTracklets}
+              disabled={!effectiveRunId || isExporting || outputFetchState === "loading"}
             >
-              {camerasForGrid.slice(0, gridSize * Math.ceil(camerasForGrid.length / gridSize)).map((cam, i) => (
-                <GridCell key={cam.id} camera={cam} index={i} />
-              ))}
-            </div>
+              <Download className="mr-2 h-4 w-4" />
+              Export Tracklets
+            </Button>
           </div>
-
-          {/* Sidebar */}
-          <aside className="w-full shrink-0 border-t border-border bg-muted/20 p-4 lg:w-72 lg:border-l lg:border-t-0">
-            <h3 className="mb-4 font-semibold">Grid Settings</h3>
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <Label>Columns</Label>
-                  <span className="text-sm text-muted-foreground">{gridSize}</span>
-                </div>
-                <Slider
-                  value={[gridSize]}
-                  min={1}
-                  max={4}
-                  step={1}
-                  onValueChange={(v) => setGridSize(v[0])}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Sort By</Label>
-                <select className="w-full bg-background border rounded px-3 py-2 text-sm">
-                  <option value="scene">Scene</option>
-                  <option value="timestamp">Timestamp</option>
-                  <option value="detections">Detection Count</option>
-                </select>
-              </div>
-              <Separator />
-              <div className="text-sm text-muted-foreground">
-                Showing {camerasForGrid.length} cameras from stage artifacts
-              </div>
-            </div>
-          </aside>
-        </TabsContent>
-
-        {/* Map tab (future) */}
-        <TabsContent value="map" className="m-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-auto p-4">
-            <Card className="flex h-full min-h-[200px] items-center justify-center">
-              <div className="text-center">
-                <MapIcon className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
-                <h3 className="text-lg font-semibold mb-2">Map View Coming Soon</h3>
-                <p className="text-muted-foreground max-w-md">
-                  Interactive 2D map with vehicle paths, heatmaps, and spatiotemporal
-                  constraints will be available when GPS data is acquired.
-                </p>
-              </div>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Stats tab */}
-        <TabsContent value="stats" className="m-0 min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              icon={Camera}
-              label="Cameras"
-              value={String(outputStats.camerasAnalyzed)}
-              subtext="CityFlowV2 cameras"
-            />
-            <StatCard
-              icon={Car}
-              label="Vehicles"
-              value={String(outputStats.uniqueVehicles)}
-              subtext="unique tracked"
-            />
-            <StatCard
-              icon={TrendingUp}
-              label="Cross-Camera"
-              value={String(outputStats.crossCameraMatches)}
-              subtext="associations"
-            />
-            <StatCard
-              icon={Gauge}
-              label="Accuracy"
-              value={`${(outputStats.reIdAccuracy * 100).toFixed(0)}%`}
-              subtext="ReID confidence"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Camera className="h-4 w-4" />
-                  Camera Detection Distribution
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {cameraDistribution.map((entry) => {
-                    const percentage = entry.percentage;
-                    return (
-                      <div key={entry.id} className="flex items-center gap-3">
-                        <div
-                          className="h-3 w-3 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: getCameraColor(entry.id) }}
-                        />
-                        <span className="flex-1 text-sm font-mono">{entry.id}</span>
-                        <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${percentage}%`,
-                              backgroundColor: getCameraColor(entry.id),
-                            }}
-                          />
-                        </div>
-                        <span className="text-sm text-muted-foreground w-10 text-right">
-                          {percentage.toFixed(0)}%
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Car className="h-4 w-4" />
-                  Vehicle Type Breakdown
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {vehicleBreakdown.map((cls) => (
-                    <div key={cls.name} className="flex items-center gap-3">
-                      <div
-                        className="h-8 w-8 rounded flex items-center justify-center"
-                        style={{ backgroundColor: `${cls.color}20` }}
-                      >
-                        <cls.icon className="h-4 w-4" style={{ color: cls.color }} />
-                      </div>
-                      <span className="flex-1 text-sm">{cls.name}</span>
-                      <Badge variant="secondary">{cls.count}</Badge>
-                    </div>
-                  ))}
-                </div>
-
-                <Separator className="my-4" />
-
-                <div className="grid grid-cols-2 gap-4 text-center">
-                  <div>
-                    <p className="text-2xl font-bold">{outputStats.totalFrames.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">Total Frames</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{outputStats.processingTime}s</p>
-                    <p className="text-xs text-muted-foreground">Processing Time</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function TrajectoryItem({
-  trajectory,
-}: {
-  trajectory: {
-    id: number;
-    vehicleId: string;
-    cameras: string[];
-    duration: number;
-    vehicleType: string;
-    confidence: number;
-    color: string;
-  };
-}) {
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function TrajectoryItem({ trajectory }: { trajectory: OutputTrajectory }) {
+  const vt = trajectory.vehicleType;
+  const Icon = vt.includes("truck") ? Truck : vt.includes("bus") ? Bus : Car;
+
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+    <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-3 transition-colors hover:bg-muted">
       <div
-        className="h-10 w-10 rounded flex items-center justify-center"
+        className="flex h-9 w-9 items-center justify-center rounded"
         style={{ backgroundColor: `${trajectory.color}20`, color: trajectory.color }}
       >
-        {trajectory.vehicleType === "sedan" || trajectory.vehicleType === "SUV" ? (
-          <Car className="h-5 w-5" />
-        ) : trajectory.vehicleType === "truck" ? (
-          <Truck className="h-5 w-5" />
-        ) : (
-          <Bus className="h-5 w-5" />
-        )}
+        <Icon className="h-4 w-4" />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="font-medium">{trajectory.vehicleId}</span>
+          <span className="text-sm font-medium">{trajectory.vehicleId}</span>
           <Badge variant="secondary" className="text-[10px]">
             {(trajectory.confidence * 100).toFixed(0)}%
           </Badge>
         </div>
-        <div className="flex items-center gap-1 mt-1">
+        <div className="mt-0.5 flex items-center gap-1">
           {trajectory.cameras.map((cam, i) => (
             <div key={`${cam}-${i}`} className="flex items-center">
-              <div
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: getCameraColor(cam) }}
-              />
-              {i < trajectory.cameras.length - 1 && (
-                <span className="text-muted-foreground mx-1">→</span>
-              )}
+              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: getCameraColor(cam) }} />
+              {i < trajectory.cameras.length - 1 && <span className="mx-0.5 text-muted-foreground">→</span>}
             </div>
           ))}
-          <span className="text-xs text-muted-foreground ml-2">
-            {trajectory.cameras.length} cameras
-          </span>
+          <span className="ml-1.5 text-[10px] text-muted-foreground">{trajectory.cameras.length} cam</span>
         </div>
       </div>
-      <div className="text-right">
-        <p className="text-sm font-mono">{formatDuration(trajectory.duration)}</p>
-        <p className="text-xs text-muted-foreground">duration</p>
-      </div>
+      <span className="shrink-0 text-xs font-mono text-muted-foreground">{formatDuration(trajectory.duration)}</span>
     </div>
   );
 }
 
-function GridCell({ camera, index }: { camera: { id: string; name: string; location: string; scene: string }; index: number }) {
-  const detectionCount = [12, 8, 15, 6, 9, 4][index % 6];
-
+function StatRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
   return (
-    <div className="relative aspect-video rounded-lg overflow-hidden border border-border group cursor-pointer hover:ring-2 hover:ring-primary transition-all">
-      {/* Simulated camera feed */}
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-700 via-slate-800 to-slate-900">
-        {/* Road markings */}
-        <svg className="absolute inset-0 w-full h-full opacity-20" preserveAspectRatio="none">
-          <line x1="50%" y1="25%" x2="20%" y2="100%" stroke="white" strokeWidth="1" />
-          <line x1="50%" y1="25%" x2="80%" y2="100%" stroke="white" strokeWidth="1" />
-        </svg>
-
-        {/* Vehicle indicator */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/4">
-          <div
-            className="w-8 h-5 rounded border flex items-center justify-center"
-            style={{ borderColor: getCameraColor(camera.id), backgroundColor: `${getCameraColor(camera.id)}33` }}
-          >
-            <Car className="h-3 w-3 text-white" />
-          </div>
-        </div>
-      </div>
-
-      {/* Camera info overlay - top */}
-      <div className="absolute top-0 left-0 right-0 p-2 bg-gradient-to-b from-black/70 to-transparent">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-white text-[10px] font-mono">{camera.id}</span>
-          </div>
-          <Badge variant="secondary" className="text-[9px] h-4">
-            {detectionCount} det
-          </Badge>
-        </div>
-      </div>
-
-      {/* Hover overlay */}
-      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-        <div className="text-center text-white">
-          <p className="text-sm font-medium">{camera.location}</p>
-          <p className="text-xs text-white/60">{camera.scene}</p>
-        </div>
+    <div className="flex items-center gap-2.5 rounded-md bg-muted/40 px-3 py-2">
+      <Icon className="h-4 w-4 shrink-0 text-primary" />
+      <div className="min-w-0">
+        <p className="text-lg font-bold leading-tight">{value}</p>
+        <p className="text-[10px] text-muted-foreground">{label}</p>
       </div>
     </div>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  subtext,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  subtext: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Icon className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold">{value}</p>
-            <p className="text-xs text-muted-foreground">{subtext}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

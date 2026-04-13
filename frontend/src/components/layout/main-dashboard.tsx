@@ -3,15 +3,12 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Camera,
   Upload,
   Box,
   Scan,
@@ -19,21 +16,16 @@ import {
   GitBranch,
   BarChart3,
   Film,
-  Map,
-  Settings,
-  HelpCircle,
   ChevronLeft,
   ChevronRight,
-  Home,
   Loader2,
   FolderOpen,
+  Check,
 } from "lucide-react";
 import { useSessionStore, useUIStore, usePipelineStore } from "@/store";
 import type { StageNumber } from "@/types";
-import { Logo, LogoIcon } from "@/components/logo";
 import { GlobalProcessingBanner } from "@/components/layout/global-processing-banner";
 
-// Stage components
 import { UploadStage } from "@/components/stages/upload-stage";
 import { DetectionStage } from "@/components/stages/detection-stage";
 import { SelectionStage } from "@/components/stages/selection-stage";
@@ -44,13 +36,13 @@ import { OutputStage } from "@/components/stages/output-stage";
 import { DatasetProcessing } from "@/components/stages/dataset-processing";
 
 const stages = [
-  { id: 0 as StageNumber, label: "Upload", icon: Upload, shortLabel: "Upload" },
-  { id: 1 as StageNumber, label: "Detection", icon: Scan, shortLabel: "Detect" },
-  { id: 2 as StageNumber, label: "Selection", icon: Box, shortLabel: "Select" },
-  { id: 3 as StageNumber, label: "Inference", icon: Database, shortLabel: "ReID" },
-  { id: 4 as StageNumber, label: "Timeline", icon: GitBranch, shortLabel: "Track" },
-  { id: 5 as StageNumber, label: "Refinement", icon: BarChart3, shortLabel: "Refine" },
-  { id: 6 as StageNumber, label: "Output", icon: Film, shortLabel: "Output" },
+  { id: 0 as StageNumber, label: "Upload", icon: Upload },
+  { id: 1 as StageNumber, label: "Detection", icon: Scan },
+  { id: 2 as StageNumber, label: "Selection", icon: Box },
+  { id: 3 as StageNumber, label: "Inference", icon: Database },
+  { id: 4 as StageNumber, label: "Timeline", icon: GitBranch },
+  { id: 5 as StageNumber, label: "Refinement", icon: BarChart3 },
+  { id: 6 as StageNumber, label: "Output", icon: Film },
 ];
 
 export function MainDashboard() {
@@ -59,8 +51,8 @@ export function MainDashboard() {
   const pipelineStages = usePipelineStore((s) => s.stages);
   const [datasetView, setDatasetView] = useState(false);
 
-  const stageIsRunning = (stageId: number) =>
-    pipelineStages.find((s) => s.stage === stageId)?.status === "running";
+  const getStageStatus = (stageId: number) =>
+    pipelineStages.find((s) => s.stage === stageId)?.status ?? "idle";
 
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 overflow-hidden bg-background">
@@ -68,174 +60,98 @@ export function MainDashboard() {
       <aside
         className={cn(
           "flex min-h-0 min-w-0 flex-shrink-0 flex-col overflow-x-hidden border-r bg-card transition-all duration-300",
-          sidebarOpen ? "w-64" : "w-16"
+          sidebarOpen ? "w-56" : "w-14"
         )}
       >
-        {/* Logo */}
-        <div
-          className={cn(
-            "flex h-14 shrink-0 items-center border-b",
-            sidebarOpen ? "px-4" : "justify-center px-0"
-          )}
-        >
-          {sidebarOpen ? (
-            <Logo size="sm" />
-          ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <LogoIcon size={20} className="text-primary-foreground" />
-            </div>
-          )}
-        </div>
-
-        {/* Navigation */}
-        <ScrollArea className="min-h-0 flex-1 px-2 py-4">
-          <nav className="flex flex-col gap-1">
-            {stages.map((stage) => {
-              const Icon = stage.icon;
-              const isActive = !datasetView && currentStage === stage.id;
-              const isPast = currentStage > stage.id;
-              const running = stageIsRunning(stage.id);
-
-              return (
-                <Tooltip key={stage.id} delayDuration={0}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={isActive ? "secondary" : "ghost"}
-                      className={cn(
-                        "justify-start gap-3",
-                        !sidebarOpen && "justify-center px-2",
-                        isPast && "text-muted-foreground"
-                      )}
-                      onClick={() => {
-                        setDatasetView(false);
-                        setCurrentStage(stage.id);
-                      }}
-                    >
-                      <div
-                        className={cn(
-                          "flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium",
-                          isActive && "bg-primary text-primary-foreground",
-                          isPast && "bg-green-600 text-white",
-                          !isActive && !isPast && "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {running ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : isPast ? (
-                          "✓"
-                        ) : (
-                          stage.id
-                        )}
-                      </div>
-                      {sidebarOpen && <span>{stage.label}</span>}
-                    </Button>
-                  </TooltipTrigger>
-                  {!sidebarOpen && (
-                    <TooltipContent side="right">
-                      {stage.label}
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              );
-            })}
-          </nav>
-
-          <Separator className="my-4" />
-
-          {/* Dataset processing */}
-          <nav className="flex flex-col gap-1">
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={datasetView ? "secondary" : "ghost"}
-                  className={cn(
-                    "justify-start gap-3",
-                    !sidebarOpen && "justify-center px-2"
-                  )}
-                  onClick={() => setDatasetView(true)}
-                >
-                  <FolderOpen className="h-4 w-4" />
-                  {sidebarOpen && <span>Dataset</span>}
-                </Button>
-              </TooltipTrigger>
-              {!sidebarOpen && (
-                <TooltipContent side="right">
-                  Dataset Processing
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </nav>
-
-          <Separator className="my-4" />
-
-          {/* Future: Map view */}
-          <nav className="flex flex-col gap-1">
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    "justify-start gap-3 opacity-50",
-                    !sidebarOpen && "justify-center px-2"
-                  )}
-                  disabled
-                >
-                  <Map className="h-4 w-4" />
-                  {sidebarOpen && <span>Map View (Coming Soon)</span>}
-                </Button>
-              </TooltipTrigger>
-              {!sidebarOpen && (
-                <TooltipContent side="right">
-                  Map View (Coming Soon)
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </nav>
-        </ScrollArea>
-
-        {/* Footer — when collapsed (w-16), row layout overflows; stack vertically so expand stays reachable */}
-        <div className={cn("shrink-0 border-t", sidebarOpen ? "p-2" : "px-1 py-2")}>
-          <div
-            className={cn(
-              "flex gap-1",
-              sidebarOpen
-                ? "flex-row items-center justify-between"
-                : "flex-col items-center justify-center gap-0.5"
-            )}
+        {/* Toggle at the top */}
+        <div className={cn("flex shrink-0 items-center border-b", sidebarOpen ? "justify-end px-2 py-2" : "justify-center py-2")}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={toggleSidebar}
+            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
           >
-            <div className={cn("flex gap-1", !sidebarOpen && "flex-col items-center")}>
-              <Tooltip delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon-sm">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Settings</TooltipContent>
-              </Tooltip>
-              <Tooltip delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon-sm">
-                    <HelpCircle className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Help</TooltipContent>
-              </Tooltip>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={toggleSidebar}
-              className={cn(!sidebarOpen && "shrink-0")}
-              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-            >
-              {sidebarOpen ? (
-                <ChevronLeft className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
+            {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
         </div>
+
+        {/* Pipeline stages */}
+        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3">
+          {stages.map((stage) => {
+            const isActive = !datasetView && currentStage === stage.id;
+            const status = getStageStatus(stage.id);
+            const isCompleted = status === "completed";
+            const isRunning = status === "running";
+            const isError = status === "error";
+
+            return (
+              <Tooltip key={stage.id} delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => { setDatasetView(false); setCurrentStage(stage.id); }}
+                    className={cn(
+                      "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      !sidebarOpen && "justify-center px-0"
+                    )}
+                  >
+                    <div className={cn(
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                      isActive && "bg-primary-foreground/20 text-primary-foreground",
+                      isCompleted && !isActive && "bg-green-600/15 text-green-500",
+                      isError && !isActive && "bg-red-600/15 text-red-500",
+                      !isActive && !isCompleted && !isError && "bg-muted-foreground/10 text-muted-foreground",
+                    )}>
+                      {isRunning ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : isCompleted ? (
+                        <Check className="h-3 w-3" />
+                      ) : isError ? (
+                        <span className="text-[10px]">!</span>
+                      ) : (
+                        stage.id
+                      )}
+                    </div>
+                    {sidebarOpen && (
+                      <span className="truncate">{stage.label}</span>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                {!sidebarOpen && (
+                  <TooltipContent side="right">{stage.label}</TooltipContent>
+                )}
+              </Tooltip>
+            );
+          })}
+
+          {/* Spacer */}
+          <div className="my-2 h-px bg-border" />
+
+          {/* Dataset */}
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setDatasetView(true)}
+                className={cn(
+                  "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors",
+                  datasetView
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  !sidebarOpen && "justify-center px-0"
+                )}
+              >
+                <FolderOpen className="h-4 w-4 shrink-0" />
+                {sidebarOpen && <span className="truncate">Dataset</span>}
+              </button>
+            </TooltipTrigger>
+            {!sidebarOpen && (
+              <TooltipContent side="right">Dataset</TooltipContent>
+            )}
+          </Tooltip>
+        </nav>
       </aside>
 
       {/* Main content */}

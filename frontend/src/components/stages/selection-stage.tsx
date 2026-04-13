@@ -8,6 +8,7 @@ import {
   Layers,
   ArrowRight,
   Loader2,
+  X,
 } from "lucide-react";
 import { cn, getClassColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -269,6 +270,31 @@ export function SelectionStage() {
 
           {/* Action footer */}
           <div className="shrink-0 border-t p-4">
+            {selectedTrackIds.size > 0 && (
+              <div className="mb-3">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">{selectedTrackIds.size} selected</span>
+                  <button
+                    onClick={deselectAll}
+                    className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    Clear all
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                  {Array.from(selectedTrackIds).sort((a, b) => a - b).map((id) => (
+                    <button
+                      key={id}
+                      onClick={() => toggleTrackSelection(id)}
+                      className="group flex items-center gap-0.5 rounded-full border bg-muted/50 px-2 py-0.5 text-[10px] font-mono transition-colors hover:bg-destructive/10 hover:border-destructive/30"
+                    >
+                      #{id}
+                      <X className="h-2.5 w-2.5 text-muted-foreground group-hover:text-destructive" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <Button
               className="w-full"
               onClick={handleProceed}

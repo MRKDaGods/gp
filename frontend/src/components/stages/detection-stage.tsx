@@ -20,10 +20,10 @@ import {
   Truck,
   Bus,
   AlertCircle,
+  X,
 } from "lucide-react";
 import { cn, bboxToStyle } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -250,7 +250,7 @@ const DetectionStreamVideo = memo(function DetectionStreamVideo({
 export function DetectionStage() {
   const { currentVideo, currentFrame, setCurrentFrame, isPlaying, setIsPlaying } =
     useVideoStore();
-   const {detections,setDetections,selectedTrackIds,toggleTrackSelection,hoveredId,setHoveredId,}
+   const {detections,setDetections,selectedTrackIds,toggleTrackSelection,deselectAll,hoveredId,setHoveredId,}
     = useDetectionStore();
   const { runId, stages, updateStageProgress, setIsRunning } = usePipelineStore();
   const { setCurrentStage } = useSessionStore();
@@ -289,8 +289,6 @@ export function DetectionStage() {
 
   const frameSyncRef = useRef(currentFrame);
   frameSyncRef.current = currentFrame;
-
-  const stage1Progress = stages.find((s) => s.stage === 1);
 
   // Wait for active stage1 run (if any), then load detections.
   useEffect(() => {
@@ -952,12 +950,36 @@ export function DetectionStage() {
 
           {/* Selection summary */}
           <div className="shrink-0 border-t bg-muted/30 p-4">
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex justify-between items-center mb-2">
               <span className="text-sm text-muted-foreground">Selected</span>
-              <Badge variant={selectedTrackIds.size > 0 ? "default" : "secondary"}>
-                {selectedTrackIds.size} / {detections.length}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={selectedTrackIds.size > 0 ? "default" : "secondary"}>
+                  {selectedTrackIds.size} / {detections.length}
+                </Badge>
+                {selectedTrackIds.size > 0 && (
+                  <button
+                    onClick={deselectAll}
+                    className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
+            {selectedTrackIds.size > 0 && (
+              <div className="mb-3 flex flex-wrap gap-1">
+                {Array.from(selectedTrackIds).sort((a, b) => a - b).map((id) => (
+                  <button
+                    key={id}
+                    onClick={() => toggleTrackSelection(id)}
+                    className="group flex items-center gap-0.5 rounded-full border bg-muted/50 px-2 py-0.5 text-[10px] font-mono transition-colors hover:bg-destructive/10 hover:border-destructive/30"
+                  >
+                    #{id}
+                    <X className="h-2.5 w-2.5 text-muted-foreground group-hover:text-destructive" />
+                  </button>
+                ))}
+              </div>
+            )}
             <Button
               className="w-full"
               onClick={handleProceed}

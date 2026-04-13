@@ -1,107 +1,121 @@
 "use client";
 
-import { Shield, Cpu, Car } from "lucide-react";
-import { cn } from "@/lib/utils";
 import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
 
 export function SplashScreen() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [barWidth, setBarWidth] = useState(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId = 0;
+    const dpr = window.devicePixelRatio || 1;
+
+    const resize = () => {
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const NODES = 60;
+    const CONNECT_DIST = 160;
+    const nodes = Array.from({ length: NODES }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      r: 1.5 + Math.random() * 1.5,
+    }));
+
+    const draw = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      for (const n of nodes) {
+        n.x += n.vx;
+        n.y += n.vy;
+        if (n.x < 0 || n.x > w) n.vx *= -1;
+        if (n.y < 0 || n.y > h) n.vy *= -1;
+      }
+
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < CONNECT_DIST) {
+            const alpha = (1 - dist / CONNECT_DIST) * 0.15;
+            ctx.strokeStyle = `rgba(96,165,250,${alpha})`;
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      for (const n of nodes) {
+        ctx.fillStyle = "rgba(96,165,250,0.4)";
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      animId = requestAnimationFrame(draw);
+    };
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setBarWidth(100));
+    return () => cancelAnimationFrame(t);
+  }, []);
+
   return (
-    <div className="fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-background">
-      {/* Rings: cover full viewport so they stay centered */}
-      <div
-        className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden"
-        aria-hidden
-      >
-        {[...Array(3)].map((_, i) => (
+    <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-[#050a15]">
+
+      {/* Animated network canvas */}
+      <canvas ref={canvasRef} className="absolute inset-0" />
+
+      {/* Logo */}
+      <div className="relative z-10 flex flex-col items-center">
+        <Image
+          src="/logo.png"
+          alt="ATHAR"
+          width={360}
+          height={360}
+          className="object-contain"
+          style={{ filter: "invert(1) brightness(2)" }}
+          priority
+        />
+
+        {/* Loading bar — driven by React state, no CSS animation flicker */}
+        <div className="mt-4 h-[2px] w-48 overflow-hidden rounded-full bg-white/10">
           <div
-            key={i}
-            className={cn(
-              "absolute rounded-full border border-primary/20",
-              "animate-ping"
-            )}
+            className="h-full rounded-full bg-blue-400/60"
             style={{
-              width: `${200 + i * 100}px`,
-              height: `${200 + i * 100}px`,
-              animationDelay: `${i * 0.5}s`,
-              animationDuration: "3s",
+              width: `${barWidth}%`,
+              transition: "width 2.5s ease-out",
             }}
           />
-        ))}
-      </div>
-
-      {/* Main stack: scrolls on very short viewports; never overlaps footer */}
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8">
-        <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
-          <div className="logo-animate shrink-0">
-            <Image
-              src="/logo.png"
-              alt="ATHAR Logo"
-              width={160}
-              height={160}
-              className="object-contain"
-              priority
-            />
-          </div>
-
-          <div className="shrink-0">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground">
-              ATHAR
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              City-Wide Vehicle Tracking System
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-3">
-            <div className="flex gap-1">
-              {[...Array(4)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-2 w-2 rounded-full bg-primary animate-bounce"
-                  style={{ animationDelay: `${i * 0.15}s` }}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap items-start justify-center gap-6 sm:gap-8">
-            <FeatureBadge icon={Shield} label="Forensic" delay={0.3} />
-            <FeatureBadge icon={Cpu} label="AI-Powered" delay={0.5} />
-            <FeatureBadge icon={Car} label="Multi-Camera" delay={0.7} />
-          </div>
         </div>
       </div>
-
-      <footer className="relative z-10 shrink-0 border-t border-border/40 bg-background/80 px-4 py-4 text-center backdrop-blur-sm">
-        <p className="text-xs leading-relaxed text-muted-foreground/70">
-          Graduation Project 2024 — CityFlowV2 Demo
-        </p>
-      </footer>
-    </div>
-  );
-}
-
-function FeatureBadge({
-  icon: Icon,
-  label,
-  delay,
-}: {
-  icon: React.ElementType;
-  label: string;
-  delay: number;
-}) {
-  return (
-    <div
-      className="flex flex-col items-center gap-1 animate-fade-in opacity-0"
-      style={{
-        animationDelay: `${delay}s`,
-        animationFillMode: "forwards",
-      }}
-    >
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-        <Icon className="h-5 w-5 text-muted-foreground" />
-      </div>
-      <span className="text-xs text-muted-foreground">{label}</span>
     </div>
   );
 }

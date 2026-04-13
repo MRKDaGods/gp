@@ -5,52 +5,59 @@ import Image from "next/image";
 
 interface LogoProps {
   size?: "sm" | "md" | "lg" | "xl";
-  showText?: boolean;
   className?: string;
 }
 
 const sizes = {
-  sm: { icon: 32, text: "text-sm" },
-  md: { icon: 48, text: "text-base" },
-  lg: { icon: 64, text: "text-xl" },
-  xl: { icon: 120, text: "text-3xl" },
+  sm: 32,
+  md: 48,
+  lg: 64,
+  xl: 120,
 };
 
-export function Logo({ size = "md", showText = true, className }: LogoProps) {
-  const s = sizes[size];
-
+export function Logo({ size = "md", className }: LogoProps) {
+  const px = sizes[size];
   return (
-    <div className={cn("flex items-center gap-3", className)}>
+    <div className={cn("flex items-center", className)}>
       <Image
         src="/logo.png"
-        alt="ATHAR Logo"
-        width={s.icon}
-        height={s.icon}
-        className="object-contain"
+        alt="ATHAR"
+        width={px}
+        height={px}
+        className="hidden object-contain dark:block"
+        style={{ filter: "brightness(0) invert(1)" }}
         priority
       />
-      {showText && size !== "sm" && (
-        <div className="flex flex-col">
-          <span className={cn("font-bold tracking-tight text-foreground", s.text)}>
-            ATHAR
-          </span>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-            Vehicle Tracking System
-          </span>
-        </div>
-      )}
+      <Image
+        src="/logo.png"
+        alt="ATHAR"
+        width={px}
+        height={px}
+        className="block object-contain dark:hidden"
+        priority
+      />
     </div>
   );
 }
 
 export function LogoIcon({ size = 32, className }: { size?: number; className?: string }) {
   return (
-    <Image
-      src="/logo.png"
-      alt="ATHAR"
-      width={size}
-      height={size}
-      className={cn("object-contain", className)}
-    />
+    <>
+      <Image
+        src="/logo.png"
+        alt="ATHAR"
+        width={size}
+        height={size}
+        className={cn("hidden object-contain dark:block", className)}
+        style={{ filter: "brightness(0) invert(1)" }}
+      />
+      <Image
+        src="/logo.png"
+        alt="ATHAR"
+        width={size}
+        height={size}
+        className={cn("block object-contain dark:hidden", className)}
+      />
+    </>
   );
 }

@@ -17,9 +17,21 @@ if _HAS_CV2:
     import cv2  # noqa: F401
 
 
+def _find_ffmpeg() -> Optional[str]:
+    """Return an ffmpeg binary path, checking PATH then imageio_ffmpeg bundle."""
+    path = shutil.which("ffmpeg")
+    if path:
+        return path
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
 def _transcode_to_mp4(src: Path, dst: Path) -> bool:
     """Transcode a non-MP4 video to browser-friendly H.264 MP4."""
-    ffmpeg_bin = shutil.which("ffmpeg")
+    ffmpeg_bin = _find_ffmpeg()
     if ffmpeg_bin:
         try:
             r = subprocess.run(
@@ -43,9 +55,17 @@ def _transcode_to_mp4(src: Path, dst: Path) -> bool:
         fps = cap.get(_cv2.CAP_PROP_FPS) or 10
         w = int(cap.get(_cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(_cv2.CAP_PROP_FRAME_HEIGHT))
-        fourcc = _cv2.VideoWriter_fourcc(*"mp4v")
         tmp = dst.with_suffix(".tmp.mp4")
-        writer = _cv2.VideoWriter(str(tmp), fourcc, fps, (w, h))
+        # Try H.264 codecs that browsers can actually play, then fall back
+        for tag in ("avc1", "H264", "X264", "mp4v"):
+            fourcc = _cv2.VideoWriter_fourcc(*tag)
+            writer = _cv2.VideoWriter(str(tmp), fourcc, fps, (w, h))
+            if writer.isOpened():
+                break
+            writer.release()
+        else:
+            cap.release()
+            return False
         while True:
             ok, frame = cap.read()
             if not ok:
@@ -198,6 +218,195 @@ def _export_tracklet_clip(
             print(f"[matched] ffmpeg re-encode failed: {exc}", flush=True)
 
     return True, f"frames_written={written}"
+
+
+def _generate_annotated_summary_video(run_id: str, target_fps: float = 10.0) -> Optional[Path]:
+    """Generate a stitched full-frame annotated video for a run's matched trajectory.
+
+    Reads matched/summary.json, loads stage1 tracklets, draws bounding boxes
+    on stage0 frames, and concatenates all camera segments with transition cards.
+    Saves to stage6/summary.mp4.  Returns the path on success, None on failure.
+    """
+    if not _HAS_CV2:
+        return None
+    import cv2 as _cv2
+
+    run_dir = OUTPUT_DIR / run_id
+    summary_path = run_dir / "matched" / "summary.json"
+    if not summary_path.exists():
+        return None
+
+    try:
+        summary = json.loads(summary_path.read_text())
+    except Exception:
+        return None
+
+    clips = summary.get("clips", [])
+    if not clips:
+        return None
+
+    dataset_run_id = str(summary.get("datasetRunId", run_id))
+    probe_run_id = str(summary.get("probeRunId", run_id))
+
+    out_dir = run_dir / "stage6"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "summary.mp4"
+    tmp_path = out_dir / "summary.tmp.mp4"
+
+    writer = None
+    vid_w, vid_h = 0, 0
+    total_written = 0
+    transition_frames = int(target_fps * 0.5)
+
+    BOX_COLOR = (0, 220, 0)
+    LABEL_BG = (0, 0, 0)
+    LABEL_FG = (255, 255, 255)
+    FONT = _cv2.FONT_HERSHEY_SIMPLEX
+
+    try:
+        for clip_idx, clip_info in enumerate(clips):
+            camera_id = str(clip_info.get("camera_id", ""))
+            track_id = int(clip_info.get("track_id", -1))
+            confidence = float(clip_info.get("confidence", 0))
+
+            if not camera_id or track_id < 0:
+                continue
+
+            tracklet = _find_tracklet_for_clip(
+                probe_run_id, dataset_run_id, camera_id, track_id
+            )
+            if tracklet is None:
+                continue
+            frames = tracklet.get("frames", [])
+            if not frames:
+                continue
+
+            stage0_dir = _resolve_stage0_camera_dir(dataset_run_id, camera_id)
+            if stage0_dir is None:
+                stage0_dir = _resolve_stage0_camera_dir(probe_run_id, camera_id)
+            if stage0_dir is None:
+                continue
+
+            if writer is not None and transition_frames > 0:
+                card = np.zeros((vid_h, vid_w, 3), dtype=np.uint8)
+                label = f"Camera: {camera_id}"
+                font_scale = min(vid_w, vid_h) / 500.0
+                thickness = max(1, int(font_scale * 2))
+                (tw, th), _ = _cv2.getTextSize(label, FONT, font_scale, thickness)
+                tx = (vid_w - tw) // 2
+                ty = (vid_h + th) // 2
+                _cv2.putText(card, label, (tx, ty), FONT, font_scale, LABEL_FG, thickness, _cv2.LINE_AA)
+                for _ in range(transition_frames):
+                    writer.write(card)
+                    total_written += 1
+
+            step = max(1, int(np.ceil(len(frames) / 300)))
+            sampled = frames[::step]
+
+            for fr in sampled:
+                try:
+                    frame_id = int(fr.get("frame_id", -1))
+                    bbox = fr.get("bbox", [0, 0, 0, 0])
+                    if frame_id < 0 or not isinstance(bbox, list) or len(bbox) != 4:
+                        continue
+
+                    fp = _frame_image_path_in_dir(stage0_dir, frame_id)
+                    if fp is None:
+                        continue
+                    img = _cv2.imread(str(fp))
+                    if img is None:
+                        continue
+
+                    h, w = img.shape[:2]
+
+                    if writer is None:
+                        vid_w, vid_h = w, h
+                        fourcc = _cv2.VideoWriter_fourcc(*"mp4v")
+                        writer = _cv2.VideoWriter(str(tmp_path), fourcc, target_fps, (vid_w, vid_h))
+                        if not writer.isOpened():
+                            return None
+
+                    if w != vid_w or h != vid_h:
+                        img = _cv2.resize(img, (vid_w, vid_h), interpolation=_cv2.INTER_AREA)
+                        h, w = vid_h, vid_w
+
+                    bx1 = max(0, int(bbox[0]))
+                    by1 = max(0, int(bbox[1]))
+                    bx2 = min(w, int(bbox[2]))
+                    by2 = min(h, int(bbox[3]))
+                    _cv2.rectangle(img, (bx1, by1), (bx2, by2), BOX_COLOR, 2)
+
+                    label = f"Cam: {camera_id} | Track #{track_id} | {confidence*100:.0f}%"
+                    font_scale = 0.55
+                    thickness = 1
+                    (tw, th), baseline = _cv2.getTextSize(label, FONT, font_scale, thickness)
+                    lx = bx1
+                    ly = max(th + baseline + 4, by1 - 6)
+                    _cv2.rectangle(img, (lx, ly - th - baseline - 2), (lx + tw + 4, ly + 2), LABEL_BG, -1)
+                    _cv2.putText(img, label, (lx + 2, ly - baseline), FONT, font_scale, LABEL_FG, thickness, _cv2.LINE_AA)
+
+                    writer.write(img)
+                    total_written += 1
+                except Exception:
+                    continue
+    finally:
+        if writer is not None:
+            writer.release()
+
+    if total_written == 0:
+        tmp_path.unlink(missing_ok=True)
+        return None
+
+    ffmpeg_bin = _find_ffmpeg()
+    if ffmpeg_bin and tmp_path.exists():
+        try:
+            subprocess.run(
+                [ffmpeg_bin, "-y", "-i", str(tmp_path),
+                 "-c:v", "libx264", "-preset", "fast",
+                 "-crf", "23", "-pix_fmt", "yuv420p",
+                 "-movflags", "+faststart", "-an", str(out_path)],
+                check=True, capture_output=True, timeout=300,
+            )
+            tmp_path.unlink(missing_ok=True)
+        except Exception as exc:
+            print(f"[summary] ffmpeg re-encode failed: {exc}", flush=True)
+            if out_path.exists():
+                out_path.unlink(missing_ok=True)
+            tmp_path.rename(out_path)
+    else:
+        tmp_path.rename(out_path)
+
+    print(f"[summary] Generated annotated summary: {out_path} ({total_written} frames)", flush=True)
+    return out_path
+
+
+def _find_tracklet_for_clip(
+    probe_run_id: str,
+    dataset_run_id: str,
+    camera_id: str,
+    track_id: int,
+) -> Optional[Dict[str, Any]]:
+    """Locate the stage1 tracklet for a matched clip across probe and dataset runs."""
+    cam = _normalize_camera_id(camera_id)
+    for rid in (probe_run_id, dataset_run_id):
+        stage1_dir = OUTPUT_DIR / rid / "stage1"
+        if not stage1_dir.exists():
+            continue
+        for p in sorted(stage1_dir.glob("tracklets_*.json")):
+            if cam not in _normalize_camera_id(p.stem):
+                continue
+            try:
+                tracklets = json.loads(p.read_text())
+                for t in tracklets:
+                    if int(t.get("track_id", -1)) == track_id:
+                        return t
+            except Exception:
+                continue
+    all_tracklets = _load_all_stage1_tracklets(OUTPUT_DIR / dataset_run_id)
+    for t in all_tracklets:
+        if int(t.get("track_id", -1)) == track_id and _normalize_camera_id(str(t.get("camera_id", ""))) == cam:
+            return t
+    return None
 
 
 def _export_selected_clips(run_id: str, selected_ids: set) -> None:

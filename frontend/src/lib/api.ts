@@ -26,6 +26,10 @@ function normalizeVideoFile(raw: any): VideoFile {
     height: Number(raw.height ?? 0),
     thumbnail: typeof raw.thumbnail === 'string' ? raw.thumbnail : undefined,
     uploadedAt: String(raw.uploadedAt ?? new Date().toISOString()),
+    latestRunId:
+      raw.latestRunId != null && raw.latestRunId !== ''
+        ? String(raw.latestRunId)
+        : undefined,
   };
 }
 

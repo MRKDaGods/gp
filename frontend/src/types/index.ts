@@ -97,6 +97,8 @@ export interface VideoFile {
   height: number;
   thumbnail?: string;
   uploadedAt: string;
+  /** Latest pipeline run linked to this video (from API; survives page reload). */
+  latestRunId?: string | null;
 }
 
 export interface FrameInfo {
