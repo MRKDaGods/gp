@@ -113,6 +113,8 @@ class ReIDModel:
             return self._build_transreid(weights_path)
         if model_name.lower() == "resnet101_ibn_a":
             return self._build_resnet101_ibn(weights_path)
+        if model_name.lower() == "resnext101_ibn_a":
+            return self._build_resnext101_ibn(weights_path)
         return self._build_torchreid(model_name, weights_path)
 
     def _build_resnet101_ibn(self, weights_path: Optional[str]):
@@ -170,6 +172,64 @@ class ReIDModel:
             except Exception as e:
                 logger.warning(f"Could not load ResNet101-IBN-a weights from {weights_path}: {e}")
                 logger.warning("Using randomly initialized ResNet101-IBN-a weights")
+
+        return model
+
+    def _build_resnext101_ibn(self, weights_path: Optional[str]):
+        """Build ResNeXt101-IBN-a model for inference."""
+        from src.training.model import ReIDModelResNeXt101IBN
+
+        model = ReIDModelResNeXt101IBN(
+            num_classes=1,
+            last_stride=1,
+            pretrained=False,
+            gem_p=3.0,
+        )
+
+        if weights_path is not None:
+            try:
+                state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
+                if "state_dict" in state_dict:
+                    state_dict = state_dict["state_dict"]
+                elif "model" in state_dict:
+                    state_dict = state_dict["model"]
+
+                remapped_state_dict = {}
+                backbone_roots = (
+                    "conv1",
+                    "bn1",
+                    "layer1",
+                    "layer2",
+                    "layer3",
+                    "layer4",
+                )
+                for key, value in state_dict.items():
+                    key = key.replace("module.", "", 1)
+                    key = key.replace(".in_norm.", ".IN.").replace(".bn_norm.", ".BN.")
+
+                    if key.startswith("classifier"):
+                        continue
+
+                    if key.startswith(backbone_roots):
+                        key = f"backbone.{key}"
+
+                    remapped_state_dict[key] = value
+
+                state_dict = remapped_state_dict
+                missing, unexpected = model.load_state_dict(state_dict, strict=False)
+
+                critical_missing = [k for k in missing if not k.startswith("classifier")]
+                if critical_missing:
+                    logger.warning(
+                        f"ResNeXt101-IBN missing critical keys: {critical_missing}"
+                    )
+                if unexpected:
+                    logger.debug(f"ResNeXt101-IBN unexpected keys: {unexpected}")
+
+                logger.info(f"Loaded ResNeXt101-IBN-a weights from {weights_path}")
+            except Exception as e:
+                logger.warning(f"Could not load ResNeXt101-IBN-a weights from {weights_path}: {e}")
+                logger.warning("Using randomly initialized ResNeXt101-IBN-a weights")
 
         return model
 
@@ -469,6 +529,45 @@ class ReIDModel:
         crops = [sc.image for sc in scored_crops]
         qualities = [sc.quality for sc in scored_crops]
         return self.get_tracklet_embedding(crops, quality_scores=qualities, cam_id=cam_id, quality_temperature=quality_temperature)
+
+    def get_tracklet_multi_query_embeddings(
+        self,
+        scored_crops: List["QualityScoredCrop"],
+        k: int = 5,
+        cam_id: Optional[int] = None,
+        quality_temperature: float = 3.0,
+    ) -> Optional[np.ndarray]:
+        """Extract top-K representative crop embeddings for a tracklet.
+
+        Selection is quality-based: the highest-quality crops are retained.
+        If the tracklet has fewer than K crops, the remaining rows are padded
+        with the tracklet's pooled embedding so Stage 4 can load a dense
+        ``(N, K, D)`` tensor without special-casing variable-length tracks.
+        """
+        if not scored_crops or k <= 0:
+            return None
+
+        crops = [sc.image for sc in scored_crops]
+        qualities = np.array([sc.quality for sc in scored_crops], dtype=np.float32)
+        embeddings = self.extract_features(crops, cam_id=cam_id)
+        if embeddings.shape[0] == 0:
+            return None
+
+        top_count = min(k, embeddings.shape[0])
+        top_indices = np.argsort(-qualities)[:top_count]
+        selected = embeddings[top_indices].astype(np.float32)
+
+        if selected.shape[0] < k:
+            if qualities.shape[0] == embeddings.shape[0]:
+                weights = np.exp(qualities * quality_temperature)
+                weights = weights / max(weights.sum(), 1e-8)
+                pooled = (embeddings * weights[:, np.newaxis]).sum(axis=0, keepdims=True)
+            else:
+                pooled = embeddings.mean(axis=0, keepdims=True)
+            pad = np.repeat(pooled.astype(np.float32), k - selected.shape[0], axis=0)
+            selected = np.concatenate([selected, pad], axis=0)
+
+        return selected.astype(np.float32)
 
     # ------------------------------------------------------------------
     # Camera-specific Test-Time Adaptation (CamTTA)
