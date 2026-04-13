@@ -2,7 +2,7 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
-## Current Performance (Last Updated: 2026-04-13)
+## Current Performance (Last Updated: 2026-04-14)
 
 ### Vehicle Pipeline (CityFlowV2)
 
@@ -129,7 +129,7 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 
 Association tuning remains exhausted (225+ configs tested). The remaining vehicle path is no longer incremental stage-4 tuning or single-model feature ablations; it is ensemble-quality representation learning or materially stronger camera-pair priors.
 
-## Latest Experiment Results (2026-04-13)
+## Latest Experiment Results (2026-04-14)
 
 ### Completed
 
@@ -143,6 +143,15 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **EMA model with reranking**: **mAP = 47.76%**
 - **Analysis**: The augmentation overhaul clearly works and improves generalization. The EMA branch failed because `decay=0.9999` is too high for a 120-epoch schedule; the averaged weights converge too slowly and were still improving at epoch 120.
 - **Next**: Pipe the improved base model through the full **10a -> 10b -> 10c** chain to measure MTMC IDF1 impact. **10a v19** has already been pushed.
+
+#### 10c v47 — Augmentation Overhaul Model with 384px Deployment Bug (2026-04-14)
+- **Task**: Evaluate the new **09 v2 augmentation-overhaul** primary model in the downstream **10a -> 10b -> 10c** CityFlowV2 pipeline
+- **Result**: **MTMC IDF1 = 0.702**, a **-7.3pp** regression versus the current reproducible **0.775** baseline
+- **Root cause**: **BUG**. The **10a** notebook deployed the augoverhaul model at **384x384** input even though it was trained for **256x256**. This happened because `configs/datasets/cityflowv2.yaml` still had `input_size: [384, 384]` from the earlier 384px dead-end work, and the notebook did not explicitly override it for the 256px model.
+- **Why this matters**: This result does **not** show that the augmentation-overhaul model is worse. The model itself improved single-camera quality to **mAP = 81.59%** versus the previous **80.14%** baseline, so it should be expected to perform **better**, not worse, when deployed at the correct **256x256** resolution.
+- **Fix applied**: Added an explicit `stage2.reid.vehicle.input_size=[256,256]` override to the **10a** notebook and fixed the default `cityflowv2.yaml` input size so 256px deployment is now the safe default for the primary vehicle model.
+- **Status**: Re-running the corrected pipeline as **10a v20**; downstream MTMC results are pending.
+- **Conclusion**: Treat **10c v47** as a configuration failure, not as evidence against the augmentation overhaul. The apparent regression was caused by a silent deployment mismatch, not by weaker learned features.
 
 #### 10c v46 — AFLink Motion-Based Post-Association (2026-04-13)
 - **Task**: Test AFLink as a motion-based post-association stage after the standard CityFlowV2 appearance-driven association
@@ -226,6 +235,15 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **Impact**: This caused multiple 09d failures when kernels assumed the legacy flat mount path and could not locate the dataset
 - **Conclusion**: When debugging missing-dataset errors on Kaggle T4 kernels, check the nested `datasets/<owner>/` mount structure first.
 
+## Bugs Found / Configuration Pitfalls
+
+### CityFlowV2 `input_size` default leaked a dead-end 384px setting (2026-04-14)
+- **Bug**: `configs/datasets/cityflowv2.yaml` still contained `input_size: [384, 384]`, even though **384px deployment is a confirmed dead end** for the main vehicle MTMC pipeline.
+- **Failure mode**: The **10a** notebook silently inherited that config and exported the new **09 v2 augmentation-overhaul** model at **384x384** instead of its intended **256x256** input size.
+- **Observed impact**: This caused the catastrophic **10c v47 = 0.702 MTMC IDF1** result and could easily have been misread as a model-quality regression.
+- **Lesson**: Leaving dead-end experimental defaults in shared config files is dangerous because later notebooks can silently inherit them.
+- **Fix**: Set the safe default back to **256x256** and add explicit notebook-level overrides for `stage2.reid.vehicle.input_size` whenever testing alternate deployment resolutions.
+
 #### 12b v4/v5/v6 — Ground-plane Tracking Validation
 - **Kernel**: `ali369/12b-wildtrack-mvdetr-tracking-reid` v4-v6, T4 GPU
 - **Task**: World-coordinate tracking on MVDeTr detections plus person ReID feature extraction
@@ -306,6 +324,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 ## What Actually Worked
 
 - **Augmentation overhaul**: **+1.45pp mAP** on the primary vehicle ReID model via `RandomGrayscale`, `GaussianBlur`, `RandomPerspective`, stronger `ColorJitter`, and a wider `RandomErasing` range
+- **Deployment-bug correction**: The **10c v47** collapse to **0.702 MTMC IDF1** was traced to a **384px deployment mismatch**, not to weaker augmentation-overhaul features; the corrected **256px** rerun is now the relevant follow-up.
 
 ## Conclusive Dead Ends (DO NOT RETRY)
 

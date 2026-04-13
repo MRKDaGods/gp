@@ -52,9 +52,11 @@ def test_tracklet_features():
         class_id=0,
         embedding=np.random.randn(512).astype(np.float32),
         hsv_histogram=np.random.rand(32).astype(np.float32),
+        multi_query_embeddings=np.random.randn(3, 512).astype(np.float32),
     )
     assert feat.embedding.shape == (512,)
     assert feat.hsv_histogram.shape == (32,)
+    assert feat.multi_query_embeddings.shape == (3, 512)
 
 
 def test_global_trajectory(sample_global_trajectory):

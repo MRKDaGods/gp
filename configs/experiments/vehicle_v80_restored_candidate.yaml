@@ -1,0 +1,381 @@
+project:
+  name: mtmc-tracker
+  output_dir: data/outputs
+  run_name: null
+  log_level: INFO
+stage0:
+  input_dir: data/raw/cityflowv2
+  video_extensions:
+  - .mp4
+  - .avi
+  - .mkv
+  - .mov
+  output_fps: 10
+  target_size: null
+  normalize: false
+  denoise: false
+  denoise_strength: 3
+  clahe: true
+  clahe_clip_limit: 2.5
+  time_offsets: {}
+  lossless: false
+stage1:
+  detector:
+    model: yolo26m.pt
+    confidence_threshold: 0.25
+    iou_threshold: 0.65
+    classes:
+    - 2
+    - 5
+    - 7
+    device: cuda:0
+    half: true
+    img_size: 1280
+    agnostic_nms: true
+  tracker:
+    algorithm: botsort
+    reid_weights: models/tracker/osnet_x0_25_msmt17.pt
+    device: cuda:0
+    half: true
+    track_high_thresh: 0.25
+    track_low_thresh: 0.05
+    new_track_thresh: 0.25
+    track_buffer: 450
+    max_age: 450
+    max_obs: 460
+    min_hits: 2
+    match_thresh: 0.85
+    appearance_thresh: 0.5
+    proximity_thresh: 0.5
+    cmc_method: sof
+  min_tracklet_length: 3
+  min_tracklet_area: 800
+  interpolation:
+    enabled: true
+    max_gap: 50
+  intra_merge:
+    enabled: true
+    max_time_gap: 40.0
+    max_iou_distance: 0.7
+  roi:
+    enabled: true
+stage2:
+  reid:
+    person:
+      model_name: transreid
+      weights_path: models/reid/person_transreid_vit_base_market1501.pth
+      embedding_dim: 768
+      input_size:
+      - 256
+      - 128
+      vit_model: vit_base_patch16_224
+      num_cameras: 6
+      clip_normalization: false
+    vehicle:
+      model_name: transreid
+      weights_path: models/reid/transreid_cityflowv2_best.pth
+      weights_fallback: models/reid/transreid_cityflowv2_best.pth
+      embedding_dim: 768
+      input_size:
+      - 256
+      - 256
+      vit_model: vit_base_patch16_clip_224.openai
+      num_cameras: 59
+      clip_normalization: true
+      sie_camera_map: {}
+    vehicle2:
+      enabled: false
+      save_separate: true
+      model_name: resnet101_ibn_a
+      weights_path: models/reid/resnet101ibn_cityflowv2_384px_best.pth
+      embedding_dim: 2048
+      input_size:
+      - 384
+      - 384
+      clip_normalization: false
+    batch_size: 64
+    device: cuda:0
+    half: true
+    flip_augment: true
+    quality_temperature: 3.0
+    color_augment: false
+    multiscale_sizes: []
+  hsv:
+    h_bins: 32
+    s_bins: 16
+    v_bins: 16
+    n_stripes: 3
+  pca:
+    enabled: true
+    n_components: 384
+    pca_model_path: models/reid/pca_transform_ensemble.pkl
+    secondary_pca_model_path: models/reid/pca_transform_secondary.pkl
+  multi_query:
+    k: 0
+  crop:
+    min_area: 800
+    padding_ratio: 0.05
+    samples_per_tracklet: 48
+    min_quality: 0.05
+    laplacian_min_var: 30.0
+  camera_bn:
+    enabled: false
+  power_norm:
+    alpha: 0.0
+  camera_tta:
+    enabled: false
+stage3:
+  faiss:
+    index_type: flat_ip
+  metadata:
+    db_path: null
+stage4:
+  association:
+    top_k: 100
+    secondary_embeddings:
+      path: data/outputs/run_latest/stage2/embeddings_secondary.npy
+      weight: 0.0
+    multi_query:
+      enabled: false
+      weight: 0.5
+      dir: ''
+    fic:
+      enabled: true
+      regularisation: 0.1
+      min_samples: 5
+    fac:
+      enabled: false
+      knn: 20
+      learning_rate: 0.5
+      beta: 0.08
+      epochs: 1
+    query_expansion:
+      enabled: true
+      k: 3
+      alpha: 5.0
+      dba: false
+    exhaustive_cross_camera: true
+    exhaustive_min_similarity: 0.1
+    mutual_nn:
+      enabled: true
+      top_k_per_query: 20
+    reranking:
+      enabled: false
+      k1: 20
+      k2: 3
+      lambda_value: 0.3
+    weights:
+      appearance: 0.5
+      hsv: 0.3
+      spatiotemporal: 0.2
+      person:
+        appearance: 0.7
+        hsv: 0.05
+        spatiotemporal: 0.25
+      vehicle:
+        appearance: 0.7
+        hsv: 0.0
+        spatiotemporal: 0.25
+      length_weight_power: 0.5
+    spatiotemporal:
+      max_time_gap: 300
+      min_time_gap: 0
+      camera_transitions:
+        S01_c001:
+          S01_c002:
+            min_time: 0
+            max_time: 20
+            mean_time: 1.9
+            std_time: 3.4
+          S01_c003:
+            min_time: 0
+            max_time: 5
+            mean_time: 0.5
+            std_time: 0.9
+        S01_c002:
+          S01_c001:
+            min_time: 0
+            max_time: 20
+            mean_time: 1.9
+            std_time: 3.4
+          S01_c003:
+            min_time: 0
+            max_time: 20
+            mean_time: 1.4
+            std_time: 3.1
+        S01_c003:
+          S01_c001:
+            min_time: 0
+            max_time: 5
+            mean_time: 0.5
+            std_time: 0.9
+          S01_c002:
+            min_time: 0
+            max_time: 20
+            mean_time: 1.4
+            std_time: 3.1
+        S02_c006:
+          S02_c007:
+            min_time: 0
+            max_time: 25
+            mean_time: 0.9
+            std_time: 2.6
+          S02_c008:
+            min_time: 0
+            max_time: 30
+            mean_time: 8.1
+            std_time: 6.2
+        S02_c007:
+          S02_c006:
+            min_time: 0
+            max_time: 25
+            mean_time: 0.9
+            std_time: 2.6
+          S02_c008:
+            min_time: 0
+            max_time: 20
+            mean_time: 5.8
+            std_time: 5.1
+        S02_c008:
+          S02_c006:
+            min_time: 0
+            max_time: 30
+            mean_time: 8.1
+            std_time: 6.2
+          S02_c007:
+            min_time: 0
+            max_time: 20
+            mean_time: 5.8
+            std_time: 5.1
+    graph:
+      similarity_threshold: 0.53
+      algorithm: conflict_free_cc
+      louvain_resolution: 0.7
+      bridge_prune_margin: 0.0
+      max_component_size: 12
+      louvain_seed: 42
+    reciprocal_best_match:
+      enabled: false
+      min_similarity: 0.2
+    csls:
+      enabled: false
+      k: 10
+    cluster_verify:
+      enabled: false
+      min_connectivity: 0.3
+    temporal_split:
+      enabled: false
+      min_gap: 60.0
+      split_threshold: 0.5
+    gallery_expansion:
+      enabled: true
+      threshold: 0.5
+      max_rounds: 2
+      orphan_match_threshold: 0.4
+    temporal_overlap:
+      enabled: true
+      bonus: 0.05
+      max_mean_time: 5.0
+    camera_pair_norm:
+      enabled: false
+      min_pairs: 10
+    hierarchical:
+      enabled: false
+      centroid_threshold: 0.35
+      merge_threshold: 0.35
+      orphan_threshold: 0.3
+      max_merge_size: 12
+    camera_bias:
+      enabled: false
+      iterations: 0
+      cid_bias_npy_path: configs/datasets/cityflowv2_cid_bias.npy
+    zone_model:
+      enabled: false
+      zone_data_path: configs/datasets/cityflowv2_zones.json
+      min_count: 2
+      bonus: 0.03
+      penalty: 0.03
+    camera_pair_boost:
+      enabled: false
+      boosts:
+        S02_c006-S02_c008: 0.08
+        S01_c001-S01_c003: 0.04
+        S01_c002-S01_c003: 0.04
+stage5:
+  evaluator: trackeval
+  ground_truth_dir: data/raw/cityflowv2
+  metrics:
+  - HOTA
+  - MOTA
+  - IDF1
+  iou_threshold: 0.5
+  generate_report: true
+  report_format: html
+  mtmc_only_submission: false
+  min_trajectory_confidence: 0.3
+  min_trajectory_frames: 40
+  min_submission_confidence: 0.15
+  cross_id_nms_iou: 0.4
+  stationary_filter:
+    enabled: true
+    min_displacement_px: 150
+    max_mean_velocity_px: 2.0
+  track_edge_trim:
+    enabled: false
+    mode: confidence
+    trim_fraction: 0.1
+  track_smoothing:
+    enabled: false
+    window: 7
+    polyorder: 2
+  gt_zone_filter: true
+  gt_zone_margin_frac: 0.2
+  gt_frame_clip: true
+  gt_frame_clip_min_iou: 0.4
+stage6:
+  video:
+    enabled: true
+    draw_bboxes: true
+    draw_ids: true
+    draw_trails: true
+    trail_length: 30
+    output_fps: 10
+    codec: mp4v
+    colors_by: global_id
+  bev:
+    enabled: false
+    map_image: null
+    scale: 1.0
+  timeline:
+    enabled: true
+  export:
+    formats:
+    - json
+    - csv
+apps:
+  dashboard:
+    host: localhost
+    port: 8501
+  nl_query:
+    model: all-MiniLM-L6-v2
+    top_k: 10
+  simulation_3d:
+    enabled: true
+    backend: plotly
+dataset:
+  name: cityflowv2
+  type: mtmc_vehicle
+  root_dir: data/raw/cityflowv2
+  videos_dir: null
+  cameras: null
+  annotation_format: mot
+  ground_truth_dir: null
+  camera_transitions: null
+  target_classes:
+  - 2
+  - 5
+  - 7
+  class_mapping:
+    2: car
+    5: bus
+    7: truck

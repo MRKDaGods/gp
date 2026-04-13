@@ -1,5 +1,5 @@
 {
-  "id": "ali369/12a-wildtrack-mvdetr-training",
+  "id": "gumfreddy/12a-wildtrack-mvdetr-training",
   "title": "12a WILDTRACK MVDeTr Training",
   "code_file": "12a_wildtrack_mvdetr.ipynb",
   "language": "python",
@@ -9,10 +9,16 @@
   "enable_tpu": false,
   "enable_internet": true,
   "machine_shape": "NvidiaTeslaT4",
+  "keywords": [
+    "wildtrack",
+    "mvdetr",
+    "training"
+  ],
   "dataset_sources": [
-    "mrkdagods/mtmc-weights",
+    "gumfreddy/mtmc-weights",
     "aryashah2k/large-scale-multicamera-detection-dataset"
   ],
   "competition_sources": [],
-  "kernel_sources": []
+  "kernel_sources": [],
+  "model_sources": []
 }

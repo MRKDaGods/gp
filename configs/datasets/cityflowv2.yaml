@@ -98,7 +98,7 @@ stage2:
       weights_path: "models/reid/transreid_cityflowv2_384px_best.pth"
       weights_fallback: "models/reid/transreid_cityflowv2_best.pth"
       embedding_dim: 768
-      input_size: [384, 384]
+      input_size: [256, 256]
       vit_model: "vit_base_patch16_clip_224.openai"
       num_cameras: 59   # trained on 59 cameras; SIE pads extra cameras to zero
       clip_normalization: true
@@ -119,6 +119,14 @@ stage2:
       embedding_dim: 2048
       input_size: [384, 384]
       clip_normalization: false
+    vehicle3:
+      enabled: false
+      save_separate: true
+      model_name: "resnext101_ibn_a"
+      weights_path: ""
+      embedding_dim: 2048
+      input_size: [384, 384]
+      clip_normalization: false
   hsv:
     h_bins: 32
     s_bins: 16
@@ -129,6 +137,7 @@ stage2:
     n_components: 384          # v72: 512 hurt (-0.6pp), 384 confirmed optimal
     pca_model_path: "models/reid/pca_transform_ensemble.pkl"  # separate path to avoid cache collision
     secondary_pca_model_path: "models/reid/pca_transform_secondary.pkl"
+    tertiary_pca_model_path: "models/reid/pca_transform_tertiary.pkl"
   crop:
     min_area: 800
     padding_ratio: 0.05        # tighter crops for vehicles
@@ -148,6 +157,9 @@ stage4:
     secondary_embeddings:
       path: "data/outputs/run_latest/stage2/embeddings_secondary.npy"
       weight: 0.4
+    tertiary_embeddings:
+      path: ""
+      weight: 0.0
     # FIC: per-camera feature whitening (AIC21 1st-place technique)
     # Removes camera-specific bias from embeddings before association.
     fic:

@@ -1,0 +1,17 @@
+{
+  "id": "gumfreddy/09g-vehicle-reid-resnet101ibn-dmt",
+  "title": "09g vehicle reid resnet101ibn dmt",
+  "code_file": "09g_resnet101ibn_dmt.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "enable_internet": true,
+  "dataset_sources": [
+    "gumfreddy/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "kernel_sources": [],
+  "competition_sources": []
+}

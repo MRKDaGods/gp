@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 
@@ -23,6 +24,113 @@ from src.core.io_utils import (
     load_global_trajectories,
     load_tracklets_by_camera,
 )
+
+
+def _tracklet_num_frames(tracklet: Any) -> int:
+    if isinstance(tracklet, dict):
+        if tracklet.get("num_frames") is not None:
+            return int(tracklet["num_frames"])
+        return len(tracklet.get("frames") or [])
+
+    num_frames = getattr(tracklet, "num_frames", None)
+    if num_frames is not None:
+        return int(num_frames)
+    return len(getattr(tracklet, "frames", None) or [])
+
+
+def _tracklet_start_time(tracklet: Any) -> float:
+    if isinstance(tracklet, dict):
+        if tracklet.get("start_time") is not None:
+            return float(tracklet["start_time"])
+
+        frames = tracklet.get("frames") or []
+        if not frames:
+            return 0.0
+
+        first_frame = frames[0]
+        if isinstance(first_frame, dict):
+            return float(first_frame.get("timestamp", 0.0))
+        return float(getattr(first_frame, "timestamp", 0.0))
+
+    return float(getattr(tracklet, "start_time", 0.0))
+
+
+def _tracklet_camera_id(tracklet: Any) -> str:
+    if isinstance(tracklet, dict):
+        return str(tracklet.get("camera_id", ""))
+    return str(getattr(tracklet, "camera_id", ""))
+
+
+def _tracklet_to_crop_payload(tracklet: Any) -> dict[str, Any] | None:
+    camera_id = _tracklet_camera_id(tracklet)
+    if not camera_id:
+        return None
+
+    if isinstance(tracklet, dict):
+        frames = tracklet.get("frames") or []
+    else:
+        frames = getattr(tracklet, "frames", None) or []
+
+    if not frames:
+        return None
+
+    payload_frames = []
+    for frame in frames:
+        if isinstance(frame, dict):
+            frame_id = frame.get("frame_id")
+            bbox = frame.get("bbox")
+        else:
+            frame_id = getattr(frame, "frame_id", None)
+            bbox = getattr(frame, "bbox", None)
+
+        if frame_id is None or bbox is None:
+            continue
+
+        payload_frames.append({
+            "frame_id": int(frame_id),
+            "bbox": list(bbox),
+        })
+
+    if not payload_frames:
+        return None
+
+    return {
+        "camera_id": camera_id,
+        "frames": payload_frames,
+    }
+
+
+def _get_tracklet_representative_crop(stage0_dir: Path, tracklet: Any):
+    tracklet_payload = _tracklet_to_crop_payload(tracklet)
+    if tracklet_payload is None:
+        return None
+
+    from src.apps.forensic_dashboard import get_representative_crop
+
+    return get_representative_crop(str(stage0_dir), tracklet_payload)
+
+
+def _build_camera_thumbnails(stage0_dir: Path, tracklets: list[Any]) -> list[tuple[str, Any]]:
+    best_by_camera: dict[str, Any] = {}
+    for tracklet in tracklets:
+        camera_id = _tracklet_camera_id(tracklet)
+        if not camera_id:
+            continue
+
+        best_tracklet = best_by_camera.get(camera_id)
+        if best_tracklet is None or _tracklet_num_frames(tracklet) > _tracklet_num_frames(best_tracklet):
+            best_by_camera[camera_id] = tracklet
+
+    thumbnails = []
+    for camera_id, tracklet in sorted(
+        best_by_camera.items(),
+        key=lambda item: _tracklet_start_time(item[1]),
+    ):
+        crop = _get_tracklet_representative_crop(stage0_dir, tracklet)
+        if crop is not None:
+            thumbnails.append((camera_id, crop))
+
+    return thumbnails
 
 
 def get_run_dir() -> Path:
@@ -131,6 +239,9 @@ def page_search(run_dir: Path):
     st.title("Search & Browse Trajectories")
 
     traj_path = run_dir / "stage4" / "global_trajectories.json"
+    stage0_dir = run_dir / "stage0"
+    has_stage0_frames = stage0_dir.exists()
+
     if not traj_path.exists():
         st.warning("No trajectory data found. Run the pipeline first.")
         return
@@ -159,20 +270,52 @@ def page_search(run_dir: Path):
 
     # Display results
     for traj in filtered[:50]:
+        tracklets = sorted(traj.tracklets, key=_tracklet_start_time)
+        representative_tracklet = None
+        representative_crop = None
+        camera_thumbnails = []
+
+        if tracklets and has_stage0_frames:
+            representative_tracklet = max(tracklets, key=_tracklet_num_frames)
+            representative_crop = _get_tracklet_representative_crop(
+                stage0_dir,
+                representative_tracklet,
+            )
+            if len(tracklets) > 1:
+                camera_thumbnails = _build_camera_thumbnails(stage0_dir, tracklets)
+
         with st.expander(
             f"ID {traj.global_id} | {traj.class_name} | "
             f"{traj.num_cameras} cameras | {traj.total_duration:.1f}s"
         ):
-            st.write(f"**Cameras visited**: {' → '.join(traj.camera_sequence)}")
-            st.write(f"**Time span**: {traj.time_span[0]:.1f}s - {traj.time_span[1]:.1f}s")
+            image_col, info_col = st.columns([1, 3])
 
-            for tk in sorted(traj.tracklets, key=lambda x: x.start_time):
-                st.write(
-                    f"  - Camera `{tk.camera_id}`: "
-                    f"track {tk.track_id}, "
-                    f"{tk.start_time:.1f}s - {tk.end_time:.1f}s, "
-                    f"{tk.num_frames} frames"
-                )
+            with image_col:
+                if representative_crop is not None:
+                    st.image(
+                        representative_crop,
+                        caption=f"Representative crop ({_tracklet_camera_id(representative_tracklet)})",
+                        use_container_width=True,
+                    )
+
+            with info_col:
+                st.write(f"**Cameras visited**: {' → '.join(traj.camera_sequence)}")
+                st.write(f"**Time span**: {traj.time_span[0]:.1f}s - {traj.time_span[1]:.1f}s")
+
+                for tk in tracklets:
+                    st.write(
+                        f"  - Camera `{tk.camera_id}`: "
+                        f"track {tk.track_id}, "
+                        f"{tk.start_time:.1f}s - {tk.end_time:.1f}s, "
+                        f"{tk.num_frames} frames"
+                    )
+
+            if len(camera_thumbnails) > 1:
+                st.caption("Per-camera representative crops")
+                thumb_cols = st.columns(len(camera_thumbnails))
+                for thumb_col, (camera_id, crop) in zip(thumb_cols, camera_thumbnails):
+                    with thumb_col:
+                        st.image(crop, caption=camera_id, use_container_width=True)
 
 
 # ---- Page: NL Query ----
@@ -181,6 +324,9 @@ def page_nl_query(run_dir: Path):
     st.title("Natural Language Query")
 
     traj_path = run_dir / "stage4" / "global_trajectories.json"
+    stage0_dir = run_dir / "stage0"
+    has_stage0_frames = stage0_dir.exists()
+
     if not traj_path.exists():
         st.warning("No trajectory data found. Run the pipeline first.")
         return
@@ -208,13 +354,45 @@ def page_nl_query(run_dir: Path):
 
         st.subheader(f"Results for: \"{query}\"")
         for traj, score, desc in results:
+            tracklets = sorted(traj.tracklets, key=_tracklet_start_time)
+            representative_tracklet = None
+            representative_crop = None
+            camera_thumbnails = []
+
+            if tracklets and has_stage0_frames:
+                representative_tracklet = max(tracklets, key=_tracklet_num_frames)
+                representative_crop = _get_tracklet_representative_crop(
+                    stage0_dir,
+                    representative_tracklet,
+                )
+                if len(tracklets) > 1:
+                    camera_thumbnails = _build_camera_thumbnails(stage0_dir, tracklets)
+
             with st.expander(
                 f"Score: {score:.3f} | ID {traj.global_id} | {traj.class_name} | "
                 f"{traj.num_cameras} cameras"
             ):
-                st.write(f"**Description**: {desc}")
-                st.write(f"**Cameras**: {' → '.join(traj.camera_sequence)}")
-                st.write(f"**Duration**: {traj.total_duration:.1f}s")
+                image_col, info_col = st.columns([1, 3])
+
+                with image_col:
+                    if representative_crop is not None:
+                        st.image(
+                            representative_crop,
+                            caption=f"Representative crop ({_tracklet_camera_id(representative_tracklet)})",
+                            use_container_width=True,
+                        )
+
+                with info_col:
+                    st.write(f"**Description**: {desc}")
+                    st.write(f"**Cameras**: {' → '.join(traj.camera_sequence)}")
+                    st.write(f"**Duration**: {traj.total_duration:.1f}s")
+
+                if len(camera_thumbnails) > 1:
+                    st.caption("Per-camera representative crops")
+                    thumb_cols = st.columns(len(camera_thumbnails))
+                    for thumb_col, (camera_id, crop) in zip(thumb_cols, camera_thumbnails):
+                        with thumb_col:
+                            st.image(crop, caption=camera_id, use_container_width=True)
 
 
 # ---- Page: 3D Visualization ----
