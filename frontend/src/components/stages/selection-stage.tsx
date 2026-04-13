@@ -26,6 +26,21 @@ import { getTracklets } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 
+/** Match detection-stage crop settings (stage-0 aligned + upscale + JPEG quality). */
+function uploadVideoCropUrl(
+  videoId: string,
+  frameId: number,
+  bbox: number[],
+  opts?: { quality?: number; minEdge?: number; pad?: number }
+): string {
+  if (!bbox || bbox.length !== 4) return "";
+  const q = opts?.quality ?? 92;
+  const minEdge = opts?.minEdge ?? 200;
+  const pad = opts?.pad ?? 0.12;
+  const [x1, y1, x2, y2] = bbox;
+  return `${API_BASE}/crops/${encodeURIComponent(videoId)}?frameId=${frameId}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&quality=${q}&minEdge=${minEdge}&pad=${pad}`;
+}
+
 interface SampleFrame {
   frameId: number;
   bbox: number[];
@@ -291,18 +306,16 @@ function TrackletCard({
     if (samples && samples.length > 0) {
       for (const sf of samples) {
         if (sf.bbox && sf.bbox.length === 4) {
-          cropUrls.push(
-            `${API_BASE}/crops/${videoId}?frameId=${sf.frameId}&x1=${sf.bbox[0]}&y1=${sf.bbox[1]}&x2=${sf.bbox[2]}&y2=${sf.bbox[3]}`
-          );
+          const u = uploadVideoCropUrl(videoId, sf.frameId, sf.bbox);
+          if (u) cropUrls.push(u);
         }
       }
     }
     if (cropUrls.length === 0) {
       const bbox = tracklet.representativeBbox;
       if (bbox && bbox.length === 4) {
-        cropUrls.push(
-          `${API_BASE}/crops/${videoId}?frameId=${tracklet.representativeFrame}&x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`
-        );
+        const u = uploadVideoCropUrl(videoId, tracklet.representativeFrame, bbox);
+        if (u) cropUrls.push(u);
       }
     }
   }
@@ -351,8 +364,9 @@ function TrackletCard({
             <img
               src={currentUrl}
               alt={`${tracklet.className} Track #${tracklet.id}`}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain bg-black/40"
               loading="lazy"
+              decoding="async"
               onError={() => setImgError(true)}
             />
           ) : (

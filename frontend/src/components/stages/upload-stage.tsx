@@ -174,12 +174,6 @@ export function UploadStage() {
       if (runId) {
         setRunId(runId);
       }
-
-      toast({
-        title: "Stage 1 started",
-        description: `Running detection/tracking on "${video.name}"`,
-        variant: "success",
-      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setIsRunning(false);
