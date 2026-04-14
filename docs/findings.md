@@ -147,6 +147,16 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **Analysis**: The augmentation overhaul clearly works and improves generalization. The EMA branch failed because `decay=0.9999` is too high for a 120-epoch schedule; the averaged weights converge too slowly and were still improving at epoch 120.
 - **Downstream outcome**: The corrected end-to-end follow-up in **10c v48** reached only **0.722 MTMC IDF1**, so the higher validation mAP did not transfer to vehicle MTMC.
 
+#### 09 v3 — EMA Training Results (2026-04-14)
+- **Task**: Re-test EMA on the primary CityFlowV2 TransReID ViT-B/16 CLIP path using the augoverhaul augmentation stack with the standard **TripletLoss + CenterLoss** recipe and a lower **EMA decay = 0.999**
+- **Base model result**: **mAP = 81.53%**, **R1 = 92.41%**
+- **EMA model result**: **mAP = 81.44%**, **R1 = 92.74%**
+- **EMA delta vs base**: **-0.09pp mAP**, **+0.33pp R1**
+- **Baseline comparison**: Relative to the prior **80.14% mAP / 92.27% R1** baseline, the augoverhaul + EMA training run still gains **+1.39pp mAP** overall
+- **Interpretation**: EMA converges to essentially the same solution as the base model. The tiny validation difference is not meaningful enough to justify carrying a second checkpoint or treating EMA as a distinct improvement path.
+- **Downstream implication**: Combined with **10c v48 = 0.722 MTMC IDF1** (**-5.3pp**), this further confirms that higher single-camera **mAP** is **not** the MTMC bottleneck in the current vehicle pipeline.
+- **Conclusion**: **EMA is a dead end** for this recipe. It produces nearly identical validation quality to the base model and does not change the core finding that feature-space changes with better mAP are failing to improve MTMC.
+
 #### 10c v47 — Augmentation Overhaul Model with 384px Deployment Bug (2026-04-14)
 - **Task**: Evaluate the new **09 v2 augmentation-overhaul** primary model in the downstream **10a -> 10b -> 10c** CityFlowV2 pipeline
 - **Result**: **MTMC IDF1 = 0.702**, a **-7.3pp** regression versus the current reproducible **0.775** baseline
@@ -373,6 +383,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | AFLink motion linking | -3.95pp MTMC IDF1; motion consistency unreliable across non-overlapping cameras and false merges dominate | 10c v46 |
 | 384px TransReID deployment | -2.8pp MTMC IDF1 despite +10pp mAP; v43=0.7585, v44=0.7562 vs v80=0.784 | 10a v43, 10a v44, v80 baseline |
 | Augmentation overhaul + CircleLoss (09 v2 augoverhaul model) | -5.3pp MTMC IDF1 (0.722 vs 0.775 baseline) despite +1.45pp mAP; confounded recipe changed both augmentations and loss, and likely suppressed color/texture cues needed for cross-camera vehicle matching | 10c v48, 09 v2 |
+| EMA model averaging | Model **mAP=81.53%** vs EMA **mAP=81.44%** with **R1 92.41% vs 92.74%**; EMA converges to essentially the same place and is not a meaningful improvement path | 09 v3 |
 | DMT camera-aware training (87.3% mAP) | -1.4pp MTMC IDF1; v46=0.758 vs v45=0.772 | 10c v45-v46 |
 | EMA (`decay=0.9999`, 120 epochs) | mAP=39.09%; too slow to converge under the current training schedule and needs a much longer run to be viable | 09 v2 |
 | Multi-query track representation | -0.1pp; v51=0.771 vs v50=0.772 | 10c v50-v51 |
