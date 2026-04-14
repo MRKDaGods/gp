@@ -13,6 +13,7 @@
 | **SOTA Target** | 84.86% | AIC22 1st place |
 | **Gap to SOTA** | 7.36pp | Relative to the current reproducible best |
 | **Primary Model (ViT-B/16 CLIP 256px, 09 v2 aug overhaul)** | mAP=81.59% | On CityFlowV2 eval split; +1.45pp vs the prior 80.14% baseline |
+| **10c v48 (09 v2 augoverhaul @ 256px)** | MTMC IDF1=0.722 | Best result after an 11-sweep association re-optimization; single-cam IDF1 only 0.752 |
 | **Secondary Model (ResNet101-IBN-a)** | mAP=52.77% | On CityFlowV2 eval split, ImageNet→CityFlowV2 only |
 | **Secondary Model VeRi-776 pretrain (09e v2)** | mAP=62.52% | On VeRi-776 test set, ready for CityFlowV2 fine-tuning |
 | **384px ViT (09b v2)** | DEAD END | Higher single-camera ReID accuracy did not transfer; MTMC IDF1 only 0.7585-0.7562 in v43-v44, -2.8pp vs 256px baseline |
@@ -20,6 +21,8 @@
 | **Association configs tested** | 225+ | All within 0.3pp of optimal |
 
 **Current reproducible vehicle MTMC IDF1 is 0.775** with 10c v52 using the v80-restored recipe (`sim_thresh=0.50`, `appearance_weight=0.70`, `fic_reg=0.50`, `aqe_k=3`, `gallery_thresh=0.48`, `orphan_match=0.38`). This is a small improvement over v50/v51 at 0.772, but it still trails the historical v80 result of 0.784. Vehicle association remains exhausted, so future gains will need materially better features or priors rather than more stage-4 tuning.
+
+The corrected **10c v48** evaluation of the **09 v2 augoverhaul** model at the intended **256px** resolution still regressed sharply: the best full sweep reached only **MTMC IDF1 = 0.722** with `sim_thresh=0.45`, `appearance_weight=0.60`, `fic_reg=1.00`, `aqe_k=3`, `aflink_gap=150`, and `aflink_dir=0.85`. Single-camera **IDF1 = 0.752** was also materially below the baseline (~0.82), confirming that the earlier **10c v47** collapse was partly a deployment bug, but the underlying **09 v2** training recipe is itself a vehicle-MTMC regression.
 
 **⚠️ Metric Disambiguation (Vehicle Pipeline):**
 - **MTMC IDF1 = 77.5%** — Current reproducible best on the current codebase from 10c v52. This remains the official metric and the only number that should be compared to AIC22 SOTA.
@@ -56,7 +59,7 @@ The remaining gap to SOTA now decomposes into:
 | Higher-dimensional concat-patch features | -0.3pp | Tested and harmful (v48-v49) |
 | Association tuning / structural association changes | Exhausted | 225+ configs plus structural variants already tried |
 
-**Higher single-camera ReID mAP is not translating into better MTMC IDF1.** Both 384px deployment and DMT camera-aware training improved single-camera discrimination but hurt cross-camera association. Without a true multi-model ensemble, the realistic ceiling now appears to be roughly 77-78% MTMC IDF1.
+**Higher single-camera ReID mAP is not translating into better MTMC IDF1.** Three experiments now confirm this: the augmentation-overhaul plus CircleLoss recipe, 384px deployment, and DMT camera-aware training all improved or preserved validation mAP while hurting downstream MTMC. Without a true multi-model ensemble, the realistic ceiling now appears to be roughly 77-78% MTMC IDF1.
 
 ## Critical Discovery: 384px Is a Dead End for MTMC
 
@@ -142,7 +145,7 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **EMA model result**: **mAP = 39.09%**
 - **EMA model with reranking**: **mAP = 47.76%**
 - **Analysis**: The augmentation overhaul clearly works and improves generalization. The EMA branch failed because `decay=0.9999` is too high for a 120-epoch schedule; the averaged weights converge too slowly and were still improving at epoch 120.
-- **Next**: Pipe the improved base model through the full **10a -> 10b -> 10c** chain to measure MTMC IDF1 impact. **10a v19** has already been pushed.
+- **Downstream outcome**: The corrected end-to-end follow-up in **10c v48** reached only **0.722 MTMC IDF1**, so the higher validation mAP did not transfer to vehicle MTMC.
 
 #### 10c v47 — Augmentation Overhaul Model with 384px Deployment Bug (2026-04-14)
 - **Task**: Evaluate the new **09 v2 augmentation-overhaul** primary model in the downstream **10a -> 10b -> 10c** CityFlowV2 pipeline
@@ -150,8 +153,18 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **Root cause**: **BUG**. The **10a** notebook deployed the augoverhaul model at **384x384** input even though it was trained for **256x256**. This happened because `configs/datasets/cityflowv2.yaml` still had `input_size: [384, 384]` from the earlier 384px dead-end work, and the notebook did not explicitly override it for the 256px model.
 - **Why this matters**: This result does **not** show that the augmentation-overhaul model is worse. The model itself improved single-camera quality to **mAP = 81.59%** versus the previous **80.14%** baseline, so it should be expected to perform **better**, not worse, when deployed at the correct **256x256** resolution.
 - **Fix applied**: Added an explicit `stage2.reid.vehicle.input_size=[256,256]` override to the **10a** notebook and fixed the default `cityflowv2.yaml` input size so 256px deployment is now the safe default for the primary vehicle model.
-- **Status**: Re-running the corrected pipeline as **10a v20**; downstream MTMC results are pending.
+- **Status**: The fix was verified in **10a v20**, and the corrected **256px** deployment was evaluated end-to-end in **10c v48**.
 - **Conclusion**: Treat **10c v47** as a configuration failure, not as evidence against the augmentation overhaul. The apparent regression was caused by a silent deployment mismatch, not by weaker learned features.
+
+#### 10c v48 — Corrected 256px Evaluation of the 09 v2 Augoverhaul Model (2026-04-14)
+- **Task**: Re-run the full downstream **10a -> 10b -> 10c** CityFlowV2 pipeline with the **09 v2 augoverhaul** model deployed at the correct **256x256** input size
+- **Best association config**: `sim_thresh=0.45`, `appearance_weight=0.60`, `fic_reg=1.00`, `aqe_k=3`, `aflink_gap=150`, `aflink_dir=0.85`
+- **Sweep size**: **11 association configs**
+- **Result**: **MTMC IDF1 = 0.722**, which is **-5.3pp** versus the current reproducible **0.775** baseline
+- **Single-camera quality**: **IDF1 = 0.752**, also materially below the baseline (~0.82)
+- **Interpretation**: The 384px deployment bug in **10c v47** was real, but fixing it did **not** rescue the model. The underlying **09 v2** recipe still regresses badly for MTMC even at the correct deployment resolution.
+- **Root cause**: The experiment was confounded because it changed both the augmentation stack and the loss at the same time: it added `RandomGrayscale`, stronger `ColorJitter`, `GaussianBlur`, and `RandomPerspective`, while also replacing **TripletLoss** with **CircleLoss**. The stronger augmentations likely suppress color and texture cues that are still needed to distinguish same-model vehicles across cameras, and the simultaneous loss change prevents precise attribution.
+- **Conclusion**: The **09 v2 augoverhaul + CircleLoss** recipe is a confirmed **DEAD END** for CityFlowV2 vehicle MTMC despite its higher validation **mAP = 81.59%**.
 
 #### 10c v46 — AFLink Motion-Based Post-Association (2026-04-13)
 - **Task**: Test AFLink as a motion-based post-association stage after the standard CityFlowV2 appearance-driven association
@@ -228,8 +241,6 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 
 ### In Progress
 
-- **10a v19**: Running the **09 v2 augmentation-overhaul base model** through stages **0-2** to measure downstream MTMC impact in the **10a -> 10b -> 10c** chain
-
 #### Kaggle T4 Dataset Mount Structure Discovery
 - **Discovery**: On Kaggle **T4 GPU** kernels, datasets mounted under **`/kaggle/input/datasets/<owner>/<slug>/`** rather than **`/kaggle/input/<slug>/`**
 - **Impact**: This caused multiple 09d failures when kernels assumed the legacy flat mount path and could not locate the dataset
@@ -241,6 +252,7 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **Bug**: `configs/datasets/cityflowv2.yaml` still contained `input_size: [384, 384]`, even though **384px deployment is a confirmed dead end** for the main vehicle MTMC pipeline.
 - **Failure mode**: The **10a** notebook silently inherited that config and exported the new **09 v2 augmentation-overhaul** model at **384x384** instead of its intended **256x256** input size.
 - **Observed impact**: This caused the catastrophic **10c v47 = 0.702 MTMC IDF1** result and could easily have been misread as a model-quality regression.
+- **Verification**: The fix was verified in **10a v20**, and the corrected **256px** deployment was then evaluated in **10c v48**.
 - **Lesson**: Leaving dead-end experimental defaults in shared config files is dangerous because later notebooks can silently inherit them.
 - **Fix**: Set the safe default back to **256x256** and add explicit notebook-level overrides for `stage2.reid.vehicle.input_size` whenever testing alternate deployment resolutions.
 
@@ -324,7 +336,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 ## What Actually Worked
 
 - **Augmentation overhaul**: **+1.45pp mAP** on the primary vehicle ReID model via `RandomGrayscale`, `GaussianBlur`, `RandomPerspective`, stronger `ColorJitter`, and a wider `RandomErasing` range
-- **Deployment-bug correction**: The **10c v47** collapse to **0.702 MTMC IDF1** was traced to a **384px deployment mismatch**, not to weaker augmentation-overhaul features; the corrected **256px** rerun is now the relevant follow-up.
+- **Deployment-bug correction**: The **10c v47** collapse to **0.702 MTMC IDF1** was correctly traced to a **384px deployment mismatch**; the **10a v20** fix and **10c v48** rerun verified the bug was real, even though the underlying **09 v2** recipe still regressed for MTMC.
 
 ## Conclusive Dead Ends (DO NOT RETRY)
 
@@ -360,6 +372,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | max_iou_distance=0.5 | -1.6pp | v47 |
 | AFLink motion linking | -3.95pp MTMC IDF1; motion consistency unreliable across non-overlapping cameras and false merges dominate | 10c v46 |
 | 384px TransReID deployment | -2.8pp MTMC IDF1 despite +10pp mAP; v43=0.7585, v44=0.7562 vs v80=0.784 | 10a v43, 10a v44, v80 baseline |
+| Augmentation overhaul + CircleLoss (09 v2 augoverhaul model) | -5.3pp MTMC IDF1 (0.722 vs 0.775 baseline) despite +1.45pp mAP; confounded recipe changed both augmentations and loss, and likely suppressed color/texture cues needed for cross-camera vehicle matching | 10c v48, 09 v2 |
 | DMT camera-aware training (87.3% mAP) | -1.4pp MTMC IDF1; v46=0.758 vs v45=0.772 | 10c v45-v46 |
 | EMA (`decay=0.9999`, 120 epochs) | mAP=39.09%; too slow to converge under the current training schedule and needs a much longer run to be viable | 09 v2 |
 | Multi-query track representation | -0.1pp; v51=0.771 vs v50=0.772 | 10c v50-v51 |
@@ -406,4 +419,4 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 
 ## Key Insight
 
-**The system is NOT broken.** Vehicle MTMC remains capped by camera-invariant feature quality, not association logic. The current reproducible ceiling is 77.5% MTMC IDF1, while the historical 78.4% v80 result is no longer reproducible on the current codebase. Higher single-camera ReID mAP does **not** translate to better MTMC IDF1 in this pipeline: 384px deployment (-2.8pp despite a large mAP gain) and DMT camera-aware training (-1.4pp despite +7pp mAP) both made cross-camera association worse, and multi-query plus concat-patch variants also failed to improve over baseline. The ResNet path is likewise not a near-term ensemble unlock: 09f v3 recovered from the circle-loss failure but still topped out at 42.7% mAP, materially worse than the direct ImageNet→CityFlowV2 baseline at 52.77%, and extending that direct path further only degraded to 50.61%. On the person side, ground-plane tracking is already strong (**90.3% MODA, 94.7% IDF1**), but rerunning tracking on the stronger **12a v3** detector stayed essentially flat at **90.0% MODA, 94.7% IDF1**, indicating that the current WILDTRACK pipeline is now tracker-limited rather than detector-limited. The remaining vehicle work is no longer about more association sweeps or single-model feature tweaks; without a true multi-model ensemble, the realistic ceiling appears to be roughly 77-78% MTMC IDF1.
+**The system is NOT broken.** Vehicle MTMC remains capped by camera-invariant feature quality, not association logic. The current reproducible ceiling is 77.5% MTMC IDF1, while the historical 78.4% v80 result is no longer reproducible on the current codebase. Higher single-camera ReID mAP does **not** translate to better MTMC IDF1 in this pipeline: augmentation overhaul plus CircleLoss (**+1.45pp mAP -> -5.3pp MTMC IDF1**), 384px deployment (**same mAP -> -2.8pp MTMC IDF1**), and DMT camera-aware training (**+7pp mAP -> -1.4pp MTMC IDF1**) all made cross-camera association worse, and multi-query plus concat-patch variants also failed to improve over baseline. This now confirms that **mAP != MTMC IDF1** for CityFlowV2 vehicle tracking: the MTMC graph needs features with clean, thresholdable similarity distributions, not just good ranking on the validation split. The ResNet path is likewise not a near-term ensemble unlock: 09f v3 recovered from the circle-loss failure but still topped out at 42.7% mAP, materially worse than the direct ImageNet→CityFlowV2 baseline at 52.77%, and extending that direct path further only degraded to 50.61%. On the person side, ground-plane tracking is already strong (**90.3% MODA, 94.7% IDF1**), but rerunning tracking on the stronger **12a v3** detector stayed essentially flat at **90.0% MODA, 94.7% IDF1**, indicating that the current WILDTRACK pipeline is now tracker-limited rather than detector-limited. The remaining vehicle work is no longer about more association sweeps or single-model feature tweaks; without a true multi-model ensemble, the realistic ceiling appears to be roughly 77-78% MTMC IDF1.
