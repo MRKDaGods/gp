@@ -1,7 +1,7 @@
 # MTMC Tracker — Comprehensive Experiment Log
 
 > **Purpose**: Prevent re-running experiments. Every parameter combination and approach is logged here.
-> **Last updated**: 2026-03-25
+> **Last updated**: 2026-04-14
 > **Current best (Kaggle)**: MTMC IDF1 = **78.4%** (10c v44 / ali369 / code v80, min_hits=2)
 > **Current best (local, recent)**: MTMC IDF1 = **77.7%** (10c v28, CamTTA + power_norm=0.5)
 > **Historical local claim**: IDF1 = 82.97% (v47 — unverifiable, predates current experiment log)
@@ -133,6 +133,13 @@ clahe_clip_limit:      2.5
 
 Note: On CamTTA + power_norm features, the existing association optimum was effectively confirmed again: `sim_thresh=0.53`, `appearance_weight=0.70`, `fic_reg=0.10`, `aqe_k=3`, and `intra_merge=true` with `thresh=0.80` and `gap=30` stayed best or tied-best. The only measurable gain was a tiny +0.2pp from lowering `gallery_thresh` to 0.48 with `orphan_match=0.38`.
 
+### 2.3 2026-04 Augoverhaul Downstream Follow-Ups
+
+| Version | Upstream Model | Config Changes | MTMC IDF1 | Verdict | Key Insight |
+|:-------:|----------------|----------------|:---------:|:-------:|-------------|
+| 10c v48 | 09 v2 augoverhaul @ 256px | Corrected deployment size, 11-config association re-sweep | 72.2% | REJECTED | Fixing the 384px deployment bug did not rescue the model |
+| 10c v49 | 09 v3 augoverhaul-EMA (`mAP=81.53%`, `R1=92.41%`) | Broader association sweep; best config `sim=0.45`, `app=0.60`, `st=0.40`, `fic=1.00`, `aqe_k=3`, `gallery=0.45`, `orphan=0.35`; AFLink `gap=150`, `dir=0.85` improved 0.675 -> 0.722 | 72.2% | REJECTED | Same 0.722 ceiling as v48; reranking off, camera-pair norm off, intra-merge negligible, so the augoverhaul model family is the bottleneck rather than association tuning |
+
 ---
 
 ## 3. Exhaustive Parameter Sweep Results
@@ -214,6 +221,8 @@ Note: On CamTTA + power_norm features, the existing association optimum was effe
 |:-------:|--------|:---:|:--:|:------:|
 | 09b v1 | 384px from 256px checkpoint | 44.94% | - | FAILED |
 | 09b v2 | 384px ViT-B/16 CLIP proper | **80.14%** | **92.27%** | SUCCESS |
+| 09 v2 | Augoverhaul + CircleLoss | **81.59%** | - | HIGHER ReID, MTMC REGRESSION |
+| 09 v3 | Augoverhaul + EMA training run (base checkpoint used downstream) | **81.53%** | **92.41%** | SAME MTMC CEILING AS 09 v2 |
 
 ### 4.2 Knowledge Distillation (09c)
 

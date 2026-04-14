@@ -14,6 +14,7 @@
 | **Gap to SOTA** | 7.36pp | Relative to the current reproducible best |
 | **Primary Model (ViT-B/16 CLIP 256px, 09 v2 aug overhaul)** | mAP=81.59% | On CityFlowV2 eval split; +1.45pp vs the prior 80.14% baseline |
 | **10c v48 (09 v2 augoverhaul @ 256px)** | MTMC IDF1=0.722 | Best result after an 11-sweep association re-optimization; single-cam IDF1 only 0.752 |
+| **10c v49 (09 v3 augoverhaul-EMA @ 256px)** | MTMC IDF1=0.722 | Best result after a broader association sweep; AFLink recovered 0.675 -> 0.722 but could not break the augoverhaul ceiling |
 | **Secondary Model (ResNet101-IBN-a)** | mAP=52.77% | On CityFlowV2 eval split, ImageNet→CityFlowV2 only |
 | **Secondary Model VeRi-776 pretrain (09e v2)** | mAP=62.52% | On VeRi-776 test set, ready for CityFlowV2 fine-tuning |
 | **384px ViT (09b v2)** | DEAD END | Higher single-camera ReID accuracy did not transfer; MTMC IDF1 only 0.7585-0.7562 in v43-v44, -2.8pp vs 256px baseline |
@@ -22,7 +23,7 @@
 
 **Current reproducible vehicle MTMC IDF1 is 0.775** with 10c v52 using the v80-restored recipe (`sim_thresh=0.50`, `appearance_weight=0.70`, `fic_reg=0.50`, `aqe_k=3`, `gallery_thresh=0.48`, `orphan_match=0.38`). This is a small improvement over v50/v51 at 0.772, but it still trails the historical v80 result of 0.784. Vehicle association remains exhausted, so future gains will need materially better features or priors rather than more stage-4 tuning.
 
-The corrected **10c v48** evaluation of the **09 v2 augoverhaul** model at the intended **256px** resolution still regressed sharply: the best full sweep reached only **MTMC IDF1 = 0.722** with `sim_thresh=0.45`, `appearance_weight=0.60`, `fic_reg=1.00`, `aqe_k=3`, `aflink_gap=150`, and `aflink_dir=0.85`. Single-camera **IDF1 = 0.752** was also materially below the baseline (~0.82), confirming that the earlier **10c v47** collapse was partly a deployment bug, but the underlying **09 v2** training recipe is itself a vehicle-MTMC regression.
+The corrected **10c v48** evaluation of the **09 v2 augoverhaul** model at the intended **256px** resolution still regressed sharply: the best full sweep reached only **MTMC IDF1 = 0.722** with `sim_thresh=0.45`, `appearance_weight=0.60`, `fic_reg=1.00`, `aqe_k=3`, `aflink_gap=150`, and `aflink_dir=0.85`. The follow-up **10c v49** sweep on the **09 v3 augoverhaul-EMA** training run reproduced the same **0.722** ceiling with a broader parameter search, confirming that the regression persists across augoverhaul variants and is driven by the model family rather than missed association tuning. Single-camera **IDF1 = 0.752** in **10c v48** was also materially below the baseline (~0.82), confirming that the earlier **10c v47** collapse was partly a deployment bug, but the underlying augoverhaul recipe is itself a vehicle-MTMC regression.
 
 **⚠️ Metric Disambiguation (Vehicle Pipeline):**
 - **MTMC IDF1 = 77.5%** — Current reproducible best on the current codebase from 10c v52. This remains the official metric and the only number that should be compared to AIC22 SOTA.
@@ -154,7 +155,7 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **EMA delta vs base**: **-0.09pp mAP**, **+0.33pp R1**
 - **Baseline comparison**: Relative to the prior **80.14% mAP / 92.27% R1** baseline, the augoverhaul + EMA training run still gains **+1.39pp mAP** overall
 - **Interpretation**: EMA converges to essentially the same solution as the base model. The tiny validation difference is not meaningful enough to justify carrying a second checkpoint or treating EMA as a distinct improvement path.
-- **Downstream implication**: Combined with **10c v48 = 0.722 MTMC IDF1** (**-5.3pp**), this further confirms that higher single-camera **mAP** is **not** the MTMC bottleneck in the current vehicle pipeline.
+- **Downstream implication**: Combined with **10c v48 = 0.722** and **10c v49 = 0.722 MTMC IDF1** (**-5.3pp** vs baseline in both cases), this further confirms that higher single-camera **mAP** is **not** the MTMC bottleneck in the current vehicle pipeline.
 - **Conclusion**: **EMA is a dead end** for this recipe. It produces nearly identical validation quality to the base model and does not change the core finding that feature-space changes with better mAP are failing to improve MTMC.
 
 #### 10c v47 — Augmentation Overhaul Model with 384px Deployment Bug (2026-04-14)
@@ -175,6 +176,17 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **Interpretation**: The 384px deployment bug in **10c v47** was real, but fixing it did **not** rescue the model. The underlying **09 v2** recipe still regresses badly for MTMC even at the correct deployment resolution.
 - **Root cause**: The experiment was confounded because it changed both the augmentation stack and the loss at the same time: it added `RandomGrayscale`, stronger `ColorJitter`, `GaussianBlur`, and `RandomPerspective`, while also replacing **TripletLoss** with **CircleLoss**. The stronger augmentations likely suppress color and texture cues that are still needed to distinguish same-model vehicles across cameras, and the simultaneous loss change prevents precise attribution.
 - **Conclusion**: The **09 v2 augoverhaul + CircleLoss** recipe is a confirmed **DEAD END** for CityFlowV2 vehicle MTMC despite its higher validation **mAP = 81.59%**.
+
+#### 10c v49 — Association Sweep on the 09 v3 Augoverhaul-EMA Model (2026-04-14)
+- **Task**: Re-run the downstream **10c** association sweep using the **09 v3 augoverhaul-EMA** training run (`mAP = 81.53%`, `R1 = 92.41%`) to test whether the EMA-trained augoverhaul recipe changes the MTMC operating point
+- **Best association config**: `sim_thresh=0.45`, `appearance_weight=0.60`, `spatiotemporal_weight=0.40`, `fic_reg=1.00`, `aqe_k=3`, `gallery_thresh=0.45`, `orphan_match=0.35`
+- **Best result**: **MTMC IDF1 = 0.722**, exactly matching **10c v48** and therefore confirming a persistent augoverhaul ceiling
+- **AFLink effect**: With the best non-AFLink operating point, MTMC IDF1 peaked at **0.675**; enabling AFLink with `max_spatial_gap_px=150` and `min_direction_cos=0.85` lifted it to **0.722**, but still did not recover the baseline
+- **Reranking**: **Off** was best throughout the sweep
+- **Camera-pair normalization**: **Off** was best throughout the sweep
+- **Intra-camera merge**: Negligible effect at `thresh=0.80` and `gap=60`
+- **Interpretation**: Even after swapping to the **09 v3** augoverhaul checkpoint and expanding the association search, the ceiling stayed fixed at **0.722**. That makes the failure mode robust to association variants and points back to the augoverhaul feature space itself rather than missed stage-4 tuning.
+- **Conclusion**: The augoverhaul regression is now confirmed across both **10c v48** and **10c v49**. Different sweeps and slightly different augoverhaul checkpoints converge to the same ceiling, so the model family itself is the issue, not the association parameters.
 
 #### 10c v46 — AFLink Motion-Based Post-Association (2026-04-13)
 - **Task**: Test AFLink as a motion-based post-association stage after the standard CityFlowV2 appearance-driven association
