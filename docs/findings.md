@@ -2,7 +2,7 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
-## Current Performance (Last Updated: 2026-04-14)
+## Current Performance (Last Updated: 2026-04-16)
 
 ### Vehicle Pipeline (CityFlowV2)
 
@@ -13,6 +13,7 @@
 | **SOTA Target** | 84.86% | AIC22 1st place |
 | **Gap to SOTA** | 7.36pp | Relative to the current reproducible best |
 | **Primary Model (ViT-B/16 CLIP 256px, 09 v2 aug overhaul)** | mAP=81.59% | On CityFlowV2 eval split; +1.45pp vs the prior 80.14% baseline |
+| **Experiment B (CircleLoss ablation, 09 v4)** | mAP=18.45%, R1=48.84% | Catastrophic failure with baseline augmentations; training loss was `inf` at every epoch |
 | **10c v48 (09 v2 augoverhaul @ 256px)** | MTMC IDF1=0.722 | Best result after an 11-sweep association re-optimization; single-cam IDF1 only 0.752 |
 | **10c v49 (09 v3 augoverhaul-EMA @ 256px)** | MTMC IDF1=0.722 | Best result after a broader association sweep; AFLink recovered 0.675 -> 0.722 but could not break the augoverhaul ceiling |
 | **Secondary Model (ResNet101-IBN-a)** | mAP=52.77% | On CityFlowV2 eval split, ImageNet→CityFlowV2 only |
@@ -24,6 +25,8 @@
 **Current reproducible vehicle MTMC IDF1 is 0.775** with 10c v52 using the v80-restored recipe (`sim_thresh=0.50`, `appearance_weight=0.70`, `fic_reg=0.50`, `aqe_k=3`, `gallery_thresh=0.48`, `orphan_match=0.38`). This is a small improvement over v50/v51 at 0.772, but it still trails the historical v80 result of 0.784. Vehicle association remains exhausted, so future gains will need materially better features or priors rather than more stage-4 tuning.
 
 The corrected **10c v48** evaluation of the **09 v2 augoverhaul** model at the intended **256px** resolution still regressed sharply: the best full sweep reached only **MTMC IDF1 = 0.722** with `sim_thresh=0.45`, `appearance_weight=0.60`, `fic_reg=1.00`, `aqe_k=3`, `aflink_gap=150`, and `aflink_dir=0.85`. The follow-up **10c v49** sweep on the **09 v3 augoverhaul-EMA** training run reproduced the same **0.722** ceiling with a broader parameter search, confirming that the regression persists across augoverhaul variants and is driven by the model family rather than missed association tuning. Single-camera **IDF1 = 0.752** in **10c v48** was also materially below the baseline (~0.82), confirming that the earlier **10c v47** collapse was partly a deployment bug, but the underlying augoverhaul recipe is itself a vehicle-MTMC regression.
+
+The new **Experiment B** CircleLoss-only ablation on the primary vehicle ReID path failed catastrophically. Kernel **`gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation` v1** used the original baseline augmentation stack with **CE+LS(eps=0.05) + CircleLoss(m=0.25, gamma=128) + CenterLoss** for **120 epochs**, but the training loss was **`inf` at every epoch** and the run collapsed to only **mAP = 18.45%** and **R1 = 48.84%**. This independently confirms that **CircleLoss is a dead end** on this CityFlowV2 TransReID recipe. It also sharpens the interpretation of the augoverhaul regression: either the augoverhaul augmentations themselves caused the **81.59% mAP -> 0.722 MTMC IDF1** failure, or **CircleLoss was not actually active** in that training run due to a config/path mismatch. In either case, **CircleLoss is not a viable explanation for a healthy high-mAP regime** because when it is definitely active, it destroys training entirely.
 
 **⚠️ Metric Disambiguation (Vehicle Pipeline):**
 - **MTMC IDF1 = 77.5%** — Current reproducible best on the current codebase from 10c v52. This remains the official metric and the only number that should be compared to AIC22 SOTA.
@@ -133,9 +136,18 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 
 Association tuning remains exhausted (225+ configs tested). The remaining vehicle path is no longer incremental stage-4 tuning or single-model feature ablations; it is ensemble-quality representation learning or materially stronger camera-pair priors.
 
-## Latest Experiment Results (2026-04-14)
+## Latest Experiment Results (2026-04-16)
 
 ### Completed
+
+#### 09 v4 / Experiment B — CircleLoss Ablation on Baseline Augmentations (2026-04-16)
+- **Kernel**: `gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation` **v1**
+- **Purpose**: Isolate whether **CircleLoss** caused the augoverhaul regression by keeping the original baseline augmentation stack and disabling EMA
+- **Config**: **TransReID ViT-B/16 CLIP 256px**, **CE+LS(eps=0.05) + CircleLoss(m=0.25, gamma=128) + CenterLoss**, **120 epochs**, baseline augmentations only: `RandomHorizontalFlip`, `Pad+RandomCrop`, `ColorJitter(brightness=0.2, contrast=0.15, saturation=0.1, hue=0.0)`, `Normalize`, `RandomErasing`
+- **Result**: **Catastrophic failure** with **best mAP = 18.45%** and **best R1 = 48.84%**
+- **Training stability**: Loss was **`inf` at every epoch**, indicating complete numerical instability rather than a weak-but-valid training regime
+- **Interpretation**: This matches the pre-existing dead-end pattern that **circle-style metric learning can catastrophically destabilize training** in this codebase. It also means the prior augoverhaul regression cannot be explained as “CircleLoss helped ReID but hurt MTMC.” When CircleLoss is definitely active on the primary ViT recipe, it destroys training outright.
+- **Conclusion**: **CircleLoss is a confirmed dead end** for the primary CityFlowV2 TransReID path. The augoverhaul regression is therefore most likely attributable to the augoverhaul augmentations themselves, unless the earlier augoverhaul training never actually activated CircleLoss because of a config mismatch.
 
 #### 09 v2 — Augmentation Overhaul + EMA (2026-04-13)
 - **Task**: Test a stronger augmentation recipe plus model EMA on the primary CityFlowV2 TransReID ViT-B/16 CLIP training path
@@ -380,6 +392,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | Score-level ensemble with 52.77% mAP secondary at 0.30 weight | -0.1pp MTMC IDF1; noise dilutes primary signal | 10a/10c fusion test, fus0.3_ter0.0 |
 | SGD optimizer for ResNet101-IBN-a | 30.27% mAP catastrophic | v18 mrkdagods |
 | Circle loss for ResNet101-IBN-a with triplet loss | Catastrophic gradient conflict; NEVER combine on the same feature tensor | 09d v17 (29.6%), 09f v2 (16.2%) vs 09d v18 (52.77%), 09e (62.52%) with circle_weight=0 |
+| CircleLoss on TransReID ViT-B/16 CLIP (Experiment B, baseline augmentations) | Catastrophic numerical instability; training loss was `inf` at every epoch and the run collapsed to **18.45% mAP / 48.84% R1** | `gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation` v1 |
 | ResNet101-IBN-a VeRi-776→CityFlowV2 fine-tuning | mAP=42.7% (09f v3), worse than direct ImageNet→CityFlowV2 (52.77% mAP, 09d v18); secondary-model ensemble path not viable without better pretraining or broader hyperparameter search | 09e v2, 09f v3, 09d v18 |
 | Extended fine-tuning from the 09d v18 ResNet101-IBN-a checkpoint | mAP degraded from 52.77% to 50.61% after resuming with lower LR; confirms the direct ImageNet→CityFlowV2 path is already at its ceiling | 09d gumfreddy v3 |
 | CLIP ViT backbone when checkpoint uses standard ViT | `norm_pre` randomly initialized, causing mode collapse (cosine sim 0.874) | 12b v5/v6 vs v8 |
@@ -394,7 +407,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | max_iou_distance=0.5 | -1.6pp | v47 |
 | AFLink motion linking | -3.95pp MTMC IDF1; motion consistency unreliable across non-overlapping cameras and false merges dominate | 10c v46 |
 | 384px TransReID deployment | -2.8pp MTMC IDF1 despite +10pp mAP; v43=0.7585, v44=0.7562 vs v80=0.784 | 10a v43, 10a v44, v80 baseline |
-| Augmentation overhaul + CircleLoss (09 v2 augoverhaul model) | -5.3pp MTMC IDF1 (0.722 vs 0.775 baseline) despite +1.45pp mAP; confounded recipe changed both augmentations and loss, and likely suppressed color/texture cues needed for cross-camera vehicle matching | 10c v48, 09 v2 |
+| Augmentation overhaul + CircleLoss (09 v2 augoverhaul model) | -5.3pp MTMC IDF1 (0.722 vs 0.775 baseline) despite +1.45pp mAP; confounded recipe changed both augmentations and loss. Follow-up CircleLoss-only ablation collapsed to **18.45% mAP** with `inf` loss every epoch, so CircleLoss is independently a dead end and the augoverhaul augmentations are the most likely regression source unless the original run had a CircleLoss config mismatch | 10c v48, 09 v2, 09 v4 Experiment B |
 | EMA model averaging | Model **mAP=81.53%** vs EMA **mAP=81.44%** with **R1 92.41% vs 92.74%**; EMA converges to essentially the same place and is not a meaningful improvement path | 09 v3 |
 | DMT camera-aware training (87.3% mAP) | -1.4pp MTMC IDF1; v46=0.758 vs v45=0.772 | 10c v45-v46 |
 | EMA (`decay=0.9999`, 120 epochs) | mAP=39.09%; too slow to converge under the current training schedule and needs a much longer run to be viable | 09 v2 |
@@ -442,4 +455,4 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 
 ## Key Insight
 
-**The system is NOT broken.** Vehicle MTMC remains capped by camera-invariant feature quality, not association logic. The current reproducible ceiling is 77.5% MTMC IDF1, while the historical 78.4% v80 result is no longer reproducible on the current codebase. Higher single-camera ReID mAP does **not** translate to better MTMC IDF1 in this pipeline: augmentation overhaul plus CircleLoss (**+1.45pp mAP -> -5.3pp MTMC IDF1**), 384px deployment (**same mAP -> -2.8pp MTMC IDF1**), and DMT camera-aware training (**+7pp mAP -> -1.4pp MTMC IDF1**) all made cross-camera association worse, and multi-query plus concat-patch variants also failed to improve over baseline. This now confirms that **mAP != MTMC IDF1** for CityFlowV2 vehicle tracking: the MTMC graph needs features with clean, thresholdable similarity distributions, not just good ranking on the validation split. The ResNet path is likewise not a near-term ensemble unlock: 09f v3 recovered from the circle-loss failure but still topped out at 42.7% mAP, materially worse than the direct ImageNet→CityFlowV2 baseline at 52.77%, and extending that direct path further only degraded to 50.61%. On the person side, ground-plane tracking is already strong (**90.3% MODA, 94.7% IDF1**), but rerunning tracking on the stronger **12a v3** detector stayed essentially flat at **90.0% MODA, 94.7% IDF1**, indicating that the current WILDTRACK pipeline is now tracker-limited rather than detector-limited. The remaining vehicle work is no longer about more association sweeps or single-model feature tweaks; without a true multi-model ensemble, the realistic ceiling appears to be roughly 77-78% MTMC IDF1.
+**The system is NOT broken.** Vehicle MTMC remains capped by camera-invariant feature quality, not association logic. The current reproducible ceiling is 77.5% MTMC IDF1, while the historical 78.4% v80 result is no longer reproducible on the current codebase. Higher single-camera ReID mAP does **not** translate to better MTMC IDF1 in this pipeline: augmentation overhaul plus CircleLoss (**+1.45pp mAP -> -5.3pp MTMC IDF1**), 384px deployment (**same mAP -> -2.8pp MTMC IDF1**), and DMT camera-aware training (**+7pp mAP -> -1.4pp MTMC IDF1**) all made cross-camera association worse, and the new CircleLoss-only Experiment B showed that when CircleLoss is definitely active on the primary ViT recipe it fails catastrophically (**18.45% mAP, `inf` loss every epoch**). That means the augoverhaul regression is most likely driven by the augoverhaul augmentations themselves, unless the earlier training had a CircleLoss config mismatch. This now confirms that **mAP != MTMC IDF1** for CityFlowV2 vehicle tracking: the MTMC graph needs features with clean, thresholdable similarity distributions, not just good ranking on the validation split. The ResNet path is likewise not a near-term ensemble unlock: 09f v3 recovered from the circle-loss failure but still topped out at 42.7% mAP, materially worse than the direct ImageNet→CityFlowV2 baseline at 52.77%, and extending that direct path further only degraded to 50.61%. On the person side, ground-plane tracking is already strong (**90.3% MODA, 94.7% IDF1**), but rerunning tracking on the stronger **12a v3** detector stayed essentially flat at **90.0% MODA, 94.7% IDF1**, indicating that the current WILDTRACK pipeline is now tracker-limited rather than detector-limited. The remaining vehicle work is no longer about more association sweeps or single-model feature tweaks; without a true multi-model ensemble, the realistic ceiling appears to be roughly 77-78% MTMC IDF1.
