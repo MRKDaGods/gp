@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Optional
 
 import numpy as np
@@ -53,6 +54,19 @@ class TrackerWrapper:
                         "cmc_method", "frame_rate"]:
                 if key in tracker_config:
                     kwargs[key] = tracker_config[key]
+
+        sig = inspect.signature(tracker_cls.__init__)
+        valid_params = set(sig.parameters.keys()) - {"self"}
+        accepts_var_kwargs = any(
+            param.kind == inspect.Parameter.VAR_KEYWORD
+            for param in sig.parameters.values()
+        )
+        if not accepts_var_kwargs:
+            filtered = {key: value for key, value in kwargs.items() if key in valid_params}
+            dropped = set(kwargs.keys()) - set(filtered.keys())
+            if dropped:
+                logger.warning(f"Dropped unsupported tracker params: {dropped}")
+            kwargs = filtered
 
         self.tracker = tracker_cls(**kwargs)
         logger.info(f"Tracker initialized: {algorithm}, device={device}")
