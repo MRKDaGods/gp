@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -43,7 +44,7 @@ class TrackerWrapper:
 
         kwargs = {"device": device, "half": half}
         if reid_weights:
-            kwargs["reid_weights"] = reid_weights
+            kwargs["reid_weights"] = Path(reid_weights)
 
         # Pass BoxMOT-specific config params
         if tracker_config:
