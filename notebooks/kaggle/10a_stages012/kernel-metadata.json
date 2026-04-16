@@ -15,6 +15,6 @@
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema"
+    "gumfreddy/09-vehicle-reid-cityflowv2"
   ]
 }

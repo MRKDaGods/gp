@@ -21,6 +21,7 @@ from src.core.data_models import Tracklet, TrackletFeatures
 from src.core.io_utils import save_embeddings, save_hsv_features, save_multi_query_embeddings
 from src.stage2_features.crop_extractor import CropExtractor
 from src.stage2_features.embeddings import camera_aware_batch_normalize, l2_normalize
+from src.stage2_features.foreground_masker import ForegroundMasker
 from src.stage2_features.hsv_extractor import HSVExtractor
 from src.stage2_features.pca_whitening import PCAWhitener
 from src.stage2_features.reid_model import ReIDModel
@@ -141,6 +142,16 @@ def run_stage2(
         min_quality=stage_cfg.crop.get("min_quality", 0.05),
         laplacian_min_var=stage_cfg.crop.get("laplacian_min_var", 0.0),
     )
+
+    foreground_masker: Optional[ForegroundMasker] = None
+    foreground_mask_cfg = stage_cfg.crop.get("foreground_masking", {})
+    if foreground_mask_cfg.get("enabled", False):
+        foreground_masker = ForegroundMasker(
+            model_name=foreground_mask_cfg.get("model_name", "facebook/sam2.1-hiera-tiny"),
+            min_crop_size=foreground_mask_cfg.get("min_crop_size", 48),
+            fill_value=foreground_mask_cfg.get("fill_value", "mean"),
+            device=stage_cfg.reid.device,
+        )
 
     hsv_extractor = HSVExtractor(
         h_bins=stage_cfg.hsv.h_bins,
@@ -331,6 +342,8 @@ def run_stage2(
             scored_crops_per_tracklet = []
             for tracklet in tracklets:
                 sc = crop_extractor.extract_crops_from_frames(tracklet, cam_frame_images)
+                if foreground_masker is not None and tracklet.class_id in VEHICLE_CLASSES:
+                    foreground_masker.mask_crops(sc)
                 scored_crops_per_tracklet.append(sc)
                 all_cam_crops_for_tta.extend([c.image for c in sc])
 
@@ -365,6 +378,13 @@ def run_stage2(
             if not scored_crops:
                 dropped_no_crops += 1
                 continue
+
+            if (
+                foreground_masker is not None
+                and preloaded_scored_crops is None
+                and tracklet.class_id in VEHICLE_CLASSES
+            ):
+                foreground_masker.mask_crops(scored_crops)
 
             # Select ReID model based on class
             if tracklet.class_id in PERSON_CLASSES:
@@ -708,7 +728,8 @@ def run_stage2(
         f"HSV dim={hsv_matrix.shape[1]}, "
         f"flip_aug={'on' if flip_augment else 'off'}, "
         f"{mq_log}"
-        f"camera_bn={'on' if stage_cfg.get('camera_bn', {}).get('enabled', True) else 'off'}"
+        f"camera_bn={'on' if stage_cfg.get('camera_bn', {}).get('enabled', True) else 'off'}, "
+        f"foreground_masking={'on' if foreground_masker is not None else 'off'}"
     )
 
     return all_features

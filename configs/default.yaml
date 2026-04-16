@@ -129,10 +129,11 @@ stage2:
     samples_per_tracklet: 16
     min_quality: 0.05       # composite quality threshold [0, 1]
     laplacian_min_var: 30.0   # Laplacian-variance blur filter (0 = disabled)
-  foreground_masking:
-    enabled: false
-    model_type: "sam2_hiera_tiny"
-    min_crop_size: 64
+    foreground_masking:
+      enabled: false
+      model_name: "facebook/sam2.1-hiera-tiny"
+      min_crop_size: 48
+      fill_value: "mean"
   # --- NEW: camera-aware batch normalisation ---
   camera_bn:
     enabled: true
