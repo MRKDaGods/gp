@@ -60,17 +60,26 @@ class TrackerWrapper:
     @staticmethod
     def _get_tracker_class(algorithm: str):
         """Dynamically import the tracker class from boxmot."""
-        from boxmot import BotSort, DeepOcSort, StrongSort, ByteTrack, OcSort, HybridSort
+        import boxmot
 
-        mapping = {
-            "botsort": BotSort,
-            "deepocsort": DeepOcSort,
-            "strongsort": StrongSort,
-            "bytetrack": ByteTrack,
-            "ocsort": OcSort,
-            "hybridsort": HybridSort,
+        candidates = {
+            "botsort": ("BotSort", "BoTSORT", "BOTSORT"),
+            "deepocsort": ("DeepOcSort", "DeepOCSort", "DEEPOCSORT"),
+            "strongsort": ("StrongSort", "StrongSORT", "STRONGSORT"),
+            "bytetrack": ("ByteTrack", "BYTETrack", "BYTETRACK"),
+            "ocsort": ("OcSort", "OCSort", "OCSORT"),
+            "hybridsort": ("HybridSort", "HybridSORT", "HYBRIDSORT"),
         }
-        return mapping[algorithm]
+
+        for class_name in candidates[algorithm]:
+            tracker_cls = getattr(boxmot, class_name, None)
+            if tracker_cls is not None:
+                return tracker_cls
+
+        raise ImportError(
+            f"boxmot does not expose a supported class for '{algorithm}'. "
+            f"Tried: {candidates[algorithm]}"
+        )
 
     def update(
         self, detections: list[Detection] | np.ndarray, frame: np.ndarray
