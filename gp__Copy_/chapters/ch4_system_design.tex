@@ -1,0 +1,140 @@
+\chapter{System Design and Architecture}
+
+This chapter describes the overall design and architecture of the multi-camera tracking and re-identification system. The system is organised as a seven-stage modular pipeline that begins with raw video archives from multiple cameras and ends with globally consistent cross-camera trajectories, a vector search index, evaluation metrics, and an operator-facing web application.
+
+\section{Overview and Assumptions}
+
+The system targets fixed surveillance cameras deployed in urban or semi-urban environments, such as streets, intersections, building entrances, and public facilities. Each camera provides a recorded video archive with a known resolution and frame rate. The cameras are assumed to be time-synchronised at the level of seconds. Audio information is not used; the system operates solely on visual input. Cameras may have non-overlapping fields of view, different perspectives, and varying lighting conditions, which is typical for large-scale camera networks. The system operates exclusively in offline batch processing mode.
+
+\section{System Architecture}
+
+The pipeline is composed of seven sequentially executed stages. Each stage reads the outputs of the previous stage from disk and writes its own outputs, enabling individual stages to be re-run independently without reprocessing earlier stages. Figure~\ref{fig:system_block} shows the full system block diagram.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.95\textwidth]{\parbox{0.93\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Full 7-stage system block diagram\\(cameras $\rightarrow$ Stage~0--6 $\rightarrow$ web application)}\vspace{2.5cm}}}
+% TODO: insert figure — full 7-stage block diagram: cameras → Stage 0-6 → web application
+\caption{Full system block diagram showing the seven processing stages and the web application layer.}
+\label{fig:system_block}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.95\textwidth]{\parbox{0.93\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Data flow diagram\\(file formats between pipeline stages)}\vspace{2.5cm}}}
+% TODO: insert figure — data flow diagram showing file formats between stages (video → frames manifest → tracklet JSON → .npy embeddings → FAISS .bin + SQLite → global trajectories JSON)
+\caption{Data flow between pipeline stages showing file formats at each stage boundary.}
+\label{fig:data_flow}
+\end{figure}
+
+\section{Stage 0: Ingestion and Preprocessing}
+
+Stage~0 discovers all camera video archives in the configured dataset directory and prepares them for downstream processing. It extracts frames at a configurable rate (default 10~FPS) and applies preprocessing: resize to a standardised resolution, bilateral denoising, and normalisation. Each extracted frame is described by a \texttt{FrameInfo} record containing a 0-based frame ID, camera ID, timestamp, and file path. The per-camera frame manifests are written to disk as JSON and consumed by Stage~1.
+
+\section{Stage 1: Object Detection and Single-Camera Tracking}
+
+\subsection{Detection}
+
+Object detection is performed by YOLO26m (Ultralytics) using pre-trained COCO weights. Only vehicle classes are detected: car (class~2), bus (class~5), and truck (class~7). The model runs at 1280-pixel input resolution with a detection confidence threshold of 0.25, NMS IoU of 0.65, and half-precision (FP16) inference on GPU.
+
+\subsection{Single-Camera Tracking}
+
+Deep-OC-SORT is deployed via the BoxMOT library. It uses OSNet-x0.25 appearance weights (MSMT17 pre-trained) for re-association of occluded objects. Key configuration: track buffer of 450~frames ($\approx$45~seconds at 10~FPS) to retain tracks through traffic-light stops; high-confidence threshold 0.25; low-confidence threshold 0.05.
+
+\subsection{Tracklet Post-Processing}
+
+After tracking, a TrackletBuilder applies three post-processing steps: (1) linear bounding-box interpolation to fill detection gaps up to 30~frames; (2) within-camera intra-merge that joins temporally close tracklets of the same class separated by up to 25~seconds with overlapping spatial footprints; (3) filtering that removes tracklets shorter than 3~frames or with bounding-box area below 800~pixels. Outputs are stored as one JSON file per camera.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: YOLO26m detections with Deep-OC-SORT track IDs on a sample frame}\vspace{2.5cm}}}
+% TODO: insert figure — example frame with YOLO bounding boxes and track IDs overlaid
+\caption{Stage~1 output: YOLO26m detections with Deep-OC-SORT track IDs on a sample camera frame.}
+\label{fig:stage1}
+\end{figure}
+
+\section{Stage 2: Feature Extraction}
+
+For each tracklet, representative bounding-box crops are extracted from its member frames. Each crop is resized to 256$\times$256 pixels and passed through the TransReID ViT-Base/16 CLIP model to produce a 768-dimensional embedding. A PCA model (fitted on training data) reduces each embedding to 384~dimensions and whitens them; all vectors are L2-normalised before storage. In parallel, an HSV colour histogram (16 Hue $\times$ 8 Saturation $\times$ 4 Value bins = 512 dimensions) is computed from each crop with centre-region weighting. A secondary OSNet-x0.25 embedding is also computed and fused at score level (10\% weight) during association.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.90\textwidth]{\parbox{0.88\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: TransReID training and inference pipeline\\(CityFlowV2 crops $\rightarrow$ ViT-B/16 CLIP $\rightarrow$ SIE+JPM $\rightarrow$ 768D $\rightarrow$ PCA $\rightarrow$ 384D L2-norm)}\vspace{2.5cm}}}
+% TODO: insert figure — TransReID training pipeline: CityFlowV2 crops → ViT-Base/16 CLIP → SIE + JPM → 768D → PCA → 384D L2-norm
+\caption{TransReID training and inference pipeline: from raw crops to 384-dimensional normalised embeddings.}
+\label{fig:reid_pipeline}
+\end{figure}
+
+\section{Stage 3: Indexing}
+
+Stage~3 builds a FAISS IndexFlatIP index over all 384-dimensional tracklet embeddings, enabling exact cosine similarity search. Alongside the vector index, a SQLite database stores tracklet metadata: camera ID, track ID, object class, start and end frame, start and end timestamp, and bounding-box statistics. Both the FAISS binary index and the SQLite database are written to disk for use by Stage~4 and the web application search service.
+
+\section{Stage 4: Cross-Camera Association}
+
+Stage~4 assigns globally consistent identities to tracklets across cameras using the following steps:
+
+\begin{enumerate}
+    \item \textbf{Top-K retrieval}: For each tracklet, query the FAISS index for the top-20 most similar tracklets using appearance embeddings.
+    \item \textbf{Spatial-temporal gating}: Remove candidate pairs from different camera pairs with implausible transition times.
+    \item \textbf{Weighted similarity fusion}: Combine appearance similarity (weight 0.70), HSV colour similarity (weight 0.25), and spatial-temporal plausibility score (weight 0.05).
+    \item \textbf{Conflict-free connected components}: Build a similarity graph (threshold 0.53, maximum component size 12) and extract connected components using NetworkX, enforcing the conflict-free constraint that no camera may contribute more than one tracklet to a single global identity.
+    \item \textbf{Gallery expansion}: Iteratively expand each component by querying with the new members' embeddings, up to one round.
+\end{enumerate}
+
+The output is a set of \texttt{GlobalTrajectory} records, each containing a global ID and the list of contributing per-camera tracklet evidence.
+
+\section{Stage 5: Evaluation}
+
+Stage~5 converts the global trajectories to MOT submission format (1-based frame IDs) and invokes TrackEval to compute HOTA, IDF1, and MOTA against the CityFlowV2 ground-truth annotations. Metrics are written to disk as JSON and displayed in the web dashboard.
+
+\section{Stage 6: Visualisation}
+
+Stage~6 produces: annotated video files with global track IDs overlaid, a bird's-eye-view trajectory map, a timeline JSON export for frontend rendering, and CSV/JSON exports of the global trajectory table.
+
+\section{Backend Architecture}
+
+The pipeline stages are exposed through a FastAPI (Python) REST API that the frontend communicates with. The application is organised into 15 routers:
+
+\begin{itemize}
+    \item \textbf{health} --- liveness probe
+    \item \textbf{videos} --- upload, list, and stream camera videos
+    \item \textbf{frames} --- serve extracted frames by camera and frame ID
+    \item \textbf{detections} --- query per-frame detection bounding boxes
+    \item \textbf{tracklets} --- query per-camera tracklet data
+    \item \textbf{crops} --- serve bounding-box crop images
+    \item \textbf{pipeline} --- trigger and monitor stage execution
+    \item \textbf{runs} --- list and inspect pipeline run metadata
+    \item \textbf{datasets} --- manage pre-computed dataset artefacts
+    \item \textbf{timeline} --- query and apply timeline edits
+    \item \textbf{search} --- cross-camera similarity search queries
+    \item \textbf{results} --- serve global trajectory results
+    \item \textbf{export} --- export results as MOT CSV, annotated video, or JSON
+    \item \textbf{locations} --- geographic location metadata hierarchy
+\end{itemize}
+
+All routers share a SQLite metadata store and a FAISS index loaded into memory at startup. CORS is configured to permit connections from the frontend development server.
+
+\section{Frontend Architecture}
+
+The operator-facing application is a Next.js~14 (TypeScript) single-page application with a dark UniFi-style theme.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.95\textwidth]{\parbox{0.93\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Frontend 7-step operator workflow screenshots\\(Upload $\rightarrow$ Detection $\rightarrow$ Selection $\rightarrow$ Inference $\rightarrow$ Timeline $\rightarrow$ Refinement $\rightarrow$ Output)}\vspace{2.5cm}}}
+% TODO: insert figure — 7-step UI workflow screenshots: Upload → Detection → Selection → Inference → Timeline → Refinement → Output
+\caption{Frontend operator workflow across all seven interaction steps.}
+\label{fig:frontend}
+\end{figure}
+
+The 7-step operator workflow is:
+
+\begin{enumerate}
+    \item \textbf{Upload} --- drag-and-drop video upload with gallery preview
+    \item \textbf{Detection} --- YOLO bounding boxes rendered on the video; runs automatically after upload
+    \item \textbf{Selection} --- operator clicks bounding boxes to designate targets of interest
+    \item \textbf{Inference} --- attach location (geographic hierarchy) and datetime metadata; trigger cross-camera pipeline
+    \item \textbf{Timeline} --- Clipchamp-style tracklet timeline editor with split-screen video playback
+    \item \textbf{Refinement} --- select reference frames, re-run similarity search, adjust playback speed
+    \item \textbf{Output} --- summarised video export, grid view (up to $5\times5$ cameras), statistics
+\end{enumerate}
+
+Key frontend libraries: Zustand (state management), TanStack Query~v5 (server data fetching), Video.js~8.12 (video playback), shadcn/ui with Radix~UI primitives (component library), dnd-kit (drag-and-drop), Leaflet/react-leaflet (mapping).

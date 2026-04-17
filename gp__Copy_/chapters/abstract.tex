@@ -1,0 +1,12 @@
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.8em}
+
+Modern cities rely heavily on large networks of CCTV cameras for security, traffic monitoring, and public safety. However, most existing systems struggle to continuously track vehicles and people when they move between different cameras, especially when the camera views do not overlap. This leads to frequent loss of identity, fragmented trajectories, and limited ability to analyze movement patterns in wide areas.
+
+This project addresses the problem of tracking objects across multiple cameras while preserving their identities over time. The main objective is to design and implement a system that can detect objects of interest, follow them within each camera view, and then associate their appearances across different cameras in a reliable way. The system aims to support city-wide monitoring scenarios in which many cameras are installed in different locations with varying viewpoints and lighting conditions.
+
+The proposed approach is based on a pipeline that combines object detection, single-camera tracking, and cross-camera re-identification. First, objects of interest are detected in each frame of the video streams. Second, a tracking component links these detections over time to build continuous trajectories within each camera. Third, a re-identification component compares visual information from different cameras to decide whether objects seen in separate views belong to the same real-world entity. A data processing pipeline is designed to handle video input, manage intermediate results, and store the final tracking information for later analysis.
+
+The project produces a working prototype that demonstrates multi-camera tracking and identity preservation on recorded video sequences. The system is evaluated using selected test scenarios to check its ability to maintain consistent identities across camera changes and to handle practical challenges such as occlusions and appearance variations. The development uses standard computer vision and machine learning tools, and the results provide an initial step towards a scalable platform for intelligent, city-wide surveillance applications.

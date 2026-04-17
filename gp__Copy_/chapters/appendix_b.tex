@@ -1,0 +1,92 @@
+\chapter{Use Cases}
+
+This appendix describes the primary use cases of the multi-camera tracking system as exercised through the web application. Each use case maps to one step of the operator workflow.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: UML use case diagram (Actor: Operator, UC1--UC7)}\vspace{2.5cm}}}
+% TODO: insert figure — UML use case diagram with actor "Operator" and use cases UC1–UC7
+\caption{System use case diagram.}
+\label{fig:use_case}
+\end{figure}
+
+\section*{UC1: Upload Camera Footage}
+\textbf{Actor:} Operator \\
+\textbf{Precondition:} Operator has access to the web application and has one or more video files from surveillance cameras. \\
+\textbf{Main Flow:}
+\begin{enumerate}
+    \item Operator navigates to the Upload screen.
+    \item Operator drags and drops one or more video files onto the upload zone, or uses the file picker.
+    \item System uploads files to the backend, creates video catalogue entries, and displays a thumbnail gallery.
+    \item System automatically triggers Stage~0 (frame extraction) and Stage~1 (detection) on the uploaded videos.
+\end{enumerate}
+\textbf{Postcondition:} Video files are stored; per-frame detections are available.
+
+\section*{UC2: Review Detections}
+\textbf{Actor:} Operator \\
+\textbf{Precondition:} UC1 complete; Stage~1 detection results available. \\
+\textbf{Main Flow:}
+\begin{enumerate}
+    \item System renders YOLO bounding boxes overlaid on the video player.
+    \item Operator reviews detections frame by frame or via video scrubbing.
+    \item Operator verifies that vehicles of interest are correctly detected.
+\end{enumerate}
+\textbf{Postcondition:} Operator has confirmed detection quality.
+
+\section*{UC3: Select Target of Interest}
+\textbf{Actor:} Operator \\
+\textbf{Precondition:} Detections displayed (UC2 complete). \\
+\textbf{Main Flow:}
+\begin{enumerate}
+    \item Operator clicks on a bounding box in the video frame.
+    \item System highlights the selected box in green and records the associated tracklet ID.
+    \item Operator may select multiple targets or deselect by clicking again.
+\end{enumerate}
+\textbf{Postcondition:} One or more tracklets are designated as query targets.
+
+\section*{UC4: Run Cross-Camera Inference}
+\textbf{Actor:} Operator \\
+\textbf{Precondition:} At least one target selected (UC3 complete). \\
+\textbf{Main Flow:}
+\begin{enumerate}
+    \item Operator optionally fills in location metadata (country, governorate, district, intersection) and a datetime range.
+    \item Operator clicks ``Run Inference''.
+    \item System executes Stages~2--4: feature extraction, FAISS indexing, cross-camera association.
+    \item System assigns global track IDs and returns results.
+\end{enumerate}
+\textbf{Postcondition:} Global trajectories are available.
+
+\section*{UC5: Review Timeline}
+\textbf{Actor:} Operator \\
+\textbf{Precondition:} Cross-camera results available (UC4 complete). \\
+\textbf{Main Flow:}
+\begin{enumerate}
+    \item System displays a Clipchamp-style timeline with tracklet segments colour-coded by camera.
+    \item A split-screen player shows the video for the selected camera segment.
+    \item Operator reviews the sequence of camera appearances for each global identity.
+    \item Operator may drag segment boundaries or reorder segments.
+\end{enumerate}
+\textbf{Postcondition:} Operator has reviewed the cross-camera trajectory sequence.
+
+\section*{UC6: Refine Search}
+\textbf{Actor:} Operator \\
+\textbf{Precondition:} Initial results reviewed (UC5 complete). \\
+\textbf{Main Flow:}
+\begin{enumerate}
+    \item Operator selects specific reference frames from the timeline.
+    \item Operator adjusts video playback speed (e.g., 0.25$\times$ for close inspection).
+    \item Operator triggers a re-search using the selected frames as new query embeddings.
+    \item System updates results with the refined query.
+\end{enumerate}
+\textbf{Postcondition:} Refined global trajectory returned.
+
+\section*{UC7: Export Results}
+\textbf{Actor:} Operator \\
+\textbf{Precondition:} Final results reviewed. \\
+\textbf{Main Flow:}
+\begin{enumerate}
+    \item Operator selects the desired export format: summarised video, MOT CSV, or JSON trajectory.
+    \item Operator optionally selects a camera grid layout (1$\times$1 to 5$\times$5).
+    \item System generates and downloads the export file.
+\end{enumerate}
+\textbf{Postcondition:} Export file saved to operator's local machine.

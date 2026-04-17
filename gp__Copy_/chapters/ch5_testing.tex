@@ -1,0 +1,141 @@
+\chapter{System Testing and Verification}
+
+This chapter describes the testing strategy, experimental setup, and benchmark results for the multi-camera tracking system. Testing covers unit and integration validation of the seven-stage pipeline, and end-to-end evaluation against the CityFlowV2 benchmark with comparison to published state-of-the-art methods.
+
+\section{Testing Setup}
+
+\subsection{Hardware}
+
+Model training was performed on Kaggle cloud infrastructure using an NVIDIA Tesla P100 GPU (16~GB HBM2). Pipeline inference and integration testing were conducted on a local development machine with an NVIDIA GTX~1050~Ti (4~GB GDDR5) and an Intel Core~i7 CPU under Windows~11.
+
+\subsection{Dataset}
+
+All experiments use the \textbf{CityFlowV2} dataset from the AI~City Challenge 2022 Track~1. CityFlowV2 contains 46 synchronised cameras deployed at real urban intersections, with 880 globally annotated vehicle identities. The dataset is organised into three scenes:
+
+\begin{table}[htbp]
+\centering
+\caption{CityFlowV2 dataset composition.}
+\label{tab:dataset}
+\begin{tabular}{lcc}
+\hline
+\textbf{Scene} & \textbf{Cameras} & \textbf{Description} \\ \hline
+S01 & 3  & Urban intersection cluster \\
+S02 & 4  & Urban intersection cluster \\
+S03 & 6  & Urban intersection cluster \\
+Total & 46 & 880 annotated vehicle IDs \\ \hline
+\end{tabular}
+\end{table}
+
+Ground-truth annotations use 1-based frame IDs in MOT format. The pipeline internally uses 0-based frame IDs and converts to 1-based only at export time.
+
+\section{Testing Plan and Strategy}
+
+\subsection{Module Testing}
+
+Each pipeline stage has a corresponding pytest test module under \texttt{tests/}. A smoke-test mode processes only 10~frames per camera and validates that all seven stages execute end-to-end without error in under two minutes, confirming output file presence and schema correctness at each stage boundary. Specific validations include:
+
+\begin{itemize}
+    \item Stage~0: frame count in manifest matches extracted JPEG count per camera.
+    \item Stage~1: each tracklet JSON contains required fields (\texttt{track\_id}, \texttt{camera\_id}, \texttt{class\_name}, \texttt{frames}).
+    \item Stage~2: embedding array shape is $N \times 384$; all rows are unit-norm.
+    \item Stage~3: FAISS index size equals embedding count; SQLite row count matches.
+    \item Stage~4: no global trajectory assigns the same camera's tracklet to two different global IDs (conflict-free constraint).
+    \item Stage~5: TrackEval completes and produces HOTA, IDF1, MOTA in output JSON.
+\end{itemize}
+
+\subsection{Integration Testing}
+
+Stage-by-stage integration is verified by running consecutive stage pairs on a sample of Scene~S02 (4~cameras, $\approx$2~minutes of footage). Each stage reads its predecessor's disk outputs, confirming that the file format contracts are satisfied across stage boundaries without manual intervention.
+
+\section{Test Schedule}
+
+\begin{table}[htbp]
+\centering
+\caption{Per-stage milestones.}
+\label{tab:schedule}
+\begin{tabular}{lll}
+\hline
+\textbf{Stage} & \textbf{Component} & \textbf{Status} \\ \hline
+Stage~0 & Ingestion \& preprocessing & Complete \\
+Stage~1 & Detection \& tracking      & Complete \\
+Stage~2 & Feature extraction          & Complete \\
+Stage~3 & FAISS indexing              & Complete \\
+Stage~4 & Cross-camera association    & Complete \\
+Stage~5 & Evaluation (TrackEval)      & Complete \\
+Stage~6 & Visualisation \& export     & Complete \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Comparative Results}
+
+\subsection{Multi-Camera Tracking: CityFlowV2}
+
+Table~\ref{tab:mtmc_results} compares our system against published state-of-the-art methods on the CityFlowV2 (AI~City Challenge 2022 Track~1) benchmark. IDF1 is the primary ranking metric.
+
+\begin{table}[htbp]
+\centering
+\caption{Multi-camera tracking results on CityFlowV2.}
+\label{tab:mtmc_results}
+\begin{tabular}{llcc}
+\hline
+\textbf{Method} & \textbf{Dataset} & \textbf{IDF1 (\%)} & \textbf{MOTA (\%)} \\ \hline
+AIC22 1st place            & CityFlowV2 & [AIC22-1ST-IDF1]  & [AIC22-1ST-MOTA]  \\
+AIC22 2nd (Li et al.)      & CityFlowV2 & 84.37             & ---               \\
+AIC21 1st (Liu et al.)     & CityFlowV2 & $\approx$84.1     & ---               \\
+Human baseline             & CityFlowV2 & [HUMAN-IDF1]      & [HUMAN-MOTA]      \\
+\textbf{Ours (TransReID ViT-B/16 CLIP)} & CityFlowV2 & \textbf{[OUR-IDF1]} & \textbf{[OUR-MOTA]} \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: IDF1 bar chart --- Ours vs.~AIC22 1st vs.~AIC22 2nd vs.~AIC21 1st vs.~Human}\vspace{2.5cm}}}
+% TODO: insert bar chart — IDF1 comparison: Ours vs AIC22 1st vs AIC22 2nd vs AIC21 1st vs Human
+\caption{IDF1 comparison of our system against state-of-the-art methods on CityFlowV2.}
+\label{fig:mtmc_chart}
+\end{figure}
+
+\subsection{Re-Identification Model Performance}
+
+Table~\ref{tab:reid_results} reports Re-ID performance. Literature results for TransReID ViT-Base/16 on standard benchmarks are included for reference.
+
+\begin{table}[htbp]
+\centering
+\caption{Re-identification results.}
+\label{tab:reid_results}
+\begin{tabular}{llcc}
+\hline
+\textbf{Method} & \textbf{Dataset} & \textbf{mAP (\%)} & \textbf{Rank-1 (\%)} \\ \hline
+TransReID ViT-B/16 (paper)         & Market-1501  & 89.0  & 95.1  \\
+TransReID ViT-B/16 (paper)         & VeRi-776     & 82.1  & 97.4  \\
+Human baseline                     & CityFlowV2   & [HUMAN-MAP]   & [HUMAN-R1]   \\
+\textbf{Ours (TransReID ViT-B/16 CLIP)} & CityFlowV2 & \textbf{[OUR-MAP]} & \textbf{[OUR-R1]} \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: TransReID training loss and Rank-1 accuracy curves across epochs on CityFlowV2}\vspace{2.5cm}}}
+% TODO: insert figure — TransReID training loss and Rank-1 accuracy curves across epochs on CityFlowV2
+\caption{TransReID ViT-Base/16 CLIP training loss and Rank-1 accuracy during fine-tuning on CityFlowV2.}
+\label{fig:training_curves}
+\end{figure}
+
+\subsection{Association Hyperparameter Ablation}
+
+The association stage (Stage~4) was subjected to an extensive ablation study with over [PLACEHOLDER] configuration variants evaluated on the CityFlowV2 validation set. Key findings:
+
+\begin{itemize}
+    \item Similarity threshold: optimal at 0.53 (values below 0.45 merge unrelated tracks; above 0.60 fragment correct identities).
+    \item Appearance weight: optimal at 0.70; increasing HSV weight beyond 0.30 degrades IDF1.
+    \item Conflict-free constraint: provides consistent improvement over unconstrained connected components.
+    \item K-reciprocal re-ranking: no IDF1 improvement on this dataset; disabled in final system.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Ablation study --- IDF1 sensitivity to Stage~4 hyperparameters}\vspace{2.5cm}}}
+% TODO: insert bar chart — IDF1 vs key hyperparameter variants (sim_threshold, appearance_weight, algorithm)
+\caption{Ablation study: IDF1 sensitivity to key Stage~4 hyperparameters.}
+\label{fig:ablation}
+\end{figure}

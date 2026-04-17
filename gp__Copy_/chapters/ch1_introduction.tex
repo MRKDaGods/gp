@@ -1,0 +1,39 @@
+\chapter{Introduction}
+
+In modern cities, large networks of surveillance cameras are widely deployed on streets, intersections, public facilities, and private infrastructures. These cameras generate continuous video streams that contain valuable information about the movement of vehicles and people, yet most of this data is only monitored visually by human operators. As a result, it is difficult to obtain a consistent view of how objects move across different locations, especially when they appear in multiple cameras at different times and angles. There is a strong need for intelligent systems that can automatically analyze these video streams and maintain the identity of objects as they travel through the camera network.
+
+This project focuses on designing a system that can track objects across multiple cameras while preserving their identities over time. The system targets realistic city-wide scenarios, where cameras may not share overlapping fields of view, and where appearance changes and occlusions frequently occur. By addressing these challenges, the project aims to contribute to more effective monitoring and improved decision making in security and public safety applications. Furthermore, maintaining consistent object identities across spatially distributed cameras enables better situational awareness by providing operators with a unified, continuous understanding of how objects move through an environment rather than fragmented observations from isolated camera feeds. In the context of traffic management, such a system can support applications like origin-destination analysis, congestion pattern detection, and travel time estimation by reliably associating vehicle trajectories across intersections and road segments, thereby enabling data-driven planning and real-time traffic optimization.
+
+\section{Motivation and Justification}
+
+Surveillance cameras are already installed in many urban environments, but their potential is often underutilized because most systems treat each camera as an isolated source of information. When a vehicle or a person leaves the field of view of one camera and appears in another, traditional setups usually cannot automatically associate these observations as belonging to the same real-world object. This limitation leads to fragmented tracking, loss of context, and heavy reliance on manual inspection of video footage.
+
+The motivation for this project arises from the need to transform these isolated camera feeds into an integrated, intelligent monitoring system. A multi-camera tracking and re-identification solution can help security operators and law enforcement agencies follow persons or vehicles of interest across different locations without constantly rewinding or searching in multiple video streams, and can provide continuous trajectories that are valuable for incident investigation. By allowing for consistent identity preservation across cameras, the proposed system aims to increase the usefulness and efficiency of existing surveillance infrastructure to support security and public safety operations.
+
+\section{Project Objectives, Problem Definition and the Essential Question}
+
+The general objective of this project is to design and implement a system that is capable of detecting, tracking, and re-identifying objects across multiple cameras in a reliable and scalable way. More specifically, the project pursues the following objectives:
+
+\begin{itemize}
+    \item Detect objects of interest, such as vehicles and people, in video streams captured by a set of surveillance cameras.
+    \item Track these objects over time within each individual camera to obtain continuous trajectories.
+    \item Associate observations of the same object across different cameras in order to preserve a consistent identity as it moves through the network.
+    \item Handle practical challenges such as appearance changes, occlusions, and varying viewpoints and illumination conditions.
+    \item Provide a modular software system that can be extended, improved, and integrated into larger surveillance or analytics platforms.
+\end{itemize}
+
+Based on these objectives, the problem addressed by this project can be defined as follows: given video streams from a set of distributed cameras, build a system that automatically produces identity-consistent tracks of objects as they move within and between camera views, without manual intervention. The system should operate under realistic constraints, such as limited overlap between fields of view, variations in camera placement, and changing environmental conditions.
+
+The essential question that guides this project can be summarized as: \textit{how can a multi-camera system be designed to maintain reliable object identities across a distributed camera network in real-world urban environments?} This question is closely related to the mission of engineering education at Cairo University, which emphasizes developing practical, innovative solutions to societal and industrial problems using solid scientific and engineering principles.
+
+\section{Project Outcomes}
+
+The main outcomes of this project are both conceptual and practical. On the conceptual side, the project delivers a complete design for a multi-camera object tracking and re-identification system, including a clear problem formulation, assumptions, and architectural choices. The design highlights how detection, single-camera tracking, cross-camera association, and data management components can be combined into one coherent pipeline.
+
+On the practical side, the project delivers a working software prototype that demonstrates the core functionalities of the proposed system on sample video data. The prototype is capable of processing video streams from multiple cameras, identifying objects of interest, building trajectories within each camera, and linking those trajectories across cameras. In addition, the project produces documentation describing the system design, implementation details, and usage instructions, as well as a set of test scenarios and qualitative evaluation results. Together, these outcomes provide a foundation that future work can extend to more advanced, large-scale deployments.
+
+\section{Document Organization}
+
+The remainder of this report is organized into several chapters, each addressing a specific aspect of the project. Chapter~2 presents the market feasibility study, including the target customers, existing solutions in the market, and a preliminary business and financial perspective for the proposed system. Chapter~3 provides the literature survey, where the relevant background concepts and previous research related to object detection, single-camera tracking, and multi-camera re-identification are discussed, and the chosen approach is justified.
+
+Chapter 4 describes the system design and architecture in detail, outlining the main modules, their responsibilities, and the interactions between them. Chapter 5 explains how the system is tested and verified, covering the testing setup and environment, the testing plan and strategy at both the module and integration levels, the test schedule, and a comparative evaluation of results against previous work to assess the correctness, robustness, and performance of the implementation. Finally, Chapter 6 summarizes the challenges faced during the project, the experience gained, the main conclusions, and possible directions for future work and extensions.
