@@ -1,4 +1,4 @@
-% TODO: verify exact source references and whether the final paper keeps three subtables or merges them into one summary table.
+% Verified against docs/findings.md and experiment-log.md on 2026-04-17.
 \begingroup
 \scriptsize
 \setlength{\tabcolsep}{4pt}
@@ -25,8 +25,8 @@ MVDeTr ResNet18 & 25 (best@20) & 92.1\% & 95.7\% & 96.6\% & 12a v3 (gumfreddy) \
 \toprule
 Tracker & Config & IDF1 & MODA & IDSW & Precision & Recall & Source \\
 \midrule
-Naive baseline & --- & 92.8\% & TODO & TODO & TODO & TODO & 12b v9 \\
-Global optimal (Hungarian) & window=10 & 91.2\% & 88.2\% & 15 & TODO & TODO & 12b v3 \\
+Naive baseline & --- & 92.8\% & 88.6\% & 12 & --- & --- & 12b v9 \\
+Global optimal (Hungarian) & window=10 & 91.2\% & 88.2\% & 15 & --- & --- & 12b v3 \\
 Tuned Kalman (BoT-SORT) & max\_age=2, min\_hits=2, d\_gate=25 & 94.7\% & 90.0\% & 5 & 94.5\% & 96.1\% & 12b v14, v1, v2 \\
 \bottomrule
 \end{tabularx}

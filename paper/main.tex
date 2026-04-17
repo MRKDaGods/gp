@@ -18,6 +18,7 @@
 \usepackage{xcolor}
 \usepackage{cite}
 \usepackage{amsmath}
+\usepackage[hidelinks]{hyperref}
 
 \graphicspath{{figures/}}
 
@@ -27,14 +28,14 @@
 
 \title{One Model, 91\% of SOTA: A Systematic Study of Feature Quality vs. Association Tuning in Multi-Camera Multi-Target Tracking}
 
-\author{Anonymous Authors}
+\author{Abdelrahman Mostafa, Mark Ashraf, and Ali ElSayed}
 
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-Multi-camera multi-target tracking (MTMC) is critical for intelligent transportation and surveillance, yet top-performing systems rely on computationally expensive multi-model ensembles that are impractical for real-world deployment. We present a systematic empirical study that definitively separates the contributions of feature quality from association algorithm design in MTMC pipelines. Using a single CLIP-pretrained Vision Transformer (ViT-B/16) with Feature-space Independent Component whitening (FIC), our system achieves 77.5\% MTMC IDF1 on CityFlowV2 --- 91.1\% of the 5-model-ensemble state-of-the-art (84.86\%) --- while requiring approximately 5$\times$ less compute. Through 225+ exhaustive association parameter configurations, we prove that association tuning accounts for at most 0.3 percentage points of variation once features are fixed, establishing that cross-camera feature invariance, not matching algorithms, is the true MTMC bottleneck. We catalog 19+ failed approaches including CSLS (-34.7pp), SAM2 foreground masking (-8.7pp), AFLink motion linking (-3.8pp to -13.2pp), and 384px input resolution (-2.8pp), providing a comprehensive roadmap of dead ends that saves future researchers significant GPU time. Critically, we demonstrate that higher single-camera ReID accuracy (mAP) does not reliably improve MTMC performance: three independent experiments show improved mAP degrading cross-camera association by 1.4--5.3pp. We validate our pipeline's generality on WILDTRACK pedestrian tracking, achieving 94.7\% ground-plane IDF1 (99.4\% of SOTA) with the same architectural pattern. Our dual-domain evaluation, exhaustive ablation study, and dead-end catalog constitute the most comprehensive single-pipeline MTMC analysis published to date.
+Multi-camera multi-target tracking (MTMC) is critical for intelligent transportation and surveillance, yet top-performing systems rely on computationally expensive multi-model ensembles that are impractical for real-world deployment. We present a systematic empirical study that definitively separates the contributions of feature quality from association algorithm design in MTMC pipelines. Using a single CLIP-pretrained Vision Transformer (ViT-B/16) with Feature-space Independent Component whitening (FIC), our system achieves 77.5\% MTMC IDF1 on CityFlowV2 --- 91.3\% of the 5-model-ensemble state-of-the-art (84.86\%) --- while using a single ReID model instead of an ensemble of three to five models. Through 225+ exhaustive association parameter configurations, we prove that association tuning accounts for at most 0.3 percentage points of variation once features are fixed, establishing that cross-camera feature invariance, not matching algorithms, is the true MTMC bottleneck. We catalog 19 failed approaches including CSLS (-34.7pp), SAM2 foreground masking (-8.7pp), AFLink motion linking (-3.8pp to -13.2pp), and 384px input resolution (-2.8pp), providing a comprehensive roadmap of dead ends that saves future researchers significant GPU time. Critically, we demonstrate that higher single-camera ReID accuracy (mAP) does not reliably improve MTMC performance: two independent experiments show improved mAP degrading cross-camera association by 1.4--5.3pp, while a third shows that preserving mAP at higher resolution still degrades MTMC by 2.8pp. We validate our pipeline's generality on WILDTRACK pedestrian tracking, achieving 94.7\% ground-plane IDF1 (99.4\% of SOTA) with the same architectural pattern. Our dual-domain evaluation, exhaustive ablation study, and dead-end catalog constitute the most comprehensive single-pipeline MTMC analysis published to date.
 \end{abstract}
 
 \section{Introduction}
@@ -44,7 +45,7 @@ The modern MTMC literature has largely converged on a two-stage recipe: strong p
 
 That practical gap motivates the central question of this paper: when a single-model MTMC system trails the ensemble-heavy state of the art, is the missing performance primarily due to weak association logic or to insufficient cross-camera feature quality? This question matters because the answer determines where future effort should go. If the bottleneck is association, then more graph solvers, clustering variants, or flow formulations should recover a substantial fraction of the remaining gap. If the bottleneck is feature quality, then additional association tuning will quickly saturate, and the path forward will instead be better cross-camera invariant representations or diverse feature ensembles.
 
-We study this question in an efficiency-oriented single-pipeline regime. Our vehicle system uses YOLO detection, BoT-SORT tracking, a CLIP-pretrained TransReID ViT-B/16 backbone \cite{transreid,clip}, FIC whitening, power normalization, PCA to 384 dimensions, FAISS retrieval \cite{faiss}, and conflict-free connected-components association. On the current codebase, this pipeline reaches 77.5\% MTMC IDF1 on CityFlowV2, which is 91.1\% of the 2022 challenge leader while using one ReID model rather than an ensemble of three to five models. The same architectural pattern, adapted to overlapping-camera pedestrian tracking with MVDeTr detections and a tuned Kalman tracker, reaches 94.7\% ground-plane IDF1 on WILDTRACK \cite{wildtrack}.
+We study this question in an efficiency-oriented single-pipeline regime. Our vehicle system uses YOLO detection, BoT-SORT tracking, a CLIP-pretrained TransReID ViT-B/16 backbone \cite{transreid,clip}, FIC whitening, power normalization, PCA to 384 dimensions, FAISS retrieval \cite{faiss}, and conflict-free connected-components association. On the current codebase, this pipeline reaches 77.5\% MTMC IDF1 on CityFlowV2, which is 91.3\% of the 2022 challenge leader while using one ReID model rather than an ensemble of three to five models. The same architectural pattern, adapted to overlapping-camera pedestrian tracking with MVDeTr detections and a tuned Kalman tracker, reaches 94.7\% ground-plane IDF1 on WILDTRACK \cite{wildtrack}.
 
 Our main finding is not simply that a single strong model is competitive. It is that association is already saturated once competent features and a competent graph merge are in place. Across 225+ association configurations, including threshold sweeps, clustering variants, intra-camera merge settings, temporal overlap weighting, post-processing options, and even a network-flow-style structural replacement, the observed improvements collapse into a narrow band around the same operating point. The remaining gap to SOTA is therefore not explained by insufficient Stage-4 tuning. It is explained by a cross-camera feature invariance gap.
 
@@ -66,7 +67,7 @@ Early MTMC systems relied heavily on hand-crafted appearance descriptors, geomet
 
 Recent ReID research has substantially improved the representation side of the MTMC stack. CNN-based models such as IBN-Net variants improved generalization by balancing appearance sensitivity with normalization-induced robustness \cite{ibnnet}. Transformer-based ReID models then further improved discriminative power by modeling global context and part-level structure more effectively. TransReID \cite{transreid} was particularly influential because it adapted vision transformers to the re-identification setting through camera-aware side information and jigsaw patch modeling. CLIP pretraining \cite{clip} added another axis of benefit by providing a stronger initialization than conventional ImageNet-only supervision, especially when downstream data are limited. Our vehicle pipeline operates directly in this line of work: a CLIP-pretrained ViT is not used as a generic backbone only, but as the main mechanism for cross-camera identity transfer.
 
-Association methods have also become more sophisticated. Classical graph clustering, hierarchical clustering, and network-flow formulations remain common because MTMC can be viewed naturally as constrained graph partitioning or tracklet linking. The literature includes connected-components merges, Louvain-style community detection, agglomerative clustering, flow solvers, and score fusion with spatial and temporal priors \cite{mtmc2021,scorebased,aic22sta}. Challenge systems further add reranking, camera-pair bias matrices, and camera-aware feature calibration. However, the existence of many plausible association mechanisms has also made it easy for the field to over-attribute gains to the final graph solver while under-measuring the representation quality that makes the graph easy or hard in the first place.
+Association methods have also become more sophisticated. Classical graph clustering, hierarchical clustering, and network-flow formulations remain common because MTMC can be viewed naturally as constrained graph partitioning or tracklet linking. The literature includes connected-components merges, Louvain-style community detection, agglomerative clustering, flow solvers, score fusion with spatial and temporal priors, and camera-aware feature calibration \cite{mtmc2021,scorebased,aic22sta,camawarefic}. Challenge systems further add reranking and camera-pair bias matrices. However, the existence of many plausible association mechanisms has also made it easy for the field to over-attribute gains to the final graph solver while under-measuring the representation quality that makes the graph easy or hard in the first place.
 
 The AI City Challenge vividly illustrates this trend. The highest-performing 2021 and 2022 vehicle systems consistently relied on multi-model ensembles, often with three to five ReID backbones, high-resolution inputs, and multiple post-hoc refinements \cite{aicity2022,aic22winner,aic22sta}. This progression suggests that the frontier of performance is tightly coupled to representation diversity, not just to a single clever association routine. At the same time, recent publishable systems with lower absolute accuracy have shown that there is still room for scientifically valuable work below SOTA when the contribution is methodological clarity, efficiency, or reproducibility \cite{scorebased,realtimeaccess}.
 
@@ -97,7 +98,7 @@ where $\mathbf{f}_i$ and $\mathbf{f}_j$ are the processed appearance embeddings,
 
 The graph solver is a conflict-free connected-components algorithm. Standard connected components can produce cascading errors when a high-similarity bridge merges incompatible same-camera trajectories into one component. Our conflict-free variant explicitly resolves same-camera conflicts before finalizing a component, which prevents this failure mode from propagating. Although the gain over ordinary connected components is only 0.21 percentage points, this is precisely the point of the paper: once the graph is well-conditioned, better association logic yields only modest incremental returns.
 
-The final vehicle operating point also includes intra-camera merge and lightweight post-processing. Intra-camera merge reconnects fragmented same-camera tracks before cross-camera clustering and contributes 0.28 percentage points at its best threshold. Post-processing removes clearly unreliable trajectories and parked-vehicle artifacts. Evaluation is performed with TrackEval using HOTA, IDF1, and MOTA as primary metrics \cite{trackeval,hota}. Throughout the vehicle ablations, we keep the evaluation protocol fixed so that changes can be attributed to the intended stage.
+The final vehicle operating point also includes intra-camera merge and lightweight post-processing. Intra-camera merge reconnects fragmented same-camera tracks before cross-camera clustering and contributes 0.28 percentage points at its best threshold. Post-processing removes clearly unreliable trajectories and parked-vehicle artifacts. Evaluation is performed with TrackEval using HOTA, IDF1, and MOTA as primary metrics \cite{trackeval,hota}. Table~\ref{tab:component_contributions} summarizes the main components and their measured contributions. Throughout the vehicle ablations, we keep the evaluation protocol fixed so that changes can be attributed to the intended stage.
 
 \subsection{Person Pipeline}
 The person pipeline uses the same architectural logic but adapts the front end to the geometry of WILDTRACK. Instead of per-camera detection followed by cross-camera appearance-based linking alone, we start from MVDeTr world-coordinate detections and then track people on the ground plane. This choice is appropriate because WILDTRACK provides overlapping synchronized views and calibration-rich geometry, unlike the largely non-overlapping CityFlowV2 vehicle setup.
@@ -149,14 +150,14 @@ Stationary filter & S5 & Remove parked vehicles & +0.2pp & disp=150, vel=2.0 \\
 
 \section{Experiments}
 \subsection{Experimental Setup}
-We evaluate the vehicle pipeline on CityFlowV2 and the person pipeline on WILDTRACK. The full CityFlow benchmark introduced by Tang \emph{et al.} contains 46 cameras and 880 globally annotated vehicle identities \cite{cityflow}; the Track-1 evaluation subset used in our experiments comprises six cameras across two scenes and roughly 128 vehicle identities, which is the regime targeted by our current Kaggle notebook chain. WILDTRACK consists of seven synchronized HD cameras with overlapping fields of view and dense pedestrian interactions \cite{wildtrack}.
+We evaluate the vehicle pipeline on CityFlowV2 and the person pipeline on WILDTRACK. The original CityFlow benchmark introduced by Tang \emph{et al.} contains 40 cameras and 666 vehicle identities \cite{cityflow}. The later CityFlowV2 / AI City Challenge Track-1 setup used in our work expands to 46 cameras across 16 intersections in a mid-sized US city \cite{aicity2022}. Our experiments do not use that full 46-camera benchmark. They use only the S01+S02 evaluation subset, which comprises six cameras and roughly 128 vehicle identities, because that is the subset exported and evaluated by the current Kaggle notebook chain. WILDTRACK consists of seven synchronized HD cameras with overlapping fields of view and dense pedestrian interactions \cite{wildtrack}.
 
 For vehicles, the complete end-to-end pipeline runs as a staged chain: Stages 0--2 on Kaggle GPU hardware, Stage 3 indexing on CPU, and Stages 4--5 association and evaluation on CPU. This split reflects the actual deployment pattern used for the 225+ sweeps. Our reproducible best result is 77.5\% MTMC IDF1, 80.1\% IDF1, 67.1\% MOTA, and 58.1\% HOTA using the restored v80-style association recipe on the current codebase. We also report the historical 78.4\% best from the earlier code branch because it is useful for decomposing component gains in Table~\ref{tab:ablation}, but the official headline number in this paper is the reproducible 77.5\% result.
 
 All ablations are compared under a fixed evaluation protocol. In the vehicle experiments, the current best reported numbers use the same GT-assisted frame clipping and zone filtering used across our recent experiment log. This slightly inflates absolute scores relative to a fully unconstrained deployment setting, but it does not affect the internal comparisons that drive the conclusions of the paper because every ablation in the main analysis is measured under the same protocol.
 
 \subsection{Vehicle MTMC on CityFlowV2}
-Table~\ref{tab:ablation} presents the cumulative vehicle ablation. The baseline connected-components operating point starts near 74.0\% MTMC IDF1. The largest single gain comes from FIC whitening, which contributes roughly two percentage points by compensating for camera-specific distortions in the feature space. Power normalization adds another 0.5 points, and AQE adds about 0.9 points. Conflict-free connected components, temporal overlap, intra-camera merge, and the tracker-side change to $\texttt{min\_hits}=2$ then provide smaller but consistent gains. Taken together, these improvements lift the historical best to 78.4\%, or about 4.4 percentage points above the basic baseline. The current reproducible branch retains most of that gain at 77.5\%.
+Table~\ref{tab:ablation} presents the cumulative vehicle ablation, and Figure~\ref{fig:cumulative_ablation} plots the same progression. The baseline connected-components operating point starts near 74.0\% MTMC IDF1. The largest single gain comes from FIC whitening, which contributes roughly two percentage points by compensating for camera-specific distortions in the feature space. Power normalization adds another 0.5 points, and AQE adds about 0.9 points. Conflict-free connected components, intra-camera merge, and the tracker-side change to $\texttt{min\_hits}=2$ then provide smaller but consistent gains. A separate controlled ON/OFF study shows that temporal overlap contributes about 0.9 percentage points as well, but we keep it outside the cumulative table because that measurement was taken on a different branch and is therefore not strictly additive. Taken together, these improvements lift the historical best to 78.4\%, or about 4.4 percentage points above the basic baseline. The current reproducible branch retains most of that gain at 77.5\%.
 
 \begin{table*}[t]
 \centering
@@ -221,7 +222,7 @@ Table~\ref{tab:dead_ends} and Figure~\ref{fig:dead_end_waterfall} summarize the 
 
 \begin{table*}[t]
 \centering
-\caption{Catalog of failed approaches on CityFlowV2 vehicle MTMC.}
+\caption{Catalog of failed approaches across the vehicle and person pipelines. Most rows are CityFlowV2 vehicle MTMC results; the global-optimal tracker row is the corresponding WILDTRACK person-pipeline dead end.}
 \label{tab:dead_ends}
 \input{tables/dead_ends}
 \end{table*}
@@ -269,7 +270,7 @@ The paper has clear limitations. First, the vehicle conclusion is driven mainly 
 Even with those limitations, the main conclusion is robust: feature quality, not association tuning, is the MTMC bottleneck in the present single-model regime. That conclusion holds not because one experiment says so, but because many experiments fail to contradict it.
 
 \section{Conclusion}
-This paper presented a complete empirical study of a seven-stage MTMC pipeline across two domains. On CityFlowV2 vehicle tracking, a single CLIP-pretrained TransReID ViT-B/16 with FIC, power normalization, PCA, AQE, and conflict-free connected-components association reaches 77.5\% MTMC IDF1, or 91.1\% of the 2022 state of the art. On WILDTRACK pedestrian tracking, the same pipeline pattern reaches 94.7\% ground-plane IDF1. Across 225+ CityFlowV2 association configurations and 59 WILDTRACK tracker configurations, we find that the major remaining limitation is not the association stage but the quality of cross-camera invariant features.
+This paper presented a complete empirical study of a seven-stage MTMC pipeline across two domains. On CityFlowV2 vehicle tracking, a single CLIP-pretrained TransReID ViT-B/16 with FIC, power normalization, PCA, AQE, and conflict-free connected-components association reaches 77.5\% MTMC IDF1, or 91.3\% of the 2022 state of the art. On WILDTRACK pedestrian tracking, the same pipeline pattern reaches 94.7\% ground-plane IDF1. Across 225+ CityFlowV2 association configurations and 59 WILDTRACK tracker configurations, we find that the major remaining limitation is not the association stage but the quality of cross-camera invariant features.
 
 The practical recommendation is therefore straightforward. Practitioners who already have a competent graph-based association stage should invest next in better or more diverse feature models, not in endless threshold sweeps. For researchers, the most promising future directions are camera-invariant training objectives, stronger multi-model ensembles, and learned graph reasoning methods that operate on improved feature spaces rather than trying to rescue weak ones. The negative results collected here are part of that contribution: they narrow the search space and make the remaining open problems clearer.
 
@@ -307,25 +308,25 @@ T. Chavdarova, P. Baqu\'e, S. Bouquet, A. Maksai, C. Jose, L. Lettry, P. Fua, L.
 X. Pan, P. Luo, J. Shi, and X. Tang, ``Two at once: Enhancing learning and generalization capacities via IBN-Net,'' in \emph{Proc. Eur. Conf. Comput. Vis. (ECCV)}, 2018, pp. 464--479, doi: 10.1007/978-3-030-01225-0\_29.
 
 \bibitem{aicity2022}
-``The 6th AI City Challenge,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)}, 2022, doi: 10.1109/CVPRW56347.2022.00378.
+M. Naphade, S. Wang, D. C. Anastasiu, Z. Tang, M.-C. Chang, Y. Yao, L. Zheng, M. S. Rahman, A. Venkatachalapathy, A. Sharma, Q. Feng, V. Ablavsky, S. Sclaroff, P. Chakraborty, A. Li, S. Li, and R. Chellappa, ``The 6th AI City Challenge,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)}, 2022, pp. 3346--3355, doi: 10.1109/CVPRW56347.2022.00378.
 
 \bibitem{aic22winner}
-``Multi-camera vehicle tracking system for AI City Challenge 2022,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)}, 2022, doi: 10.1109/CVPRW56347.2022.00369.
+F. Li, Z. Wang, D. Nie, S. Zhang, X. Jiang, X. Zhao, and P. Hu, ``Multi-camera vehicle tracking system for AI City Challenge 2022,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)}, 2022, pp. 3265--3273, doi: 10.1109/CVPRW56347.2022.00369.
 
 \bibitem{aic22sta}
-``City-scale multi-camera vehicle tracking based on space-time-appearance features,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)}, 2022, doi: 10.1109/CVPRW56347.2022.00374.
+H. Yao, Z. Duan, Z. Xie, J. Chen, X. Wu, D. Xu, and Y. Gao, ``City-scale multi-camera vehicle tracking based on space-time-appearance features,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)}, 2022, pp. 3310--3318, doi: 10.1109/CVPRW56347.2022.00374.
 
 \bibitem{mtmc2021}
-``Multi-target multi-camera vehicle tracking for city-scale traffic management,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)}, 2021, doi: 10.1109/CVPRW53098.2021.00473.
+K. Shim, S. Yoon, K. Ko, and C. Kim, ``Multi-target multi-camera vehicle tracking for city-scale traffic management,'' in \emph{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW)}, 2021, doi: 10.1109/CVPRW53098.2021.00473.
 
 \bibitem{scorebased}
-``Score-based matching for city-scale multi-target multi-camera vehicle tracking,'' \emph{Multimedia Tools Appl.}, 2024, doi: 10.1007/s11042-024-19108-9.
+Z.-Y. Yang, C.-W. Liu, C.-H. Chen, C.-W. Chen, and M.-C. Hsyu, ``Score-based matching for city-scale multi-target multi-camera vehicle tracking,'' \emph{Multimedia Tools Appl.}, vol. 84, no. 10, pp. 7647--7663, 2025, doi: 10.1007/s11042-024-19108-9.
 
 \bibitem{camawarefic}
-``Camera-aware re-identification feature for multi-target multi-camera tracking,'' \emph{Image Vis. Comput.}, 2024, doi: 10.1016/j.imavis.2023.104889.
+J. Zhu, Q. Li, C. Gao, Y. Ge, and K. Xu, ``Camera-aware re-identification feature for multi-target multi-camera tracking,'' \emph{Image Vis. Comput.}, vol. 142, Art. no. 104889, 2024, doi: 10.1016/j.imavis.2023.104889.
 
 \bibitem{realtimeaccess}
-T. Al\`as, J. C. SanMiguel, and collaborators, ``Real-time multi-camera multi-target tracking in smart-city environments,'' \emph{IEEE Access}, 2026, to appear.
+O. Al\`as, R. Cervera, and R. Sanfeliu, ``A scalable real-time multi-camera vehicle tracking system for urban environments,'' \emph{IEEE Access}, 2026, early access.
 
 \end{thebibliography}
 
