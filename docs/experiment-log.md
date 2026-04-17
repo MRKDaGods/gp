@@ -260,9 +260,21 @@ Note: The control run for this retest measured **IDF1 = 0.7921** and **HOTA = 0.
 | v5 (ali369) | ali369 | COMPLETE | All 6 STEPs OK |
 | v12 | mrkdagods | mAP=**21.9%** | IBN layer3 bug (layer1+2 only) |
 | v13 | mrkdagods | mAP=11.98% (epoch 19 only, timed out) | IBN fix confirmed (layer1+2+3 all have IBN keys). Training recipe is the bottleneck - 12% mAP at epoch 20 is very low even for early training. |
+| v17 | ali369 | mAP=29.6% | CircleLoss + triplet conflict |
+| v18 | ali369 | mAP=**52.77%** | Best direct ImageNet→CityFlowV2 baseline |
+| gumfreddy v3 | gumfreddy | mAP=50.61% | Extended fine-tuning from v18 regressed |
+| 09e v2 | ali369 | mAP=62.52% on VeRi-776 | Pretraining succeeded, but transfer path later failed |
+| 09f v3 | ali369 | mAP=42.7% | VeRi-776→CityFlowV2 fine-tune worse than direct baseline |
+| 09i v1 | gumfreddy | mAP=50.80% at epoch 100/160, R1=73.46%, mAP_rerank=54.65% | ArcFace + Triplet + Center warm-start from 09d overfit after epoch 100 and stayed below the 52.77% ceiling |
 
 
-The ResNet101-IBN-a training recipe itself needs investigation - both v12 (21.9% at e60) and v13 (12% at e19) show the model is not converging. Possible causes: wrong LR schedule, insufficient augmentation, or wrong optimizer settings. The ensemble plan is BLOCKED until training quality improves.
+The ResNet101-IBN-a path is now effectively closed. Across the original direct baseline, extended fine-tuning, VeRi-776 transfer, CircleLoss, SGD, and the new ArcFace follow-up, every serious variant ended at or below the **52.77% mAP** direct-training ceiling. The latest **09i v1** run confirms that even an ArcFace-based recipe does not rescue this backbone when warm-started from the existing CE-optimized checkpoint: it peaked at **50.80% mAP** by **epoch 100/160**, then overfit. This leaves the ensemble plan blocked by representation quality rather than missing optimizer or schedule tweaks.
+
+### 4.4 ResNet101-IBN-a ArcFace Follow-Up (09i)
+
+| Version | Account | Recipe | Result | Verdict | Key Insight |
+|:-------:|:-------:|--------|:------:|:-------:|-------------|
+| 09i v1 | gumfreddy | ArcFace (`s=30`, `m=0.35`) + Triplet (`m=0.3`) + Center loss, warm-start from 09d | Best **mAP=50.80%**, **R1=73.46%**, **mAP_rerank=54.65%** at **epoch 100/160** | REJECTED | Performance declined after epoch 100; CE-shaped warm-start geometry did not transfer cleanly into ArcFace, and four competing objectives on only 128 train IDs pushed the run into overfitting instead of a better optimum |
 
 ---
 

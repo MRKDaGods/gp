@@ -124,6 +124,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **Network flow solver**: -0.24pp MTMC IDF1, increased conflation from 27→30 instead of reducing it
 - **VeRi-776→CityFlowV2 ResNet pretrain**: 42.7% mAP (worse than direct 52.77%)
 - **Extended ResNet fine-tuning**: 50.61% mAP (degraded from 52.77%)
+- **ArcFace on ResNet101-IBN-a**: 50.80% mAP (warm-start geometry mismatch, 6 variants exhausted at 52.77% ceiling)
 - **Score-level ensemble with 52.77% secondary**: -0.1pp (secondary too weak, adds noise)
 - **Circle loss + triplet**: 16-30% mAP (conflicting gradients)
 - **SGD for ResNet**: 30.27% mAP (catastrophic — AdamW essential for small datasets)
@@ -137,7 +138,6 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - min_hits=2 (+0.2pp), Kalman tuning for person (+1.9pp IDF1)
 
 ### Remaining Untried Approaches
-- Center loss for primary ViT training (never attempted)
 - GNN edge classification for association (not implemented)
 - SAM2 foreground masking before ReID (not implemented)
 - Graph-based multi-view tracking for person pipeline (not implemented)

@@ -94,6 +94,8 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 
 **Status update (2026-04-01)**: Extending the direct ImageNet→CityFlowV2 run by resuming from the **09d v18** 52.77% checkpoint at a lower learning rate (**3e-4**) peaked at only **50.61% mAP** in **09d gumfreddy v3**. This confirms that **52.77% is effectively the ceiling** for the current ImageNet→CityFlowV2 ResNet101-IBN-a recipe rather than an undertrained checkpoint.
 
+**Status update (2026-04-17)**: The new **09i v1 ArcFace** follow-up on **gumfreddy** also failed to break that ceiling. With **ArcFace (s=30, m=0.35) + Triplet (m=0.3) + Center loss** and a **warm-start from 09d**, the run peaked at only **50.80% mAP**, **73.46% R1**, and **54.65% mAP_rerank** at **epoch 100/160**, then declined through the rest of training. The most likely root cause is **geometry mismatch**: the checkpoint was warm-started from a **cross-entropy-optimized** solution, then forced into an **ArcFace angular-margin** regime while also keeping triplet and center objectives active. On a dataset with only **128 train IDs**, that creates **four competing losses/geometries** and pushes the model into overfitting rather than better discrimination.
+
 ## What SOTA Does Differently
 
 | Pattern | AIC22 1st | AIC22 2nd | AIC21 1st | We have? |
@@ -141,6 +143,15 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 ## Latest Experiment Results (2026-04-17)
 
 ### Completed
+
+#### 09i v1 — ResNet101-IBN-a ArcFace Follow-Up (2026-04-17)
+- **Task**: Test whether an **ArcFace-based** ResNet101-IBN-a recipe can lift the secondary vehicle model above the long-standing **52.77% mAP** ceiling and make it ensemble-worthy
+- **Recipe**: **ArcFace (s=30, m=0.35) + Triplet (margin=0.3) + Center loss**, warm-started from the best **09d** checkpoint
+- **Result**: Best **mAP = 50.80%** at **epoch 100/160**, **R1 = 73.46%**, **mAP_rerank = 54.65%**
+- **Training dynamics**: Performance **declined after epoch 100**, indicating classic overfitting on the small **128-ID** CityFlowV2 train split
+- **Comparison**: Still **worse than the 09d baseline** at **52.77% mAP**
+- **Root cause**: Warm-starting from a **CE-optimized** checkpoint into an **ArcFace angular-margin** objective creates a geometry mismatch, and combining that with **triplet + center** on only **128 classes** produces too many competing objectives for this backbone/data regime
+- **Conclusion**: **ArcFace is a dead end for the current ResNet101-IBN-a path**, and the secondary-model rescue attempt did not materialize
 
 #### 10c v55 — CID_BIAS Topology Bias Sweep (2026-04-17)
 - **Task**: Test whether a lightweight **topology-derived CID_BIAS** improves Stage-4 association by adding camera-pair-specific similarity offsets on top of the restored baseline recipe
@@ -424,9 +435,11 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | Score-level ensemble with 52.77% mAP secondary at 0.30 weight | -0.1pp MTMC IDF1; noise dilutes primary signal | 10a/10c fusion test, fus0.3_ter0.0 |
 | SGD optimizer for ResNet101-IBN-a | 30.27% mAP catastrophic | v18 mrkdagods |
 | Circle loss for ResNet101-IBN-a with triplet loss | Catastrophic gradient conflict; NEVER combine on the same feature tensor | 09d v17 (29.6%), 09f v2 (16.2%) vs 09d v18 (52.77%), 09e (62.52%) with circle_weight=0 |
+| ArcFace on ResNet101-IBN-a warm-started from 09d | Best **50.80% mAP**, **73.46% R1**, **54.65% mAP_rerank** at epoch 100/160, then overfit; warm-starting a CE-shaped solution into ArcFace created an angular-geometry mismatch and still failed to beat the **52.77%** baseline | 09i v1 |
 | CircleLoss on TransReID ViT-B/16 CLIP (Experiment B, baseline augmentations) | Catastrophic numerical instability; training loss was `inf` at every epoch and the run collapsed to **18.45% mAP / 48.84% R1** | `gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation` v1 |
 | ResNet101-IBN-a VeRi-776→CityFlowV2 fine-tuning | mAP=42.7% (09f v3), worse than direct ImageNet→CityFlowV2 (52.77% mAP, 09d v18); secondary-model ensemble path not viable without better pretraining or broader hyperparameter search | 09e v2, 09f v3, 09d v18 |
 | Extended fine-tuning from the 09d v18 ResNet101-IBN-a checkpoint | mAP degraded from 52.77% to 50.61% after resuming with lower LR; confirms the direct ImageNet→CityFlowV2 path is already at its ceiling | 09d gumfreddy v3 |
+| ResNet101-IBN-a path FULLY EXHAUSTED | Six variants are now closed out: **09d original**, **09d extended**, **09f VeRi-776 transfer**, **09d CircleLoss**, **09d SGD**, and **09i ArcFace** all finished at or below the **52.77%** ceiling. That is far below the **~65%** minimum needed for a useful ensemble, so this backbone path should be **abandoned** for CityFlowV2 vehicle MTMC | 09d, 09f, 09i |
 | CLIP ViT backbone when checkpoint uses standard ViT | `norm_pre` randomly initialized, causing mode collapse (cosine sim 0.874) | 12b v5/v6 vs v8 |
 | Default Kalman tracker with chi-squared gating on WILDTRACK | Worse than naive baseline; IDF1 fell to 88.9% | 12b v14 sweep |
 | ReID merge on top of tuned WILDTRACK Kalman tracks | No improvement over baseline; tracks already clean and only 44 features matched | 12b v14 merge sweep |
@@ -485,6 +498,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 - 09e v2: VeRi-776 pretraining complete, mAP=62.52% on VeRi-776 test set (384x384, 120 epochs, triplet+center, cosine, fp16)
 - 09f v2: mAP=16.2% catastrophic failure (circle_weight=1.0, bs=32, label_smooth=0.1, lr=7e-5; best model at epoch 4 during warmup)
 - 09f v3: mAP=42.7% at epoch 104/120 (circle_weight=0.0, bs=48, label_smoothing=0.05, AdamW lr=3.5e-4, warmup start_factor=0.1, 120 epochs); still worse than direct ImageNet→CityFlowV2 in 09d v18
+- 09i v1: mAP=50.80%, R1=73.46%, mAP_rerank=54.65% at epoch 100/160 with ArcFace+Triplet+Center warm-started from 09d; declined afterward and still failed to beat the 52.77% baseline
 
 ## Key Insight
 
