@@ -115,7 +115,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **CSLS**: -34.7pp (catastrophic — penalizes genuine vehicle-type hubs)
 - **384px ViT deployment**: -2.8pp (captures viewpoint-specific textures that hurt cross-camera matching)
 - **AFLink motion linking**: confirmed harmful at **-3.8pp to -13.2pp MTMC IDF1** in clean retests; even `gap=100`, `dir_cos=0.90` loses **-3.82pp** because motion consistency is unreliable across non-overlapping CityFlowV2 cameras and AFLink creates false merges
-- **CID_BIAS**: -3.3pp (overfits with only 464 GT-matched tracklets)
+- **CID_BIAS**: GT-learned version -3.3pp; topology CID_BIAS -1.0 to -1.2pp (additive bias distorts FIC-calibrated similarities)
 - **DMT camera-aware training**: -1.4pp single-model (also 09g: 43.8% mAP, too weak)
 - **Hierarchical clustering**: -1 to -5pp (centroid averaging loses discriminative signal)
 - **FAC**: -2.5pp (cross-camera KNN consensus overwrites distinguishing details)

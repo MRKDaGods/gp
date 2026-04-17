@@ -154,6 +154,12 @@ Note: The control run for this retest measured **IDF1 = 0.7921** and **HOTA = 0.
 |:-------:|----------------|----------------|:---------:|:-------:|-------------|
 | 10c v53 | Fresh baseline features from 10a v30 | Replaced CC/conflict-free merge logic with a network-flow / Hungarian-style solver plus merge verification, compared directly against the controlled v52 CC baseline | CC baseline **77.14%**; network flow **76.9%** | REJECTED | Network flow is only **-0.24pp** on MTMC IDF1 and slightly improves MOTA/HOTA, but it fails its purpose by increasing conflation from **27 -> 30** predicted IDs instead of reducing false merges |
 
+### 2.6 2026-04 CID_BIAS Topology Bias Follow-Up
+
+| Version | Upstream Model | Config Changes | MTMC IDF1 | Verdict | Key Insight |
+|:-------:|----------------|----------------|:---------:|:-------:|-------------|
+| 10c v55 | Fresh baseline features from 10a v30 | Added topology-derived additive CID_BIAS terms on top of the restored baseline recipe; tested conservative **(+0.02/-0.10)**, default **(+0.04/-0.15)**, and aggressive **(+0.06/-0.20)** bias schedules against a no-bias control | Control **77.4%**; conservative **76.4%**; default **76.2%**; aggressive **76.3%** | REJECTED | All additive bias variants hurt by **-1.0 to -1.2pp**. FIC whitening already provides the useful camera calibration, and extra CID_BIAS offsets distort the calibrated similarity space |
+
 ---
 
 ## 3. Exhaustive Parameter Sweep Results
@@ -301,7 +307,6 @@ The ResNet101-IBN-a training recipe itself needs investigation - both v12 (21.9%
 | Timestamp bias correction | S4 | +0.3-0.5pp | **** |
 | Per-camera CLAHE tuning | S0 | +0.2-0.5pp | *** |
 | Hand-annotated zone polygons | S4 | +0.5-1.5pp | *** |
-| CID_BIAS per camera pair | S4 | +0.5-1.0pp | *** |
 | DMT camera-aware training | Training | +1.0-1.5pp | *** |
 | GNN edge classification | S4 | +1.0-3.0pp | ** |
 
@@ -323,6 +328,7 @@ The ResNet101-IBN-a training recipe itself needs investigation - both v12 (21.9%
 12. **Fragmentation dominates**: Under-merging errors 1.7-2.5x over-merging. Feature quality problem.
 13. **SAM2 foreground masking is catastrophic for vehicle MTMC (-8.7pp)**: 10a v29 + 10c v50 peaked at only **0.688 MTMC IDF1** after a full **60-config** sweep, versus the **0.775** non-SAM2 baseline. Masking removes useful background context and likely clips vehicle boundary cues while raising runtime from **~65 min to 105.2 min**.
 14. **Network flow did not solve conflation**: 10c v53 reached only **0.769 MTMC IDF1** vs the **0.7714** CC baseline. Although **MOTA/HOTA** ticked up slightly and **ID switches** fell by 2, conflation actually worsened from **27 -> 30** predicted IDs, so the current CC-based solver remains preferable.
+15. **Topology CID_BIAS is also a dead end**: 10c v55 tested additive camera-pair offsets from **(+0.02/-0.10)** through **(+0.06/-0.20)** and all regressed to **0.764-0.762-0.763** versus a **0.774** control. FIC whitening already handles the useful cross-camera calibration; additive CID_BIAS just distorts those calibrated similarities.
 
 ### Gap Attribution
 
@@ -368,11 +374,11 @@ The ResNet101-IBN-a training recipe itself needs investigation - both v12 (21.9%
 | Hierarchical? | -1.0 to -5.1pp always | 3.1 |
 | Louvain? | Identical to CC | 3.1 |
 | Zone model? | Auto-zones hurt. Hand-annotated never tried. | 3.1 |
-| Camera bias? | -0.4pp. CID_BIAS per-pair never tried. | 3.1 |
+| Camera bias? | Basic camera bias: -0.4pp. CID_BIAS variants also failed: GT-learned -3.3pp, topology bias -1.0 to -1.2pp. | 3.1, 2.6 |
 | FAC? | -2.5pp | 3.1 |
 | mtmc_only? | -5pp. Always false. | 3.2 |
 | Knowledge distillation? | Tried poorly (22%). Needs fix. | 4.2 |
-| Circle loss? | Never used. Code exists. | 7 |
+| Circle loss? | Yes. 09 v4 collapsed to 18.45% mAP with `inf` loss; dead end. | 4.1 |
 | ResNet101-IBN-a? | v13 complete: 11.98% at e19; recipe needs investigation. | 4.3 |
 | Feature concat? | -1.6pp. Don't repeat. | 3.4 |
 | Track smoothing? | Harmful. Don't repeat. | 3.2 |

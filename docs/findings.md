@@ -101,7 +101,7 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 | 3+ ReID backbone ensemble | 5 models | 3 models | 3 models | **NO** (1 working) |
 | 384×384 input | ✅ | ✅ | ✅ | **Tested, but harmful in our pipeline** |
 | IBN-a backbones | ✅ | ✅ | ✅ | ViT only |
-| Camera-pair bias (CID_BIAS) | ROI masks | NPY | NPY | **Tested on 256px: -3.3pp MTMC IDF1 (DEAD END)** |
+| Camera-pair bias (CID_BIAS) | ROI masks | NPY | NPY | **Tested twice and harmful: GT-learned -3.3pp, topology bias -1.0 to -1.2pp (DEAD END)** |
 | Reranking | Box-grained | k-reciprocal | k-reciprocal | **Disabled** |
 | Camera-aware training (DMT) | ✅ | ✅ | ✅ | **NO** |
 | Multiple loss functions | ID+tri+circle+cam | ID+tri+cam | ID+tri+cam | ID+tri |
@@ -118,7 +118,7 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 - **09g**: ResNet101-IBN-a DMT training is currently running on **gumfreddy** with **150 epochs**, a **camera-adversarial head**, and **no circle loss**.
 - **09h**: ResNeXt101-IBN-a DMT training is running on **gumfreddy** (**v1**).
 - **Infrastructure**: **Stage 2** and **Stage 4** have already been updated for **3-model score-level fusion**.
-- **CID_BIAS**: tested on 256px features; MTMC IDF1 dropped from 0.784 to 0.751 (-3.3pp). Dead end for single-model features.
+- **CID_BIAS**: both tested variants are dead ends. The original GT-learned CID_BIAS dropped MTMC IDF1 from **0.784 -> 0.751** (**-3.3pp**), and the later topology-bias sweep in **10c v55** reached only **0.764-0.762-0.763** versus a **0.774** control (**-1.0 to -1.2pp**). FIC whitening already handles the useful camera calibration, and additive CID_BIAS terms distort those calibrated similarities.
 
 **Why the previous improvements failed**
 
@@ -131,7 +131,7 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 | Priority | Action | Expected Impact | Status |
 |:--------:|--------|:---------------:|--------|
 | **1** | Train or acquire a truly complementary secondary/tertiary ReID model for ensemble use | Only plausible path to a material gain | BLOCKED — ensemble tested at 0.30 weight with 52.77% mAP secondary, no gain; ResNet training path exhausted without VeRi-776 benefit |
-| **2** | ~~CID_BIAS~~ | -3.3pp on 256px features (0.751 vs 0.784 baseline) | **DEAD END** |
+| **2** | ~~CID_BIAS~~ | Both variants are dead ends: GT-learned **-3.3pp** and topology bias **-1.0 to -1.2pp**; FIC whitening already covers camera calibration | **DEAD END** |
 | **3** | Additional association sweeps or structural tweaks | Negligible | NOT RECOMMENDED |
 | **4** | More single-model feature variants (384px, DMT, multi-query, concat-patch) | Negative based on current evidence | DO NOT RETRY |
 | **5** | Re-enable reranking only after feature quality improves materially | Potentially positive only with better features | BLOCKED by current features |
@@ -141,6 +141,15 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 ## Latest Experiment Results (2026-04-17)
 
 ### Completed
+
+#### 10c v55 — CID_BIAS Topology Bias Sweep (2026-04-17)
+- **Task**: Test whether a lightweight **topology-derived CID_BIAS** improves Stage-4 association by adding camera-pair-specific similarity offsets on top of the restored baseline recipe
+- **Baseline**: Fresh baseline features from **10a v30** with a control run at **MTMC IDF1 = 0.774** and no additive bias
+- **Conservative bias**: **+0.02 / -0.10** reached **MTMC IDF1 = 0.764** (**-1.0pp**)
+- **Default bias**: **+0.04 / -0.15** reached **MTMC IDF1 = 0.762** (**-1.2pp**)
+- **Aggressive bias**: **+0.06 / -0.20** reached **MTMC IDF1 = 0.763** (**-1.2pp**)
+- **Interpretation**: Every tested additive bias degraded MTMC, including the most conservative setting. This indicates the current pipeline is already getting the useful camera-pair calibration from **FIC whitening**, and extra CID_BIAS offsets only warp the calibrated similarity geometry.
+- **Conclusion**: **Topology CID_BIAS is a confirmed dead end** for the current CityFlowV2 single-model pipeline. Together with the earlier **GT-learned CID_BIAS** regression (**-3.3pp**), this now rules out both learned and hand-shaped additive CID_BIAS variants.
 
 #### 10c v53 — Network Flow Solver vs CC Baseline (2026-04-17)
 - **Task**: Test a **network flow / Hungarian-based structural association solver** as a replacement for the existing connected-components merge logic, with merge verification intended to reduce cross-camera conflation
