@@ -1,0 +1,53 @@
+% TODO: verify exact source references and whether the final paper keeps three subtables or merges them into one summary table.
+\begingroup
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+
+\begin{minipage}{\textwidth}
+\textbf{(a) Detection Results}
+
+\begin{tabularx}{\textwidth}{l c c c c l}
+\toprule
+Model & Epochs & MODA & Precision & Recall & Source \\
+\midrule
+MVDeTr ResNet18 & 10 & 90.9\% & 95.8\% & 95.1\% & 12a v26 \\
+MVDeTr ResNet18 & 25 (best@20) & 92.1\% & 95.7\% & 96.6\% & 12a v3 (gumfreddy) \\
+\bottomrule
+\end{tabularx}
+\end{minipage}
+
+\vspace{0.7em}
+
+\begin{minipage}{\textwidth}
+\textbf{(b) Tracking Results}
+
+\begin{tabularx}{\textwidth}{l l c c c c c l}
+\toprule
+Tracker & Config & IDF1 & MODA & IDSW & Precision & Recall & Source \\
+\midrule
+Naive baseline & --- & 92.8\% & TODO & TODO & TODO & TODO & 12b v9 \\
+Global optimal (Hungarian) & window=10 & 91.2\% & 88.2\% & 15 & TODO & TODO & 12b v3 \\
+Tuned Kalman (BoT-SORT) & max\_age=2, min\_hits=2, d\_gate=25 & 94.7\% & 90.0\% & 5 & 94.5\% & 96.1\% & 12b v14, v1, v2 \\
+\bottomrule
+\end{tabularx}
+\end{minipage}
+
+\vspace{0.7em}
+
+\begin{minipage}{\textwidth}
+\textbf{(c) Convergence Evidence}
+
+\begin{tabularx}{\textwidth}{l c c c X}
+\toprule
+Experiment & Configs Tested & Best IDF1 & IDSW & Conclusion \\
+\midrule
+12b v14 (initial Kalman sweep) & 20+ & 94.7\% & 5 & First convergence \\
+12b v1 (better detector) & 12+ & 94.7\% & 5 & Detector-independent operating point \\
+12b v2 (extended Kalman sweep) & 15+ & 94.7\% & 5 & Parameter-exhausted \\
+12b v3 (global optimal tracker) & 12+ & 91.2\% & 15 & Alternative tracker worse \\
+Total & 59+ & 94.7\% & 5 & Fully converged \\
+\bottomrule
+\end{tabularx}
+\end{minipage}
+
+\endgroup

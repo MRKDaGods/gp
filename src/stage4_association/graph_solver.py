@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple
 
 import networkx as nx
+import numpy as np
 from loguru import logger
+from scipy.optimize import linear_sum_assignment
 
 
 class GraphSolver:
@@ -29,6 +32,7 @@ class GraphSolver:
         louvain_seed: int = 42,
         bridge_prune_margin: float = 0.0,
         max_component_size: int = 0,
+        merge_verify_threshold: Optional[float] = None,
     ):
         self.similarity_threshold = similarity_threshold
         self.algorithm = algorithm
@@ -36,6 +40,7 @@ class GraphSolver:
         self.louvain_seed = louvain_seed
         self.bridge_prune_margin = bridge_prune_margin
         self.max_component_size = max_component_size
+        self.merge_verify_threshold = merge_verify_threshold
 
     def solve(
         self,
@@ -102,6 +107,10 @@ class GraphSolver:
             clusters = list(nx.connected_components(G))
         elif self.algorithm == "conflict_free_cc":
             clusters = self._conflict_free_greedy(
+                similarities, num_nodes, camera_ids, start_times, end_times,
+            )
+        elif self.algorithm == "network_flow":
+            clusters = self._network_flow_solver(
                 similarities, num_nodes, camera_ids, start_times, end_times,
             )
         elif self.algorithm == "community_detection":
@@ -328,6 +337,211 @@ class GraphSolver:
             f"Conflict-free greedy: {edges_added} edges added, "
             f"{edges_blocked} blocked by conflicts, "
             f"{len(clusters)} clusters"
+        )
+        return clusters
+
+    @staticmethod
+    def _pair_key(i: int, j: int) -> Tuple[int, int]:
+        return (i, j) if i < j else (j, i)
+
+    @staticmethod
+    def _clusters_have_temporal_conflict(
+        members_a: Set[int],
+        members_b: Set[int],
+        camera_ids: List[str],
+        start_times: Optional[List[float]],
+        end_times: Optional[List[float]],
+    ) -> bool:
+        if start_times is None or end_times is None:
+            return False
+
+        for a in members_a:
+            cam_a = camera_ids[a]
+            for b in members_b:
+                if camera_ids[b] != cam_a:
+                    continue
+                if start_times[a] <= end_times[b] and start_times[b] <= end_times[a]:
+                    return True
+        return False
+
+    def _clusters_pass_merge_verification(
+        self,
+        members_a: Set[int],
+        members_b: Set[int],
+        similarities: Dict[Tuple[int, int], float],
+        camera_ids: List[str],
+    ) -> bool:
+        verify_threshold = self.merge_verify_threshold
+        if verify_threshold is None:
+            verify_threshold = self.similarity_threshold
+
+        cameras_a = {camera_ids[node] for node in members_a}
+        cameras_b = {camera_ids[node] for node in members_b}
+
+        for cam_a in cameras_a:
+            for cam_b in cameras_b:
+                if cam_a == cam_b:
+                    continue
+
+                supported = False
+                for node_a in members_a:
+                    if camera_ids[node_a] != cam_a:
+                        continue
+                    for node_b in members_b:
+                        if camera_ids[node_b] != cam_b:
+                            continue
+                        sim = similarities.get(self._pair_key(node_a, node_b), float("-inf"))
+                        if sim >= verify_threshold:
+                            supported = True
+                            break
+                    if supported:
+                        break
+
+                if not supported:
+                    return False
+
+        return True
+
+    def _network_flow_solver(
+        self,
+        similarities: Dict[Tuple[int, int], float],
+        num_nodes: int,
+        camera_ids: Optional[List[str]],
+        start_times: Optional[List[float]],
+        end_times: Optional[List[float]],
+    ) -> List[Set[int]]:
+        """Solve association with pairwise Hungarian matching plus merge verification.
+
+        The solver first computes globally optimal 1:1 matches for each camera pair
+        using linear assignment. It then merges those matches only when the merge
+        would remain temporally valid and every newly connected camera pair has a
+        direct edge above the verification threshold. This blocks A-B-C transitive
+        chains when the implied A-C link is weak or absent.
+        """
+        if camera_ids is None:
+            logger.warning("network_flow: missing camera IDs, falling back to connected_components")
+            G = nx.Graph()
+            G.add_nodes_from(range(num_nodes))
+            for (i, j), sim in similarities.items():
+                if sim >= self.similarity_threshold:
+                    G.add_edge(i, j, weight=sim)
+            return list(nx.connected_components(G))
+
+        node_cameras: Dict[str, List[int]] = defaultdict(list)
+        for idx, camera_id in enumerate(camera_ids):
+            node_cameras[camera_id].append(idx)
+
+        similarity_lookup: Dict[Tuple[int, int], float] = {}
+        edges_by_camera_pair: Dict[Tuple[str, str], Dict[Tuple[int, int], float]] = defaultdict(dict)
+        for (i, j), sim in similarities.items():
+            key = self._pair_key(i, j)
+            similarity_lookup[key] = sim
+            if sim < self.similarity_threshold:
+                continue
+            cam_i = camera_ids[i]
+            cam_j = camera_ids[j]
+            if cam_i == cam_j:
+                continue
+            cam_pair = tuple(sorted((cam_i, cam_j)))
+            left, right = key
+            if camera_ids[left] != cam_pair[0]:
+                left, right = right, left
+            edges_by_camera_pair[cam_pair][(left, right)] = sim
+
+        accepted_matches: List[Tuple[int, int, float]] = []
+        total_pair_matches = 0
+
+        for (cam_a, cam_b), pair_sims in sorted(edges_by_camera_pair.items()):
+            left_nodes = sorted(node_cameras[cam_a])
+            right_nodes = sorted(node_cameras[cam_b])
+            if not left_nodes or not right_nodes:
+                continue
+
+            left_index = {node: idx for idx, node in enumerate(left_nodes)}
+            right_index = {node: idx for idx, node in enumerate(right_nodes)}
+            matrix_size = max(len(left_nodes), len(right_nodes))
+            profit = np.zeros((matrix_size, matrix_size), dtype=np.float32)
+
+            for (left_node, right_node), sim in pair_sims.items():
+                row = left_index[left_node]
+                col = right_index[right_node]
+                profit[row, col] = max(sim - self.similarity_threshold, 0.0) + 1e-6
+
+            row_ind, col_ind = linear_sum_assignment(-profit)
+
+            matched_here = 0
+            for row, col in zip(row_ind.tolist(), col_ind.tolist()):
+                if row >= len(left_nodes) or col >= len(right_nodes):
+                    continue
+                left_node = left_nodes[row]
+                right_node = right_nodes[col]
+                sim = pair_sims.get((left_node, right_node))
+                if sim is None or sim < self.similarity_threshold:
+                    continue
+                accepted_matches.append((left_node, right_node, sim))
+                matched_here += 1
+
+            total_pair_matches += matched_here
+            logger.info(
+                f"Network flow pair {cam_a}↔{cam_b}: {matched_here} matches "
+                f"above threshold {self.similarity_threshold:.3f}"
+            )
+
+        parent = list(range(num_nodes))
+        rank = [0] * num_nodes
+        cluster_members: Dict[int, Set[int]] = {idx: {idx} for idx in range(num_nodes)}
+
+        def find(node: int) -> int:
+            while parent[node] != node:
+                parent[node] = parent[parent[node]]
+                node = parent[node]
+            return node
+
+        def union(root_a: int, root_b: int) -> int:
+            if rank[root_a] < rank[root_b]:
+                root_a, root_b = root_b, root_a
+            parent[root_b] = root_a
+            if rank[root_a] == rank[root_b]:
+                rank[root_a] += 1
+            cluster_members[root_a] |= cluster_members[root_b]
+            del cluster_members[root_b]
+            return root_a
+
+        merges_added = 0
+        blocked_temporal = 0
+        blocked_verify = 0
+        for i, j, sim in sorted(accepted_matches, key=lambda item: item[2], reverse=True):
+            root_i = find(i)
+            root_j = find(j)
+            if root_i == root_j:
+                continue
+
+            members_i = cluster_members[root_i]
+            members_j = cluster_members[root_j]
+            if self._clusters_have_temporal_conflict(
+                members_i, members_j, camera_ids, start_times, end_times,
+            ):
+                blocked_temporal += 1
+                continue
+
+            if not self._clusters_pass_merge_verification(
+                members_i, members_j, similarity_lookup, camera_ids,
+            ):
+                blocked_verify += 1
+                continue
+
+            union(root_i, root_j)
+            merges_added += 1
+
+        clusters_dict: Dict[int, Set[int]] = {}
+        for node in range(num_nodes):
+            clusters_dict.setdefault(find(node), set()).add(node)
+
+        clusters = list(clusters_dict.values())
+        logger.info(
+            f"Network flow: {total_pair_matches} pairwise assignments, "
+            f"{merges_added} merges accepted, {blocked_temporal} blocked by conflicts, "
+            f"{blocked_verify} blocked by merge verification"
         )
         return clusters
 

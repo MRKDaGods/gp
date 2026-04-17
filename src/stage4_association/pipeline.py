@@ -102,6 +102,16 @@ def _compute_multi_query_pair_similarity(
     return (1.0 - mq_weight) * avg_sim + mq_weight * mq_sim
 
 
+def _resolve_stage4_solver(stage_cfg: DictConfig) -> str:
+    """Resolve the public Stage 4 solver toggle to an internal solver algorithm."""
+    solver = str(stage_cfg.get("solver", "cc")).lower()
+    if solver == "cc":
+        return str(stage_cfg.graph.algorithm)
+    if solver == "network_flow":
+        return "network_flow"
+    raise ValueError(f"Unknown stage4 association solver: {solver}")
+
+
 def run_stage4(
     cfg: DictConfig,
     faiss_index: FAISSIndex,
@@ -124,6 +134,7 @@ def run_stage4(
         List of GlobalTrajectory objects.
     """
     stage_cfg = cfg.stage4.association
+    solver_algorithm = _resolve_stage4_solver(stage_cfg)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -568,11 +579,12 @@ def run_stage4(
                 # Initial clustering to discover identity groups
                 tmp_solver = GraphSolver(
                     similarity_threshold=stage_cfg.graph.similarity_threshold,
-                    algorithm=stage_cfg.graph.algorithm,
+                    algorithm=solver_algorithm,
                     louvain_resolution=stage_cfg.graph.get("louvain_resolution", 1.0),
                     louvain_seed=int(stage_cfg.graph.get("louvain_seed", 42)),
                     bridge_prune_margin=float(stage_cfg.graph.get("bridge_prune_margin", 0.0)),
                     max_component_size=int(stage_cfg.graph.get("max_component_size", 0)),
+                    merge_verify_threshold=stage_cfg.graph.get("merge_verify_threshold"),
                 )
                 tmp_clusters = tmp_solver.solve(combined_sim, n, camera_ids, start_times, end_times)
                 # Only learn from multi-member clusters
@@ -798,11 +810,12 @@ def run_stage4(
 
     solver = GraphSolver(
         similarity_threshold=graph_threshold,
-        algorithm=stage_cfg.graph.algorithm,
+        algorithm=solver_algorithm,
         louvain_resolution=stage_cfg.graph.get("louvain_resolution", 1.0),
         louvain_seed=int(stage_cfg.graph.get("louvain_seed", 42)),
         bridge_prune_margin=float(stage_cfg.graph.get("bridge_prune_margin", 0.0)),
         max_component_size=int(stage_cfg.graph.get("max_component_size", 0)),
+        merge_verify_threshold=stage_cfg.graph.get("merge_verify_threshold"),
     )
 
     clusters = solver.solve(solve_sim, n, camera_ids, start_times, end_times)

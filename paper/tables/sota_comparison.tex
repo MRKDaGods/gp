@@ -1,0 +1,59 @@
+% TODO: verify literature values and compute-time estimates against final references and leaderboard sources.
+\begingroup
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+
+\begin{minipage}{\textwidth}
+\textbf{(a) CityFlowV2 Vehicle MTMC}
+
+\begin{tabularx}{\textwidth}{c l l c c c c}
+\toprule
+Rank & Method & Venue & \# ReID Models & Input Res. & MTMC IDF1 & Relative \\
+\midrule
+1 & Team28 (Box-Grained Matching) & AIC22 1st & 5 & 384$\times$384 & 84.86\% & 100\% \\
+2 & Team59 (BOE) & AIC22 2nd & 3 & 384$\times$384 & 84.37\% & 99.4\% \\
+3 & Team37 (TAG) & AIC22 3rd & Multi & --- & 83.71\% & 98.6\% \\
+4 & Team50 (FraunhoferIOSB) & AIC22 4th & --- & --- & 83.48\% & 98.4\% \\
+--- & Score-based matching (Yang) & MTA 2025 & --- & --- & \~80\% & \~94\% \\
+--- & Ours & This work & 1 & 256$\times$256 & 77.5\% & 91.1\% \\
+--- & Hierarchical clustering (Sz\H{u}cs) & MTA 2024 & --- & --- & \~72\% & \~85\% \\
+--- & Real-time MTMC (Al\`as) & IEEE Access 2026 & --- & --- & Lower & --- \\
+--- & Lightweight MTMC (Liu) & SPIE 2026 & --- & --- & Lower & --- \\
+\bottomrule
+\end{tabularx}
+\end{minipage}
+
+\vspace{0.7em}
+
+\begin{minipage}{\textwidth}
+\textbf{(b) WILDTRACK Person Tracking}
+
+\begin{tabularx}{\textwidth}{l c c X}
+\toprule
+Method & IDF1 & MODA & Notes \\
+\midrule
+SOTA reference & 95.3\% & TODO & Published best reported in current notes \\
+Ours (tuned Kalman) & 94.7\% & 90.0\% & Single detector plus Kalman tracking \\
+Naive tracker (ours) & 92.8\% & TODO & Baseline comparison \\
+Global optimal (ours) & 91.2\% & 88.2\% & Hungarian assignment underperforms Kalman \\
+\bottomrule
+\end{tabularx}
+\end{minipage}
+
+\vspace{0.7em}
+
+\begin{minipage}{\textwidth}
+\textbf{(c) Computational Cost Comparison}
+
+\begin{tabularx}{\textwidth}{l c c c c}
+\toprule
+System & \# Models & GPU Type & Est. Pipeline Time & MTMC IDF1 \\
+\midrule
+AIC22 1st (5-model ensemble) & 5 & A100 (est.) & 50+ h & 84.86\% \\
+AIC22 2nd (3-model ensemble) & 3 & A100 (est.) & 30+ h & 84.37\% \\
+Ours & 1 & T4 (Kaggle) & \~3 h & 77.5\% \\
+\bottomrule
+\end{tabularx}
+\end{minipage}
+
+\endgroup

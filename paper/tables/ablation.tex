@@ -1,0 +1,23 @@
+% TODO: verify exact numbers from experiment log before submission.
+\begingroup
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{c X c c c c c l}
+\toprule
+\# & Configuration & MTMC IDF1 & $\Delta$ (pp) & IDF1 & MOTA & HOTA & Source \\
+\midrule
+1 & Baseline CC (basic PCA 384D, no FIC, no temporal overlap, no intra-merge) & 74.0\% & --- & TODO & TODO & TODO & 10c v14--v22 grid \\
+2 & + FIC whitening (reg=0.1 in the historical ablation notes) & 76.0\% & +2.0 & TODO & TODO & TODO & 10c v31--v33 \\
+3 & + Power normalization ($\alpha=0.5$) & 76.5\% & +0.5 & TODO & TODO & TODO & 10c v28--v29 \\
+4 & + AQE ($K=3$, $\alpha=5.0$) & 77.4\% & +0.9 & TODO & TODO & TODO & 10c v14 vs. v22 \\
+5 & + Conflict-free CC algorithm & 77.6\% & +0.21 & TODO & TODO & TODO & 10c v23--v26 \\
+6 & + Temporal overlap bonus (0.05) & 78.0\% & +0.9* & TODO & TODO & TODO & 10c v75 overlap-off ablation \\
+7 & + Intra-camera merge (thresh=0.80, gap=30) & 78.28\% & +0.28 & TODO & TODO & TODO & 10c v34 \\
+8 & + min\_hits=2 (historical best) & 78.4\% & +0.2 & 79.8\% & TODO & TODO & 10c v44 / historical v80 recipe \\
+9 & Current reproducible best (v80-restored recipe on current codebase) & 77.5\% & --- & 80.1\% & 67.1\% & 58.1\% & 10c v52 \\
+\bottomrule
+\end{tabularx}
+
+\vspace{0.4em}
+\par\noindent\footnotesize *Temporal overlap was measured as an ON/OFF controlled ablation rather than as a clean cumulative addition on the same exact branch. The table keeps it in the cumulative narrative because it is one of the largest confirmed gains.
+\endgroup

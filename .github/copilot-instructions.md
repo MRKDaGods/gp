@@ -114,13 +114,14 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 ### Confirmed Dead Ends (DO NOT RETRY)
 - **CSLS**: -34.7pp (catastrophic — penalizes genuine vehicle-type hubs)
 - **384px ViT deployment**: -2.8pp (captures viewpoint-specific textures that hurt cross-camera matching)
-- **AFLink motion linking**: -3.95pp MTMC IDF1 (motion consistency unreliable across non-overlapping CityFlowV2 cameras; false merges)
+- **AFLink motion linking**: confirmed harmful at **-3.8pp to -13.2pp MTMC IDF1** in clean retests; even `gap=100`, `dir_cos=0.90` loses **-3.82pp** because motion consistency is unreliable across non-overlapping CityFlowV2 cameras and AFLink creates false merges
 - **CID_BIAS**: -3.3pp (overfits with only 464 GT-matched tracklets)
 - **DMT camera-aware training**: -1.4pp single-model (also 09g: 43.8% mAP, too weak)
 - **Hierarchical clustering**: -1 to -5pp (centroid averaging loses discriminative signal)
 - **FAC**: -2.5pp (cross-camera KNN consensus overwrites distinguishing details)
 - **Reranking**: Always hurts (k-reciprocal sets contain false positives with current features)
 - **Feature concatenation**: -1.6pp (mixes uncalibrated feature spaces)
+- **Network flow solver**: -0.24pp MTMC IDF1, increased conflation from 27→30 instead of reducing it
 - **VeRi-776→CityFlowV2 ResNet pretrain**: 42.7% mAP (worse than direct 52.77%)
 - **Extended ResNet fine-tuning**: 50.61% mAP (degraded from 52.77%)
 - **Score-level ensemble with 52.77% secondary**: -0.1pp (secondary too weak, adds noise)
@@ -139,7 +140,6 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - Center loss for primary ViT training (never attempted)
 - GNN edge classification for association (not implemented)
 - SAM2 foreground masking before ReID (not implemented)
-- Network flow / min-cost-max-flow solver (not implemented)
 - Graph-based multi-view tracking for person pipeline (not implemented)
 
 ## Kaggle Workflow

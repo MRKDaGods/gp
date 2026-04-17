@@ -1,0 +1,33 @@
+% TODO: verify exact numbers and final wording against docs/findings.md and the experiment log.
+\begingroup
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{c l l l c c X}
+\toprule
+\# & Method & Category & Expected & Actual IDF1 & $\Delta$ & Hypothesis for Failure \\
+\midrule
+1 & CSLS distance & Association & Reduce hubness & 42.8\% & -34.7pp & Penalized genuine vehicle-type hubs and destroyed useful neighborhood structure. \\
+2 & SAM2 foreground masking & Feature & Remove background noise & 68.8\% & -8.7pp & Removed contextual cues and clipped vehicle boundaries that still carry identity signal. \\
+3 & Augoverhaul + CircleLoss model & Training & Better ReID features & 72.2\% & -5.3pp & Stronger augmentations and/or CircleLoss suppressed cues needed for cross-camera matching. \\
+4 & \texttt{mtmc\_only=true} & Post-proc & Drop single-camera noise & TODO & -5.0pp & Removed valid single-camera trajectories that still contribute positively to the final metric. \\
+5 & AFLink motion linking (gap=100) & Association & Motion-based merges & 73.3\% & -3.8pp & Motion consistency is unreliable across non-overlapping cameras; false merges dominate. \\
+6 & Global optimal tracker (person) & Tracking & Better assignment & 91.2\% & -3.5pp & Sliding-window assignment lost Kalman motion prediction and increased switches. \\
+7 & CID\_BIAS camera-pair matrix & Association & Camera calibration & 75.1\% & -3.3pp & Single-model features were too brittle for camera-pair priors; bias matrix overfit sparse evidence. \\
+8 & Tracker max\_gap=80 & Tracking & Longer track persistence & 74.5\% & -3.0pp & Overly long persistence increased false continuation and identity contamination. \\
+9 & 384px ViT deployment & Feature & Higher resolution detail & 75.6\% & -2.8pp & Higher resolution emphasized viewpoint-specific textures that do not transfer across cameras. \\
+10 & Denoise preprocessing & Feature & Cleaner crops & TODO & -2.7pp & Denoising removed subtle appearance cues and altered feature statistics unfavorably. \\
+11 & FAC feature augmentation & Association & KNN consensus & TODO & -2.5pp & Cross-camera KNN consensus overwrote discriminative details with noisy neighbors. \\
+12 & DMT camera-aware training & Training & Camera invariance & 75.8\% & -1.4pp & Improved validation mAP but over-specialized to camera cues rather than robust cross-camera identity. \\
+13 & Feature concatenation (vs. score fusion) & Fusion & Richer representation & TODO & -1.6pp & Mixed uncalibrated feature spaces and degraded similarity calibration. \\
+14 & Hierarchical clustering & Association & Better global merges & 72.3--76.5\% & -1.0 to -5.1pp & Centroid averaging and dendrogram merges lost identity-specific signal and amplified early mistakes. \\
+15 & max\_iou\_distance=0.5 & Tracking & Tighter matching & TODO & -1.6pp & Over-tight association fragmented tracks instead of preventing harmful merges. \\
+16 & PCA 512D & Feature & More dimensions & TODO & -0.78pp & Extra dimensions preserved more noise than discriminative identity information. \\
+17 & Network flow solver & Association & Reduce conflation & 76.9\% & -0.24pp & Slight metric gains elsewhere did not offset higher conflation than conflict-free CC. \\
+18 & Score-level ensemble with weak secondary & Fusion & Model diversity & 77.4\% & -0.1pp & The 52.77\% mAP secondary model added noise rather than complementary signal. \\
+19 & Reranking (k-reciprocal) & Association & Re-score similarities & Negative & Negative & Reciprocal neighbor sets contained false positives with the current feature quality. \\
+\bottomrule
+\end{tabularx}
+
+\vspace{0.4em}
+\par\noindent\footnotesize TODO: Move the training-path dead ends (CircleLoss ablations, SGD, VeRi-776 transfer, extended ResNet fine-tuning, EMA) into a supplementary table or appendix if the final venue page budget allows it.
+\endgroup

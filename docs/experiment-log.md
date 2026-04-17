@@ -1,7 +1,7 @@
 # MTMC Tracker — Comprehensive Experiment Log
 
 > **Purpose**: Prevent re-running experiments. Every parameter combination and approach is logged here.
-> **Last updated**: 2026-04-14
+> **Last updated**: 2026-04-17
 > **Current best (Kaggle)**: MTMC IDF1 = **78.4%** (10c v44 / ali369 / code v80, min_hits=2)
 > **Current best (local, recent)**: MTMC IDF1 = **77.7%** (10c v28, CamTTA + power_norm=0.5)
 > **Historical local claim**: IDF1 = 82.97% (v47 — unverifiable, predates current experiment log)
@@ -140,6 +140,20 @@ Note: On CamTTA + power_norm features, the existing association optimum was effe
 | 10c v48 | 09 v2 augoverhaul @ 256px | Corrected deployment size, 11-config association re-sweep | 72.2% | REJECTED | Fixing the 384px deployment bug did not rescue the model |
 | 10c v49 | 09 v3 augoverhaul-EMA (`mAP=81.53%`, `R1=92.41%`) | Broader association sweep; best config `sim=0.45`, `app=0.60`, `st=0.40`, `fic=1.00`, `aqe_k=3`, `gallery=0.45`, `orphan=0.35`; AFLink `gap=150`, `dir=0.85` improved 0.675 -> 0.722 | 72.2% | REJECTED | Same 0.722 ceiling as v48; reranking off, camera-pair norm off, intra-merge negligible, so the augoverhaul model family is the bottleneck rather than association tuning |
 
+### 2.4 2026-04 Controlled AFLink Retest on Restored Baseline
+
+| Version | Upstream Model | Config Changes | MTMC IDF1 | Verdict | Key Insight |
+|:-------:|----------------|----------------|:---------:|:-------:|-------------|
+| 10c v52 AFLink addon retest | Fresh baseline features from 10a v30 | Exact v52 baseline recipe `sim=0.50`, `app=0.70`, `fic=0.50`, `aqe_k=3`, `gallery=0.48`, `orphan=0.38`; pure AFLink addon sweep over `gap/dir = 100/0.90, 150/0.85, 200/0.70` | Control **77.14%**; AFLink **73.32%**, **71.83%**, **63.94%** | REJECTED | Clean retest removes the v46 confound: even tight AFLink hurts **-3.82pp**, and wider gaps make false cross-camera merges much worse |
+
+Note: The control run for this retest measured **IDF1 = 0.7921** and **HOTA = 0.5747** with AFLink disabled. This was a pure post-association addon test on the exact restored baseline operating point, not a joint association sweep.
+
+### 2.5 2026-04 Structural Association Follow-Up
+
+| Version | Upstream Model | Config Changes | MTMC IDF1 | Verdict | Key Insight |
+|:-------:|----------------|----------------|:---------:|:-------:|-------------|
+| 10c v53 | Fresh baseline features from 10a v30 | Replaced CC/conflict-free merge logic with a network-flow / Hungarian-style solver plus merge verification, compared directly against the controlled v52 CC baseline | CC baseline **77.14%**; network flow **76.9%** | REJECTED | Network flow is only **-0.24pp** on MTMC IDF1 and slightly improves MOTA/HOTA, but it fails its purpose by increasing conflation from **27 -> 30** predicted IDs instead of reducing false merges |
+
 ---
 
 ## 3. Exhaustive Parameter Sweep Results
@@ -271,6 +285,7 @@ The ResNet101-IBN-a training recipe itself needs investigation - both v12 (21.9%
 | 384x384 Native Training | 09b v1: mAP=44.9% (wrong init) | All SOTA use 384px | **HIGH** |
 | Knowledge Distillation | 09c: 22% mAP (dim mismatch) | All AIC24 top-3 used KD | **HIGH** |
 | Score-Level Ensemble (2+ models) | Only OSNet@10% | Need proper 2nd backbone | **HIGH** |
+| Network flow / Hungarian solver | 10c v53 reached **76.9%** vs **77.14%** CC baseline and increased conflation **27 -> 30** | This implementation was not helpful; only worth revisiting if a materially different formulation is proposed | LOW |
 | Multi-Scale TTA | Marginal + timeout | Selective approach needed | LOW |
 | CamTTA | Hurts MTMC, helps GLOBAL | CLOSED | CLOSED |
 
@@ -286,12 +301,9 @@ The ResNet101-IBN-a training recipe itself needs investigation - both v12 (21.9%
 | Timestamp bias correction | S4 | +0.3-0.5pp | **** |
 | Per-camera CLAHE tuning | S0 | +0.2-0.5pp | *** |
 | Hand-annotated zone polygons | S4 | +0.5-1.5pp | *** |
-| SAM2 foreground masking | S2 | +0.3-0.5pp | *** |
 | CID_BIAS per camera pair | S4 | +0.5-1.0pp | *** |
 | DMT camera-aware training | Training | +1.0-1.5pp | *** |
-| Network flow / Hungarian | S4 | +0.3-1.0pp | ** |
 | GNN edge classification | S4 | +1.0-3.0pp | ** |
-| AFLink tracklet linking | S4 post | +0.3-0.5pp | ** |
 
 ---
 
@@ -309,6 +321,8 @@ The ResNet101-IBN-a training recipe itself needs investigation - both v12 (21.9%
 10. **Reranking hurts with weak features**: Re-test after feature quality improvement.
 11. **S02_c006 is catastrophic (74% IDF1)**: FP ratio 6.86x, GT covers only 43% of video.
 12. **Fragmentation dominates**: Under-merging errors 1.7-2.5x over-merging. Feature quality problem.
+13. **SAM2 foreground masking is catastrophic for vehicle MTMC (-8.7pp)**: 10a v29 + 10c v50 peaked at only **0.688 MTMC IDF1** after a full **60-config** sweep, versus the **0.775** non-SAM2 baseline. Masking removes useful background context and likely clips vehicle boundary cues while raising runtime from **~65 min to 105.2 min**.
+14. **Network flow did not solve conflation**: 10c v53 reached only **0.769 MTMC IDF1** vs the **0.7714** CC baseline. Although **MOTA/HOTA** ticked up slightly and **ID switches** fell by 2, conflation actually worsened from **27 -> 30** predicted IDs, so the current CC-based solver remains preferable.
 
 ### Gap Attribution
 

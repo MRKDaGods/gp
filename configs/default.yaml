@@ -156,6 +156,7 @@ stage3:
 
 stage4:
   association:
+    solver: "cc"  # public solver toggle: cc keeps graph.algorithm, network_flow uses Hungarian matching
     top_k: 100
     # --- Secondary embedding fusion (e.g., OSNet + TransReID ensemble) ---
     secondary_embeddings:
@@ -231,7 +232,8 @@ stage4:
                    S02_c007: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
     graph:
       similarity_threshold: 0.60  # v30: optimal for 280D PCA whitened embeddings
-      algorithm: "conflict_free_cc"  # v28: conflict-aware greedy matching prevents false transitive chains
+      algorithm: "conflict_free_cc"  # used when stage4.association.solver=cc
+      merge_verify_threshold: null  # network_flow: null => reuse similarity_threshold
       louvain_resolution: 1.0  # balanced: 1.5 over-fragments, 0.8 under-segments
       bridge_prune_margin: 0.0  # v27: no bridge pruning yields best MTMC (+1.4pp)
       max_component_size: 12    # v25: tighter cap to prevent runaway merges

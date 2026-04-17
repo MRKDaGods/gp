@@ -2,7 +2,7 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
-## Current Performance (Last Updated: 2026-04-16)
+## Current Performance (Last Updated: 2026-04-17)
 
 ### Vehicle Pipeline (CityFlowV2)
 
@@ -23,6 +23,8 @@
 | **Association configs tested** | 225+ | All within 0.3pp of optimal |
 
 **Current reproducible vehicle MTMC IDF1 is 0.775** with 10c v52 using the v80-restored recipe (`sim_thresh=0.50`, `appearance_weight=0.70`, `fic_reg=0.50`, `aqe_k=3`, `gallery_thresh=0.48`, `orphan_match=0.38`). This is a small improvement over v50/v51 at 0.772, but it still trails the historical v80 result of 0.784. Vehicle association remains exhausted, so future gains will need materially better features or priors rather than more stage-4 tuning.
+
+The latest structural association follow-up, **10c v53 network flow solver**, confirms that conclusion. Against the same controlled **10c v52** baseline, network flow reached only **MTMC IDF1 = 0.769** versus **0.7714** for the CC baseline (**-0.24pp**). It slightly improved **MOTA** (**0.689 -> 0.694**) and **HOTA** (**0.5747 -> 0.577**) with **2 fewer ID switches** (**199 -> 197**), but it **increased conflation from 27 to 30 predicted IDs** instead of reducing it. The current **conflict_free_cc** pipeline remains the preferred solver for this problem.
 
 The corrected **10c v48** evaluation of the **09 v2 augoverhaul** model at the intended **256px** resolution still regressed sharply: the best full sweep reached only **MTMC IDF1 = 0.722** with `sim_thresh=0.45`, `appearance_weight=0.60`, `fic_reg=1.00`, `aqe_k=3`, `aflink_gap=150`, and `aflink_dir=0.85`. The follow-up **10c v49** sweep on the **09 v3 augoverhaul-EMA** training run reproduced the same **0.722** ceiling with a broader parameter search, confirming that the regression persists across augoverhaul variants and is driven by the model family rather than missed association tuning. Single-camera **IDF1 = 0.752** in **10c v48** was also materially below the baseline (~0.82), confirming that the earlier **10c v47** collapse was partly a deployment bug, but the underlying augoverhaul recipe is itself a vehicle-MTMC regression.
 
@@ -136,9 +138,28 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 
 Association tuning remains exhausted (225+ configs tested). The remaining vehicle path is no longer incremental stage-4 tuning or single-model feature ablations; it is ensemble-quality representation learning or materially stronger camera-pair priors.
 
-## Latest Experiment Results (2026-04-16)
+## Latest Experiment Results (2026-04-17)
 
 ### Completed
+
+#### 10c v53 — Network Flow Solver vs CC Baseline (2026-04-17)
+- **Task**: Test a **network flow / Hungarian-based structural association solver** as a replacement for the existing connected-components merge logic, with merge verification intended to reduce cross-camera conflation
+- **Baseline**: Controlled **10c v52** CC run at **MTMC IDF1 = 0.7714**, **MOTA = 0.689**, **HOTA = 0.5747**, **ID switches = 199**, **45 fragmented GT IDs**, **27 conflated predicted IDs**
+- **Network flow result**: **MTMC IDF1 = 0.769**, **MOTA = 0.694**, **HOTA = 0.577**, **ID switches = 197**, **46 fragmented GT IDs**, **30 conflated predicted IDs**
+- **Delta vs baseline**: **-0.24pp MTMC IDF1**, **+0.5pp MOTA**, **+0.2pp HOTA**, **-2 ID switches**, **+1 fragmented GT ID**, **+3 conflated predicted IDs**
+- **Interpretation**: The solver improved some frame-level metrics slightly, but it failed its main design goal. The Hungarian assignment plus merge verification did **not** prevent false merges and instead created **more conflation** than the CC baseline.
+- **Conclusion**: **Network flow is neutral to slightly negative** for the current CityFlowV2 vehicle pipeline. It is **not a hard dead end** on the scale of AFLink or CSLS, but it is **not helpful** and does not justify replacing the existing **conflict_free_cc** approach.
+
+#### 10a v29 / 10c v50 — SAM2 Foreground Masking Before Vehicle ReID (2026-04-16)
+- **Task**: Test inference-time **SAM2 foreground masking** on vehicle crops before Stage-2 ReID feature extraction using **`facebook/sam2.1-hiera-tiny`**
+- **Masking config**: **center-point prompt**, **per-crop mean fill**, **`min_crop_size=48`**
+- **10a v29 runtime / scale**: **929 tracklets**, **105.2 min**, versus roughly **~65 min** for the same pipeline without SAM2 masking
+- **10c v50 evaluation**: Full **60-config** Stage-4 parameter sweep with **FEATURE_TEST enabled** across **11 parameter dimensions**, including AFLink and camera-pair normalization variants
+- **Best result**: **MTMC IDF1 = 0.688**
+- **Per-camera 2D metrics**: **MOTA = 0.540**, **IDF1 = 0.704**, **HOTA = 0.515**
+- **Baseline comparison**: Current reproducible non-SAM2 baseline is **MTMC IDF1 = 0.775** from **10c v52**, so SAM2 masking is **-8.7pp** worse despite exhaustive association retuning
+- **Interpretation**: Foreground masking removes background context such as road surface and nearby scene cues that appear to help cross-camera vehicle re-identification. The masks also likely clip vehicle edges and suppress boundary features that carry identity signal.
+- **Conclusion**: **SAM2 foreground masking is a confirmed dead end** for the current CityFlowV2 vehicle pipeline. It adds major runtime cost while degrading both single-camera and MTMC quality, and even aggressive downstream retuning could not recover baseline performance.
 
 #### 09 v4 / Experiment B — CircleLoss Ablation on Baseline Augmentations (2026-04-16)
 - **Kernel**: `gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation` **v1**
@@ -206,9 +227,11 @@ Association tuning remains exhausted (225+ configs tested). The remaining vehicl
 - **Best AFLink params**: `spatial_gap=150px`, `direction_cos=0.85`, `camera_pair_norm=on`
 - **Best result**: **MTMC IDF1 = 0.7355**, which is **down from the 0.775 baseline by -3.95pp**
 - **Within-sweep behavior**: AFLink gained roughly **+6.3pp** inside its own sweep (**0.669 -> 0.732**) when tuning `spatial_gap` and `direction_cos`
-- **Root cause**: The full re-sweep selected a different and worse base association operating point, so the AFLink-local gains did not survive end-to-end evaluation. More importantly, CityFlowV2 cameras have minimal spatial overlap, so motion consistency across non-overlapping views is unreliable. Vehicles moving in similar directions are often different identities, which caused many false cross-camera merges.
-- **Conclusion**: AFLink is harmful on **CityFlowV2** and should be treated as a **DEAD END** for this dataset. It may still be relevant on datasets with adjacent or overlapping camera views where motion continuity is physically informative.
-- **Key insight**: The within-sweep gain shows motion features carry some signal, but the false-positive merge rate remained too high at every threshold tested.
+- **Retest status**: This result is now **confirmed by a clean controlled retest** on **10c v52** using the exact restored baseline association recipe (`sim_thresh=0.50`, `appearance_weight=0.70`, `fic_reg=0.50`, `aqe_k=3`, `gallery_thresh=0.48`, `orphan_match=0.38`) and fresh baseline features from **10a v30**.
+- **Controlled retest**: Control without AFLink reached **MTMC IDF1 = 0.7714**, **IDF1 = 0.7921**, **HOTA = 0.5747**. AFLink then degraded to **0.7332** at `gap=100`, `dir_cos=0.90` (**-3.82pp**), **0.7183** at `gap=150`, `dir_cos=0.85` (**-5.31pp**), and **0.6394** at `gap=200`, `dir_cos=0.70` (**-13.20pp**).
+- **Root cause**: The original v46 result was initially suspected to be partly confounded by joint sweep interactions, but the clean retest removes that explanation. Even with a tight **100px** gap and strict **0.90** direction cosine, motion consistency across non-overlapping CityFlowV2 cameras is not reliable enough for identity linking. AFLink creates false cross-camera merges that fragment the identity space, and wider motion windows make the damage worse.
+- **Conclusion**: AFLink is **confirmed harmful** on **CityFlowV2** and should be treated as a **DEAD END** for this dataset. The true penalty is now established at roughly **-3.8pp to -13.2pp MTMC IDF1**, not just the original **-3.95pp** point estimate from v46.
+- **Key insight**: The fact that even `gap=100` with `dir_cos=0.90` still loses **-3.82pp** shows the problem is structural, not a loose-threshold artifact.
 
 #### 12b v2 — Extended Kalman Sweep (2026-04-13)
 - **Task**: Extend the WILDTRACK tracker sweep beyond the original tuned-Kalman search to test whether broader interpolation, longer track persistence, looser detection thresholds, or better interpolation dynamics can reduce the remaining 5 ID switches
@@ -405,7 +428,8 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | CID_BIAS (camera-pair bias matrix) | -3.3pp MTMC IDF1 on 256px features (0.751 vs 0.784) | v44 + CID_BIAS test |
 | confidence_threshold=0.20 | -2.8pp | v45 |
 | max_iou_distance=0.5 | -1.6pp | v47 |
-| AFLink motion linking | -3.95pp MTMC IDF1; motion consistency unreliable across non-overlapping cameras and false merges dominate | 10c v46 |
+| AFLink motion linking | Confirmed harmful in controlled retest: **-3.82pp** even at `gap=100`, `dir_cos=0.90`; broader gaps degrade to **-5.31pp** (`150/0.85`) and **-13.20pp** (`200/0.70`). Motion consistency across non-overlapping cameras is unreliable and false merges dominate. | 10c v46, 10c v52 |
+| SAM2 foreground masking | -8.7pp MTMC IDF1 (0.688 vs 0.775 baseline); removes useful background context and clips vehicle boundary features, while increasing runtime from ~65 min to 105.2 min | 10a v29, 10c v50 |
 | 384px TransReID deployment | -2.8pp MTMC IDF1 despite +10pp mAP; v43=0.7585, v44=0.7562 vs v80=0.784 | 10a v43, 10a v44, v80 baseline |
 | Augmentation overhaul + CircleLoss (09 v2 augoverhaul model) | -5.3pp MTMC IDF1 (0.722 vs 0.775 baseline) despite +1.45pp mAP; confounded recipe changed both augmentations and loss. Follow-up CircleLoss-only ablation collapsed to **18.45% mAP** with `inf` loss every epoch, so CircleLoss is independently a dead end and the augoverhaul augmentations are the most likely regression source unless the original run had a CircleLoss config mismatch | 10c v48, 09 v2, 09 v4 Experiment B |
 | EMA model averaging | Model **mAP=81.53%** vs EMA **mAP=81.44%** with **R1 92.41% vs 92.74%**; EMA converges to essentially the same place and is not a meaningful improvement path | 09 v3 |
@@ -432,7 +456,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | Feature Extraction (ViT) | ⚠️ Ceiling | 256px remains best; 384px is a verified dead end for MTMC |
 | Feature Processing (PCA) | ✅ OK | 384D optimal |
 | Ensemble/Fusion | ❌ Blocked | Tested at 0.30 weight: -0.1pp. Secondary (52.77% mAP) far too weak for ensemble benefit |
-| Association (Stage 4) | ✅ Exhausted | 225+ configs, no more gains |
+| Association (Stage 4) | ✅ Exhausted | 225+ configs plus network-flow v53; CC remains preferred after network flow lost -0.24pp and increased conflation |
 | Evaluation | ✅ OK | Under-merging 1.69:1 ratio = feature quality issue |
 
 ## Model Training History
