@@ -17,6 +17,7 @@
 | **10c v48 (09 v2 augoverhaul @ 256px)** | MTMC IDF1=0.722 | Best result after an 11-sweep association re-optimization; single-cam IDF1 only 0.752 |
 | **10c v49 (09 v3 augoverhaul-EMA @ 256px)** | MTMC IDF1=0.722 | Best result after a broader association sweep; AFLink recovered 0.675 -> 0.722 but could not break the augoverhaul ceiling |
 | **Secondary Model (ResNet101-IBN-a)** | mAP=52.77% | On CityFlowV2 eval split, ImageNet→CityFlowV2 only |
+| **Secondary Model ViT-Small/16 IN-21k (09k v1)** | mAP=48.66%, R1=62.01% | Confirms the non-CLIP ceiling extends to ViT architectures too |
 | **Secondary Model VeRi-776 pretrain (09e v2)** | mAP=62.52% | On VeRi-776 test set, ready for CityFlowV2 fine-tuning |
 | **384px ViT (09b v2)** | DEAD END | Higher single-camera ReID accuracy did not transfer; MTMC IDF1 only 0.7585-0.7562 in v43-v44, -2.8pp vs 256px baseline |
 | **09f CityFlowV2 fine-tune** | mAP=42.7% | v3 peaked at epoch 104/120 and still underperformed direct ImageNet→CityFlowV2 (09d v18: 52.77%) |
@@ -95,6 +96,8 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 **Status update (2026-04-01)**: Extending the direct ImageNet→CityFlowV2 run by resuming from the **09d v18** 52.77% checkpoint at a lower learning rate (**3e-4**) peaked at only **50.61% mAP** in **09d gumfreddy v3**. This confirms that **52.77% is effectively the ceiling** for the current ImageNet→CityFlowV2 ResNet101-IBN-a recipe rather than an undertrained checkpoint.
 
 **Status update (2026-04-17)**: The new **09i v1 ArcFace** follow-up on **gumfreddy** also failed to break that ceiling. With **ArcFace (s=30, m=0.35) + Triplet (m=0.3) + Center loss** and a **warm-start from 09d**, the run peaked at only **50.80% mAP**, **73.46% R1**, and **54.65% mAP_rerank** at **epoch 100/160**, then declined through the rest of training. The most likely root cause is **geometry mismatch**: the checkpoint was warm-started from a **cross-entropy-optimized** solution, then forced into an **ArcFace angular-margin** regime while also keeping triplet and center objectives active. On a dataset with only **128 train IDs**, that creates **four competing losses/geometries** and pushes the model into overfitting rather than better discrimination.
+
+**Status update (2026-04-17)**: The new **09k v1 ViT-Small/16** run reached only **48.66% mAP** and **62.01% R1** after **120 epochs** despite using a ViT backbone. This confirms that the current **~50% secondary-model ceiling is a pretraining problem, not an architecture problem**: switching from ResNet to a non-CLIP ViT does not solve CityFlowV2's low-data regime. In practice, only **CLIP-pretrained** backbones are currently clearing the **65%+ mAP** bar needed for a plausible ensemble model on this dataset. That makes alternative **CLIP-family** backbones the right search space, and `timm` already provides several drop-in options such as **LAION-2B CLIP** and **DFN-2B CLIP** variants.
 
 ## What SOTA Does Differently
 

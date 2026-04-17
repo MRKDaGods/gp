@@ -243,6 +243,9 @@ Note: The control run for this retest measured **IDF1 = 0.7921** and **HOTA = 0.
 | 09b v2 | 384px ViT-B/16 CLIP proper | **80.14%** | **92.27%** | SUCCESS |
 | 09 v2 | Augoverhaul + CircleLoss | **81.59%** | - | HIGHER ReID, MTMC REGRESSION |
 | 09 v3 | Augoverhaul + EMA training run (base checkpoint used downstream) | **81.53%** | **92.41%** | SAME MTMC CEILING AS 09 v2 |
+| 09k v1 | ViT-Small/16 TransReID (ImageNet-21k pretrain), 120 epochs | **48.66%** | **62.01%** | BELOW ENSEMBLE THRESHOLD |
+
+The new **09k v1** ViT-Small/16 result is important because it rules out backbone family as the main problem for secondary-model recovery. Despite moving from ResNet to a ViT architecture, the non-CLIP **ImageNet-21k** pretraining path still topped out at only **48.66% mAP** and **62.01% R1**, well below the **~65% mAP** minimum needed for a useful ensemble partner. The bottleneck is therefore **pretraining quality**, not simply architecture choice: on CityFlowV2's **128 train IDs**, non-CLIP backbones appear capped at roughly **~53% mAP**.
 
 ### 4.2 Knowledge Distillation (09c)
 
@@ -368,6 +371,7 @@ The ResNet101-IBN-a path is now effectively closed. Across the original direct b
 |------|:------:|:-------:|---------|
 | 10c v31 | COMPLETE | ali369 | Association sweep complete: mtmc_idf1=78.0%; only gallery_thresh improved (+0.2pp) |
 | 09d v13 | COMPLETE | mrkdagods | Timed out after epoch 19: mAP=11.98%; IBN layer1+2+3 fix confirmed, but training recipe is not converging |
+| 09l v1 | RUNNING | gumfreddy | TransReID ViT-B/16 LAION-2B CLIP pushed and running; testing an alternative CLIP backbone as a diversity model for ensemble use |
 | Next | BLOCKED | - | Ensemble plan blocked until ResNet101-IBN-a training quality improves |
 
 ---
