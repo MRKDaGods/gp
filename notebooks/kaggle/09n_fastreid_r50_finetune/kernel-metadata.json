@@ -8,6 +8,6 @@
   "enable_gpu": true,
   "enable_internet": true,
   "dataset_sources": [],
-  "kernel_sources": ["gumfreddy/mtmc-09l-cityflow-training-data"],
+  "kernel_sources": [],
   "competition_sources": []
 }
