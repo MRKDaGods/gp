@@ -1,0 +1,16 @@
+{
+  "id": "gumfreddy/09o-eva02-vit-reid-cityflowv2",
+  "title": "09o-eva02-vit-reid-cityflowv2",
+  "code_file": "09o_eva02_vit_reid.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "competition_sources": [],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
+}

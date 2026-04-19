@@ -37,7 +37,7 @@ class ReIDModel:
     """
 
     # Model names routed to TransReID instead of torchreid
-    _TRANSREID_NAMES = {"transreid", "vit_small", "vit_base", "transreid_vit"}
+    _TRANSREID_NAMES = {"transreid", "vit_small", "vit_base", "transreid_vit", "eva02_vit"}
 
     def __init__(
         self,

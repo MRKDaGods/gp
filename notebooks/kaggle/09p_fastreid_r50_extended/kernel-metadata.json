@@ -1,0 +1,18 @@
+{
+  "id": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+  "title": "09p-fastreid-r50-extended-cityflowv2",
+  "code_file": "09p_fastreid_r50_extended.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "competition_sources": [],
+  "dataset_sources": [],
+  "kernel_sources": [
+    "gumfreddy/09n-fastreid-r50-finetune-cityflowv2"
+  ],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
+}

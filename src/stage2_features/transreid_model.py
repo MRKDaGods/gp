@@ -105,13 +105,18 @@ class TransReID(nn.Module):
 
     def forward(self, x: torch.Tensor, cam_ids: torch.Tensor | None = None):
         B = x.shape[0]
+        rot_pos_embed = None
 
         # 1. Patch embedding
         x = self.vit.patch_embed(x)
 
         # 2. CLS token + positional embedding + pos_drop (use timm's method)
         if hasattr(self.vit, "_pos_embed"):
-            x = self.vit._pos_embed(x)
+            result = self.vit._pos_embed(x)
+            if isinstance(result, tuple):
+                x, rot_pos_embed = result
+            else:
+                x = result
         else:
             cls_tok = self.vit.cls_token.expand(B, -1, -1)
             x = torch.cat([cls_tok, x], dim=1) + self.vit.pos_embed
@@ -134,7 +139,10 @@ class TransReID(nn.Module):
 
         # 6. Transformer blocks + final norm
         for blk in self.vit.blocks:
-            x = blk(x)
+            if rot_pos_embed is not None:
+                x = blk(x, rope=rot_pos_embed)
+            else:
+                x = blk(x)
         x = self.vit.norm(x)
 
         # CLS token → global feature
