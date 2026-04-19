@@ -1,0 +1,13 @@
+{
+  "id": "gumfreddy/09n-fastreid-r50-finetune-cityflowv2",
+  "title": "09n FastReID R50-IBN Fine-tune CityFlowV2",
+  "code_file": "09n_fastreid_r50_finetune.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "kernel_sources": ["gumfreddy/mtmc-09l-cityflow-training-data"],
+  "competition_sources": []
+}
