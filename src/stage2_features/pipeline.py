@@ -164,6 +164,9 @@ def run_stage2(
     color_augment = stage_cfg.reid.get("color_augment", False)
     multiscale_raw = stage_cfg.reid.get("multiscale_sizes", [])
     multiscale_sizes = [tuple(s) for s in multiscale_raw] if multiscale_raw else []
+    center_crop_raw = stage_cfg.reid.get("center_crop_scales", [])
+    center_crop_scales = [float(scale) for scale in center_crop_raw] if center_crop_raw else []
+    normalize_views = bool(stage_cfg.reid.get("normalize_views", False))
     quality_temperature = float(stage_cfg.reid.get("quality_temperature", 3.0))
     multi_query_k = int(stage_cfg.get("multi_query", {}).get("k", 0))
     target_classes = OmegaConf.select(cfg, "dataset.target_classes", default=None)
@@ -186,6 +189,8 @@ def run_stage2(
             flip_augment=flip_augment,
             color_augment=color_augment,
             multiscale_sizes=multiscale_sizes,
+            center_crop_scales=center_crop_scales,
+            normalize_views=normalize_views,
             num_cameras=stage_cfg.reid.person.get("num_cameras", 0),
             vit_model=stage_cfg.reid.person.get("vit_model", "vit_base_patch16_clip_224.openai"),
             clip_normalization=stage_cfg.reid.person.get("clip_normalization", None),
@@ -209,6 +214,8 @@ def run_stage2(
         flip_augment=flip_augment,
         color_augment=color_augment,
         multiscale_sizes=multiscale_sizes,
+        center_crop_scales=center_crop_scales,
+        normalize_views=normalize_views,
         num_cameras=stage_cfg.reid.vehicle.get("num_cameras", 0),
         vit_model=stage_cfg.reid.vehicle.get("vit_model", "vit_base_patch16_clip_224.openai"),
         clip_normalization=stage_cfg.reid.vehicle.get("clip_normalization", None),
@@ -232,6 +239,9 @@ def run_stage2(
                 half=stage_cfg.reid.half,
                 flip_augment=flip_augment,
                 color_augment=color_augment,
+                multiscale_sizes=multiscale_sizes,
+                center_crop_scales=center_crop_scales,
+                normalize_views=normalize_views,
                 num_cameras=vehicle2_cfg.get("num_cameras", 0),
                 vit_model=vehicle2_cfg.get("vit_model", "vit_base_patch16_clip_224.openai"),
                 clip_normalization=vehicle2_cfg.get("clip_normalization", False),
@@ -261,6 +271,9 @@ def run_stage2(
                 half=stage_cfg.reid.half,
                 flip_augment=flip_augment,
                 color_augment=color_augment,
+                multiscale_sizes=multiscale_sizes,
+                center_crop_scales=center_crop_scales,
+                normalize_views=normalize_views,
                 num_cameras=vehicle3_cfg.get("num_cameras", 0),
                 vit_model=vehicle3_cfg.get("vit_model", "vit_base_patch16_clip_224.openai"),
                 clip_normalization=vehicle3_cfg.get("clip_normalization", False),

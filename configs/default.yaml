@@ -111,6 +111,10 @@ stage2:
     # Each entry is [H, W]. Empty list = disabled (use only input_size).
     # For TransReID vehicle (256x256): try [[224, 224], [288, 288]] for ±1 patch row/col.
     multiscale_sizes: []  # disabled by default; enable on Kaggle P100
+    # --- Center-crop scale TTA: crop/pad center region before preprocessing ---
+    center_crop_scales: []
+    # --- Per-view L2 normalization before TTA averaging ---
+    normalize_views: false
   hsv:
     h_bins: 32         # increased from 16 for better colour discrimination
     s_bins: 16         # increased from 8

@@ -50,6 +50,8 @@ class ReIDModel:
         flip_augment: bool = True,
         color_augment: bool = False,
         multiscale_sizes: Optional[List[Tuple[int, int]]] = None,
+        center_crop_scales: Optional[List[float]] = None,
+        normalize_views: bool = False,
         num_cameras: int = 0,
         vit_model: str = "vit_base_patch16_clip_224.openai",
         clip_normalization: Optional[bool] = None,
@@ -64,6 +66,8 @@ class ReIDModel:
         self.flip_augment = flip_augment
         self.color_augment = color_augment
         self.multiscale_sizes = multiscale_sizes or []  # additional (H,W) sizes for TTA
+        self.center_crop_scales = center_crop_scales or []
+        self.normalize_views = normalize_views
         self.num_cameras = num_cameras
         self.vit_model = vit_model
 
@@ -101,7 +105,9 @@ class ReIDModel:
             f"ReID model loaded: {model_name}, dim={embedding_dim}, "
             f"input={self.input_size}, norm={norm_tag}, interp={interp_tag}, "
             f"device={device}"
+            + (f", center_crop_scales={self.center_crop_scales}" if self.center_crop_scales else "")
             + (f", multiscale={self.multiscale_sizes}" if self.multiscale_sizes else "")
+            + (", normalize_views=true" if self.normalize_views else "")
         )
 
     def _build_model(self, model_name: str, weights_path: Optional[str]):
@@ -437,6 +443,59 @@ class ReIDModel:
             return torch.full((batch_size,), cam_id, dtype=torch.long, device=self.device)
         return None
 
+    def _forward_crops(
+        self,
+        crops: List[np.ndarray],
+        cam_tensor: Optional[torch.Tensor],
+    ) -> np.ndarray:
+        """Run a crop batch through the model and return float32 numpy features."""
+        batch_tensor = self._preprocess(crops).to(self.device)
+        if self.half:
+            batch_tensor = batch_tensor.half()
+        if cam_tensor is not None:
+            features = self.model(batch_tensor, cam_ids=cam_tensor)
+        else:
+            features = self.model(batch_tensor)
+        if isinstance(features, (tuple, list)):
+            features = features[0]
+        return features.float().cpu().numpy()
+
+    @staticmethod
+    def _l2_normalize_rows(features: np.ndarray) -> np.ndarray:
+        """L2-normalize each feature row independently."""
+        norms = np.linalg.norm(features, axis=1, keepdims=True)
+        return features / np.maximum(norms, 1e-8)
+
+    def _center_crop_at_scale(self, crops: List[np.ndarray], scale: float) -> List[np.ndarray]:
+        """Apply center-crop (<1.0) or reflect-pad (>1.0) at a given scale."""
+        if scale <= 0:
+            raise ValueError(f"center_crop scale must be positive, got {scale}")
+
+        result: List[np.ndarray] = []
+        for crop in crops:
+            h, w = crop.shape[:2]
+            if scale < 1.0:
+                new_h = max(1, min(h, int(round(h * scale))))
+                new_w = max(1, min(w, int(round(w * scale))))
+                y_start = (h - new_h) // 2
+                x_start = (w - new_w) // 2
+                transformed = crop[y_start:y_start + new_h, x_start:x_start + new_w]
+            elif scale > 1.0:
+                pad_h = max(0, int(round(h * (scale - 1.0) / 2.0)))
+                pad_w = max(0, int(round(w * (scale - 1.0) / 2.0)))
+                transformed = cv2.copyMakeBorder(
+                    crop,
+                    pad_h,
+                    pad_h,
+                    pad_w,
+                    pad_w,
+                    borderType=cv2.BORDER_REFLECT_101,
+                )
+            else:
+                transformed = crop
+            result.append(transformed)
+        return result
+
     @torch.no_grad()
     def _extract_batch(self, batch_crops: List[np.ndarray], cam_id: Optional[int] = None) -> np.ndarray:
         """Extract embeddings for a single batch with optional augmentation.
@@ -448,33 +507,12 @@ class ReIDModel:
         Returns:
             (N, D) float32 numpy array.
         """
-        batch_tensor = self._preprocess(batch_crops).to(self.device)
-        if self.half:
-            batch_tensor = batch_tensor.half()
         cam_tensor = self._make_cam_tensor(len(batch_crops), cam_id)
-        if cam_tensor is not None:
-            features = self.model(batch_tensor, cam_ids=cam_tensor)
-        else:
-            features = self.model(batch_tensor)
-        if isinstance(features, (tuple, list)):
-            features = features[0]
-        features = features.float().cpu().numpy()
-
-        n_views = 1
+        views = [self._forward_crops(batch_crops, cam_tensor)]
 
         if self.flip_augment:
             flipped_crops = [cv2.flip(c, 1) for c in batch_crops]
-            flip_tensor = self._preprocess(flipped_crops).to(self.device)
-            if self.half:
-                flip_tensor = flip_tensor.half()
-            if cam_tensor is not None:
-                flip_features = self.model(flip_tensor, cam_ids=cam_tensor)
-            else:
-                flip_features = self.model(flip_tensor)
-            if isinstance(flip_features, (tuple, list)):
-                flip_features = flip_features[0]
-            features = features + flip_features.float().cpu().numpy()
-            n_views += 1
+            views.append(self._forward_crops(flipped_crops, cam_tensor))
 
         if self.color_augment:
             for alpha, beta in [(1.2, 15), (0.8, -10)]:
@@ -482,17 +520,15 @@ class ReIDModel:
                     cv2.convertScaleAbs(c, alpha=alpha, beta=beta)
                     for c in batch_crops
                 ]
-                aug_tensor = self._preprocess(aug_crops).to(self.device)
-                if self.half:
-                    aug_tensor = aug_tensor.half()
-                if cam_tensor is not None:
-                    aug_features = self.model(aug_tensor, cam_ids=cam_tensor)
-                else:
-                    aug_features = self.model(aug_tensor)
-                if isinstance(aug_features, (tuple, list)):
-                    aug_features = aug_features[0]
-                features = features + aug_features.float().cpu().numpy()
-                n_views += 1
+                views.append(self._forward_crops(aug_crops, cam_tensor))
+
+        for scale in self.center_crop_scales:
+            scaled_crops = self._center_crop_at_scale(batch_crops, float(scale))
+            views.append(self._forward_crops(scaled_crops, cam_tensor))
+
+            if self.flip_augment:
+                scaled_flipped_crops = [cv2.flip(c, 1) for c in scaled_crops]
+                views.append(self._forward_crops(scaled_flipped_crops, cam_tensor))
 
         # Multi-scale TTA: resize crops to intermediate size, then back to
         # model input size.  This lets the model see "zoomed" content without
@@ -511,34 +547,17 @@ class ReIDModel:
                     )
                     for c in batch_crops
                 ]
-                ms_tensor = self._preprocess(ms_crops).to(self.device)
-                if self.half:
-                    ms_tensor = ms_tensor.half()
-                if cam_tensor is not None:
-                    ms_features = self.model(ms_tensor, cam_ids=cam_tensor)
-                else:
-                    ms_features = self.model(ms_tensor)
-                if isinstance(ms_features, (tuple, list)):
-                    ms_features = ms_features[0]
-                features = features + ms_features.float().cpu().numpy()
-                n_views += 1
+                views.append(self._forward_crops(ms_crops, cam_tensor))
 
                 # Flip TTA on multi-scale views for additional viewpoint diversity
                 if self.flip_augment:
                     ms_flipped = [cv2.flip(c, 1) for c in ms_crops]
-                    ms_flip_tensor = self._preprocess(ms_flipped).to(self.device)
-                    if self.half:
-                        ms_flip_tensor = ms_flip_tensor.half()
-                    if cam_tensor is not None:
-                        ms_flip_feat = self.model(ms_flip_tensor, cam_ids=cam_tensor)
-                    else:
-                        ms_flip_feat = self.model(ms_flip_tensor)
-                    if isinstance(ms_flip_feat, (tuple, list)):
-                        ms_flip_feat = ms_flip_feat[0]
-                    features = features + ms_flip_feat.float().cpu().numpy()
-                    n_views += 1
+                    views.append(self._forward_crops(ms_flipped, cam_tensor))
 
-        return features / n_views
+        if self.normalize_views and len(views) > 1:
+            views = [self._l2_normalize_rows(view) for view in views]
+
+        return np.sum(np.stack(views, axis=0), axis=0) / len(views)
 
     @torch.no_grad()
     def extract_features(self, crops: List[np.ndarray], batch_size: int = 64, cam_id: Optional[int] = None) -> np.ndarray:
