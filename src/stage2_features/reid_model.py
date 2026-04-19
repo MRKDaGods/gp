@@ -168,6 +168,26 @@ class ReIDModel:
 
         return remapped_state_dict
 
+    @staticmethod
+    def _prepare_native_fastreid_sbs_r50_ibn_state_dict(
+        state_dict: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        """Normalize native R50-IBN checkpoints before loading for inference."""
+        prepared_state_dict: dict[str, torch.Tensor] = {}
+
+        for key, value in state_dict.items():
+            key = key.replace("module.", "", 1)
+
+            if key.startswith("classifier"):
+                continue
+
+            if key.startswith("bn_neck."):
+                key = f"bottleneck.{key[len('bn_neck.'):]}"
+
+            prepared_state_dict[key] = value
+
+        return prepared_state_dict
+
     def _build_fastreid_sbs_r50_ibn(self, weights_path: Optional[str]):
         """Build fast-reid SBS(R50-IBN-a) and return 2048D pre-BNNeck features."""
         from src.training.model import ReIDModelResNet50IBN
@@ -184,7 +204,21 @@ class ReIDModel:
             try:
                 checkpoint = torch.load(weights_path, map_location="cpu", weights_only=False)
                 state_dict = self._unwrap_checkpoint_state_dict(checkpoint)
-                state_dict = self._remap_fastreid_sbs_r50_ibn_state_dict(state_dict)
+                state_dict_keys = {key.replace("module.", "", 1) for key in state_dict}
+                has_native_keys = any(
+                    key in state_dict_keys
+                    for key in ("bn_neck.weight", "bottleneck.weight", "pool.p")
+                )
+                needs_remap = not has_native_keys and (
+                    "heads.pool_layer.p" in state_dict_keys
+                    or any(key.startswith("heads.bottleneck.") for key in state_dict_keys)
+                )
+
+                if needs_remap:
+                    state_dict = self._remap_fastreid_sbs_r50_ibn_state_dict(state_dict)
+                else:
+                    state_dict = self._prepare_native_fastreid_sbs_r50_ibn_state_dict(state_dict)
+
                 missing, unexpected = model.load_state_dict(state_dict, strict=False)
 
                 critical_missing = [
