@@ -243,9 +243,18 @@ Note: The control run for this retest measured **IDF1 = 0.7921** and **HOTA = 0.
 | 09b v2 | 384px ViT-B/16 CLIP proper | **80.14%** | **92.27%** | SUCCESS |
 | 09 v2 | Augoverhaul + CircleLoss | **81.59%** | - | HIGHER ReID, MTMC REGRESSION |
 | 09 v3 | Augoverhaul + EMA training run (base checkpoint used downstream) | **81.53%** | **92.41%** | SAME MTMC CEILING AS 09 v2 |
+| 09l v1 | ViT-B/16 LAION-2B CLIP, CircleLoss ablation recipe, 120 epochs | **20.36%** | **53.03%** | FAILED (`inf` loss throughout; gamma=128 CircleLoss overflowed fp16 autocast) |
+| 09l v2 | ViT-B/16 LAION-2B CLIP, TripletLoss + EMA, 160 epochs | **61.51%** | **81.41%** | PROMISING BUT UNCONVERGED |
+| 09l v3 | ViT-B/16 LAION-2B CLIP, resumed from v2 EMA checkpoint, 300 total epochs | **78.61%** | **90.43%** | READY FOR ENSEMBLE DEPLOYMENT |
 | 09k v1 | ViT-Small/16 TransReID (ImageNet-21k pretrain), 120 epochs | **48.66%** | **62.01%** | BELOW ENSEMBLE THRESHOLD |
 
-The new **09k v1** ViT-Small/16 result is important because it rules out backbone family as the main problem for secondary-model recovery. Despite moving from ResNet to a ViT architecture, the non-CLIP **ImageNet-21k** pretraining path still topped out at only **48.66% mAP** and **62.01% R1**, well below the **~65% mAP** minimum needed for a useful ensemble partner. The bottleneck is therefore **pretraining quality**, not simply architecture choice: on CityFlowV2's **128 train IDs**, non-CLIP backbones appear capped at roughly **~53% mAP**.
+The full **09l** sequence now closes the loop on **LAION-2B CLIP** as a secondary-model candidate. After the broken **09l v1** CircleLoss recipe failed numerically, the stable **09l v2** rerun restored the backbone to **61.51% mAP**, **81.41% R1**, **67.20% mAP_rerank**, and **82.95% R1_rerank** in **160 epochs** with **TripletLoss + EMA(decay=0.9999)**.
+
+Resuming that **v2 EMA checkpoint** for **09l v3** and extending training to **300 total epochs** lifted the model to **78.61% mAP**, **90.43% R1**, **81.09% mAP_rerank**, and **90.98% R1_rerank**. The resumed phase took **~3.3 hours on a Kaggle T4**, and the curve kept improving smoothly across **epoch 180/200/220/240/260/280/300 = 65.93/68.84/71.49/73.68/75.68/77.26/78.61 mAP**.
+
+That result changes the interpretation of this backbone path: **LAION-2B CLIP is now a strong secondary model**, only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**, and comfortably above the **~65% mAP** bar required for score-level fusion. This path is now **ready for ensemble deployment** rather than needing more rescue training.
+
+The new **09k v1** ViT-Small/16 result is important because it rules out backbone family as the main problem for secondary-model recovery. Despite moving from ResNet to a ViT architecture, the non-CLIP **ImageNet-21k** pretraining path still topped out at only **48.66% mAP** and **62.01% R1**, well below the **~65% mAP** minimum needed for a useful ensemble partner. Combined with the later **09j v2** ResNeXt101-IBN-a ArcFace collapse to **36.88% mAP**, the evidence now points to **pretraining quality and initialization compatibility**, not simply architecture choice: on CityFlowV2's **128 train IDs**, non-CLIP backbones are not producing a viable secondary model and the CNN variants remain capped well below the ensemble bar.
 
 ### 4.2 Knowledge Distillation (09c)
 
@@ -278,6 +287,14 @@ The ResNet101-IBN-a path is now effectively closed. Across the original direct b
 | Version | Account | Recipe | Result | Verdict | Key Insight |
 |:-------:|:-------:|--------|:------:|:-------:|-------------|
 | 09i v1 | gumfreddy | ArcFace (`s=30`, `m=0.35`) + Triplet (`m=0.3`) + Center loss, warm-start from 09d | Best **mAP=50.80%**, **R1=73.46%**, **mAP_rerank=54.65%** at **epoch 100/160** | REJECTED | Performance declined after epoch 100; CE-shaped warm-start geometry did not transfer cleanly into ArcFace, and four competing objectives on only 128 train IDs pushed the run into overfitting instead of a better optimum |
+
+### 4.5 ResNeXt101-IBN-a ArcFace Attempt (09j)
+
+| Version | Account | Recipe | Result | Verdict | Key Insight |
+|:-------:|:-------:|--------|:------:|:-------:|-------------|
+| 09j v2 | gumfreddy | ResNeXt101-32x8d-IBN-a + ArcFace + GeM + BNNeck, **160 epochs**, **batch 48**, **lr=3.5e-4**, **384x384** | **mAP=36.88%**, **R1=62.69%**, **mAP_rerank=40.49%** | REJECTED | The original IBN-Net ResNeXt weights were built for **32x32d grouped convolutions**, while the training model used **32x8d**. The v2 fix filtered loading with `strict=False`, but that only avoided the crash; it left many layers randomly initialized and crippled the model |
+
+The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Even after fixing the explicit weight-shape mismatch from **v1**, the fallback partial-load strategy still produced a catastrophically weak model because too much of the backbone was effectively random at initialization. At **36.88% mAP**, this run finished not just below the **52.77%** ResNet101-IBN-a baseline, but far below the minimum quality needed for any ensemble use. The practical conclusion is that the current non-CLIP CNN routes are dead ends on CityFlowV2 unless a truly compatible pretrained checkpoint exists.
 
 ---
 
@@ -318,7 +335,7 @@ The ResNet101-IBN-a path is now effectively closed. Across the original direct b
 |----------|:-----:|:---------:|:--------:|
 | 384px ViT-B/16 (proper training) | Training->S2 | +1.0-2.0pp | ***** |
 | ResNet101-IBN-a ensemble | Training->S2->S4 | +1.0-1.5pp | ***** |
-| Circle loss training | Training | +0.3-0.5pp | **** |
+| Alternative CLIP-family backbone beyond LAION-2B (for example DFN-2B) | Training | +0.5-1.5pp | **** |
 | Timestamp bias correction | S4 | +0.3-0.5pp | **** |
 | Per-camera CLAHE tuning | S0 | +0.2-0.5pp | *** |
 | Hand-annotated zone polygons | S4 | +0.5-1.5pp | *** |
@@ -344,6 +361,7 @@ The ResNet101-IBN-a path is now effectively closed. Across the original direct b
 13. **SAM2 foreground masking is catastrophic for vehicle MTMC (-8.7pp)**: 10a v29 + 10c v50 peaked at only **0.688 MTMC IDF1** after a full **60-config** sweep, versus the **0.775** non-SAM2 baseline. Masking removes useful background context and likely clips vehicle boundary cues while raising runtime from **~65 min to 105.2 min**.
 14. **Network flow did not solve conflation**: 10c v53 reached only **0.769 MTMC IDF1** vs the **0.7714** CC baseline. Although **MOTA/HOTA** ticked up slightly and **ID switches** fell by 2, conflation actually worsened from **27 -> 30** predicted IDs, so the current CC-based solver remains preferable.
 15. **Topology CID_BIAS is also a dead end**: 10c v55 tested additive camera-pair offsets from **(+0.02/-0.10)** through **(+0.06/-0.20)** and all regressed to **0.764-0.762-0.763** versus a **0.774** control. FIC whitening already handles the useful cross-camera calibration; additive CID_BIAS just distorts those calibrated similarities.
+16. **09l v3 makes LAION-2B CLIP ensemble-ready**: after resuming the stable **09l v2** EMA checkpoint from **epoch 160 -> 300**, **09l v3** reached **78.61% mAP / 90.43% R1 / 81.09% mAP_rr / 90.98% R1_rr**. The extension improved steadily through **epoch 180 -> 300** and finished only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**, so this backbone now clears the practical **~65%** ensemble threshold by a wide margin.
 
 ### Gap Attribution
 
@@ -371,8 +389,9 @@ The ResNet101-IBN-a path is now effectively closed. Across the original direct b
 |------|:------:|:-------:|---------|
 | 10c v31 | COMPLETE | ali369 | Association sweep complete: mtmc_idf1=78.0%; only gallery_thresh improved (+0.2pp) |
 | 09d v13 | COMPLETE | mrkdagods | Timed out after epoch 19: mAP=11.98%; IBN layer1+2+3 fix confirmed, but training recipe is not converging |
-| 09l v1 | RUNNING | gumfreddy | TransReID ViT-B/16 LAION-2B CLIP pushed and running; testing an alternative CLIP backbone as a diversity model for ensemble use |
-| Next | BLOCKED | - | Ensemble plan blocked until ResNet101-IBN-a training quality improves |
+| 09l v1 | COMPLETE | gumfreddy | **mAP=20.36%**, **R1=53.03%**, **mAP_rr=27.16%**; catastrophic failure because **CircleLoss(gamma=128)** overflowed fp16 autocast and kept loss at `inf` throughout |
+| 09l v2 | COMPLETE | gumfreddy | **mAP=61.51%**, **R1=81.41%**, **mAP_rr=67.20%**, **R1_rr=82.95%** after **160 epochs** with **TripletLoss + EMA(decay=0.9999)**; strong recovery over v1, but still clearly unconverged because mAP rose **55.98% -> 61.51%** from epoch **140 -> 160** as cosine LR ended |
+| 09l v3 | COMPLETE | gumfreddy | resumed from the **09l v2 EMA** checkpoint to **300 total epochs**; **mAP=78.61%**, **R1=90.43%**, **mAP_rr=81.09%**, **R1_rr=90.98%**; strong secondary model only **1.53pp** behind **09b v2 (80.14% mAP)** and now ready for ensemble deployment |
 
 ---
 

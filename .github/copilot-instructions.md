@@ -125,6 +125,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **VeRi-776→CityFlowV2 ResNet pretrain**: 42.7% mAP (worse than direct 52.77%)
 - **Extended ResNet fine-tuning**: 50.61% mAP (degraded from 52.77%)
 - **ArcFace on ResNet101-IBN-a**: 50.80% mAP (warm-start geometry mismatch, 6 variants exhausted at 52.77% ceiling)
+- **ResNeXt101-IBN-a ArcFace**: 36.88% mAP (IBN-Net pretrained weights were for 32x32d while the model here used 32x8d; `strict=False` partial loading left many layers random and crippled training)
 - **Score-level ensemble with 52.77% secondary**: -0.1pp (secondary too weak, adds noise)
 - **Circle loss + triplet**: 16-30% mAP (conflicting gradients)
 - **SGD for ResNet**: 30.27% mAP (catastrophic — AdamW essential for small datasets)

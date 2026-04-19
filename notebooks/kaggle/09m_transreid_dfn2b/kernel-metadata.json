@@ -1,7 +1,7 @@
 {
-  "id": "gumfreddy/09l-transreid-laion-2b-training",
-  "title": "09l TransReID LAION-2B Training",
-  "code_file": "09l_transreid_laion2b.ipynb",
+  "id": "gumfreddy/09m-transreid-dfn-2b-training",
+  "title": "09m TransReID DFN-2B Training",
+  "code_file": "09m_transreid_dfn2b.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
@@ -10,9 +10,7 @@
   "machine_shape": "NvidiaTeslaT4",
   "dataset_sources": [],
   "competition_sources": [],
-  "kernel_sources": [
-    "gumfreddy/09l-transreid-laion-2b-training"
-  ],
+  "kernel_sources": [],
   "model_sources": [
     "mrkdagods/transreid-veri/other/default/1"
   ]

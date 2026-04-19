@@ -233,7 +233,9 @@ def run_stage2(
                 flip_augment=flip_augment,
                 color_augment=color_augment,
                 num_cameras=vehicle2_cfg.get("num_cameras", 0),
+                vit_model=vehicle2_cfg.get("vit_model", "vit_base_patch16_clip_224.openai"),
                 clip_normalization=vehicle2_cfg.get("clip_normalization", False),
+                concat_patch=vehicle2_cfg.get("concat_patch", False),
             )
             logger.info(
                 f"Ensemble ReID enabled: primary={stage_cfg.reid.vehicle.model_name} "
@@ -260,7 +262,9 @@ def run_stage2(
                 flip_augment=flip_augment,
                 color_augment=color_augment,
                 num_cameras=vehicle3_cfg.get("num_cameras", 0),
+                vit_model=vehicle3_cfg.get("vit_model", "vit_base_patch16_clip_224.openai"),
                 clip_normalization=vehicle3_cfg.get("clip_normalization", False),
+                concat_patch=vehicle3_cfg.get("concat_patch", False),
             )
             logger.info(
                 f"Tertiary ensemble ReID enabled: {vehicle3_cfg.get('model_name', 'resnext101_ibn_a')}"
