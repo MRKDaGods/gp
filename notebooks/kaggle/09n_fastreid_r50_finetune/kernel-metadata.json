@@ -1,6 +1,6 @@
 {
   "id": "gumfreddy/09n-fastreid-r50-finetune-cityflowv2",
-  "title": "09n FastReID R50-IBN Fine-tune CityFlowV2",
+  "title": "09n-fastreid-r50-finetune-cityflowv2",
   "code_file": "09n_fastreid_r50_finetune.ipynb",
   "language": "python",
   "kernel_type": "notebook",
