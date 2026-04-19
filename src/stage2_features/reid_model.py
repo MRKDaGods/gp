@@ -111,11 +111,99 @@ class ReIDModel:
         """
         if self.is_transreid:
             return self._build_transreid(weights_path)
+        if model_name.lower() in {"fastreid_sbs_r50_ibn", "fastreid_r50_ibn"}:
+            return self._build_fastreid_sbs_r50_ibn(weights_path)
         if model_name.lower() == "resnet101_ibn_a":
             return self._build_resnet101_ibn(weights_path)
         if model_name.lower() == "resnext101_ibn_a":
             return self._build_resnext101_ibn(weights_path)
         return self._build_torchreid(model_name, weights_path)
+
+    @staticmethod
+    def _unwrap_checkpoint_state_dict(checkpoint: object) -> dict:
+        """Unwrap common checkpoint containers to a raw state dict."""
+        if isinstance(checkpoint, dict):
+            if "state_dict" in checkpoint:
+                return checkpoint["state_dict"]
+            if "model" in checkpoint:
+                return checkpoint["model"]
+            return checkpoint
+        raise TypeError(f"Unsupported checkpoint type: {type(checkpoint)!r}")
+
+    @staticmethod
+    def _remap_fastreid_sbs_r50_ibn_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Remap fast-reid SBS(R50-IBN) keys to our inference model."""
+        remapped_state_dict: dict[str, torch.Tensor] = {}
+        skip_prefixes = (
+            "pixel_mean",
+            "pixel_std",
+            "heads.classifier",
+        )
+
+        for key, value in state_dict.items():
+            key = key.replace("module.", "", 1)
+
+            if key.startswith(skip_prefixes):
+                continue
+            if key.startswith("backbone.NL_"):
+                continue
+
+            if key == "heads.pool_layer.p":
+                remapped_state_dict["pool.p"] = value
+                continue
+
+            if key.startswith("heads.bottleneck."):
+                suffix = key[len("heads.bottleneck.") :]
+                if suffix.startswith("0."):
+                    suffix = suffix[2:]
+                remapped_state_dict[f"bottleneck.{suffix}"] = value
+                continue
+
+            if key == "heads.bnneck.num_batches_tracked":
+                remapped_state_dict["bottleneck.num_batches_tracked"] = value
+                continue
+
+            if key.startswith("backbone."):
+                remapped_state_dict[key] = value
+
+        return remapped_state_dict
+
+    def _build_fastreid_sbs_r50_ibn(self, weights_path: Optional[str]):
+        """Build fast-reid SBS(R50-IBN-a) and return 2048D pre-BNNeck features."""
+        from src.training.model import ReIDModelResNet50IBN
+
+        model = ReIDModelResNet50IBN(
+            num_classes=1,
+            last_stride=1,
+            pretrained=False,
+            gem_p=3.0,
+            eval_feature="global",
+        )
+
+        if weights_path is not None:
+            try:
+                checkpoint = torch.load(weights_path, map_location="cpu", weights_only=False)
+                state_dict = self._unwrap_checkpoint_state_dict(checkpoint)
+                state_dict = self._remap_fastreid_sbs_r50_ibn_state_dict(state_dict)
+                missing, unexpected = model.load_state_dict(state_dict, strict=False)
+
+                critical_missing = [
+                    key for key in missing
+                    if not key.startswith("classifier")
+                ]
+                if critical_missing:
+                    logger.warning(
+                        f"fast-reid SBS R50-IBN missing critical keys: {critical_missing}"
+                    )
+                if unexpected:
+                    logger.debug(f"fast-reid SBS R50-IBN unexpected keys: {unexpected}")
+
+                logger.info(f"Loaded fast-reid SBS R50-IBN weights from {weights_path}")
+            except Exception as e:
+                logger.warning(f"Could not load fast-reid SBS R50-IBN weights from {weights_path}: {e}")
+                logger.warning("Using randomly initialized fast-reid SBS R50-IBN weights")
+
+        return model
 
     def _build_resnet101_ibn(self, weights_path: Optional[str]):
         """Build ResNet101-IBN-a model for inference."""

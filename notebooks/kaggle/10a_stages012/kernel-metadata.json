@@ -15,7 +15,6 @@
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "gumfreddy/09l-transreid-laion-2b-training",
-    "gumfreddy/09m-clip-rn50x4-vehicle-reid-cityflowv2"
+    "gumfreddy/09l-transreid-laion-2b-training"
   ]
 }

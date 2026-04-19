@@ -228,3 +228,73 @@ class TestReIDModelTransReIDRouting:
         # Can't actually instantiate without GPU/weights, so test the logic
         model_cls = ReIDModel
         assert "transreid" in model_cls._TRANSREID_NAMES
+
+    def test_fastreid_name_routes_to_builder(self):
+        """fast-reid SBS(R50-IBN) is routed to the dedicated builder."""
+        from src.stage2_features.reid_model import ReIDModel
+
+        model = ReIDModel.__new__(ReIDModel)
+        model.is_transreid = False
+
+        calls = {}
+
+        def fake_builder(weights_path):
+            calls["weights_path"] = weights_path
+            return "sentinel"
+
+        model._build_fastreid_sbs_r50_ibn = fake_builder
+        built = ReIDModel._build_model(model, "fastreid_sbs_r50_ibn", "weights.pth")
+
+        assert built == "sentinel"
+        assert calls["weights_path"] == "weights.pth"
+
+    def test_fastreid_state_dict_remap(self):
+        """fast-reid checkpoint keys are remapped to the local model layout."""
+        from src.stage2_features.reid_model import ReIDModel
+
+        state_dict = {
+            "pixel_mean": torch.zeros(3, 1, 1),
+            "backbone.conv1.weight": torch.randn(64, 3, 7, 7),
+            "backbone.layer1.0.bn1.IN.weight": torch.randn(32),
+            "backbone.NL_2.0.g.0.weight": torch.randn(1),
+            "heads.pool_layer.p": torch.tensor([3.0]),
+            "heads.bnneck.num_batches_tracked": torch.tensor(0),
+            "heads.bottleneck.0.weight": torch.randn(2048),
+            "heads.bottleneck.0.running_mean": torch.randn(2048),
+            "heads.classifier.weight": torch.randn(575, 2048),
+        }
+
+        remapped = ReIDModel._remap_fastreid_sbs_r50_ibn_state_dict(state_dict)
+
+        assert "backbone.conv1.weight" in remapped
+        assert "backbone.layer1.0.bn1.IN.weight" in remapped
+        assert "pool.p" in remapped
+        assert "bottleneck.weight" in remapped
+        assert "bottleneck.running_mean" in remapped
+        assert "bottleneck.num_batches_tracked" in remapped
+        assert "pixel_mean" not in remapped
+        assert "heads.classifier.weight" not in remapped
+        assert not any(key.startswith("backbone.NL_") for key in remapped)
+
+
+class TestResNet50IBNModel:
+    """Tests for the ResNet50-IBN fast-reid-compatible inference model."""
+
+    def test_resnet50_ibn_global_eval_feature_shape(self):
+        """Global eval mode returns 2048D pre-BNNeck features."""
+        pytest.importorskip("torchvision", reason="torchvision required for ResNet50-IBN tests")
+
+        from src.training.model import ReIDModelResNet50IBN
+
+        model = ReIDModelResNet50IBN(
+            num_classes=1,
+            pretrained=False,
+            eval_feature="global",
+        )
+        model.eval()
+
+        x = torch.randn(1, 3, 64, 64)
+        with torch.no_grad():
+            out = model(x)
+
+        assert out.shape == (1, 2048)

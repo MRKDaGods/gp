@@ -83,15 +83,11 @@ stage2:
     vehicle2:
       enabled: false  # disabled by default; enabled per-dataset for ensemble runs
       save_separate: true  # Save to embeddings_secondary.npy for stage4 fusion (preferred)
-      model_name: "transreid"
-      weights_path: "models/reid/transreid_cityflowv2_laion2b.pth"
-      weights_fallback: "models/reid/vehicle_transreid_vit_base_veri776.pth"
-      embedding_dim: 768
+      model_name: "fastreid_sbs_r50_ibn"
+      weights_path: "models/reid/fastreid_sbs_r50_ibn_veri.pth"
+      embedding_dim: 2048
       input_size: [256, 256]
-      vit_model: "vit_base_patch16_clip_224.laion2b"
-      num_cameras: 59
-      clip_normalization: true
-      concat_patch: true
+      clip_normalization: false
       sie_camera_map: {}
     vehicle3:
       enabled: false
