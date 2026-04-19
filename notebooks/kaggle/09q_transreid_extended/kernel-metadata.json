@@ -1,0 +1,18 @@
+{
+  "id": "gumfreddy/09q-transreid-extended-cityflowv2",
+  "title": "09q-transreid-extended-cityflowv2",
+  "code_file": "09q_transreid_extended.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "competition_sources": [],
+  "dataset_sources": [],
+  "kernel_sources": [
+    "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation"
+  ],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
+}
