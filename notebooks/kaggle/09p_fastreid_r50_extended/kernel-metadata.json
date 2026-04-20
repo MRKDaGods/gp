@@ -9,10 +9,10 @@
   "enable_tpu": false,
   "enable_internet": true,
   "competition_sources": [],
-  "dataset_sources": [],
-  "kernel_sources": [
-    "gumfreddy/09n-fastreid-r50-finetune-cityflowv2"
+  "dataset_sources": [
+    "gumfreddy/09n-r50-ibn-cityflowv2-checkpoint"
   ],
+  "kernel_sources": [],
   "model_sources": [],
   "machine_shape": "NvidiaTeslaT4"
 }
