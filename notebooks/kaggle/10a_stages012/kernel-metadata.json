@@ -16,6 +16,7 @@
   "competition_sources": [],
   "kernel_sources": [
     "gumfreddy/09l-transreid-laion-2b-training",
-    "gumfreddy/09n-fastreid-r50-finetune-cityflowv2"
+    "gumfreddy/09n-fastreid-r50-finetune-cityflowv2",
+    "gumfreddy/09o-eva02-vit-reid-cityflowv2"
   ]
 }

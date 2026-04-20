@@ -1,7 +1,7 @@
 # MTMC Tracker — Comprehensive Experiment Log
 
 > **Purpose**: Prevent re-running experiments. Every parameter combination and approach is logged here.
-> **Last updated**: 2026-04-17
+> **Last updated**: 2026-04-20
 > **Current best (Kaggle)**: MTMC IDF1 = **78.4%** (10c v44 / ali369 / code v80, min_hits=2)
 > **Current best (local, recent)**: MTMC IDF1 = **77.7%** (10c v28, CamTTA + power_norm=0.5)
 > **Historical local claim**: IDF1 = 82.97% (v47 — unverifiable, predates current experiment log)
@@ -420,3 +420,19 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 | Power normalization? | +0.5pp. Enabled. | 3.4 |
 | Multi-scale TTA? | Always neutral/harmful. | 3.4 |
 | Denoise? | -2.7pp. Keep off. | 3.3 |
+
+### 10c v60 — Fine-tuned R50-IBN Fusion (gumfreddy)
+- **Date**: 2026-04-20
+- **Notebook**: 10c v60 (10a v37 -> 10b v22 -> 10c v60)
+- **Change**: Deploy fine-tuned R50-IBN (09n, mAP=63.64%) as secondary model, sweep fusion weights [0.0, 0.05, ..., 0.5]
+- **Results**:
+	- w=0.00: MTMC IDF1=0.7730 (baseline, primary only)
+	- w=0.05: MTMC IDF1=0.7733
+	- w=0.10: MTMC IDF1=0.7736 <- BEST (+0.06pp)
+	- w=0.15: MTMC IDF1=0.7713
+	- w=0.20: MTMC IDF1=0.7715
+	- w=0.25: MTMC IDF1=0.7715
+	- w=0.30: MTMC IDF1=0.7714
+	- w=0.40: MTMC IDF1=0.7702
+	- w=0.50: MTMC IDF1=0.7625
+- **Conclusion**: Marginal gain (+0.06pp). R50-IBN at 63.64% mAP still too weak for meaningful ensemble. Need >=70% mAP or different architecture.

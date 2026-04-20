@@ -183,6 +183,16 @@ Association tuning remains exhausted (**225+** configs tested), and the secondar
 - **Lesson**: A useful ensemble here likely requires **architecturally diverse** models with meaningfully different feature biases, such as different backbones, input sizes, or training objectives. Two **CLIP ViT-B/16** variants are too similar.
 - **Conclusion**: **LAION-2B CLIP score-level fusion is a confirmed dead end** for the current vehicle MTMC pipeline despite the strong standalone **09l v3** model.
 
+#### 10c v60 — Fine-Tuned R50-IBN Fusion Sweep (10a v37) (2026-04-20)
+- **Kernel**: `gumfreddy/mtmc-10c-stages-4-5-association-eval` **v60**
+- **Task**: Test whether deploying the fine-tuned **FastReID SBS R50-IBN** secondary model improves vehicle MTMC through score-level fusion on top of the restored **10a v37 -> 10b v22 -> 10c v60** pipeline
+- **Secondary model**: **FastReID SBS R50-IBN** from **09n** with **mAP = 63.64%** and **R1 = 78.69%** on CityFlowV2
+- **Fusion sweep**: evaluated weights **[0.00, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50]**
+- **Best result**: **w = 0.10 -> MTMC IDF1 = 0.7736**, only **+0.06pp** over the **w = 0.00** baseline at **0.7730**
+- **Higher weights hurt**: **w = 0.15 -> 0.7713** (**-0.18pp**) and **w = 0.50 -> 0.7625** (**-1.05pp**)
+- **Interpretation**: Fine-tuning improved the R50-IBN secondary substantially over the earlier zero-shot ResNet baseline (**63.64% vs 52.77% mAP**), but the downstream MTMC gain remains negligible.
+- **Conclusion**: Even a fine-tuned **63.64% mAP** R50-IBN secondary is still too weak for meaningful ensemble gain. A useful secondary likely needs **>=70% mAP** on CityFlowV2 or a fundamentally different architecture such as **EVA02**. This confirms the broader dead end for **ResNet-IBN** score-level fusion secondaries, including the already exhausted **ResNet101-IBN-a** path.
+
 #### 09l v1 — LAION-2B CLIP CircleLoss Failure (2026-04-17)
 - **Kernel**: `gumfreddy/09l-transreid-laion-2b-training` **v1**
 - **Task**: Test **TransReID ViT-B/16 LAION-2B CLIP 256px** as an alternative **CLIP-family** secondary vehicle ReID backbone for future ensemble use
@@ -503,6 +513,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | PCA dimension search | 384D optimal, others worse | Experiment log |
 | Ensemble with 52% secondary at high weight | Dilutes signal | Current state |
 | Score-level ensemble with 52.77% mAP secondary at 0.30 weight | -0.1pp MTMC IDF1; noise dilutes primary signal | 10a/10c fusion test, fus0.3_ter0.0 |
+| Fine-tuned R50-IBN fusion (63.64% mAP) | Only **+0.06pp** MTMC IDF1 at best (`w=0.10`); even with an **11pp** mAP gain over the zero-shot **52.77%** baseline, the secondary is still far too weak for meaningful ensemble benefit | 10c v60 |
 | Score-level ensemble with 78.61% mAP LAION-2B CLIP secondary at 0.30 weight | -0.5pp MTMC IDF1 and all key metrics worse; two CLIP ViT-B/16 variants are too correlated to provide complementary signal | 10c v56 |
 | SGD optimizer for ResNet101-IBN-a | 30.27% mAP catastrophic | v18 mrkdagods |
 | Circle loss for ResNet101-IBN-a with triplet loss | Catastrophic gradient conflict; NEVER combine on the same feature tensor | 09d v17 (29.6%), 09f v2 (16.2%) vs 09d v18 (52.77%), 09e (62.52%) with circle_weight=0 |

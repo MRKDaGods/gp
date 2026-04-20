@@ -13,6 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from unittest.mock import MagicMock
 
 timm = pytest.importorskip("timm", reason="timm required for TransReID tests")
 
@@ -196,7 +197,7 @@ class TestReIDModelTransReIDRouting:
         """TransReID model names are correctly identified."""
         from src.stage2_features.reid_model import ReIDModel
 
-        for name in ["transreid", "vit_small", "vit_base", "transreid_vit"]:
+        for name in ["transreid", "vit_small", "vit_base", "transreid_vit", "eva02_vit"]:
             assert name in ReIDModel._TRANSREID_NAMES
 
     def test_non_transreid_names(self):
@@ -221,6 +222,28 @@ class TestReIDModelTransReIDRouting:
         assert _CLIP_STD[0] == pytest.approx(0.26862954)
         assert _IMAGENET_STD[0] == pytest.approx(0.229)
 
+    def test_eva02_clip_normalization_auto_detect(self, monkeypatch):
+        """EVA02 CLIP backbones auto-enable CLIP normalization."""
+        from src.stage2_features.reid_model import ReIDModel
+
+        fake_model = MagicMock()
+        fake_model.eval.return_value = fake_model
+        fake_model.to.return_value = fake_model
+        monkeypatch.setattr(ReIDModel, "_build_model", lambda self, model_name, weights_path: fake_model)
+
+        model = ReIDModel(
+            model_name="eva02_vit",
+            weights_path=None,
+            embedding_dim=768,
+            input_size=(256, 256),
+            device="cpu",
+            half=False,
+            vit_model="eva02_base_patch16_clip_224.merged2b",
+            clip_normalization=None,
+        )
+
+        assert model.clip_normalization is True
+
     def test_default_input_size_override(self):
         """TransReID automatically uses 224x224 when default (256, 128) is set."""
         from src.stage2_features.reid_model import ReIDModel
@@ -228,6 +251,34 @@ class TestReIDModelTransReIDRouting:
         # Can't actually instantiate without GPU/weights, so test the logic
         model_cls = ReIDModel
         assert "transreid" in model_cls._TRANSREID_NAMES
+
+    def test_eva02_vit_model_fallback(self, monkeypatch):
+        """EVA02 merged2b model names fall back to the base timm backbone when unavailable."""
+        import timm
+
+        from src.stage2_features import transreid_model
+        from src.stage2_features.reid_model import ReIDModel
+
+        captured = {}
+
+        def fake_build_transreid(**kwargs):
+            captured.update(kwargs)
+            return "eva02-sentinel"
+
+        model = ReIDModel.__new__(ReIDModel)
+        model.num_cameras = 0
+        model.embedding_dim = 768
+        model.vit_model = "eva02_base_patch16_clip_224.merged2b"
+        model.input_size = (256, 256)
+
+        monkeypatch.setattr(transreid_model, "build_transreid", fake_build_transreid)
+        monkeypatch.setattr(timm, "is_model", lambda name: False if name == model.vit_model else True)
+
+        built = ReIDModel._build_transreid(model, weights_path="weights.pth")
+
+        assert built == "eva02-sentinel"
+        assert captured["vit_model"] == "eva02_base_patch16_clip_224"
+        assert captured["weights_path"] == "weights.pth"
 
     def test_fastreid_name_routes_to_builder(self):
         """fast-reid SBS(R50-IBN) is routed to the dedicated builder."""

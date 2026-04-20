@@ -92,11 +92,14 @@ stage2:
     vehicle3:
       enabled: false
       save_separate: true
-      model_name: "resnext101_ibn_a"
-      weights_path: ""
-      embedding_dim: 2048
-      input_size: [384, 384]
-      clip_normalization: false
+      model_name: "eva02_vit"
+      weights_path: "models/reid/eva02_vit_cityflowv2.pth"
+      embedding_dim: 768
+      input_size: [256, 256]
+      vit_model: "eva02_base_patch16_clip_224.merged2b"
+      clip_normalization: true
+      num_cameras: 0
+      concat_patch: false
     batch_size: 64
     device: "cuda:0"
     half: true

@@ -365,11 +365,23 @@ class ReIDModel:
         """Build TransReID ViT model."""
         from src.stage2_features.transreid_model import build_transreid
 
+        vit_model = self.vit_model
+
+        if "eva02" in vit_model.lower() and "." in vit_model:
+            import timm
+
+            if not timm.is_model(vit_model):
+                fallback = vit_model.rsplit(".", 1)[0]
+                logger.warning(
+                    f"timm model {vit_model!r} not available, falling back to {fallback!r}"
+                )
+                vit_model = fallback
+
         model = build_transreid(
             num_classes=1,
             num_cameras=self.num_cameras,
             embed_dim=self.embedding_dim,
-            vit_model=self.vit_model,
+            vit_model=vit_model,
             pretrained=weights_path is None,
             weights_path=weights_path,
             img_size=self.input_size,  # (H, W) — sets correct patch grid
