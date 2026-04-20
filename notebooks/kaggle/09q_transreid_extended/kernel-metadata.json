@@ -12,7 +12,9 @@
   "dataset_sources": [
     "gumfreddy/mtmc-weights"
   ],
-  "kernel_sources": [],
+  "kernel_sources": [
+    "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation"
+  ],
   "model_sources": [],
   "machine_shape": "NvidiaTeslaT4"
 }
