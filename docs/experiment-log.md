@@ -160,6 +160,13 @@ Note: The control run for this retest measured **IDF1 = 0.7921** and **HOTA = 0.
 |:-------:|----------------|----------------|:---------:|:-------:|-------------|
 | 10c v55 | Fresh baseline features from 10a v30 | Added topology-derived additive CID_BIAS terms on top of the restored baseline recipe; tested conservative **(+0.02/-0.10)**, default **(+0.04/-0.15)**, and aggressive **(+0.06/-0.20)** bias schedules against a no-bias control | Control **77.4%**; conservative **76.4%**; default **76.2%**; aggressive **76.3%** | REJECTED | All additive bias variants hurt by **-1.0 to -1.2pp**. FIC whitening already provides the useful camera calibration, and extra CID_BIAS offsets distort the calibrated similarity space |
 
+### 2.7 2026-04 Improved R50-IBN Fusion Follow-Up
+
+| Version | Upstream Model | Config Changes | MTMC IDF1 | Verdict | Key Insight |
+|:-------:|----------------|----------------|:---------:|:-------:|-------------|
+| 10c v60 | 09n FastReID SBS R50-IBN on 10a v37 -> 10b v22 | First fine-tuned R50-IBN fusion sweep across **w in [0.00, 0.05, ..., 0.50]** | Best **77.36%** at **w=0.10** | REJECTED | Fine-tuned R50-IBN improved the secondary model, but MTMC gain stayed marginal at only **+0.06pp** |
+| 10c v61 | Improved 09p R50-IBN path on 10a `run_kaggle_20260420_201401` -> 10b v23 | Repeated the fusion sweep with the newer 10a chain and improved 09p secondary embeddings | Best **77.3595%** at **w=0.10** | REJECTED | Even with improved secondary training and more robust ingestion, the gain over **w=0.00** is only **+0.0006pp**, confirming the ceiling is still dominated by primary feature quality rather than association tuning |
+
 ---
 
 ## 3. Exhaustive Parameter Sweep Results
@@ -403,6 +410,7 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 | 09l v2 | COMPLETE | gumfreddy | **mAP=61.51%**, **R1=81.41%**, **mAP_rr=67.20%**, **R1_rr=82.95%** after **160 epochs** with **TripletLoss + EMA(decay=0.9999)**; strong recovery over v1, but still clearly unconverged because mAP rose **55.98% -> 61.51%** from epoch **140 -> 160** as cosine LR ended |
 | 09l v3 | COMPLETE | gumfreddy | resumed from the **09l v2 EMA** checkpoint to **300 total epochs**; **mAP=78.61%**, **R1=90.43%**, **mAP_rr=81.09%**, **R1_rr=90.98%**; strong secondary model only **1.53pp** behind **09b v2 (80.14% mAP)** and now ready for ensemble deployment |
 | 09o v1 | COMPLETE | gumfreddy | **mAP=48.17%**, **R1=65.90%**, **R5=77.17%**, **R10=82.83%** after **120 epochs** with **AdamW** and **CE+Triplet+Center**; weaker than both the primary ViT baseline and the fine-tuned **R50-IBN** secondary, so EVA02 is a dead end for ensemble use under the current recipe |
+| 09q v7 | RUNNING | gumfreddy | Pending after iterative notebook fixes; leave as in-progress until the corrected run completes |
 
 ---
 
@@ -448,3 +456,21 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 	- w=0.40: MTMC IDF1=0.7702
 	- w=0.50: MTMC IDF1=0.7625
 - **Conclusion**: Marginal gain (+0.06pp). R50-IBN at 63.64% mAP still too weak for meaningful ensemble. Need >=70% mAP or different architecture.
+
+### 10c v61 — Improved 09p R50-IBN Fusion (gumfreddy)
+- **Date**: 2026-04-20
+- **Notebook**: 10c v61 (10a `run_kaggle_20260420_201401` -> 10b v23 -> 10c v61)
+- **Kernel**: `gumfreddy/mtmc-10c-stages-4-5-association-eval` v61
+- **Change**: Deploy the improved **09p** R50-IBN secondary through the newer 10a chain and repeat the fusion sweep over weights **[0.0, 0.05, ..., 0.5]**
+- **Canonical result rule**: treat the **best fusion-sweep value** as canonical for this run, not the one-off Stage-5 log line that printed **[MTMC] IDF1=77.1%, MOTA=68.9%, HOTA=57.5%, IDSW=198** during one pass
+- **Results**:
+	- w=0.00: MTMC IDF1=0.773021
+	- w=0.05: MTMC IDF1=0.773255
+	- w=0.10: MTMC IDF1=0.773595 <- BEST
+	- w=0.15: MTMC IDF1=0.772622
+	- w=0.20: MTMC IDF1=0.771648
+	- w=0.25: MTMC IDF1=0.771440
+	- w=0.30: MTMC IDF1=0.771440
+	- w=0.40: MTMC IDF1=0.770557
+	- w=0.50: MTMC IDF1=0.761920
+- **Conclusion**: The improved **09p** secondary and newer ingestion chain still produce only a marginal gain over baseline (**+0.000574** at best). This remains below the reproducible **0.775** ceiling and confirms the bottleneck is still primary feature quality / architecture rather than missed association tuning.

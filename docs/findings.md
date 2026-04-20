@@ -203,6 +203,25 @@ Association tuning remains exhausted (**225+** configs tested), and the secondar
 - **Interpretation**: Fine-tuning improved the R50-IBN secondary substantially over the earlier zero-shot ResNet baseline (**63.64% vs 52.77% mAP**), but the downstream MTMC gain remains negligible.
 - **Conclusion**: Even a fine-tuned **63.64% mAP** R50-IBN secondary is still too weak for meaningful ensemble gain. A useful secondary likely needs **>=70% mAP** on CityFlowV2 and genuinely complementary feature biases. This confirms the broader dead end for **ResNet-IBN** score-level fusion secondaries, including the already exhausted **ResNet101-IBN-a** path.
 
+#### 10c v61 — Improved 09p R50-IBN Fusion Sweep Still Near Prior Ceiling (10a `run_kaggle_20260420_201401`, 10b v23) (2026-04-20)
+- **Kernel**: `gumfreddy/mtmc-10c-stages-4-5-association-eval` **v61**
+- **Task**: Re-run the score-level fusion sweep using the improved **09p FastReID SBS R50-IBN** secondary embeddings from the newer **10a** chain on top of **10a `run_kaggle_20260420_201401` -> 10b v23 -> 10c v61**
+- **Secondary model**: improved **09p** R50-IBN path deployed through the updated **10a** extraction chain
+- **Fusion sweep**: evaluated weights **[0.00, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50]**
+- **Results**:
+	- **w = 0.00 -> MTMC IDF1 = 0.773021**
+	- **w = 0.05 -> MTMC IDF1 = 0.773255**
+	- **w = 0.10 -> MTMC IDF1 = 0.773595** (**BEST**)
+	- **w = 0.15 -> MTMC IDF1 = 0.772622**
+	- **w = 0.20 -> MTMC IDF1 = 0.771648**
+	- **w = 0.25 -> MTMC IDF1 = 0.771440**
+	- **w = 0.30 -> MTMC IDF1 = 0.771440**
+	- **w = 0.40 -> MTMC IDF1 = 0.770557**
+	- **w = 0.50 -> MTMC IDF1 = 0.761920**
+- **Canonical result for this run**: use the **fusion-sweep best** at **0.773595 MTMC IDF1** rather than the one-pass Stage-5 log line that reported **[MTMC] IDF1=77.1%, MOTA=68.9%, HOTA=57.5%, IDSW=198**
+- **Interpretation**: Even with improved **09p** secondary training and more robust ingestion, the gain remains only **+0.000574** over the **w = 0.00** baseline. That is effectively flat, still below the current reproducible **0.775** result, and far below the historical **0.784** / SOTA regime.
+- **Conclusion**: This further confirms that the bottleneck remains **primary feature quality / architecture**, not a missed association sweep. The vehicle pipeline is still pinned near the same **~0.773-0.775** ceiling.
+
 #### 09l v1 — LAION-2B CLIP CircleLoss Failure (2026-04-17)
 - **Kernel**: `gumfreddy/09l-transreid-laion-2b-training` **v1**
 - **Task**: Test **TransReID ViT-B/16 LAION-2B CLIP 256px** as an alternative **CLIP-family** secondary vehicle ReID backbone for future ensemble use
@@ -524,6 +543,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | Ensemble with 52% secondary at high weight | Dilutes signal | Current state |
 | Score-level ensemble with 52.77% mAP secondary at 0.30 weight | -0.1pp MTMC IDF1; noise dilutes primary signal | 10a/10c fusion test, fus0.3_ter0.0 |
 | Fine-tuned R50-IBN fusion (63.64% mAP) | Only **+0.06pp** MTMC IDF1 at best (`w=0.10`); even with an **11pp** mAP gain over the zero-shot **52.77%** baseline, the secondary is still far too weak for meaningful ensemble benefit | 10c v60 |
+| Improved 09p R50-IBN fusion via newer 10a/10b chain | Only **+0.0006** MTMC IDF1 at best (`w=0.10`, **0.773595** vs **0.773021** baseline); improved secondary training plus robust ingestion still leaves the pipeline near the same ceiling | 10c v61 |
 | EVA02 ViT-B/16 CLIP | **48.17% mAP** (too weak for ensemble, backbone doesn't transfer well for vehicle ReID) | 09o v1 |
 | Score-level ensemble with 78.61% mAP LAION-2B CLIP secondary at 0.30 weight | -0.5pp MTMC IDF1 and all key metrics worse; two CLIP ViT-B/16 variants are too correlated to provide complementary signal | 10c v56 |
 | SGD optimizer for ResNet101-IBN-a | 30.27% mAP catastrophic | v18 mrkdagods |
@@ -605,4 +625,8 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 
 **The system is NOT broken.** Vehicle MTMC remains capped by camera-invariant feature quality, not association logic. The current reproducible ceiling is **77.5% MTMC IDF1**, while the historical **78.4%** v80 result is no longer reproducible on the current codebase. Higher single-camera ReID mAP does **not** automatically translate to better MTMC IDF1 in this pipeline: augmentation overhaul plus CircleLoss (**+1.45pp mAP -> -5.3pp MTMC IDF1**), **384px** deployment (**same mAP -> -2.8pp MTMC IDF1**), and **DMT** camera-aware training (**+7pp mAP -> -1.4pp MTMC IDF1**) all made cross-camera association worse, and the CircleLoss-only Experiment B showed that when CircleLoss is definitely active on the primary ViT recipe it fails catastrophically (**18.45% mAP, `inf` loss every epoch**). That means the augoverhaul regression is most likely driven by the augmentations themselves unless the earlier training had a CircleLoss config mismatch. The key lesson remains that **mAP != MTMC IDF1** for CityFlowV2 vehicle tracking: the MTMC graph needs features with clean, thresholdable similarity distributions, not just strong validation ranking.
 
-At the same time, **09l v3 changes the ensemble outlook materially**. The weak secondary-model paths are still dead ends: **ResNet101-IBN-a** topped out at **52.77% mAP**, **FastReID SBS R50-IBN** reached only **63.64%**, **ViT-Small/16 IN-21k** reached only **48.66%**, **EVA02 ViT-B/16 CLIP** reached only **48.17%**, and **ResNeXt101-IBN-a ArcFace** collapsed to **36.88%** because the available pretrained weights were structurally incompatible. But the **CLIP-family secondary path** is now validated in one specific form: **LAION-2B CLIP 09l v3** reached **78.61% mAP / 90.43% R1 / 81.09% mAP_rerank**, only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**. That gives the repo its first genuinely strong, ensemble-ready secondary model. On the person side, ground-plane tracking is already strong (**90.3% MODA, 94.7% IDF1**), but rerunning tracking on the stronger **12a v3** detector stayed essentially flat at **90.0% MODA, 94.7% IDF1**, indicating that the current WILDTRACK pipeline is now tracker-limited rather than detector-limited. The remaining vehicle work is no longer about more association sweeps or more single-model feature tweaks; it is now the direct evaluation of score-level fusion with a strong secondary backbone.
+At the same time, **09l v3 changes the ensemble outlook materially**. The weak secondary-model paths are still dead ends: **ResNet101-IBN-a** topped out at **52.77% mAP**, the original **FastReID SBS R50-IBN** path reached only **63.64%**, the newer **10c v61** deployment of the improved **09p** R50-IBN secondary still produced only a **+0.0006** MTMC IDF1 gain over baseline, **ViT-Small/16 IN-21k** reached only **48.66%**, **EVA02 ViT-B/16 CLIP** reached only **48.17%**, and **ResNeXt101-IBN-a ArcFace** collapsed to **36.88%** because the available pretrained weights were structurally incompatible. But the **CLIP-family secondary path** is now validated in one specific form: **LAION-2B CLIP 09l v3** reached **78.61% mAP / 90.43% R1 / 81.09% mAP_rerank**, only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**. That gives the repo its first genuinely strong, ensemble-ready secondary model. On the person side, ground-plane tracking is already strong (**90.3% MODA, 94.7% IDF1**), but rerunning tracking on the stronger **12a v3** detector stayed essentially flat at **90.0% MODA, 94.7% IDF1**, indicating that the current WILDTRACK pipeline is now tracker-limited rather than detector-limited. The remaining vehicle work is no longer about more association sweeps or more single-model feature tweaks; it is now the direct evaluation of score-level fusion with a strong secondary backbone.
+
+## Pending
+
+- **09q v7** is currently running and remains **pending** after iterative notebook fixes.
