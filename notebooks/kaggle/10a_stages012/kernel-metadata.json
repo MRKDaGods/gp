@@ -11,7 +11,8 @@
   "machine_shape": "NvidiaTeslaT4",
   "dataset_sources": [
     "gumfreddy/mtmc-weights",
-    "thanhnguyenle/data-aicity-2023-track-2"
+    "thanhnguyenle/data-aicity-2023-track-2",
+    "gumfreddy/09p-r50-ibn-cityflowv2-extended-checkpoint"
   ],
   "competition_sources": [],
   "kernel_sources": [
