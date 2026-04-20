@@ -247,6 +247,7 @@ Note: The control run for this retest measured **IDF1 = 0.7921** and **HOTA = 0.
 | 09l v2 | ViT-B/16 LAION-2B CLIP, TripletLoss + EMA, 160 epochs | **61.51%** | **81.41%** | PROMISING BUT UNCONVERGED |
 | 09l v3 | ViT-B/16 LAION-2B CLIP, resumed from v2 EMA checkpoint, 300 total epochs | **78.61%** | **90.43%** | READY FOR ENSEMBLE DEPLOYMENT |
 | 09k v1 | ViT-Small/16 TransReID (ImageNet-21k pretrain), 120 epochs | **48.66%** | **62.01%** | BELOW ENSEMBLE THRESHOLD |
+| 09o v1 | EVA02 ViT-B/16 CLIP, 120 epochs, AdamW, backbone_lr=1e-5, head_lr=5e-4, CE+Triplet+Center, cosine schedule | **48.17%** | **65.90%** | DEAD END FOR ENSEMBLE USE |
 
 The full **09l** sequence now closes the loop on **LAION-2B CLIP** as a secondary-model candidate. After the broken **09l v1** CircleLoss recipe failed numerically, the stable **09l v2** rerun restored the backbone to **61.51% mAP**, **81.41% R1**, **67.20% mAP_rerank**, and **82.95% R1_rerank** in **160 epochs** with **TripletLoss + EMA(decay=0.9999)**.
 
@@ -254,7 +255,15 @@ Resuming that **v2 EMA checkpoint** for **09l v3** and extending training to **3
 
 That result changes the interpretation of this backbone path: **LAION-2B CLIP is now a strong secondary model**, only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**, and comfortably above the **~65% mAP** bar required for score-level fusion. This path is now **ready for ensemble deployment** rather than needing more rescue training.
 
-The new **09k v1** ViT-Small/16 result is important because it rules out backbone family as the main problem for secondary-model recovery. Despite moving from ResNet to a ViT architecture, the non-CLIP **ImageNet-21k** pretraining path still topped out at only **48.66% mAP** and **62.01% R1**, well below the **~65% mAP** minimum needed for a useful ensemble partner. Combined with the later **09j v2** ResNeXt101-IBN-a ArcFace collapse to **36.88% mAP**, the evidence now points to **pretraining quality and initialization compatibility**, not simply architecture choice: on CityFlowV2's **128 train IDs**, non-CLIP backbones are not producing a viable secondary model and the CNN variants remain capped well below the ensemble bar.
+The new **09k v1** ViT-Small/16 and **09o v1** EVA02 results are important because they rule out a simple "switch to another ViT backbone" explanation for secondary-model recovery. Despite using transformer backbones, the non-OpenAI-CLIP alternatives still topped out at only **48.66% mAP / 62.01% R1** for **ViT-Small/16 IN-21k** and **48.17% mAP / 65.90% R1** for **EVA02 ViT-B/16 CLIP**, both well below the quality needed for a useful ensemble partner. Combined with the later **09j v2** ResNeXt101-IBN-a ArcFace collapse to **36.88% mAP**, the evidence now points to **transfer quality and initialization compatibility**, not simply architecture choice: on CityFlowV2's **128 train IDs**, most alternative backbones are not producing a viable secondary model and the CNN variants remain capped well below the ensemble bar.
+
+### 4.6 EVA02 ViT-B/16 CLIP (09o)
+
+| Version | Account | Recipe | Result | Verdict | Key Insight |
+|:-------:|:-------:|--------|:------:|:-------:|-------------|
+| 09o v1 | gumfreddy | EVA02 ViT-B/16 CLIP, **120 epochs**, **AdamW**, **backbone_lr=1e-5**, **head_lr=5e-4**, **CE + Triplet + Center**, cosine schedule | **mAP=48.17%**, **R1=65.90%**, **R5=77.17%**, **R10=82.83%** | REJECTED | Considerably weaker than both the **80.14%** primary ViT-B/16 CLIP baseline and the **63.64%** fine-tuned R50-IBN secondary; EVA02 does not transfer well for vehicle ReID with the current recipe |
+
+The **09o v1** result closes out the current **EVA02** path for CityFlowV2 vehicle ReID. Even with a conservative fine-tuning recipe and a full **120-epoch** run, it finished at only **48.17% mAP**, which is not merely below the practical ensemble threshold but also below the fine-tuned **R50-IBN** secondary. That makes **EVA02 ViT-B/16 CLIP** a dead end under the current training setup and removes it from the list of plausible near-term fusion candidates.
 
 ### 4.2 Knowledge Distillation (09c)
 
@@ -335,7 +344,7 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 |----------|:-----:|:---------:|:--------:|
 | 384px ViT-B/16 (proper training) | Training->S2 | +1.0-2.0pp | ***** |
 | ResNet101-IBN-a ensemble | Training->S2->S4 | +1.0-1.5pp | ***** |
-| Alternative CLIP-family backbone beyond LAION-2B (for example DFN-2B) | Training | +0.5-1.5pp | **** |
+| Alternative CLIP-family backbone beyond LAION-2B and EVA02 (for example DFN-2B) | Training | +0.5-1.5pp | **** |
 | Timestamp bias correction | S4 | +0.3-0.5pp | **** |
 | Per-camera CLAHE tuning | S0 | +0.2-0.5pp | *** |
 | Hand-annotated zone polygons | S4 | +0.5-1.5pp | *** |
@@ -362,6 +371,7 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 14. **Network flow did not solve conflation**: 10c v53 reached only **0.769 MTMC IDF1** vs the **0.7714** CC baseline. Although **MOTA/HOTA** ticked up slightly and **ID switches** fell by 2, conflation actually worsened from **27 -> 30** predicted IDs, so the current CC-based solver remains preferable.
 15. **Topology CID_BIAS is also a dead end**: 10c v55 tested additive camera-pair offsets from **(+0.02/-0.10)** through **(+0.06/-0.20)** and all regressed to **0.764-0.762-0.763** versus a **0.774** control. FIC whitening already handles the useful cross-camera calibration; additive CID_BIAS just distorts those calibrated similarities.
 16. **09l v3 makes LAION-2B CLIP ensemble-ready**: after resuming the stable **09l v2** EMA checkpoint from **epoch 160 -> 300**, **09l v3** reached **78.61% mAP / 90.43% R1 / 81.09% mAP_rr / 90.98% R1_rr**. The extension improved steadily through **epoch 180 -> 300** and finished only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**, so this backbone now clears the practical **~65%** ensemble threshold by a wide margin.
+17. **EVA02 ViT-B/16 CLIP is a dead end with the current recipe**: **09o v1** reached only **48.17% mAP / 65.90% R1 / 77.17% R5 / 82.83% R10** after **120 epochs** with **AdamW** and **CE+Triplet+Center**. That is not just below ensemble usefulness, but even below the fine-tuned **R50-IBN** secondary at **63.64% mAP**, so the backbone does not transfer well to CityFlowV2 vehicles under the present setup.
 
 ### Gap Attribution
 
@@ -392,6 +402,7 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 | 09l v1 | COMPLETE | gumfreddy | **mAP=20.36%**, **R1=53.03%**, **mAP_rr=27.16%**; catastrophic failure because **CircleLoss(gamma=128)** overflowed fp16 autocast and kept loss at `inf` throughout |
 | 09l v2 | COMPLETE | gumfreddy | **mAP=61.51%**, **R1=81.41%**, **mAP_rr=67.20%**, **R1_rr=82.95%** after **160 epochs** with **TripletLoss + EMA(decay=0.9999)**; strong recovery over v1, but still clearly unconverged because mAP rose **55.98% -> 61.51%** from epoch **140 -> 160** as cosine LR ended |
 | 09l v3 | COMPLETE | gumfreddy | resumed from the **09l v2 EMA** checkpoint to **300 total epochs**; **mAP=78.61%**, **R1=90.43%**, **mAP_rr=81.09%**, **R1_rr=90.98%**; strong secondary model only **1.53pp** behind **09b v2 (80.14% mAP)** and now ready for ensemble deployment |
+| 09o v1 | COMPLETE | gumfreddy | **mAP=48.17%**, **R1=65.90%**, **R5=77.17%**, **R10=82.83%** after **120 epochs** with **AdamW** and **CE+Triplet+Center**; weaker than both the primary ViT baseline and the fine-tuned **R50-IBN** secondary, so EVA02 is a dead end for ensemble use under the current recipe |
 
 ---
 
@@ -414,6 +425,7 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 | mtmc_only? | -5pp. Always false. | 3.2 |
 | Knowledge distillation? | Tried poorly (22%). Needs fix. | 4.2 |
 | Circle loss? | Yes. 09 v4 collapsed to 18.45% mAP with `inf` loss; dead end. | 4.1 |
+| EVA02? | 09o v1 reached 48.17% mAP / 65.90% R1. Dead end with current recipe. | 4.6 |
 | ResNet101-IBN-a? | v13 complete: 11.98% at e19; recipe needs investigation. | 4.3 |
 | Feature concat? | -1.6pp. Don't repeat. | 3.4 |
 | Track smoothing? | Harmful. Don't repeat. | 3.2 |

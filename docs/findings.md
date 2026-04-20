@@ -2,7 +2,7 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
-## Current Performance (Last Updated: 2026-04-19)
+## Current Performance (Last Updated: 2026-04-20)
 
 ### Vehicle Pipeline (CityFlowV2)
 
@@ -21,6 +21,7 @@
 | **Secondary Model (ResNet101-IBN-a)** | mAP=52.77% | On CityFlowV2 eval split, ImageNet→CityFlowV2 only |
 | **Secondary Model ResNeXt101-IBN-a ArcFace (09j v2)** | mAP=36.88%, R1=62.69% | Catastrophic failure after partial/mismatched pretrained weight loading left large parts of the backbone randomly initialized |
 | **Secondary Model ViT-Small/16 IN-21k (09k v1)** | mAP=48.66%, R1=62.01% | Confirms the non-CLIP ceiling extends to ViT architectures too |
+| **Secondary Model EVA02 ViT-B/16 CLIP (09o v1)** | mAP=48.17%, R1=65.90% | Much weaker than the primary ViT-B/16 CLIP baseline and even the fine-tuned R50-IBN secondary; current recipe does not transfer well to vehicle ReID |
 | **Secondary Model CLIP RN50x4 CNN (09m v2)** | mAP=1.55%, R1=4.18% | Catastrophic failure; CE loss converged but retrieval features were unusable, closing out the CNN-based CLIP secondary path |
 | **Secondary Model VeRi-776 pretrain (09e v2)** | mAP=62.52% | On VeRi-776 test set, ready for CityFlowV2 fine-tuning |
 | **384px ViT (09b v2)** | DEAD END | Higher single-camera ReID accuracy did not transfer; MTMC IDF1 only 0.7585-0.7562 in v43-v44, -2.8pp vs 256px baseline |
@@ -39,7 +40,7 @@ That conclusion is now reinforced by the full **09l** sequence. The original **0
 
 The **09l v3** continuation confirmed that **v2 was schedule-limited, not architecture-limited**. The resumed training phase kept improving across **epoch 180/200/220/240/260/280/300 = 65.93/68.84/71.49/73.68/75.68/77.26/78.61 mAP**, and the finished model sits only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**. But the follow-up **10c v56** score-fusion test still regressed, showing that a strong secondary alone is not enough when the feature families are too correlated.
 
-The new **09m v2 CLIP RN50x4 CNN** experiment closes the other obvious escape hatch. It reached only **mAP = 1.55%** and **R1 = 4.18%** despite the cross-entropy loss converging from **6.57 -> 0.99** over **200 epochs**, which means optimization did not fail in the usual sense but the learned features were still useless for retrieval. The most likely root causes are **(1)** a **QuickGELU mismatch** between `open_clip` model construction (`quick_gelu=False`) and the OpenAI pretrained weights (`quick_gelu=True`), which corrupts the pretrained feature geometry, **(2)** the **CNN attention-pooling CLIP architecture** not fitting the standard ReID projection-head recipe used elsewhere in the codebase, and **(3)** **640D CNN features** being fundamentally harder to adapt for fine-grained vehicle ReID than the **768D ViT** features. Taken together with the failed **52.77% ResNet**, **36.88% ResNeXt**, **48.66% ViT-Small**, and **10c v56** correlated-CLIP fusion regression, the **score-level ensemble path is now fully exhausted**: there is **no viable secondary model** on the current codebase.
+The new **09m v2 CLIP RN50x4 CNN** experiment closes the other obvious escape hatch. It reached only **mAP = 1.55%** and **R1 = 4.18%** despite the cross-entropy loss converging from **6.57 -> 0.99** over **200 epochs**, which means optimization did not fail in the usual sense but the learned features were still useless for retrieval. The most likely root causes are **(1)** a **QuickGELU mismatch** between `open_clip` model construction (`quick_gelu=False`) and the OpenAI pretrained weights (`quick_gelu=True`), which corrupts the pretrained feature geometry, **(2)** the **CNN attention-pooling CLIP architecture** not fitting the standard ReID projection-head recipe used elsewhere in the codebase, and **(3)** **640D CNN features** being fundamentally harder to adapt for fine-grained vehicle ReID than the **768D ViT** features. Taken together with the failed **63.64% R50-IBN**, **52.77% ResNet101-IBN-a**, **48.17% EVA02 ViT-B/16 CLIP**, **48.66% ViT-Small**, **36.88% ResNeXt**, and **10c v56** correlated-CLIP fusion regression, the **score-level ensemble path is now fully exhausted**: there is **no viable secondary model** on the current codebase.
 
 **⚠️ Metric Disambiguation (Vehicle Pipeline):**
 - **MTMC IDF1 = 77.5%** — Current reproducible best on the current codebase from 10c v52. This remains the official metric and the only number that should be compared to AIC22 SOTA.
@@ -70,7 +71,7 @@ The remaining gap to SOTA now decomposes into:
 
 | Deficiency | Impact | Status |
 |------------|:------:|--------|
-| Lack of a viable complementary secondary model | Largest remaining gap | **FULLY EXHAUSTED** for now: weak non-CLIP secondaries all failed, **09m v2** collapsed to **1.55% mAP**, and even strong **09l v3** CLIP-ViT fusion regressed in **10c v56** |
+| Lack of a viable complementary secondary model | Largest remaining gap | **FULLY EXHAUSTED** for now: weak alternative secondaries all failed, including **09o v1 EVA02 at 48.17% mAP** and **09m v2** at **1.55% mAP**, and even strong **09l v3** CLIP-ViT fusion regressed in **10c v56** |
 | Camera-aware single-model training (DMT) | -1.4pp | Tested and harmful (v46) |
 | Multi-query track representation | -0.1pp | Tested and neutral/harmful (v51) |
 | Higher-dimensional concat-patch features | -0.3pp | Tested and harmful (v48-v49) |
@@ -158,9 +159,18 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 
 Association tuning remains exhausted (**225+** configs tested), and the secondary-model / score-level fusion route is now exhausted as well. The remaining realistic vehicle options are to **write the paper**, build a materially new **graph-based association model**, or attempt another step-change in the **primary ViT** representation despite the already strong **81.59% mAP** baseline.
 
-## Latest Experiment Results (2026-04-19)
+## Latest Experiment Results (2026-04-20)
 
 ### Completed
+
+#### 09o v1 — EVA02 ViT-B/16 CLIP on CityFlowV2 Dead End (2026-04-20)
+- **Kernel**: `gumfreddy/09o-eva02-vit-cityflowv2`
+- **Task**: Test whether **EVA02 ViT-B/16 CLIP** can provide a stronger, more complementary secondary vehicle ReID backbone for ensemble use on CityFlowV2
+- **Training**: **120 epochs**, **AdamW**, **backbone_lr=1e-5**, **head_lr=5e-4**, **CE + Triplet + Center**, **cosine schedule**
+- **Result**: **mAP = 48.17%**, **R1 = 65.90%**, **R5 = 77.17%**, **R10 = 82.83%**
+- **Comparison**: This is far below the primary **ViT-B/16 CLIP** baseline at **80.14% mAP** and even below the fine-tuned **FastReID SBS R50-IBN** secondary at **63.64% mAP**
+- **Interpretation**: The current **EVA02** transfer recipe does not adapt well to fine-grained vehicle ReID on CityFlowV2. The backbone retains some ranking signal, but it is nowhere near the **>=65% mAP** practical floor for a useful ensemble secondary
+- **Conclusion**: **EVA02 ViT-B/16 CLIP is a confirmed dead end with the current recipe**. At **48.17% mAP**, it is too weak for ensemble use and does not justify further score-fusion follow-up in its current form.
 
 #### 09m v2 — CLIP RN50x4 CNN Secondary Model Dead End (2026-04-19)
 - **Kernel**: `gumfreddy/09m-clip-rn50x4-vehicle-reid-cityflowv2`
@@ -191,7 +201,7 @@ Association tuning remains exhausted (**225+** configs tested), and the secondar
 - **Best result**: **w = 0.10 -> MTMC IDF1 = 0.7736**, only **+0.06pp** over the **w = 0.00** baseline at **0.7730**
 - **Higher weights hurt**: **w = 0.15 -> 0.7713** (**-0.18pp**) and **w = 0.50 -> 0.7625** (**-1.05pp**)
 - **Interpretation**: Fine-tuning improved the R50-IBN secondary substantially over the earlier zero-shot ResNet baseline (**63.64% vs 52.77% mAP**), but the downstream MTMC gain remains negligible.
-- **Conclusion**: Even a fine-tuned **63.64% mAP** R50-IBN secondary is still too weak for meaningful ensemble gain. A useful secondary likely needs **>=70% mAP** on CityFlowV2 or a fundamentally different architecture such as **EVA02**. This confirms the broader dead end for **ResNet-IBN** score-level fusion secondaries, including the already exhausted **ResNet101-IBN-a** path.
+- **Conclusion**: Even a fine-tuned **63.64% mAP** R50-IBN secondary is still too weak for meaningful ensemble gain. A useful secondary likely needs **>=70% mAP** on CityFlowV2 and genuinely complementary feature biases. This confirms the broader dead end for **ResNet-IBN** score-level fusion secondaries, including the already exhausted **ResNet101-IBN-a** path.
 
 #### 09l v1 — LAION-2B CLIP CircleLoss Failure (2026-04-17)
 - **Kernel**: `gumfreddy/09l-transreid-laion-2b-training` **v1**
@@ -514,6 +524,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | Ensemble with 52% secondary at high weight | Dilutes signal | Current state |
 | Score-level ensemble with 52.77% mAP secondary at 0.30 weight | -0.1pp MTMC IDF1; noise dilutes primary signal | 10a/10c fusion test, fus0.3_ter0.0 |
 | Fine-tuned R50-IBN fusion (63.64% mAP) | Only **+0.06pp** MTMC IDF1 at best (`w=0.10`); even with an **11pp** mAP gain over the zero-shot **52.77%** baseline, the secondary is still far too weak for meaningful ensemble benefit | 10c v60 |
+| EVA02 ViT-B/16 CLIP | **48.17% mAP** (too weak for ensemble, backbone doesn't transfer well for vehicle ReID) | 09o v1 |
 | Score-level ensemble with 78.61% mAP LAION-2B CLIP secondary at 0.30 weight | -0.5pp MTMC IDF1 and all key metrics worse; two CLIP ViT-B/16 variants are too correlated to provide complementary signal | 10c v56 |
 | SGD optimizer for ResNet101-IBN-a | 30.27% mAP catastrophic | v18 mrkdagods |
 | Circle loss for ResNet101-IBN-a with triplet loss | Catastrophic gradient conflict; NEVER combine on the same feature tensor | 09d v17 (29.6%), 09f v2 (16.2%) vs 09d v18 (52.77%), 09e (62.52%) with circle_weight=0 |
@@ -588,9 +599,10 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 - 09l v1: mAP=20.36%, R1=53.03%, mAP_rerank=27.16%; broken CircleLoss recipe kept loss at `inf` throughout and does not reflect backbone quality
 - 09l v2: mAP=61.51%, R1=81.41%, mAP_rerank=67.20%, R1_rerank=82.95% at epoch 160 with TripletLoss+EMA; strong recovery, but still schedule-limited
 - 09l v3: mAP=78.61%, R1=90.43%, mAP_rerank=81.09%, R1_rerank=90.98% at 300 total epochs after resuming from the v2 EMA checkpoint; now the first ensemble-ready secondary model in the repo
+- 09o v1: mAP=48.17%, R1=65.90%, R5=77.17%, R10=82.83% after 120 epochs with AdamW, `backbone_lr=1e-5`, `head_lr=5e-4`, and CE+Triplet+Center; substantially weaker than both the primary ViT baseline and the fine-tuned R50-IBN secondary, so EVA02 is a dead end with the current vehicle-ReID recipe
 
 ## Key Insight
 
 **The system is NOT broken.** Vehicle MTMC remains capped by camera-invariant feature quality, not association logic. The current reproducible ceiling is **77.5% MTMC IDF1**, while the historical **78.4%** v80 result is no longer reproducible on the current codebase. Higher single-camera ReID mAP does **not** automatically translate to better MTMC IDF1 in this pipeline: augmentation overhaul plus CircleLoss (**+1.45pp mAP -> -5.3pp MTMC IDF1**), **384px** deployment (**same mAP -> -2.8pp MTMC IDF1**), and **DMT** camera-aware training (**+7pp mAP -> -1.4pp MTMC IDF1**) all made cross-camera association worse, and the CircleLoss-only Experiment B showed that when CircleLoss is definitely active on the primary ViT recipe it fails catastrophically (**18.45% mAP, `inf` loss every epoch**). That means the augoverhaul regression is most likely driven by the augmentations themselves unless the earlier training had a CircleLoss config mismatch. The key lesson remains that **mAP != MTMC IDF1** for CityFlowV2 vehicle tracking: the MTMC graph needs features with clean, thresholdable similarity distributions, not just strong validation ranking.
 
-At the same time, **09l v3 changes the ensemble outlook materially**. The non-CLIP secondary-model paths are still dead ends: **ResNet101-IBN-a** topped out at **52.77% mAP**, **ViT-Small/16 IN-21k** reached only **48.66%**, and **ResNeXt101-IBN-a ArcFace** collapsed to **36.88%** because the available pretrained weights were structurally incompatible. But the **CLIP-family secondary path** is now validated: **LAION-2B CLIP 09l v3** reached **78.61% mAP / 90.43% R1 / 81.09% mAP_rerank**, only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**. That gives the repo its first genuinely strong, ensemble-ready secondary model. On the person side, ground-plane tracking is already strong (**90.3% MODA, 94.7% IDF1**), but rerunning tracking on the stronger **12a v3** detector stayed essentially flat at **90.0% MODA, 94.7% IDF1**, indicating that the current WILDTRACK pipeline is now tracker-limited rather than detector-limited. The remaining vehicle work is no longer about more association sweeps or more single-model feature tweaks; it is now the direct evaluation of score-level fusion with a strong secondary backbone.
+At the same time, **09l v3 changes the ensemble outlook materially**. The weak secondary-model paths are still dead ends: **ResNet101-IBN-a** topped out at **52.77% mAP**, **FastReID SBS R50-IBN** reached only **63.64%**, **ViT-Small/16 IN-21k** reached only **48.66%**, **EVA02 ViT-B/16 CLIP** reached only **48.17%**, and **ResNeXt101-IBN-a ArcFace** collapsed to **36.88%** because the available pretrained weights were structurally incompatible. But the **CLIP-family secondary path** is now validated in one specific form: **LAION-2B CLIP 09l v3** reached **78.61% mAP / 90.43% R1 / 81.09% mAP_rerank**, only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**. That gives the repo its first genuinely strong, ensemble-ready secondary model. On the person side, ground-plane tracking is already strong (**90.3% MODA, 94.7% IDF1**), but rerunning tracking on the stronger **12a v3** detector stayed essentially flat at **90.0% MODA, 94.7% IDF1**, indicating that the current WILDTRACK pipeline is now tracker-limited rather than detector-limited. The remaining vehicle work is no longer about more association sweeps or more single-model feature tweaks; it is now the direct evaluation of score-level fusion with a strong secondary backbone.
