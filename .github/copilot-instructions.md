@@ -150,6 +150,27 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - Auth tokens in `~/.kaggle/`: abdo (gumfreddy), mrk (mrkdagods), ali369 (lolo)
 - Current active account: gumfreddy (gumfreddy_access_token) — ali369/mrkdagods tokens may be missing from ~/.kaggle/
 
+### Kaggle Push Safety Rules (CRITICAL)
+- **NEVER push a kernel more than once without confirming the previous version is fully running or complete** — rapid re-pushes create duplicate GPU sessions that consume both slots and block all other work
+- After every push, check for warning lines like `The following are not valid dataset sources` — these indicate the run started but with missing inputs; **immediately cancel** the bad run via `kaggle kernels cancel <owner/slug>` before attempting a fix-and-repush
+- If `kaggle kernels cancel` fails or is unavailable, **STOP immediately and tell the user** with the kernel URL so they can cancel manually from the Kaggle web UI
+- Kaggle allows a maximum of 2 concurrent GPU sessions per account — always check active sessions before pushing a GPU-enabled notebook
+- When iterating on kernel-metadata.json fixes, validate metadata locally first, then push **once**
+
+### Kaggle Push Safety Rules (CRITICAL)
+- **NEVER push a kernel more than once without confirming the previous version is fully running or complete** — rapid re-pushes create duplicate GPU sessions that consume both slots and block all other work
+- After every push, check for warning lines like `The following are not valid dataset sources` — these indicate the run started but with missing inputs; **immediately cancel** the bad run via `kaggle kernels cancel <owner/slug>` before attempting a fix-and-repush
+- If `kaggle kernels cancel` fails or is unavailable, **STOP immediately and tell the user** with the kernel URL so they can cancel manually from the Kaggle web UI
+- Kaggle allows a maximum of 2 concurrent GPU sessions per account — always check active sessions before pushing a GPU-enabled notebook
+- When iterating on kernel-metadata.json fixes, validate metadata locally first, then push **once**
+
+### Kaggle Push Safety Rules (CRITICAL)
+- **NEVER push a kernel more than once without confirming the previous version is fully running or complete** — rapid re-pushes create duplicate GPU sessions that consume both slots and block all other work
+- After every push, check for warning lines like `The following are not valid dataset sources` — these indicate the run started but with missing inputs; **immediately cancel** the bad run via `kaggle kernels cancel <owner/slug>` before attempting a fix-and-repush
+- If `kaggle kernels cancel` fails or is unavailable, **STOP immediately and tell the user** with the kernel URL so they can cancel manually from the Kaggle web UI
+- Kaggle allows a maximum of 2 concurrent GPU sessions per account — always check active sessions before pushing a GPU-enabled notebook
+- When iterating on kernel-metadata.json fixes, validate metadata locally first, then push **once**
+
 ## Paper Strategy
 - A full publishability analysis and paper strategy is documented in `docs/paper-strategy.md`
 - Best paper angle: "One Model, 91% of SOTA" — efficiency + exhaustive ablation study
