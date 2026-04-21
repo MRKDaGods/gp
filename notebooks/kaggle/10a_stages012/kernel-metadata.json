@@ -13,7 +13,7 @@
         "gumfreddy/mtmc-weights",
         "thanhnguyenle/data-aicity-2023-track-2",
         "gumfreddy/09p-r50-ibn-cityflowv2-extended-checkpoint",
-        "gumfreddy/09l-transreid-laion-2b-training/output"
+        "gumfreddy/09l-transreid-laion-2b-training-output"
     ],
     "competition_sources": [],
     "kernel_sources": [
