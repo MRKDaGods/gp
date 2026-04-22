@@ -1,7 +1,7 @@
 # MTMC Tracker — Comprehensive Experiment Log
 
 > **Purpose**: Prevent re-running experiments. Every parameter combination and approach is logged here.
-> **Last updated**: 2026-04-20
+> **Last updated**: 2026-04-22
 > **Current best (Kaggle)**: MTMC IDF1 = **78.4%** (10c v44 / ali369 / code v80, min_hits=2)
 > **Current best (local, recent)**: MTMC IDF1 = **77.7%** (10c v28, CamTTA + power_norm=0.5)
 > **Historical local claim**: IDF1 = 82.97% (v47 — unverifiable, predates current experiment log)
@@ -368,7 +368,7 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 4. **CamTTA hurts MTMC**: Adapts BN per camera -> features become camera-specific. FIC whitening in S4 is correct approach.
 5. **Multi-scale TTA is useless**: Tested 4+ times, never helped.
 6. **PCA=512D hurts by 0.78-3pp**. 384D is optimal.
-7. **mtmc_only=True drops IDF1 by ~5pp**: Discards single-camera tracklets.
+7. **mtmc_only=True drops IDF1 by ~5pp**: Discards single-camera tracklets. **Re-confirmed as active bug in 10c v8 (2026-04-22)** — all v8 results are ~5pp biased. Fixed in commit `69e67a0`.
 8. **CSLS is CATASTROPHIC (-34.7pp)**: Destroys similarity structure.
 9. **Feature concat ensemble hurts (-1.6pp)**: Score-level fusion is correct.
 10. **Reranking hurts with weak features**: Re-test after feature quality improvement.
@@ -410,7 +410,7 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 | 09l v2 | COMPLETE | gumfreddy | **mAP=61.51%**, **R1=81.41%**, **mAP_rr=67.20%**, **R1_rr=82.95%** after **160 epochs** with **TripletLoss + EMA(decay=0.9999)**; strong recovery over v1, but still clearly unconverged because mAP rose **55.98% -> 61.51%** from epoch **140 -> 160** as cosine LR ended |
 | 09l v3 | COMPLETE | gumfreddy | resumed from the **09l v2 EMA** checkpoint to **300 total epochs**; **mAP=78.61%**, **R1=90.43%**, **mAP_rr=81.09%**, **R1_rr=90.98%**; strong secondary model only **1.53pp** behind **09b v2 (80.14% mAP)** and now ready for ensemble deployment |
 | 09o v1 | COMPLETE | gumfreddy | **mAP=48.17%**, **R1=65.90%**, **R5=77.17%**, **R10=82.83%** after **120 epochs** with **AdamW** and **CE+Triplet+Center**; weaker than both the primary ViT baseline and the fine-tuned **R50-IBN** secondary, so EVA02 is a dead end for ensemble use under the current recipe |
-| 09q v7 | RUNNING | gumfreddy | Pending after iterative notebook fixes; leave as in-progress until the corrected run completes |
+| 09q | Exp B COMPLETE; v5 PENDING | gumfreddy | **Exp B (CLIP init)**: mAP=76.52% after 120 epochs — no improvement over 80.14%. **Exp A (resume 80.14%)**: never ran — checkpoint path bug fixed; **09q v5 pending**. |
 
 ---
 
@@ -503,8 +503,8 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 - **Changes**: \concat_patch=true\ → \alse\, \camera_bn.enabled=false\ → \	rue- **Root cause of regression**:
   - \concat_patch=true\ changes ViT embedding from 768D → 1536D; PCA was trained on 768D, corrupting downstream features (-3.79pp impact)
   - \camera_bn.enabled=false\ disables cross-camera batch normalisation (~-2pp impact)
-- **Status**: RUNNING — expected to restore ~77.36% baseline
-- **After**: will run expanded 19-point 3-way fusion sweep in 10c
+- **Status**: **COMPLETE** — 49.4 min runtime, 929 tracklets, primary + secondary + tertiary embeddings (all 384D); baseline restored
+- **Followed by**: 10b v3 (FAISS index), 10c v8 (19-point ensemble sweep, biased by MTMC_ONLY=True), 10c v9 (MTMC_ONLY fix — running)
 
 ### 09q v4 — Extended TransReID training
 - **Date**: 2026-04-22
@@ -514,3 +514,100 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
   - Added missing DataLoader cell (train_loader was never defined in v3)
   - Added \	hanhnguyenle/data-aicity-2023-track-2\ to \dataset_sources  - Added \mtmc-weights\ download cell for cross-account dataset access
 - **Goal**: push primary mAP from 80.14% → 82–84%+ for stronger ensemble foundation
+
+
+---
+
+## 2026-04-22 Session: 3-Way Ensemble Sweep & MTMC_ONLY Bug Fix
+
+### 10b v3 — FAISS Index from 10a v5
+- **Date**: 2026-04-22
+- **Input**: 10a v5 output (929 tracklets, 384D each)
+- **Status**: **COMPLETE**
+- **Output**: 12.6 MB FAISS checkpoint
+- **Purpose**: Index 10a v5 features for downstream 10c v8/v9 evaluation
+
+### 10c v8 — 3-Way Ensemble Sweep, 19 Configs (BIASED — MTMC_ONLY=True Bug)
+- **Date**: 2026-04-22
+- **Kernel**: `yahiaakhalafallah/mtmc-10c-stages-4-5-association-eval` v8
+- **Status**: **COMPLETE** — results biased ~5pp low due to MTMC_ONLY=True bug
+- **Bug**: `MTMC_ONLY=True` set in notebook AND `mtmc_only_submission: true` in `configs/datasets/cityflowv2.yaml` — drops single-camera tracks and costs ~5pp IDF1. Fixed in commit `69e67a0`.
+- **Sweep**: 19 configs testing w2 (R50-IBN secondary weight) and w3 (LAION-2B tertiary weight)
+- **Biased results** (add ~5pp for estimated unbiased values):
+
+| Config | w2 (R50-IBN) | w3 (LAION ViT) | MTMC_IDF1 (biased) | Est. unbiased |
+|---|---|---|---|---|
+| no_fusion_control | 0.00 | 0.00 | 71.09% | ~76.09% |
+| baseline_floor | 0.10 | 0.00 | 70.99% | ~75.99% |
+| ter_005 | 0.00 | 0.05 | 71.13% | ~76.13% |
+| ter_010 | 0.00 | 0.10 | 71.07% | ~76.07% |
+| ter_015 | 0.00 | 0.15 | 71.13% | ~76.13% |
+| ter_020 | 0.00 | 0.20 | 71.10% | ~76.10% |
+| ter_025 | 0.00 | 0.25 | 71.14% | ~76.14% |
+| ter_030 | 0.00 | 0.30 | 71.25% | ~76.25% |
+| w2_005_w3_005 | 0.05 | 0.05 | 71.06% | ~76.06% |
+| w2_005_w3_010 | 0.05 | 0.10 | 71.04% | ~76.04% |
+| w2_005_w3_015 | 0.05 | 0.15 | 71.02% | ~76.02% |
+| w2_005_w3_020 | 0.05 | 0.20 | 71.14% | ~76.14% |
+| w2_005_w3_025 | 0.05 | 0.25 | 71.22% | ~76.22% |
+| w2_010_w3_010 | 0.10 | 0.10 | 71.02% | ~76.02% |
+| w2_010_w3_015 | 0.10 | 0.15 | 71.06% | ~76.06% |
+| w2_010_w3_020 | 0.10 | 0.20 | 71.19% | ~76.19% |
+| **w2_005_w3_030** | **0.05** | **0.30** | **71.28% (best)** | **~76.28%** |
+| w2_010_w3_025 | 0.10 | 0.25 | 71.28% | ~76.28% |
+
+- **Ensemble gain** (biased basis): best 3-way (71.28%) vs primary-only (71.09%) = **+0.19pp**
+- **Pattern**: R50-IBN secondary (w2) hurts or is neutral at all tested weights; LAION tertiary (w3=0.30) gives marginal +0.16pp; 3-way best at w2=0.05 + w3=0.30 gives +0.19pp — all within noise
+- **Interpretation**: Consistent with prior 2-way fusion dead ends — R50-IBN too weak; LAION CLIP too correlated with primary ViT. Ensemble rescue path remains exhausted.
+- **Corrected run**: 10c v9 — **COMPLETE** (unbiased results below)
+
+### 10c v9 — MTMC_ONLY=False Fix (COMPLETE)
+- **Date**: 2026-04-22
+- **Kernel**: `yahiaakhalafallah/mtmc-10c-stages-4-5-association-eval` v9
+- **Status**: **COMPLETE** — unbiased results confirmed
+- **Change**: Commit `69e67a0` — `MTMC_ONLY=False` in notebook, `mtmc_only_submission: false` in `configs/datasets/cityflowv2.yaml`
+- **Baseline**: MTMC_IDF1=76.625%, IDF1=78.419%, MOTA=66.910%, HOTA=57.031%
+- **Baseline note**: 76.625% is ~0.74pp below expected 77.36% — feature distribution shifted by camera_bn=true; V52 params need re-tuning.
+- **Sweep results (19 configs, unbiased)**:
+
+| Config | w2 (R50-IBN) | w3 (LAION ViT) | MTMC_IDF1 | Delta |
+|---|---|---|---|---|
+| no_fusion_control | 0.00 | 0.00 | 76.625% | — |
+| baseline_floor / sec_010 | 0.10 | 0.00 | 76.561% | −0.064pp |
+| ter_005 | 0.00 | 0.05 | 76.665% | +0.040pp |
+| ter_010 | 0.00 | 0.10 | 76.586% | −0.039pp |
+| ter_015 | 0.00 | 0.15 | 76.658% | +0.033pp |
+| ter_020 | 0.00 | 0.20 | 76.641% | +0.016pp |
+| ter_025 | 0.00 | 0.25 | 76.692% | +0.067pp |
+| ter_030 | 0.00 | 0.30 | 76.779% | +0.154pp |
+| w2_005_w3_005 | 0.05 | 0.05 | 76.582% | −0.043pp |
+| w2_005_w3_010 | 0.05 | 0.10 | 76.637% | +0.012pp |
+| w2_005_w3_015 | 0.05 | 0.15 | 76.615% | −0.010pp |
+| w2_005_w3_020 | 0.05 | 0.20 | 76.692% | +0.067pp |
+| w2_005_w3_025 | 0.05 | 0.25 | 76.764% | +0.138pp |
+| **w2_005_w3_030** | **0.05** | **0.30** | **76.817% (BEST)** | **+0.192pp** |
+| w2_010_w3_010 | 0.10 | 0.10 | 76.615% | −0.010pp |
+| w2_010_w3_015 | 0.10 | 0.15 | 76.665% | +0.040pp |
+| w2_010_w3_020 | 0.10 | 0.20 | 76.730% | +0.105pp |
+| w2_010_w3_025 | 0.10 | 0.25 | 76.817% | +0.192pp |
+
+- **Best fusion point**: w2=0.05, w3=0.30 → 76.817% (+0.192pp) — also tied w2=0.10, w3=0.25
+- **R50-IBN secondary**: harmful alone (−0.064pp)
+- **LAION tertiary alone**: +0.154pp at w3=0.30 — marginal, insufficient
+- **Conclusion**: 3-way ensemble confirmed dead end; +0.192pp within noise
+
+
+### Bug: MTMC_ONLY=True in 10c Notebook and cityflowv2.yaml (2026-04-22)
+- **Bug**: `MTMC_ONLY=True` set in the 10c Kaggle notebook AND `mtmc_only_submission: true` in `configs/datasets/cityflowv2.yaml`
+- **Impact**: ~5pp MTMC IDF1 penalty (single-camera tracklets dropped from submission, invisible to evaluator)
+- **Affected runs**: All 10c v8 configs are biased ~5pp below their true values
+- **Fix**: Commit `69e67a0` — `MTMC_ONLY=False` in notebook, `mtmc_only_submission: false` in config
+- **First corrected run**: 10c v9 — **COMPLETE** (results above)
+
+### 09q — Extended TransReID Training Status (2026-04-22)
+- **Date**: 2026-04-22
+- **Kernel**: mrkdagods/09q-transreid-cityflow-v10
+- **Goal**: Push primary ViT-B/16 CLIP mAP from 80.14% toward 82-84%+
+- **Experiment B (CLIP init from scratch)**: Best **mAP=76.52%** after 120 epochs — **no improvement** over 80.14% baseline.
+- **Experiment A (resume from 80.14% checkpoint)**: **NEVER RAN** — RESUME_CHECKPOINT_CANDIDATES did not include vehicle_transreid_vit_base_cityflowv2.pth. Bug fixed.
+- **Status**: **09q v5 pending push** to re-run Exp A.

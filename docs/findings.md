@@ -8,8 +8,9 @@
 
 | Metric | Value | Notes |
 |--------|:-----:|-------|
-| **Current Reproducible Best MTMC IDF1** | **77.5%** | 10c v52, v80-restored association recipe on the current codebase |
-| **10a v5 (RUNNING — 2026-04-22)** | *pending* | 3-way ensemble: primary ViT 80.14% mAP + secondary R50-IBN 52.77% mAP + tertiary LAION CLIP; regression fix applied (`concat_patch=false`, `camera_bn=true`); awaiting corrected results |
+| **Current Reproducible Best MTMC IDF1** | **77.5%** | 10c v52, v80-restored association recipe on the current codebase (10a v30 features). Current 10a v5 baseline (camera_bn=true): 76.625% — needs fresh association re-tune. |
+| **10c v8 (3-way ensemble sweep — 2026-04-22)** | 71.28% (biased; add ~5pp) | 10a v5 regression fix COMPLETE (929 tracklets, 49.4 min); 10c v8 19-config ensemble sweep COMPLETE but biased by MTMC_ONLY=True bug (~5pp penalty); best: w2=0.05, w3=0.30 → 71.28% biased → ~76.28% est. true. Fixed in commit `69e67a0`; 10c v9 RUNNING for unbiased results. |
+| **10c v9 (MTMC_ONLY fix — 2026-04-22)** | MTMC_IDF1=76.625% (baseline), 76.817% (best ensemble) | COMPLETE. Baseline 76.625% is ~0.74pp below expected 77.36% due to feature distribution shift (camera_bn=true). Best 3-way: w2=0.05, w3=0.30 → 76.817% (+0.192pp). Ensemble marginal; dead end confirmed. |
 | **Historical Best MTMC IDF1** | **78.4%** | v80, but not reproducible with the current codebase (~1pp drift) |
 | **SOTA Target** | 84.86% | AIC22 1st place |
 | **Gap to SOTA** | 7.36pp | Relative to the current reproducible best |
@@ -166,8 +167,10 @@ Association tuning remains exhausted (**225+** configs tested), and the secondar
 
 - **What we're trying**: 3-way score fusion of primary ViT-B/16 CLIP (80.14% mAP) + secondary R50-IBN (52.77% mAP) + tertiary LAION-2B CLIP (78.61% mAP) using w2 and w3 weights tuned in a 19-point sweep.
 - **Motivation**: Both 2-way fusion paths (R50-IBN secondary, LAION CLIP secondary) gave only marginal gains. A 3-way combination has not been tested on a correct feature baseline.
-- **Status**: 10a v5 RUNNING (regression fix); 10c 19-config sweep queued to start after 10b completes.
-- **Planned sweep**: controls (no_fusion, baseline_floor); pure tertiary w3=0.05–0.30; low secondary w2=0.05 + varying tertiary w3=0.05–0.30; medium secondary w2=0.10 + tertiary w3=0.10–0.25.
+- **Status**: 10a v5 **COMPLETE** (929 tracklets, 49.4 min); 10b v3 **COMPLETE** (12.6 MB FAISS); 10c v8 **COMPLETE** (MTMC_ONLY=True bug — biased); 10c v9 **COMPLETE** (unbiased results confirmed).
+- **10c v9 unbiased results (final)**: Baseline = **76.625%** (IDF1=78.419%, MOTA=66.910%, HOTA=57.031%). Best: **w2=0.05, w3=0.30 → 76.817% (+0.192pp)**. R50-IBN alone: −0.064pp. LAION tertiary alone at w3=0.30: +0.154pp.
+- **Baseline note**: 76.625% is ~0.74pp below expected 77.36% — camera_bn=true shifted feature distribution. V52 association params need re-tuning.
+- **Conclusion**: 3-way ensemble **CONFIRMED DEAD END** — +0.192pp within noise. Priorities: (1) association re-tune for camera_bn=true, (2) 09q v5 Exp A.
 
 #### Broken Baseline Run (10a v4 yahiaakhalafallah — INVALIDATED)
 - 10a v4 had wrong overrides: concat_patch=true (→ 1536D, PCA expects 768D) and camera_bn.enabled=false (disables cross-camera BN).
@@ -599,6 +602,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 
 | **concat_patch=true deployment (PCA mismatch)** | **-3.79pp MTMC IDF1** when PCA was trained on 768D; the flag changes ViT embedding from 768D → 1536D, corrupting downstream PCA and FIC whitening. Always verify concat_patch=false for 256px deployment. | 10a v4 (yahia) 2026-04-22 |
 | **camera_bn.enabled=false** | ~**-2pp MTMC IDF1**; cross-camera batch normalisation is critical for feature calibration. Never disable. | 10a v4 (yahia) 2026-04-22 |
+| **3-way score-level ensemble (primary ViT + R50-IBN secondary + LAION tertiary)** | **CONFIRMED DEAD END** (10c v9 unbiased). Baseline 76.625%; best w2=0.05, w3=0.30 → 76.817% (+0.192pp — within noise). R50-IBN alone: −0.064pp. LAION tertiary alone: +0.154pp at w3=0.30 (marginal). | 10c v8, 10c v9, 2026-04-22 |
 
 ### 384px TransReID Input Resolution (2026-03-30)
 - **Result**: -2.8pp MTMC IDF1 (0.7562 vs 0.784 baseline)
@@ -653,4 +657,6 @@ At the same time, **09l v3 changes the ensemble outlook materially**. The weak s
 
 ## Pending
 
-- **09q v7** is currently running and remains **pending** after iterative notebook fixes.
+- **09q v5** pending: Exp B complete at mAP=76.52% (no improvement). Exp A never ran (checkpoint path bug fixed; 09q v5 push pending).
+- **Association re-tune** for camera_bn=true features: current 10a v5 baseline 76.625% vs expected 77.36% (−0.74pp). Fresh Stage-4 sweep needed.
+- ~~10c v9~~ **COMPLETE** — 3-way ensemble dead end confirmed: 76.625% baseline, 76.817% best ensemble.
