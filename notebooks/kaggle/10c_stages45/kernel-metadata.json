@@ -8,9 +8,7 @@
   "enable_gpu": false,
   "enable_tpu": false,
   "enable_internet": true,
-  "dataset_sources": [
-    "mrkdagods/mtmc-gt-annotations"
-  ],
+  "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": [
     "yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing"

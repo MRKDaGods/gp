@@ -273,7 +273,7 @@ stage5:
   # AIC protocol: only cross-camera trajectories are meaningful for MTMC eval.
   # Single-cam singletons are guaranteed FP (3-5x more predictions than GT).
   # Dropping them loses 29/240 = 12% GT vehicles but eliminates massive FP flood.
-  mtmc_only_submission: true
+  mtmc_only_submission: false
   # --- Trajectory confidence filter ---
   # Removes multi-cam trajectories with low association confidence.
   # confidence = mean pairwise appearance similarity between tracklets.
