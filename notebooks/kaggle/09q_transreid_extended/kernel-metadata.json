@@ -1,6 +1,6 @@
 {
-  "id": "gumfreddy/09q-transreid-extended-cityflowv2",
-  "title": "09q-transreid-extended-cityflowv2",
+  "id": "mrkdagods/09q-transreid-cityflow-v10",
+  "title": "09q-transreid-cityflow-v10",
   "code_file": "09q_transreid_extended.ipynb",
   "language": "python",
   "kernel_type": "notebook",
@@ -10,11 +10,10 @@
   "enable_internet": true,
   "competition_sources": [],
   "dataset_sources": [
-    "gumfreddy/mtmc-weights"
+    "gumfreddy/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
   ],
-  "kernel_sources": [
-    "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation"
-  ],
+  "kernel_sources": [],
   "model_sources": [],
   "machine_shape": "NvidiaTeslaT4"
 }

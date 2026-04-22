@@ -2,13 +2,14 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
-## Current Performance (Last Updated: 2026-04-20)
+## Current Performance (Last Updated: 2026-04-22)
 
 ### Vehicle Pipeline (CityFlowV2)
 
 | Metric | Value | Notes |
 |--------|:-----:|-------|
 | **Current Reproducible Best MTMC IDF1** | **77.5%** | 10c v52, v80-restored association recipe on the current codebase |
+| **10a v5 (RUNNING — 2026-04-22)** | *pending* | 3-way ensemble: primary ViT 80.14% mAP + secondary R50-IBN 52.77% mAP + tertiary LAION CLIP; regression fix applied (`concat_patch=false`, `camera_bn=true`); awaiting corrected results |
 | **Historical Best MTMC IDF1** | **78.4%** | v80, but not reproducible with the current codebase (~1pp drift) |
 | **SOTA Target** | 84.86% | AIC22 1st place |
 | **Gap to SOTA** | 7.36pp | Relative to the current reproducible best |
@@ -158,6 +159,26 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 | **3** | Push the primary **ViT-B/16 CLIP** training further | Possible but lower-confidence upside because **81.59% mAP** is already very strong for a single model | HIGH EFFORT / UNCERTAIN RETURN |
 
 Association tuning remains exhausted (**225+** configs tested), and the secondary-model / score-level fusion route is now exhausted as well. The remaining realistic vehicle options are to **write the paper**, build a materially new **graph-based association model**, or attempt another step-change in the **primary ViT** representation despite the already strong **81.59% mAP** baseline.
+
+## Active Experiments (2026-04-22)
+
+### 3-Way Ensemble Attempt (April 22, 2026)
+
+- **What we're trying**: 3-way score fusion of primary ViT-B/16 CLIP (80.14% mAP) + secondary R50-IBN (52.77% mAP) + tertiary LAION-2B CLIP (78.61% mAP) using w2 and w3 weights tuned in a 19-point sweep.
+- **Motivation**: Both 2-way fusion paths (R50-IBN secondary, LAION CLIP secondary) gave only marginal gains. A 3-way combination has not been tested on a correct feature baseline.
+- **Status**: 10a v5 RUNNING (regression fix); 10c 19-config sweep queued to start after 10b completes.
+- **Planned sweep**: controls (no_fusion, baseline_floor); pure tertiary w3=0.05–0.30; low secondary w2=0.05 + varying tertiary w3=0.05–0.30; medium secondary w2=0.10 + tertiary w3=0.10–0.25.
+
+#### Broken Baseline Run (10a v4 yahiaakhalafallah — INVALIDATED)
+- 10a v4 had wrong overrides: concat_patch=true (→ 1536D, PCA expects 768D) and camera_bn.enabled=false (disables cross-camera BN).
+- Result: **-3.79pp regression** — measured baseline 73.57% vs expected ~77.36%.
+- Best fusion on broken features: w2=0.05, w3=0.15 → 73.73% (+0.16pp), meaningless.
+- **All 10a v4 / 10c (yahia) v5 results are INVALIDATED.** Do not use these numbers.
+
+#### Infrastructure Fix: Cross-Account Kaggle Dataset Mounting
+- Public Kaggle datasets do **not** auto-mount cross-account at runtime.
+- Fix: add a download cell using the kernel's own KAGGLE_KEY env var to retrieve another account's outputs.
+- Applied to 10b kernel (retargeted to consume yahia's 10a output).
 
 ## Latest Experiment Results (2026-04-20)
 
@@ -575,6 +596,9 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | Multi-query track representation | -0.1pp; v51=0.771 vs v50=0.772 | 10c v50-v51 |
 | `concat_patch=true` (1536D features) | -0.3pp; v48=0.773 vs v45=0.775 | 10c v45, 10c v48 |
 | `concat_patch=true` + vehicle2 ensemble | -0.3pp; v49=0.769 vs v50=0.772 | 10c v49-v50 |
+
+| **concat_patch=true deployment (PCA mismatch)** | **-3.79pp MTMC IDF1** when PCA was trained on 768D; the flag changes ViT embedding from 768D → 1536D, corrupting downstream PCA and FIC whitening. Always verify concat_patch=false for 256px deployment. | 10a v4 (yahia) 2026-04-22 |
+| **camera_bn.enabled=false** | ~**-2pp MTMC IDF1**; cross-camera batch normalisation is critical for feature calibration. Never disable. | 10a v4 (yahia) 2026-04-22 |
 
 ### 384px TransReID Input Resolution (2026-03-30)
 - **Result**: -2.8pp MTMC IDF1 (0.7562 vs 0.784 baseline)

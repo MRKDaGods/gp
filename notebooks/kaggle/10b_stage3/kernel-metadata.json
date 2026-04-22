@@ -1,5 +1,5 @@
 {
-  "id": "gumfreddy/mtmc-10b-stage-3-faiss-indexing",
+  "id": "yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing",
   "title": "MTMC 10b - Stage 3 (FAISS Indexing)",
   "code_file": "mtmc-10b-stage-3-faiss-indexing.ipynb",
   "language": "python",
@@ -11,6 +11,6 @@
   "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": [
-    "gumfreddy/mtmc-10a-stages-0-2-tracking-reid-features"
+    "yahiaakhalafallah/mtmc-10a-stages-0-2"
   ]
 }

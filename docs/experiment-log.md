@@ -474,3 +474,43 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 	- w=0.40: MTMC IDF1=0.770557
 	- w=0.50: MTMC IDF1=0.761920
 - **Conclusion**: The improved **09p** secondary and newer ingestion chain still produce only a marginal gain over baseline (**+0.000574** at best). This remains below the reproducible **0.775** ceiling and confirms the bottleneck is still primary feature quality / architecture rather than missed association tuning.
+
+---
+
+### Run 10c-v5 (yahia) — 3-way ensemble sweep (BROKEN — regression bug)
+- **Date**: 2026-04-22
+- **Kernel**: yahiaakhalafallah/mtmc-10c-stages-4-5-association-eval v5
+- **Base**: 10a v4 (yahia) with WRONG overrides: \concat_patch=true\, \camera_bn.enabled=false- **Result**: baseline 73.57% (expected ~77.36%) — regression confirmed, -3.79pp
+- **Best fusion**: w2=0.05, w3=0.15 → 73.73% (+0.16pp over broken baseline only)
+- **Full sweep**:
+  | Config | w2 | w3 | MTMC IDF1 |
+  |---|---|---|---|
+  | no_fusion_control | 0.00 | 0.00 | 73.57% |
+  | baseline_floor | 0.10 | 0.00 | 73.55% |
+  | w2_005_w3_015 | 0.05 | 0.15 | **73.73%** |
+  | w2_000_w3_015 | 0.00 | 0.15 | 73.23% |
+  | w2_000_w3_020 | 0.00 | 0.20 | 73.12% |
+  | w2_005_w3_020 | 0.05 | 0.20 | 72.32% |
+  | w2_010_w3_010 | 0.10 | 0.10 | 72.58% |
+  | w2_010_w3_015 | 0.10 | 0.15 | 72.58% |
+  | w2_015_w3_010 | 0.15 | 0.10 | 72.55% |
+  | w2_020_w3_010 | 0.20 | 0.10 | 72.59% |
+- **Conclusion**: results invalidated by regression bug; do not use these numbers
+
+### Fix: 10a v5 — regression corrections
+- **Date**: 2026-04-22
+- **Kernel**: yahiaakhalafallah/mtmc-10a-stages-0-2 v5
+- **Changes**: \concat_patch=true\ → \alse\, \camera_bn.enabled=false\ → \	rue- **Root cause of regression**:
+  - \concat_patch=true\ changes ViT embedding from 768D → 1536D; PCA was trained on 768D, corrupting downstream features (-3.79pp impact)
+  - \camera_bn.enabled=false\ disables cross-camera batch normalisation (~-2pp impact)
+- **Status**: RUNNING — expected to restore ~77.36% baseline
+- **After**: will run expanded 19-point 3-way fusion sweep in 10c
+
+### 09q v4 — Extended TransReID training
+- **Date**: 2026-04-22
+- **Kernel**: mrkdagods/09q-transreid-cityflow-v10 v4
+- **Status**: RUNNING — 120 epochs extended fine-tuning from 80.14% mAP checkpoint
+- **Fixes applied**:
+  - Added missing DataLoader cell (train_loader was never defined in v3)
+  - Added \	hanhnguyenle/data-aicity-2023-track-2\ to \dataset_sources  - Added \mtmc-weights\ download cell for cross-account dataset access
+- **Goal**: push primary mAP from 80.14% → 82–84%+ for stronger ensemble foundation
