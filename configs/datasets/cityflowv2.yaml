@@ -145,7 +145,7 @@ stage2:
     min_quality: 0.05
     laplacian_min_var: 30.0
   camera_bn:
-    enabled: true
+    enabled: false
   # --- Camera-specific Test-Time Adaptation (CamTTA) ---
   # Adapts BNNeck running stats to each camera's appearance distribution.
   camera_tta:
