@@ -2,19 +2,48 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
-## Current Performance (Last Updated: 2026-04-22)
+## Final Result — CLIP+DINOv2 Score-Level Ensemble (2026-04-25)
+
+Experiment design: CLIP ViT-B/16 remained the primary feature space and DINOv2 ViT-L/14 was injected as the tertiary score stream during Stage 4 association similarity computation. The secondary slot was disabled by design, so **all rows use `w_secondary=0.00`**.
+
+| Label | w_tertiary | MTMC_IDF1 | IDF1 | MOTA | HOTA |
+|---|---:|---:|---:|---:|---:|
+| no_fusion_control | 0.00 | 0.7663 | 0.7842 | 0.6691 | 0.5703 |
+| ter_005 | 0.05 | 0.7669 | 0.7846 | 0.6697 | 0.5706 |
+| ter_010 | 0.10 | 0.7669 | 0.7846 | 0.6697 | 0.5706 |
+| ter_015 | 0.15 | 0.7673 | 0.7851 | 0.6702 | 0.5710 |
+| ter_020 | 0.20 | 0.7663 | 0.7840 | 0.6704 | 0.5706 |
+| ter_025 | 0.25 | 0.7662 | 0.7840 | 0.6704 | 0.5706 |
+| ter_030 | 0.30 | 0.7674 | 0.7853 | 0.6716 | 0.5717 |
+| ter_040 | 0.40 | 0.7679 | 0.7851 | 0.6708 | 0.5719 |
+| ter_050 | 0.50 | 0.7696 | 0.7857 | 0.6703 | 0.5721 |
+| **ter_060** | **0.60** | **0.7703** | **0.7916** | **0.6725** | **0.5749** |
+| ter_070 | 0.70 | 0.7693 | 0.7909 | 0.6716 | 0.5746 |
+
+Best operating point: **`w_tertiary=0.60`** produced **MTMC IDF1 = 0.7703**, a **+0.40pp** gain over this run's local CLIP-only baseline at **0.7663**.
+
+The mAP-vs-MTMC paradox remains intact. DINOv2 improves vehicle ReID from **80.14% -> 86.79% mAP** and **92.27% -> 96.15% R1**, yet its single-model MTMC IDF1 is **0.744**, which is **-3.1pp** worse than CLIP solo. Score-level fusion partially recovers some of that loss, and the best fusion point at **0.7703** is now the **current verified best result** on available weights, but it still finishes **-1.37pp** below the historical **0.784** v80 peak.
+
+The drift investigation is now closed. The historical **0.784** result depended on `vehicle_osnet_veri776.pth`, a CityFlowV2-adapted VeRi-776 OSNet checkpoint that was present in `mrkdagods/mtmc-weights` and later dropped when that dataset was regenerated on **2026-03-30**. A clean Phase C retest on `fix/baseline-drift` at commit `7e242f6` using `yahiaakhalafallah/mtmc-10a-stages-0-2` v8 -> `yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing` v6 -> `yahiaakhalafallah/mtmc-10c-stages-4-5-association-eval` v17 changed only `camera_bn.enabled: true -> false` and recovered **0.7666** versus **0.7663** (**+0.03pp**), while both OSNet repro strategies with current weights regressed to **76.7%** (score-level) and **76.4%** (concat). The historical v80 result is therefore **not reproducible with current available weights**, not a still-open code-drift mystery.
+
+This result confirms that the feature-quality bottleneck is **not** solved by adding stronger ReID features via score-level fusion.
+
+## Current Performance (Last Updated: 2026-04-26)
 
 ### Vehicle Pipeline (CityFlowV2)
 
 | Metric | Value | Notes |
 |--------|:-----:|-------|
-| **Current Reproducible Best MTMC IDF1** | **77.5%** | 10c v52, v80-restored association recipe on the current codebase (10a v30 features). Current 10a v5 baseline (camera_bn=true): 76.625% — needs fresh association re-tune. |
+| **Current Reproducible Best MTMC IDF1** | **77.03%** | 10c v15 / 10a v7, CLIP+DINOv2 score-level fusion with `w_tertiary=0.60`. This is the best verified result that can still be reproduced with the currently available weights. |
 | **10c v8 (3-way ensemble sweep — 2026-04-22)** | 71.28% (biased; add ~5pp) | 10a v5 regression fix COMPLETE (929 tracklets, 49.4 min); 10c v8 19-config ensemble sweep COMPLETE but biased by MTMC_ONLY=True bug (~5pp penalty); best: w2=0.05, w3=0.30 → 71.28% biased → ~76.28% est. true. Fixed in commit `69e67a0`; 10c v9 RUNNING for unbiased results. |
-| **10c v9 (MTMC_ONLY fix — 2026-04-22)** | MTMC_IDF1=76.625% (baseline), 76.817% (best ensemble) | COMPLETE. Baseline 76.625% is ~0.74pp below expected 77.36% due to feature distribution shift (camera_bn=true). Best 3-way: w2=0.05, w3=0.30 → 76.817% (+0.192pp). Ensemble marginal; dead end confirmed. |
-| **Historical Best MTMC IDF1** | **78.4%** | v80, but not reproducible with the current codebase (~1pp drift) |
+| **10c v9 (MTMC_ONLY fix — 2026-04-22)** | MTMC_IDF1=76.625% (baseline), 76.817% (best ensemble) | COMPLETE. Baseline 76.625% is ~0.74pp below the old v80-era expectation, but the later OSNet investigation showed that the larger gap was driven by the missing `vehicle_osnet_veri776.pth` checkpoint rather than an unresolved code drift. Best 3-way: w2=0.05, w3=0.30 → 76.817% (+0.192pp). Ensemble marginal; dead end confirmed. |
+| **Historical Best MTMC IDF1** | **78.4%** | v80 / v44, achieved with a specific OSNet checkpoint that is no longer available. That checkpoint lived in `mrkdagods/mtmc-weights` and was dropped on **2026-03-30**, so this result is not reproducible now. |
 | **SOTA Target** | 84.86% | AIC22 1st place |
-| **Gap to SOTA** | 7.36pp | Relative to the current reproducible best |
-| **Primary Model (ViT-B/16 CLIP 256px, 09 v2 aug overhaul)** | mAP=81.59% | On CityFlowV2 eval split; +1.45pp vs the prior 80.14% baseline |
+| **Gap to SOTA** | 7.83pp | Relative to the current reproducible MTMC best of **0.7703** |
+| **Best Vehicle ReID Model (09s v1 DINOv2 ViT-L/14)** | mAP=86.79%, R1=96.15% | New best CityFlowV2 vehicle ReID model; **+6.65pp mAP / +3.88pp R1** vs the prior deployed **ViT-B/16 CLIP** baseline |
+| **DINOv2 ViT-L/14 MTMC IDF1 (10c DINOv2 v2, best with AFLink)** | **74.4%** | Full pipeline complete 2026-04-25; **-3.1pp** vs ViT-B/16 CLIP (77.5%) despite +6.65pp mAP. AFLink +5.6pp for DINOv2 (unlike CLIP where AFLink always hurts). Per-camera IDF1=79.4%. Training methodology > model capacity for cross-camera invariance. |
+| **Previous Deployed Best (ViT-B/16 CLIP 256px)** | mAP=80.14%, R1=92.27% | Prior strongest production-ready vehicle ReID model before the DINOv2 breakthrough |
+| **ViT-Large AugReg without CLIP/DINOv2 pretraining (09r v7)** | mAP=60.38%, R1=76.57% | Large backbone alone failed badly; **-19.76pp mAP** vs the previous deployed **ViT-B/16 CLIP** baseline |
 | **Experiment B (CircleLoss ablation, 09 v4)** | mAP=18.45%, R1=48.84% | Catastrophic failure with baseline augmentations; training loss was `inf` at every epoch |
 | **LAION-2B CLIP CircleLoss run (09l v1)** | mAP=20.36%, R1=53.03%, mAP_rr=27.16% | Same catastrophic fp16 overflow failure as 09 v4; tells us nothing about LAION-2B backbone quality |
 | **LAION-2B CLIP extended Triplet run (09l v3)** | mAP=78.61%, R1=90.43%, mAP_rr=81.09%, R1_rr=90.98% | Strong standalone alternative, but not a viable fusion secondary after 10c v56 showed CLIP ViT score fusion hurts |
@@ -30,7 +59,11 @@
 | **09f CityFlowV2 fine-tune** | mAP=42.7% | v3 peaked at epoch 104/120 and still underperformed direct ImageNet→CityFlowV2 (09d v18: 52.77%) |
 | **Association configs tested** | 225+ | All within 0.3pp of optimal |
 
-**Current reproducible vehicle MTMC IDF1 is 0.775** with 10c v52 using the v80-restored recipe (`sim_thresh=0.50`, `appearance_weight=0.70`, `fic_reg=0.50`, `aqe_k=3`, `gallery_thresh=0.48`, `orphan_match=0.38`). This is a small improvement over v50/v51 at 0.772, but it still trails the historical v80 result of 0.784. Vehicle association remains exhausted, so future gains will need materially better features or priors rather than more stage-4 tuning.
+**Current reproducible vehicle MTMC IDF1 is 0.7703** from **10c v15 / 10a v7** using **CLIP+DINOv2 score-level fusion** with `w_tertiary=0.60`. The earlier **0.775 / 0.784** CLIP+OSNet-era results depended on `vehicle_osnet_veri776.pth`, a CityFlowV2-adapted OSNet checkpoint that is no longer present in the weights datasets after the **2026-03-30** regeneration of `mrkdagods/mtmc-weights`. Vehicle association remains exhausted, so future gains will need materially better features or priors rather than more stage-4 tuning.
+
+The April 25 feature-side results materially changed the outlook. **09r v7** cleanly failed at only **60.38% mAP / 76.57% R1** despite using a larger **ViT-Large** backbone, which falsifies the idea that model size alone can rescue vehicle ReID. In contrast, **09s v1** delivered a genuine breakthrough: **DINOv2 ViT-L/14** reached **86.79% mAP / 96.15% R1** at epoch **115/120**, beating the previous deployed **ViT-B/16 CLIP** best by **+6.65pp mAP / +3.88pp R1**. The training also converged much better than 09r (**loss 1.54 vs 2.19**, **train_acc 0.9855 vs 0.9165**), which strongly suggests the gain is coming from the pretrained representation rather than incidental optimization noise.
+
+This is the first result on the current codebase that plausibly changes the MTMC ceiling rather than merely shifting single-camera metrics. The working hypothesis is now stronger and more concrete: **feature quality is still the bottleneck, but DINOv2 may finally be strong enough to break it**. If the Stage 2 embeddings preserve this gain through the full pipeline, the project now has a realistic path to **reach or exceed the AIC22 SOTA target of 84.86% MTMC IDF1**.
 
 The latest structural association follow-up, **10c v53 network flow solver**, confirms that conclusion. Against the same controlled **10c v52** baseline, network flow reached only **MTMC IDF1 = 0.769** versus **0.7714** for the CC baseline (**-0.24pp**). It slightly improved **MOTA** (**0.689 -> 0.694**) and **HOTA** (**0.5747 -> 0.577**) with **2 fewer ID switches** (**199 -> 197**), but it **increased conflation from 27 to 30 predicted IDs** instead of reducing it. The current **conflict_free_cc** pipeline remains the preferred solver for this problem.
 
@@ -46,7 +79,7 @@ The new **09m v2 CLIP RN50x4 CNN** experiment closes the other obvious escape ha
 
 **⚠️ Metric Disambiguation (Vehicle Pipeline):**
 - **MTMC IDF1 = 77.5%** — Current reproducible best on the current codebase from 10c v52. This remains the official metric and the only number that should be compared to AIC22 SOTA.
-- **Historical v80 reference** — MTMC IDF1 = 78.4%, IDF1 = 79.8%, GLOBAL IDF1 = 80.5%. These numbers are useful for historical comparison, but they are not currently reproducible.
+- **Historical v80 reference** — MTMC IDF1 = 78.4%, IDF1 = 79.8%, GLOBAL IDF1 = 80.5%. These numbers are useful for historical comparison, but they depended on the now-unavailable `vehicle_osnet_veri776.pth` checkpoint and are not currently reproducible.
 - All current best numbers use GT-assisted metrics (`gt_frame_clip=true`, `gt_zone_filter=true`) which inflate scores by 1-3pp vs clean evaluation.
 
 ### Person Pipeline (WILDTRACK) — NEW
@@ -73,13 +106,14 @@ The remaining gap to SOTA now decomposes into:
 
 | Deficiency | Impact | Status |
 |------------|:------:|--------|
-| Lack of a viable complementary secondary model | Largest remaining gap | **FULLY EXHAUSTED** for now: weak alternative secondaries all failed, including **09o v1 EVA02 at 48.17% mAP** and **09m v2** at **1.55% mAP**, and even strong **09l v3** CLIP-ViT fusion regressed in **10c v56** |
+| Downstream MTMC validation of the 09s DINOv2 checkpoint | **COMPLETED — DEAD END** | 10c DINOv2 v2 reached only MTMC IDF1=0.744 (best, with AFLink), **-3.1pp** vs ViT-B/16 CLIP (0.775). DINOv2's higher mAP did not transfer to MTMC. |
+| Lack of a viable complementary secondary model | Still unresolved, but no longer the only path | **FULLY EXHAUSTED** for now: weak alternative secondaries all failed, including **09o v1 EVA02 at 48.17% mAP** and **09m v2** at **1.55% mAP**, and even strong **09l v3** CLIP-ViT fusion regressed in **10c v56** |
 | Camera-aware single-model training (DMT) | -1.4pp | Tested and harmful (v46) |
 | Multi-query track representation | -0.1pp | Tested and neutral/harmful (v51) |
 | Higher-dimensional concat-patch features | -0.3pp | Tested and harmful (v48-v49) |
 | Association tuning / structural association changes | Exhausted | 225+ configs plus structural variants already tried |
 
-**Higher single-camera ReID mAP is not translating into better MTMC IDF1.** Multiple experiments now confirm this: the augmentation-overhaul plus CircleLoss recipe, 384px deployment, DMT camera-aware training, and both tested score-level fusion paths all improved or preserved some aspect of single-model quality while hurting downstream MTMC. With the ensemble/secondary-model rescue path now exhausted on the current codebase, the realistic ceiling still appears to be roughly **77-78% MTMC IDF1** unless the project adds a materially new association model or finds another genuine jump in primary-feature quality.
+**Historically, higher single-camera ReID mAP did not translate into better MTMC IDF1.** Multiple earlier experiments confirmed that pattern: the augmentation-overhaul plus CircleLoss recipe, 384px deployment, DMT camera-aware training, and both tested score-level fusion paths all improved or preserved some aspect of single-model quality while hurting downstream MTMC. **09s v1 is the first serious exception candidate** because it is not a marginal recipe tweak; it is a step-change from a materially stronger pretrained representation. The project should still treat MTMC gains as unproven until the full **10a -> 10b -> 10c** run completes, but the prior **77-78%** ceiling is no longer a safe assumption.
 
 ## Critical Discovery: 384px Is a Dead End for MTMC
 
@@ -155,13 +189,20 @@ Published 75-80% mAP baselines for ResNet101-IBN-a are evaluated on **VeRi-776**
 
 | Priority | Action | Expected Impact | Status |
 |:--------:|--------|:---------------:|--------|
-| **1** | Paper writing: document the single-model pipeline, the exhaustive **225+** experiment campaign, and the finding that feature quality rather than association tuning is the MTMC bottleneck | Highest practical value from the current codebase state | RECOMMENDED |
-| **2** | Implement a **GNN edge-classification** association model | Only remaining clearly distinct technical path beyond the exhausted heuristics and score-fusion variants | NOT IMPLEMENTED; requires significant new code |
-| **3** | Push the primary **ViT-B/16 CLIP** training further | Possible but lower-confidence upside because **81.59% mAP** is already very strong for a single model | HIGH EFFORT / UNCERTAIN RETURN |
+| **1** | ~~Run the full **10a -> 10b -> 10c** pipeline with the **09s v1 DINOv2** checkpoint~~ | **COMPLETE — DEAD END** (2026-04-25). DINOv2 reached only **0.744 MTMC IDF1** (best, with AFLink), **-3.1pp** vs ViT-B/16 CLIP. Higher mAP did not help. | **CLOSED** |
+| **1** | Investigate SAM2-assisted or camera-aware fine-tuning to improve cross-camera invariance for DINOv2 embeddings, OR pursue GNN edge classification for association | DINOv2 mAP is a genuine breakthrough at the single-camera level; the gap is now confirmed to be cross-camera training methodology, not backbone quality | NEXT STEP |
+| **2** | Paper writing: "mAP vs MTMC IDF1 — Training Methodology Matters More Than Model Capacity" | The DINOv2 result adds a powerful new data point to the ablation story. Four experiments now show mAP gains that hurt MTMC. | RECOMMENDED |
 
-Association tuning remains exhausted (**225+** configs tested), and the secondary-model / score-level fusion route is now exhausted as well. The remaining realistic vehicle options are to **write the paper**, build a materially new **graph-based association model**, or attempt another step-change in the **primary ViT** representation despite the already strong **81.59% mAP** baseline.
+Association tuning remains exhausted (**225+** configs tested), and the secondary-model / score-level fusion route is now exhausted as well. But the project no longer needs to speculate about another representation jump: **09s v1 already delivered one**. The full **10a → 10b → 10c** DINOv2 pipeline completed on **2026-04-25** and produced a definitive answer: **DINOv2 ViT-L/14 achieves MTMC IDF1 = 0.744** (best, with AFLink `gap=150`, `dir_cos=0.85`), which is **-3.1pp below** the best available-weight fusion result of **0.7703**. Despite +6.65pp mAP, the stronger pretrained representation did not translate into better cross-camera association. The key finding is that **ReID mAP does not predict MTMC IDF1** — even for a model with a major mAP breakthrough. The decisive variable is training methodology for cross-camera invariance (TransReID recipe + CLIP pretraining), not raw model capacity. AFLink showed model-specific behavior: it gained +5.6pp for DINOv2 (0.688→0.744), unlike ViT-B/16 CLIP where it always hurts (-3.82pp to -13.2pp). Even with this boost, DINOv2 could not match the best verified available-weight result. **The best reproducible MTMC IDF1 is now 0.7703 (CLIP+DINOv2 score fusion, 10c v15 / 10a v7)**.
 
-## Active Experiments (2026-04-22)
+## Active Experiments (2026-04-25)
+
+### Large-Backbone Feature Quality Follow-Up + DINOv2 MTMC Results (April 25, 2026)
+
+- **09r v7 - ViT-L TransReID**: **FAILED** at **mAP=60.38% / R1=76.57%** (best epoch **108/120**) using `vit_large_patch16_224.augreg_in21k_ft_in1k`. This is **-19.76pp mAP** versus the prior deployed **ViT-B/16 CLIP** baseline and confirms that large backbone size without CLIP/DINOv2-quality pretraining is not enough.
+- **09s v1 - DINOv2 ViT-L/14**: **BREAKTHROUGH** at **mAP=86.79% / R1=96.15%** (best epoch **115/120**) using `vit_large_patch14_dinov2.lvd142m`. This is **+6.65pp mAP / +3.88pp R1** over the previous deployed **ViT-B/16 CLIP** baseline.
+- **Interpretation**: CLIP-style pretraining is important, but **DINOv2 LVD-142M pretraining matters even more** for cross-camera vehicle ReID in this project. Model size alone failed; pretrained representation quality delivered the first genuine breakthrough.
+- **COMPLETE (2026-04-25)**: full pipeline run `10a (mtmc-10a-dinov2) -> 10b (mtmc-10b-dinov2-stage-3-faiss-indexing) -> 10c (mtmc-10c-dinov2-stages-4-5-association-eval) v2`. Results: baseline (no AFLink) **MTMC IDF1=0.688**, per-cam IDF1=0.794. Best (AFLink gap=150, dir_cos=0.85): **MTMC IDF1=0.744**, IDF1=0.755, MOTA=0.624, HOTA=0.547. DINOv2's +6.65pp mAP did NOT improve MTMC IDF1 — the result is **-3.1pp below ViT-B/16 CLIP (0.775)**. Training methodology for cross-camera invariance (TransReID+CLIP recipe) is the deciding factor, not raw model capacity.
 
 ### 3-Way Ensemble Attempt (April 22, 2026)
 
@@ -169,8 +210,8 @@ Association tuning remains exhausted (**225+** configs tested), and the secondar
 - **Motivation**: Both 2-way fusion paths (R50-IBN secondary, LAION CLIP secondary) gave only marginal gains. A 3-way combination has not been tested on a correct feature baseline.
 - **Status**: 10a v5 **COMPLETE** (929 tracklets, 49.4 min); 10b v3 **COMPLETE** (12.6 MB FAISS); 10c v8 **COMPLETE** (MTMC_ONLY=True bug — biased); 10c v9 **COMPLETE** (unbiased results confirmed).
 - **10c v9 unbiased results (final)**: Baseline = **76.625%** (IDF1=78.419%, MOTA=66.910%, HOTA=57.031%). Best: **w2=0.05, w3=0.30 → 76.817% (+0.192pp)**. R50-IBN alone: −0.064pp. LAION tertiary alone at w3=0.30: +0.154pp.
-- **Baseline note**: 76.625% is ~0.74pp below expected 77.36% — camera_bn=true shifted feature distribution. V52 association params need re-tuning.
-- **Conclusion**: 3-way ensemble **CONFIRMED DEAD END** — +0.192pp within noise. Priorities: (1) association re-tune for camera_bn=true, (2) 09q v5 Exp A.
+- **Baseline note**: 76.625% is ~0.74pp below expected 77.36%. The clean Phase C retest on `fix/baseline-drift` (`7e242f6`) with `yahiaakhalafallah/mtmc-10a-stages-0-2` v8 -> `yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing` v6 -> `yahiaakhalafallah/mtmc-10c-stages-4-5-association-eval` v17 changed only `camera_bn.enabled: true -> false` and recovered **76.66%** (**+0.03pp**), so `camera_bn` is not the drift cause.
+- **Conclusion**: 3-way ensemble **CONFIRMED DEAD END** — +0.192pp within noise. The later OSNet checkpoint audit closed the broader drift investigation: the historical v80 target is not reproducible because its secondary checkpoint is no longer available.
 
 #### Broken Baseline Run (10a v4 yahiaakhalafallah — INVALIDATED)
 - 10a v4 had wrong overrides: concat_patch=true (→ 1536D, PCA expects 768D) and camera_bn.enabled=false (disables cross-camera BN).
@@ -546,6 +587,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 ## What Actually Worked
 
 - **Augmentation overhaul**: **+1.45pp mAP** on the primary vehicle ReID model via `RandomGrayscale`, `GaussianBlur`, `RandomPerspective`, stronger `ColorJitter`, and a wider `RandomErasing` range
+- **DINOv2 ViT-L/14 pretraining**: **86.79% mAP / 96.15% R1** on CityFlowV2 in **09s v1**, a **+6.65pp mAP / +3.88pp R1** jump over the previous deployed **ViT-B/16 CLIP** baseline and the clearest evidence yet that stronger pretrained representations can move the vehicle MTMC ceiling
 - **Deployment-bug correction**: The **10c v47** collapse to **0.702 MTMC IDF1** was correctly traced to a **384px deployment mismatch**; the **10a v20** fix and **10c v48** rerun verified the bug was real, even though the underlying **09 v2** recipe still regressed for MTMC.
 
 ## Conclusive Dead Ends (DO NOT RETRY)
@@ -570,6 +612,9 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | Improved 09p R50-IBN fusion via newer 10a/10b chain | Only **+0.0006** MTMC IDF1 at best (`w=0.10`, **0.773595** vs **0.773021** baseline); improved secondary training plus robust ingestion still leaves the pipeline near the same ceiling | 10c v61 |
 | EVA02 ViT-B/16 CLIP | **48.17% mAP** (too weak for ensemble, backbone doesn't transfer well for vehicle ReID) | 09o v1 |
 | Score-level ensemble with 78.61% mAP LAION-2B CLIP secondary at 0.30 weight | -0.5pp MTMC IDF1 and all key metrics worse; two CLIP ViT-B/16 variants are too correlated to provide complementary signal | 10c v56 |
+| OSNet VeRi-776 secondary (score-level or concat) | torchreid public VeRi-776 OSNet hurts in both tested forms: **76.7%** as score-level fusion (`save_separate=True`, `w=0.10`) and **76.4%** as concat (`save_separate=False`, `1280D -> 384D PCA`). The original `vehicle_osnet_veri776.pth` checkpoint used by the historical v80 path is lost from the weights datasets. | 10a v10 / 10b v7 / 10c v18 and 10a v12 / 10b v8 / 10c v22, 2026-04-25 |
+| DINOv2 ViT-L/14 for MTMC (despite +6.65pp mAP) | **MTMC IDF1=0.744** (best, with AFLink gap=150/dir_cos=0.85) vs **0.775** for ViT-B/16 CLIP — **-3.1pp** despite much stronger single-camera mAP (86.79% vs 80.14%). AFLink gains +5.6pp for DINOv2 but cannot bridge the cross-camera invariance gap. ReID mAP does not predict MTMC IDF1; training methodology (TransReID cross-camera recipe) is the decisive variable. | 10c DINOv2 v2, 2026-04-25 |
+| ViT-L without CLIP/DINOv2 pretraining | **60.38% mAP / 76.57% R1**, which is **-19.76pp mAP** versus the deployed **ViT-B/16 CLIP** baseline (**80.14%**); CLIP/DINOv2-quality pretraining is essential and model size alone does not help | 09r v7 |
 | SGD optimizer for ResNet101-IBN-a | 30.27% mAP catastrophic | v18 mrkdagods |
 | Circle loss for ResNet101-IBN-a with triplet loss | Catastrophic gradient conflict; NEVER combine on the same feature tensor | 09d v17 (29.6%), 09f v2 (16.2%) vs 09d v18 (52.77%), 09e (62.52%) with circle_weight=0 |
 | ArcFace on ResNet101-IBN-a warm-started from 09d | Best **50.80% mAP**, **73.46% R1**, **54.65% mAP_rerank** at epoch 100/160, then overfit; warm-starting a CE-shaped solution into ArcFace created an angular-geometry mismatch and still failed to beat the **52.77%** baseline | 09i v1 |
@@ -601,8 +646,10 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 | `concat_patch=true` + vehicle2 ensemble | -0.3pp; v49=0.769 vs v50=0.772 | 10c v49-v50 |
 
 | **concat_patch=true deployment (PCA mismatch)** | **-3.79pp MTMC IDF1** when PCA was trained on 768D; the flag changes ViT embedding from 768D → 1536D, corrupting downstream PCA and FIC whitening. Always verify concat_patch=false for 256px deployment. | 10a v4 (yahia) 2026-04-22 |
-| **camera_bn.enabled=false** | ~**-2pp MTMC IDF1**; cross-camera batch normalisation is critical for feature calibration. Never disable. | 10a v4 (yahia) 2026-04-22 |
+| **camera_bn.enabled=false as a baseline-drift fix** | **HYPOTHESIS FALSIFIED**. Clean retest on `fix/baseline-drift` (commit `7e242f6`) with `yahiaakhalafallah/mtmc-10a-stages-0-2` v8, `yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing` v6, and `yahiaakhalafallah/mtmc-10c-stages-4-5-association-eval` v17 recovered only **0.7666** vs the **0.7663** control (**+0.03pp**) and remained **-0.84pp** below the **0.7750** target. The earlier 10a v4 regression was confounded with `concat_patch=true` and is not valid evidence that this setting explains the drift. | 10a v8, 10b v6, 10c v17; `fix/baseline-drift` @ `7e242f6` |
 | **3-way score-level ensemble (primary ViT + R50-IBN secondary + LAION tertiary)** | **CONFIRMED DEAD END** (10c v9 unbiased). Baseline 76.625%; best w2=0.05, w3=0.30 → 76.817% (+0.192pp — within noise). R50-IBN alone: −0.064pp. LAION tertiary alone: +0.154pp at w3=0.30 (marginal). | 10c v8, 10c v9, 2026-04-22 |
+
+- **DINOv2 score-level fusion (10c v15)**: Best `w_tertiary=0.60` gives **MTMC IDF1 = 0.7703**, which is the **current verified best result** on available weights. It still does not recover the historical **0.784** v80 peak, which depended on a now-unavailable OSNet checkpoint, so the feature-quality bottleneck remains unsolved.
 
 ### 384px TransReID Input Resolution (2026-03-30)
 - **Result**: -2.8pp MTMC IDF1 (0.7562 vs 0.784 baseline)
@@ -651,7 +698,7 @@ Kaggle underperformed the local Exp 1 baseline (MTMC IDF1 0.140 vs 0.233; per-ca
 
 ## Key Insight
 
-**The system is NOT broken.** Vehicle MTMC remains capped by camera-invariant feature quality, not association logic. The current reproducible ceiling is **77.5% MTMC IDF1**, while the historical **78.4%** v80 result is no longer reproducible on the current codebase. Higher single-camera ReID mAP does **not** automatically translate to better MTMC IDF1 in this pipeline: augmentation overhaul plus CircleLoss (**+1.45pp mAP -> -5.3pp MTMC IDF1**), **384px** deployment (**same mAP -> -2.8pp MTMC IDF1**), and **DMT** camera-aware training (**+7pp mAP -> -1.4pp MTMC IDF1**) all made cross-camera association worse, and the CircleLoss-only Experiment B showed that when CircleLoss is definitely active on the primary ViT recipe it fails catastrophically (**18.45% mAP, `inf` loss every epoch**). That means the augoverhaul regression is most likely driven by the augmentations themselves unless the earlier training had a CircleLoss config mismatch. The key lesson remains that **mAP != MTMC IDF1** for CityFlowV2 vehicle tracking: the MTMC graph needs features with clean, thresholdable similarity distributions, not just strong validation ranking.
+**The system is NOT broken.** Vehicle MTMC remains capped by camera-invariant feature quality, not association logic. The current verified best is **77.03% MTMC IDF1**, while the historical **78.4%** v80 result is no longer reproducible because it depended on the now-unavailable `vehicle_osnet_veri776.pth` checkpoint. Higher single-camera ReID mAP does **not** automatically translate to better MTMC IDF1 in this pipeline: augmentation overhaul plus CircleLoss (**+1.45pp mAP -> -5.3pp MTMC IDF1**), **384px** deployment (**same mAP -> -2.8pp MTMC IDF1**), and **DMT** camera-aware training (**+7pp mAP -> -1.4pp MTMC IDF1**) all made cross-camera association worse, and the CircleLoss-only Experiment B showed that when CircleLoss is definitely active on the primary ViT recipe it fails catastrophically (**18.45% mAP, `inf` loss every epoch**). That means the augoverhaul regression is most likely driven by the augmentations themselves unless the earlier training had a CircleLoss config mismatch. The key lesson remains that **mAP != MTMC IDF1** for CityFlowV2 vehicle tracking: the MTMC graph needs features with clean, thresholdable cross-camera similarity distributions, not just strong validation ranking. The **DINOv2 ViT-L/14** result (2026-04-25) adds the most decisive data point yet: despite **+6.65pp mAP** over ViT-B/16 CLIP (86.79% vs 80.14%), DINOv2 produced only **0.744 MTMC IDF1**, while the best available-weight fusion run reached only **0.7703**. Combined with the augoverhaul, 384px, DMT, and OSNet repro failures, the pattern is now unmistakable: **training methodology for cross-camera invariance** (TransReID + CLIP pretraining + VeRi-776 intermediate step) is the decisive variable, not raw backbone capacity or single-distribution mAP.
 
 At the same time, **09l v3 changes the ensemble outlook materially**. The weak secondary-model paths are still dead ends: **ResNet101-IBN-a** topped out at **52.77% mAP**, the original **FastReID SBS R50-IBN** path reached only **63.64%**, the newer **10c v61** deployment of the improved **09p** R50-IBN secondary still produced only a **+0.0006** MTMC IDF1 gain over baseline, **ViT-Small/16 IN-21k** reached only **48.66%**, **EVA02 ViT-B/16 CLIP** reached only **48.17%**, and **ResNeXt101-IBN-a ArcFace** collapsed to **36.88%** because the available pretrained weights were structurally incompatible. But the **CLIP-family secondary path** is now validated in one specific form: **LAION-2B CLIP 09l v3** reached **78.61% mAP / 90.43% R1 / 81.09% mAP_rerank**, only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**. That gives the repo its first genuinely strong, ensemble-ready secondary model. On the person side, ground-plane tracking is already strong (**90.3% MODA, 94.7% IDF1**), but rerunning tracking on the stronger **12a v3** detector stayed essentially flat at **90.0% MODA, 94.7% IDF1**, indicating that the current WILDTRACK pipeline is now tracker-limited rather than detector-limited. The remaining vehicle work is no longer about more association sweeps or more single-model feature tweaks; it is now the direct evaluation of score-level fusion with a strong secondary backbone.
 
@@ -660,3 +707,4 @@ At the same time, **09l v3 changes the ensemble outlook materially**. The weak s
 - **09q v5** pending: Exp B complete at mAP=76.52% (no improvement). Exp A never ran (checkpoint path bug fixed; 09q v5 push pending).
 - **Association re-tune** for camera_bn=true features: current 10a v5 baseline 76.625% vs expected 77.36% (−0.74pp). Fresh Stage-4 sweep needed.
 - ~~10c v9~~ **COMPLETE** — 3-way ensemble dead end confirmed: 76.625% baseline, 76.817% best ensemble.
+- ~~DINOv2 10c pipeline~~ **COMPLETE** — DINOv2 MTMC dead end confirmed: 0.744 MTMC IDF1 (best, AFLink). The best available-weight result is now 0.7703 from CLIP+DINOv2 score fusion.

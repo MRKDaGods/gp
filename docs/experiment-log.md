@@ -1,12 +1,13 @@
 # MTMC Tracker — Comprehensive Experiment Log
 
 > **Purpose**: Prevent re-running experiments. Every parameter combination and approach is logged here.
-> **Last updated**: 2026-04-22
-> **Current best (Kaggle)**: MTMC IDF1 = **78.4%** (10c v44 / ali369 / code v80, min_hits=2)
+> **Last updated**: 2026-04-26
+> **Current verified best (Kaggle)**: MTMC IDF1 = **77.03%** (10c v15 / 10a v7, CLIP+DINOv2 score-level fusion, `w_tertiary=0.60`)
+> **Historical best (not reproducible)**: MTMC IDF1 = **78.4%** (10c v44 / ali369 / code v80, depended on the now-unavailable `vehicle_osnet_veri776.pth` checkpoint)
 > **Current best (local, recent)**: MTMC IDF1 = **77.7%** (10c v28, CamTTA + power_norm=0.5)
 > **Historical local claim**: IDF1 = 82.97% (v47 — unverifiable, predates current experiment log)
 > **SOTA target**: IDF1 ≈ 84.1% (AIC21 1st place) / 84.86% (AIC22 1st)
-> **Gap**: ~5.7–6.5pp — caused by **feature quality**, NOT association tuning
+> **Gap**: ~7.1–7.8pp — caused by **feature quality**, NOT association tuning
 > **Total experiments**: 225+ configs across ~14h GPU
 
 ---
@@ -29,7 +30,9 @@
 
 ## 1. Current Best Configuration
 
-**Kaggle best**: IDF1 = **78.4%** — 10c v44, ali369 account, code v80, 2026-03
+**Reference note**: The configuration below preserves the historical v80/v44 setup for comparison. It depended on `vehicle_osnet_veri776.pth`, a CityFlowV2-adapted OSNet checkpoint that is no longer present in `gumfreddy/mtmc-weights` or `mrkdagods/mtmc-weights`, so it is not currently reproducible.
+
+**Historical Kaggle best**: IDF1 = **78.4%** — 10c v44, ali369 account, code v80, 2026-03
 
 ```yaml
 # Stage 4: Association
@@ -167,6 +170,14 @@ Note: The control run for this retest measured **IDF1 = 0.7921** and **HOTA = 0.
 | 10c v60 | 09n FastReID SBS R50-IBN on 10a v37 -> 10b v22 | First fine-tuned R50-IBN fusion sweep across **w in [0.00, 0.05, ..., 0.50]** | Best **77.36%** at **w=0.10** | REJECTED | Fine-tuned R50-IBN improved the secondary model, but MTMC gain stayed marginal at only **+0.06pp** |
 | 10c v61 | Improved 09p R50-IBN path on 10a `run_kaggle_20260420_201401` -> 10b v23 | Repeated the fusion sweep with the newer 10a chain and improved 09p secondary embeddings | Best **77.3595%** at **w=0.10** | REJECTED | Even with improved secondary training and more robust ingestion, the gain over **w=0.00** is only **+0.0006pp**, confirming the ceiling is still dominated by primary feature quality rather than association tuning |
 
+### 2.8 2026-04-25 DINOv2 Downstream MTMC Evaluation
+
+| Version | Upstream Model | Config Changes | MTMC IDF1 | Verdict | Key Insight |
+|:-------:|----------------|----------------|:---------:|:-------:|-------------|
+| 10c DINOv2 v2 baseline | 09s v1 DINOv2 ViT-L/14 @ 252px (mAP=86.79%, R1=96.15%) | v52 baseline params (`sim=0.46`, `app=0.60`, `fic=0.20`, `aqe_k=3`, `gallery=0.48`, `orphan=0.38`, `intra_merge=True/0.80`), no AFLink | 0.688 | REJECTED | Per-camera IDF1=0.794 (single-cam quality strong); MTMC -8.7pp vs ViT-B/16 CLIP baseline despite +6.65pp mAP |
+| 10c DINOv2 v2 best | 09s v1 DINOv2 ViT-L/14 @ 252px | Same params + AFLink `gap=150px`, `dir_cos=0.85` | **0.744** | REJECTED | AFLink surprisingly helps DINOv2 (+5.6pp: 0.688→0.744); best full metrics: IDF1=0.755, MOTA=0.624, HOTA=0.547; still -3.1pp vs ViT-B/16 CLIP (0.775) |
+
+
 ---
 
 ## 3. Exhaustive Parameter Sweep Results
@@ -271,6 +282,13 @@ The new **09k v1** ViT-Small/16 and **09o v1** EVA02 results are important becau
 | 09o v1 | gumfreddy | EVA02 ViT-B/16 CLIP, **120 epochs**, **AdamW**, **backbone_lr=1e-5**, **head_lr=5e-4**, **CE + Triplet + Center**, cosine schedule | **mAP=48.17%**, **R1=65.90%**, **R5=77.17%**, **R10=82.83%** | REJECTED | Considerably weaker than both the **80.14%** primary ViT-B/16 CLIP baseline and the **63.64%** fine-tuned R50-IBN secondary; EVA02 does not transfer well for vehicle ReID with the current recipe |
 
 The **09o v1** result closes out the current **EVA02** path for CityFlowV2 vehicle ReID. Even with a conservative fine-tuning recipe and a full **120-epoch** run, it finished at only **48.17% mAP**, which is not merely below the practical ensemble threshold but also below the fine-tuned **R50-IBN** secondary. That makes **EVA02 ViT-B/16 CLIP** a dead end under the current training setup and removes it from the list of plausible near-term fusion candidates.
+
+### 4.7 DINOv2 ViT-L/14 (09s)
+
+| Version | Account | Recipe | Result | Verdict | Key Insight |
+|:-------:|:-------:|--------|:------:|:-------:|-------------|
+| 09s v1 | yahiaakhalafallah | DINOv2 ViT-L/14 (`vit_large_patch14_dinov2.lvd142m`), IMG_SIZE=252, STRIDE=14, 120 epochs, BATCH=32, stable ID+batch-hard triplet+delayed center loss | **mAP=86.79%**, **R1=96.15%**, best epoch 115/120 | BREAKTHROUGH ReID; MTMC REGRESSION | +6.65pp mAP / +3.88pp R1 over ViT-B/16 CLIP; downstream MTMC IDF1=0.744 (best, with AFLink) < ViT-B/16 CLIP 0.775 (-3.1pp). Single-cam IDF1=0.794 strong; cross-camera invariance weaker than TransReID recipe. |
+
 
 ### 4.2 Knowledge Distillation (09c)
 
@@ -379,6 +397,7 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 15. **Topology CID_BIAS is also a dead end**: 10c v55 tested additive camera-pair offsets from **(+0.02/-0.10)** through **(+0.06/-0.20)** and all regressed to **0.764-0.762-0.763** versus a **0.774** control. FIC whitening already handles the useful cross-camera calibration; additive CID_BIAS just distorts those calibrated similarities.
 16. **09l v3 makes LAION-2B CLIP ensemble-ready**: after resuming the stable **09l v2** EMA checkpoint from **epoch 160 -> 300**, **09l v3** reached **78.61% mAP / 90.43% R1 / 81.09% mAP_rr / 90.98% R1_rr**. The extension improved steadily through **epoch 180 -> 300** and finished only **1.53pp** behind the deployed **OpenAI CLIP 09b v2** baseline at **80.14% mAP**, so this backbone now clears the practical **~65%** ensemble threshold by a wide margin.
 17. **EVA02 ViT-B/16 CLIP is a dead end with the current recipe**: **09o v1** reached only **48.17% mAP / 65.90% R1 / 77.17% R5 / 82.83% R10** after **120 epochs** with **AdamW** and **CE+Triplet+Center**. That is not just below ensemble usefulness, but even below the fine-tuned **R50-IBN** secondary at **63.64% mAP**, so the backbone does not transfer well to CityFlowV2 vehicles under the present setup.
+18. **OSNet VeRi-776 secondary is closed out**: both reproduction strategies failed with currently available weights. Score-level fusion at **10%** reached only **76.7%**, concat reached **76.4%**, and the original `vehicle_osnet_veri776.pth` checkpoint that enabled the historical v80 path is no longer available in the weights datasets.
 
 ### Gap Attribution
 
@@ -404,6 +423,8 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 
 | Item | Status | Account | Details |
 |------|:------:|:-------:|---------|
+| 09s v1 | COMPLETE | yahiaakhalafallah | **DINOv2 ViT-L/14** (`vit_large_patch14_dinov2.lvd142m`) finished with **mAP=86.79%**, **R1=96.15%**, best epoch **115/120** (training BREAKTHROUGH). Full pipeline `10a→10b→10c` completed 2026-04-25: **MTMC IDF1=0.744** (best, with AFLink `gap=150`, `dir_cos=0.85`); **-3.1pp** vs ViT-B/16 CLIP (0.775). Higher mAP did NOT translate to better MTMC. |
+| 09r v7 | FAILED | yahiaakhalafallah | **ViT-L TransReID** (`vit_large_patch16_224.augreg_in21k_ft_in1k`) finished cleanly on Kaggle **T4 x2** but only reached **mAP=60.38%**, **R1=76.57%**, best epoch **108/120**. Despite the larger backbone, it underperformed the **ViT-B/16 CLIP** baseline by **-19.76pp mAP**, confirming that pretraining quality matters far more than model size. |
 | 10c v31 | COMPLETE | ali369 | Association sweep complete: mtmc_idf1=78.0%; only gallery_thresh improved (+0.2pp) |
 | 09d v13 | COMPLETE | mrkdagods | Timed out after epoch 19: mAP=11.98%; IBN layer1+2+3 fix confirmed, but training recipe is not converging |
 | 09l v1 | COMPLETE | gumfreddy | **mAP=20.36%**, **R1=53.03%**, **mAP_rr=27.16%**; catastrophic failure because **CircleLoss(gamma=128)** overflowed fp16 autocast and kept loss at `inf` throughout |
@@ -518,6 +539,34 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 
 ---
 
+## 2026-04-25 Session: 09r ViT-L Failure and 09s DINOv2 Breakthrough
+
+### 09s v1 - DINOv2 ViT-L/14 on CityFlowV2 (BREAKTHROUGH)
+- **Date**: 2026-04-25
+- **Kernel**: `yahiaakhalafallah/09s-dinov2-large-cityflowv2`
+- **Status**: **BREAKTHROUGH**
+- **Architecture**: **DINOv2 ViT-L/14** (`vit_large_patch14_dinov2.lvd142m`), **IMG_SIZE=252**, **STRIDE=14**, **120 epochs**, **BATCH=32**
+- **Recipe**: same stable loss stack as 09r (**ID + batch-hard triplet + delayed center loss**) to isolate backbone/pretraining effects rather than recipe changes
+- **Best result**: **mAP=86.79%**, **R1=96.15%**, best epoch **115/120**
+- **Delta vs previous best**: **+6.65pp mAP**, **+3.88pp R1** relative to the prior best **ViT-B/16 CLIP** baseline (**80.14% mAP**, **92.27% R1**)
+- **Training quality**: converged much better than 09r, ending around **loss=1.54** with **train_acc=0.9855** versus **loss=2.19** and **train_acc=0.9165** for the ViT-L AugReg run
+- **Interpretation**: this is the strongest CityFlowV2 vehicle ReID model trained so far and the first concrete result that plausibly changes the MTMC ceiling rather than nudging it. DINOv2 large-scale self-supervised pretraining appears to transfer better to cross-camera vehicle identity than both **ViT-B/16 CLIP** and larger non-CLIP ImageNet-style pretraining.
+
+### 09r v7 - ViT-L TransReID on CityFlowV2 (FAILED)
+- **Date**: 2026-04-25
+- **Kernel**: `yahiaakhalafallah/09r-vit-large-cityflowv2`
+- **Status**: **FAILED**
+- **Runtime**: **~2h37m** on Kaggle **T4 x2**
+- **Architecture**: **ViT-Large patch16** (`vit_large_patch16_224.augreg_in21k_ft_in1k`), **256px**, **STRIDE=16**, **120 epochs**, **BATCH=32**, **CENTER_START=10**
+- **Best result**: **mAP=60.38%**, **R1=76.57%**, best epoch **108/120**
+- **Notebook fixes confirmed in this successful run**: gradient checkpointing, 2D `sie_embed`, positional `cam_ids` for DataParallel, and valid Kaggle notebook cell IDs
+- **Delta vs previous best**: **-19.76pp mAP** versus the prior **ViT-B/16 CLIP** baseline (**80.14%**) despite the larger backbone
+- **Interpretation**: 09r cleanly falsifies the idea that model size alone will rescue the vehicle ReID bottleneck. Large non-CLIP pretraining is not enough here; the learned feature geometry from stronger pretraining regimes matters far more than parameter count.
+
+### April 25 Analysis
+- **Main lesson**: pretraining quality is the decisive variable. **ViT-L without CLIP/DINOv2-quality pretraining failed badly**, while **DINOv2 ViT-L/14** delivered an immediate step change.
+- **Strategic implication**: the feature bottleneck may no longer be fundamental. With **86.79% mAP / 96.15% R1**, the next required test is the full **10a -> 10b -> 10c** MTMC pipeline using the 09s checkpoint to measure actual downstream IDF1.
+
 ## 2026-04-22 Session: 3-Way Ensemble Sweep & MTMC_ONLY Bug Fix
 
 ### 10b v3 — FAISS Index from 10a v5
@@ -604,6 +653,47 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 - **Fix**: Commit `69e67a0` — `MTMC_ONLY=False` in notebook, `mtmc_only_submission: false` in config
 - **First corrected run**: 10c v9 — **COMPLETE** (results above)
 
+## 2026-04-25 Final Sprint — CLIP+DINOv2 Score-Level Ensemble Fusion Sweep
+
+- **Date**: 2026-04-25
+- **Kernel**: 10c v15 (gumfreddy account)
+- **Pipeline chain**: 09s v1 (DINOv2 training) -> 10a DINOv2 features -> 10b DINOv2 FAISS -> 10c v15 fusion sweep
+- **Design**: CLIP primary + DINOv2 tertiary score fusion, secondary slot disabled
+- **Wall time**: ~7 min for 11 fusion pairs (vs 12 skipped pairs that required secondary)
+
+| Label | w_tertiary | MTMC_IDF1 | IDF1 | MOTA | HOTA |
+|---|---:|---:|---:|---:|---:|
+| no_fusion_control | 0.00 | 0.7663 | 0.7842 | 0.6691 | 0.5703 |
+| ter_005 | 0.05 | 0.7669 | 0.7846 | 0.6697 | 0.5706 |
+| ter_010 | 0.10 | 0.7669 | 0.7846 | 0.6697 | 0.5706 |
+| ter_015 | 0.15 | 0.7673 | 0.7851 | 0.6702 | 0.5710 |
+| ter_020 | 0.20 | 0.7663 | 0.7840 | 0.6704 | 0.5706 |
+| ter_025 | 0.25 | 0.7662 | 0.7840 | 0.6704 | 0.5706 |
+| ter_030 | 0.30 | 0.7674 | 0.7853 | 0.6716 | 0.5717 |
+| ter_040 | 0.40 | 0.7679 | 0.7851 | 0.6708 | 0.5719 |
+| ter_050 | 0.50 | 0.7696 | 0.7857 | 0.6703 | 0.5721 |
+| **ter_060** | **0.60** | **0.7703** | **0.7916** | **0.6725** | **0.5749** |
+| ter_070 | 0.70 | 0.7693 | 0.7909 | 0.6716 | 0.5746 |
+
+- **Skipped (12 pairs)**: `baseline_floor`, `sec_010`, `w2_005_w3_005`, `w2_005_w3_010`, `w2_005_w3_015`, `w2_005_w3_020`, `w2_005_w3_025`, `w2_005_w3_030`, `w2_010_w3_010`, `w2_010_w3_015`, `w2_010_w3_020`, `w2_010_w3_025`
+- **Best**: `w_tertiary=0.60`, `MTMC IDF1=0.7703`, `IDF1=0.7916`, `MOTA=0.6725`, `HOTA=0.5749`
+- **Conclusion**: +0.40pp local gain; this is the **current verified best result** on available weights. It still remains **-1.37pp** below the historical **0.784** v80 peak, which depended on a now-unavailable OSNet checkpoint.
+- **Reference**: DINOv2 ReID training in kernel 09s v1 (`mAP=86.79%`, `R1=96.15%`, epoch `115/120`)
+
+## 2026-04-25 Session: OSNet Secondary Repro Investigation
+
+- **Date**: 2026-04-25
+- **Branch**: `repro/osnet-secondary`
+- **Objective**: Reproduce the historical v80-era OSNet-assisted gain and resolve whether the missing performance was caused by code drift or by missing secondary-model weights.
+- **Checkpoint audit**: The required `vehicle_osnet_veri776.pth` checkpoint is no longer present in either `gumfreddy/mtmc-weights` or `mrkdagods/mtmc-weights`. It was dropped when `mrkdagods/mtmc-weights` was regenerated on **2026-03-30**.
+
+| Strategy | Pipeline Chain | Design | MTMC IDF1 | Verdict | Key Insight |
+|:--------:|----------------|--------|:---------:|:-------:|-------------|
+| A | 10a v10 -> 10b v7 -> 10c v18 | OSNet score-level fusion, `save_separate=True`, `w=0.10` | **76.7%** | REJECTED | **-0.8pp** vs the CLIP-only baseline; the public OSNet weights do not recover the historical gain |
+| B | 10a v12 -> 10b v8 -> 10c v22 | OSNet concat, `save_separate=False`, **1280D -> 384D PCA** | **76.4%** | REJECTED | **-1.1pp** vs the CLIP-only baseline; concat also regresses with currently available weights |
+
+- **Verdict**: **DEAD END**. The historical v80 **78.4%** result depended on OSNet concat with a CityFlowV2-adapted VeRi-776 checkpoint (`vehicle_osnet_veri776.pth`) that is now lost. The torchreid public VeRi-776 OSNet downloaded via `gdown` does not produce useful features for CityFlowV2, either as score-level fusion or concat.
+
 ### 09q — Extended TransReID Training Status (2026-04-22)
 - **Date**: 2026-04-22
 - **Kernel**: mrkdagods/09q-transreid-cityflow-v10
@@ -611,3 +701,48 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 - **Experiment B (CLIP init from scratch)**: Best **mAP=76.52%** after 120 epochs — **no improvement** over 80.14% baseline.
 - **Experiment A (resume from 80.14% checkpoint)**: **NEVER RAN** — RESUME_CHECKPOINT_CANDIDATES did not include vehicle_transreid_vit_base_cityflowv2.pth. Bug fixed.
 - **Status**: **09q v5 pending push** to re-run Exp A.
+
+---
+
+## 2026-04-25 Session: DINOv2 MTMC Pipeline Evaluation
+
+### Pipeline Chain: 09s v1 → 10a DINOv2 → 10b DINOv2 → 10c DINOv2 v2
+
+- **10a DINOv2**: `yahiaakhalafallah/mtmc-10a-dinov2` — Stages 0-2 with DINOv2 ViT-L/14 checkpoint from 09s v1 (`vit_large_patch14_dinov2.lvd142m`, IMG_SIZE=252). Run ID: `run_kaggle_20260425_035912`.
+- **10b DINOv2**: `yahiaakhalafallah/mtmc-10b-dinov2-stage-3-faiss-indexing` — Stage 3 FAISS indexing of DINOv2 embeddings. COMPLETE.
+- **10c DINOv2**: `yahiaakhalafallah/mtmc-10c-dinov2-stages-4-5-association-eval` — Stage 4-5 association sweep and evaluation. **v2 COMPLETE**.
+
+### 10c DINOv2 v2 — Baseline (v52 params, no AFLink)
+- **Date**: 2026-04-25
+- **Config**: v52 baseline params — `sim_thresh=0.46`, `appearance_weight=0.60`, `fic_reg=0.20`, `aqe_k=3`, `gallery_thresh=0.48`, `orphan_match=0.38`, `intra_merge=True` (thresh=0.80). AFLink disabled.
+- **Result**: **MTMC IDF1 = 0.688**, Per-camera IDF1 = 0.794
+- **Comparison vs ViT-B/16 CLIP**: **-8.7pp** (0.688 vs 0.775)
+- **Interpretation**: Single-camera quality is strong (0.794 per-cam IDF1), but cross-camera association badly underperforms the CLIP baseline despite 86.79% mAP. DINOv2 embeddings are not cross-camera invariant enough under the current pipeline.
+
+### 10c DINOv2 v2 — Best (with AFLink gap=150, dir_cos=0.85)
+- **Date**: 2026-04-25
+- **Config**: Same baseline params + AFLink `max_spatial_gap_px=150`, `min_direction_cos=0.85`
+- **Best swept params**: `sim_thresh=0.46`, `appearance_weight=0.60`, `fic_reg=0.20`, `aqe_k=3`, `gallery_thresh=0.48`, `orphan_match=0.38`, `intra_merge=True` (thresh=0.80)
+- **Result**: **MTMC IDF1 = 0.744**, IDF1 = 0.755, MOTA = 0.624, HOTA = 0.547
+- **AFLink effect on DINOv2**: **+5.6pp** (0.688 → 0.744)
+- **AFLink comparison with ViT-B/16 CLIP**: ViT-B/16 CLIP lost **-3.82pp to -13.20pp** from AFLink in controlled retest (10c v52 addon). AFLink behavior is therefore **model-specific**.
+- **Comparison vs ViT-B/16 CLIP best (no AFLink)**: **-3.1pp** (0.744 vs 0.775)
+- **Interpretation**: AFLink provides partial compensation by bridging track gaps via motion consistency, suggesting DINOv2 features produce more short-gap track fragmentation than CLIP features. However, the cross-camera association deficit is structural and cannot be fully recovered with motion linking.
+
+### Key Finding: ReID mAP Does NOT Predict MTMC IDF1 — Even for DINOv2
+- **DINOv2 ViT-L/14**: mAP=86.79% → MTMC IDF1=0.744 (best, with AFLink)
+- **ViT-B/16 CLIP**: mAP=80.14% → MTMC IDF1=0.775 (no AFLink)
+- **Gap**: DINOv2 has **+6.65pp mAP** but **-3.1pp MTMC IDF1**
+- **Root cause hypothesis**: The mAP metric evaluates within-distribution ranking (same camera split). MTMC requires cross-camera invariance. TransReID's training methodology (VeRi-776 pretraining with camera-aware labels → CityFlowV2 fine-tune with camera-pair ID loss) specifically targets cross-camera invariance. DINOv2's LVD-142M self-supervised pretraining builds powerful general visual representations but does not specifically optimize for cross-camera vehicle identity invariance.
+- **Lesson**: The decisive variable for MTMC is **training methodology for cross-camera invariance** (TransReID recipe + CLIP pretraining), not raw model capacity or single-distribution mAP. This is now consistent with four data points: 384px (+0pp mAP → -2.8pp MTMC), augoverhaul (+1.45pp mAP → -5.3pp MTMC), DMT (+7pp mAP → -1.4pp MTMC), and DINOv2 (+6.65pp mAP → -3.1pp MTMC).
+- **Best MTMC IDF1 remains**: **0.775 (ViT-B/16 CLIP, 10c v52)**
+
+### Phase C - camera_bn=false Retest on v80-Restored Baseline (HYPOTHESIS FALSIFIED)
+- **Date**: 2026-04-25
+- **Kernels**: `yahiaakhalafallah/mtmc-10a-stages-0-2` v8, `yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing` v6, `yahiaakhalafallah/mtmc-10c-stages-4-5-association-eval` v17
+- **Branch**: `fix/baseline-drift` (commit `7e242f6`, NOT merged)
+- **Config change**: `camera_bn.enabled: true -> false`
+- **Result**: **MTMC IDF1 = 0.7666** (CLIP-only baseline, no fusion sweep)
+- **Delta vs current baseline (0.7663)**: **+0.03pp** (statistical noise)
+- **Delta vs historical target (0.7750)**: **-0.84pp** (drift NOT recovered)
+- **Verdict**: **HYPOTHESIS FALSIFIED** — `camera_bn=false` is not the baseline drift cause

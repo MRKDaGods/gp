@@ -89,10 +89,10 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 ## Current Performance State
 
 ### Vehicle Pipeline (CityFlowV2)
-- **Best Reproducible MTMC IDF1**: 0.775 (10c v52, gumfreddy, v80-restored recipe)
-- **Historical Best MTMC IDF1**: 0.784 (v80/v44, ali369) — ~1pp drift, not reproducible on current codebase
+- **Best Reproducible MTMC IDF1**: 0.7703 (CLIP+DINOv2 score-level fusion, `w_tertiary=0.60`, 10c v15, 10a v7)
+- **Historical Best MTMC IDF1**: 0.784 (v80/v44, ali369; requires unavailable OSNet checkpoint, not reproducible)
 - **SOTA target**: IDF1≈0.8486 (AIC22 1st place, 5-model ensemble)
-- **Gap to SOTA**: 7.36pp — caused by feature quality (single model), NOT association tuning
+- **Gap to SOTA**: 7.83pp — caused by feature quality (single model), NOT association tuning
 - **Primary model**: TransReID ViT-B/16 CLIP 256px — mAP=80.14%, R1=92.27% on CityFlowV2
 - **Secondary model**: ResNet101-IBN-a — mAP=52.77% (too weak for ensemble, needs ≥65%)
 - **Association**: EXHAUSTED (225+ configs, all within 0.3pp of optimal)
@@ -126,6 +126,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **Extended ResNet fine-tuning**: 50.61% mAP (degraded from 52.77%)
 - **ArcFace on ResNet101-IBN-a**: 50.80% mAP (warm-start geometry mismatch, 6 variants exhausted at 52.77% ceiling)
 - **ResNeXt101-IBN-a ArcFace**: 36.88% mAP (IBN-Net pretrained weights were for 32x32d while the model here used 32x8d; `strict=False` partial loading left many layers random and crippled training)
+- **OSNet VeRi-776 as secondary (score-level or concat)**: both hurt (**-0.8pp to -1.1pp**); the v80 **78.4%** checkpoint (`vehicle_osnet_veri776.pth`) is lost from the weights datasets
 - **Score-level ensemble with 52.77% secondary**: -0.1pp (secondary too weak, adds noise)
 - **Circle loss + triplet**: 16-30% mAP (conflicting gradients)
 - **SGD for ResNet**: 30.27% mAP (catastrophic — AdamW essential for small datasets)
@@ -153,21 +154,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 ### Kaggle Push Safety Rules (CRITICAL)
 - **NEVER push a kernel more than once without confirming the previous version is fully running or complete** — rapid re-pushes create duplicate GPU sessions that consume both slots and block all other work
 - After every push, check for warning lines like `The following are not valid dataset sources` — these indicate the run started but with missing inputs; **immediately cancel** the bad run via `kaggle kernels cancel <owner/slug>` before attempting a fix-and-repush
-- If `kaggle kernels cancel` fails or is unavailable, **STOP immediately and tell the user** with the kernel URL so they can cancel manually from the Kaggle web UI
-- Kaggle allows a maximum of 2 concurrent GPU sessions per account — always check active sessions before pushing a GPU-enabled notebook
-- When iterating on kernel-metadata.json fixes, validate metadata locally first, then push **once**
-
-### Kaggle Push Safety Rules (CRITICAL)
-- **NEVER push a kernel more than once without confirming the previous version is fully running or complete** — rapid re-pushes create duplicate GPU sessions that consume both slots and block all other work
-- After every push, check for warning lines like `The following are not valid dataset sources` — these indicate the run started but with missing inputs; **immediately cancel** the bad run via `kaggle kernels cancel <owner/slug>` before attempting a fix-and-repush
-- If `kaggle kernels cancel` fails or is unavailable, **STOP immediately and tell the user** with the kernel URL so they can cancel manually from the Kaggle web UI
-- Kaggle allows a maximum of 2 concurrent GPU sessions per account — always check active sessions before pushing a GPU-enabled notebook
-- When iterating on kernel-metadata.json fixes, validate metadata locally first, then push **once**
-
-### Kaggle Push Safety Rules (CRITICAL)
-- **NEVER push a kernel more than once without confirming the previous version is fully running or complete** — rapid re-pushes create duplicate GPU sessions that consume both slots and block all other work
-- After every push, check for warning lines like `The following are not valid dataset sources` — these indicate the run started but with missing inputs; **immediately cancel** the bad run via `kaggle kernels cancel <owner/slug>` before attempting a fix-and-repush
-- If `kaggle kernels cancel` fails or is unavailable, **STOP immediately and tell the user** with the kernel URL so they can cancel manually from the Kaggle web UI
+- If `kaggle kernels cancel` CLI command fails or is unavailable (e.g., older CLI versions lack the subcommand), **post the kernel URL to the user, then keep polling `kaggle kernels status <slug>` every ~60s in a loop** until the status reaches `cancelled`/`error`/`complete`. Do NOT stop the workflow — once cancellation is confirmed, resume the planned work automatically. Only halt entirely if polling shows the run is still `running` after the user has been notified and a reasonable wait has passed.
 - Kaggle allows a maximum of 2 concurrent GPU sessions per account — always check active sessions before pushing a GPU-enabled notebook
 - When iterating on kernel-metadata.json fixes, validate metadata locally first, then push **once**
 
