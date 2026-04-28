@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { LatLngTuple } from "leaflet";
+import dynamic from "next/dynamic";
 import {
   Download,
   Play,
@@ -24,9 +26,11 @@ import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { usePipelineStore, useVideoStore } from "@/store";
+import type { CameraMapCoordinateEntry } from "@/lib/api";
 import {
   exportTrajectories,
   generateSummaryVideo,
+  getDatasets,
   getMatchedSummary,
   getTracklets,
   getTrajectories,
@@ -36,10 +40,108 @@ import {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 const outputPalette = ["#22c55e", "#3b82f6", "#f97316", "#e11d48", "#06b6d4", "#8b5cf6", "#f59e0b"];
 
+const VehiclePathMap = dynamic(() => import("@/components/maps/vehicle-path-map"), { ssr: false });
+
+type CameraCoord = { lat: number; lng: number; label: string };
+
+type MapPathPoint = CameraCoord & { cameraId: string; sequence: number; tooltip: string };
+
+type CoordRegistry = Record<string, CameraMapCoordinateEntry>;
+
+function normalizeCameraId(raw: string): string | null {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  const matches = text.match(/\d+/g);
+  if (!matches || matches.length === 0) return text;
+  const num = Number(matches[matches.length - 1]);
+  if (!Number.isFinite(num)) return text;
+  return String(num);
+}
+
+function formatCameraLabel(raw: string): string {
+  const normalized = normalizeCameraId(raw);
+  if (!normalized) return String(raw);
+  if (/^\d+$/.test(normalized)) return `Camera ${normalized}`;
+  return normalized;
+}
+
+function resolveCameraCoord(registry: CoordRegistry, cameraId: string): CameraCoord | null {
+  const raw = String(cameraId ?? "").trim();
+  if (!raw) return null;
+  const normalized = normalizeCameraId(cameraId);
+  const entry =
+    (normalized ? registry[normalized] : undefined) ?? registry[raw] ?? undefined;
+  if (!entry || !Number.isFinite(entry.lat) || !Number.isFinite(entry.lng)) return null;
+  return {
+    lat: entry.lat,
+    lng: entry.lng,
+    label:
+      typeof entry.label === "string" && entry.label.trim()
+        ? entry.label.trim()
+        : formatCameraLabel(cameraId),
+  };
+}
+
+function coordRegistryEntries(registry: CoordRegistry): Array<{ cameraId: string; lat: number; lng: number; label: string }> {
+  return Object.entries(registry).map(([cameraId, c]) => ({
+    cameraId,
+    lat: c.lat,
+    lng: c.lng,
+    label:
+      typeof c.label === "string" && c.label.trim()
+        ? c.label.trim()
+        : formatCameraLabel(cameraId),
+  }));
+}
+
+function normalizeCameraList(list: unknown[]): string[] {
+  return list.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function extractCameraSequence(item: Record<string, unknown>): string[] {
+  const camSeq = item.cameraSequence ?? item.camera_sequence;
+  if (Array.isArray(camSeq) && camSeq.length) return normalizeCameraList(camSeq);
+
+  const timeline = item.timeline as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(timeline) && timeline.length) {
+    const sorted = [...timeline].sort((a, b) => {
+      const aStart = Number(a.start ?? a.start_time ?? a.startTime ?? 0);
+      const bStart = Number(b.start ?? b.start_time ?? b.startTime ?? 0);
+      return aStart - bStart;
+    });
+    return normalizeCameraList(sorted.map((entry) => entry.cameraId ?? entry.camera_id ?? ""));
+  }
+
+  const tracklets = item.tracklets as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(tracklets) && tracklets.length) {
+    const sorted = [...tracklets].sort((a, b) => {
+      const aStart = Number(a.startTime ?? a.start_time ?? 0);
+      const bStart = Number(b.startTime ?? b.start_time ?? 0);
+      return aStart - bStart;
+    });
+    return normalizeCameraList(sorted.map((t) => t.cameraId ?? t.camera_id ?? ""));
+  }
+
+  const visited = item.cameras_visited;
+  if (Array.isArray(visited) && visited.length) return normalizeCameraList(visited);
+
+  return [];
+}
+
+function computeCenter(points: Array<{ lat: number; lng: number }>): LatLngTuple {
+  if (!points.length) return [0, 0];
+  const totals = points.reduce(
+    (acc, point) => ({ lat: acc.lat + point.lat, lng: acc.lng + point.lng }),
+    { lat: 0, lng: 0 }
+  );
+  return [totals.lat / points.length, totals.lng / points.length];
+}
+
 interface OutputTrajectory {
   id: number;
   vehicleId: string;
   cameras: string[];
+  cameraSequence: string[];
   duration: number;
   vehicleType: string;
   confidence: number;
@@ -49,30 +151,8 @@ interface OutputTrajectory {
 function trajectoryFromGlobal(item: Record<string, unknown>, index: number): OutputTrajectory {
   const gid = Number(item.global_id ?? item.globalId ?? index + 1);
 
-  let cameras: string[] = [];
-  const camSeq = item.cameraSequence ?? item.camera_sequence;
-  const visited = item.cameras_visited;
-  if (Array.isArray(camSeq) && camSeq.length) {
-    cameras = camSeq as string[];
-  } else if (Array.isArray(visited) && visited.length) {
-    cameras = visited as string[];
-  } else if (Array.isArray(item.timeline) && (item.timeline as unknown[]).length) {
-    cameras = Array.from(
-      new Set(
-        (item.timeline as { camera_id?: string; cameraId?: string }[]).map(
-          (e) => e.cameraId ?? e.camera_id ?? ""
-        )
-      )
-    ).filter(Boolean);
-  } else if (Array.isArray(item.tracklets) && (item.tracklets as unknown[]).length) {
-    cameras = Array.from(
-      new Set(
-        (item.tracklets as { camera_id?: string; cameraId?: string }[]).map(
-          (t) => t.cameraId ?? t.camera_id ?? ""
-        )
-      )
-    ).filter(Boolean);
-  }
+  const cameraSequence = extractCameraSequence(item);
+  const cameras = Array.from(new Set(cameraSequence));
 
   const span = (item.timeSpan ?? item.time_span) as [number, number] | undefined;
   let duration = Number(item.totalDuration ?? item.total_duration ?? NaN);
@@ -98,7 +178,8 @@ function trajectoryFromGlobal(item: Record<string, unknown>, index: number): Out
   return {
     id: gid,
     vehicleId: `G-${String(gid).padStart(4, "0")}`,
-    cameras: Array.from(new Set(cameras)),
+    cameras,
+    cameraSequence,
     duration,
     vehicleType,
     confidence: Number.isFinite(confidence) ? confidence : 0.8,
@@ -107,15 +188,72 @@ function trajectoryFromGlobal(item: Record<string, unknown>, index: number): Out
 }
 
 function trajectoryFromTrackletSummary(item: any, index: number): OutputTrajectory {
+  const cameraId = String(item.cameraId ?? item.camera_id ?? "unknown");
   return {
     id: Number(item.id ?? index + 1),
     vehicleId: `T-${String(item.id ?? index + 1).padStart(4, "0")}`,
-    cameras: [String(item.cameraId ?? item.camera_id ?? "unknown")],
+    cameras: [cameraId],
+    cameraSequence: [cameraId],
     duration: Number(item.duration ?? 0),
     vehicleType: String(item.className ?? "sedan").toLowerCase(),
     confidence: Number(item.confidence ?? 0.8),
     color: outputPalette[index % outputPalette.length],
   };
+}
+
+function trajectoriesFromMatchedSummary(summary: any): OutputTrajectory[] {
+  const clips = Array.isArray(summary?.clips)
+    ? summary.clips.filter((c: any) => c && c.ok !== false)
+    : [];
+  if (clips.length === 0) return [];
+
+  const grouped = new Map<number, any[]>();
+  clips.forEach((clip: any, idx: number) => {
+    const gid = Number(clip.global_id ?? clip.globalId ?? idx + 1);
+    if (!Number.isFinite(gid)) return;
+    const list = grouped.get(gid) ?? [];
+    list.push(clip);
+    grouped.set(gid, list);
+  });
+
+  const groups = Array.from(grouped.entries()).sort((a, b) => a[0] - b[0]);
+
+  return groups.map(([gid, groupClips], index) => {
+    const ordered = [...groupClips].sort((a, b) => {
+      const aStart = Number(a.start_time_s ?? a.startTime ?? 0);
+      const bStart = Number(b.start_time_s ?? b.startTime ?? 0);
+      return aStart - bStart;
+    });
+
+    const cameraSequence = normalizeCameraList(
+      ordered.map((clip: any) => clip.camera_id ?? clip.cameraId ?? "")
+    );
+    const cameras = Array.from(new Set(cameraSequence));
+
+    const starts = ordered.map((clip: any) => Number(clip.start_time_s ?? clip.startTime ?? 0));
+    const ends = ordered.map((clip: any) => Number(clip.end_time_s ?? clip.endTime ?? 0));
+    const minStart = starts.length > 0 ? Math.min(...starts) : 0;
+    const maxEnd = ends.length > 0 ? Math.max(...ends) : minStart;
+    const duration = Math.max(0, maxEnd - minStart);
+
+    const confs = ordered
+      .map((clip: any) => Number(clip.confidence ?? 0))
+      .filter((c: number) => Number.isFinite(c));
+    const confidence = confs.length > 0
+      ? confs.reduce((sum: number, v: number) => sum + v, 0) / confs.length
+      : 0.8;
+
+    return {
+      id: gid,
+      vehicleId: `G-${String(gid).padStart(4, "0")}`,
+      cameras,
+      cameraSequence,
+      duration,
+      vehicleType: "vehicle",
+      confidence,
+      color: outputPalette[index % outputPalette.length],
+    };
+  });
 }
 
 function formatClock(seconds: number): string {
@@ -136,6 +274,7 @@ export function OutputStage() {
   const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [trajectories, setTrajectories] = useState<OutputTrajectory[]>([]);
+  const [selectedTrajectoryId, setSelectedTrajectoryId] = useState<number | null>(null);
   const [dataSource, setDataSource] = useState<"real" | "none">("none");
   const [error, setError] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<"mp4" | "json" | "csv">("mp4");
@@ -146,7 +285,12 @@ export function OutputStage() {
   const [summaryVideoUrl, setSummaryVideoUrl] = useState<string | null>(null);
   const [matchedSummary, setMatchedSummary] = useState<any>(null);
 
-  const { runId } = usePipelineStore();
+  const {
+    runId,
+    galleryRunId,
+    mapCameraCoordinates,
+    setMapCameraCoordinates,
+  } = usePipelineStore();
   const { currentVideo } = useVideoStore();
 
   const effectiveRunId = useMemo(
@@ -163,6 +307,45 @@ export function OutputStage() {
 
   const rawStreamUrl = currentVideo ? `${API_BASE}/videos/stream/${currentVideo.id}` : null;
   const streamUrl = summaryVideoUrl ?? rawStreamUrl;
+
+  useEffect(() => {
+    if (mapCameraCoordinates && Object.keys(mapCameraCoordinates).length > 0) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const resp = await getDatasets();
+        if (cancelled) return;
+        const list = Array.isArray(resp.data) ? resp.data : [];
+
+        if (galleryRunId) {
+          const dsByGallery = list.find((d) => d.galleryRunId === galleryRunId);
+          const cg = dsByGallery?.cameraCoordinates;
+          if (cg && Object.keys(cg).length > 0) {
+            setMapCameraCoordinates(cg);
+            return;
+          }
+        }
+
+        const m = effectiveRunId?.match(/^dataset_precompute_(.+)$/i);
+        if (m) {
+          const key = m[1];
+          const dsByRun = list.find((d) => d.name.toLowerCase() === key.toLowerCase());
+          const cr = dsByRun?.cameraCoordinates;
+          if (cr && Object.keys(cr).length > 0) {
+            setMapCameraCoordinates(cr);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [galleryRunId, effectiveRunId, mapCameraCoordinates, setMapCameraCoordinates]);
 
   // -- Playback helpers ---------------------------------------------------
 
@@ -296,7 +479,9 @@ export function OutputStage() {
             setSummaryVideoUrl(null);
           }
 
+          let matchedSummaryData: any = null;
           if (msRes.status === "fulfilled") {
+            matchedSummaryData = msRes.value;
             setMatchedSummary(msRes.value);
           } else {
             setMatchedSummary(null);
@@ -311,6 +496,15 @@ export function OutputStage() {
                   trajectoryFromGlobal(row as unknown as Record<string, unknown>, i)
                 )
               );
+              setDataSource("real");
+              return;
+            }
+          }
+
+          if (matchedSummaryData) {
+            const summaryTrajectories = trajectoriesFromMatchedSummary(matchedSummaryData);
+            if (summaryTrajectories.length > 0) {
+              setTrajectories(summaryTrajectories);
               setDataSource("real");
               return;
             }
@@ -349,6 +543,15 @@ export function OutputStage() {
     return () => { ac.abort(); };
   }, [currentVideo?.id, runId, currentVideo?.latestRunId]);
 
+  useEffect(() => {
+    if (trajectories.length === 0) {
+      if (selectedTrajectoryId !== null) setSelectedTrajectoryId(null);
+      return;
+    }
+    const hasSelected = selectedTrajectoryId != null && trajectories.some((t) => t.id === selectedTrajectoryId);
+    if (!hasSelected) setSelectedTrajectoryId(trajectories[0].id);
+  }, [trajectories, selectedTrajectoryId]);
+
   // -- Derived stats -------------------------------------------------------
 
   const outputStats = useMemo(() => {
@@ -384,6 +587,79 @@ export function OutputStage() {
 
     return { camerasAnalyzed, uniqueVehicles, crossCameraMatches, avgConfidence };
   }, [trajectories, matchedSummary]);
+
+  const selectedTrajectory = useMemo(
+    () => trajectories.find((t) => t.id === selectedTrajectoryId) ?? null,
+    [trajectories, selectedTrajectoryId]
+  );
+
+  const coordRegistry = useMemo(
+    () => ({ ...(mapCameraCoordinates ?? {}) }) as CoordRegistry,
+    [mapCameraCoordinates]
+  );
+
+  const hasMapLayer = Object.keys(coordRegistry).length > 0;
+
+  const registryCameraPoints = useMemo(
+    () => coordRegistryEntries(coordRegistry),
+    [coordRegistry]
+  );
+
+  const pathPoints = useMemo<MapPathPoint[]>(() => {
+    if (!selectedTrajectory) return [];
+    return selectedTrajectory.cameraSequence
+      .map((cameraId, index) => {
+        const coord = resolveCameraCoord(coordRegistry, cameraId);
+        if (!coord) return null;
+        return {
+          cameraId,
+          sequence: index + 1,
+          tooltip: `${coord.label} (#${index + 1})`,
+          ...coord,
+        };
+      })
+      .filter((point): point is MapPathPoint => point != null);
+  }, [selectedTrajectory, coordRegistry]);
+
+  const pathLatLngs = useMemo<LatLngTuple[]>(
+    () => pathPoints.map((point) => [point.lat, point.lng]),
+    [pathPoints]
+  );
+
+  const missingCameraIds = useMemo(() => {
+    if (!selectedTrajectory) return [];
+    const missing = selectedTrajectory.cameraSequence.filter(
+      (cameraId) => !resolveCameraCoord(coordRegistry, cameraId)
+    );
+    return Array.from(
+      new Set(
+        missing
+          .map((c) => normalizeCameraId(c))
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+  }, [selectedTrajectory, coordRegistry]);
+
+  const mapFitPoints = useMemo(
+    () =>
+      pathPoints.length > 0
+        ? pathPoints
+        : hasMapLayer
+          ? registryCameraPoints
+          : [],
+    [pathPoints, hasMapLayer, registryCameraPoints]
+  );
+
+  const mapCenter = useMemo(() => {
+    const pts =
+      pathPoints.length > 0 ? pathPoints : hasMapLayer ? registryCameraPoints : [];
+    return computeCenter(pts);
+  }, [pathPoints, hasMapLayer, registryCameraPoints]);
+
+  const pathSummary = useMemo(() => {
+    if (!selectedTrajectory || selectedTrajectory.cameraSequence.length === 0) return "";
+    return selectedTrajectory.cameraSequence.map(formatCameraLabel).join(" -> ");
+  }, [selectedTrajectory]);
 
   // -- Render --------------------------------------------------------------
 
@@ -428,7 +704,7 @@ export function OutputStage() {
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
 
         {/* Left panel: video + trajectory list */}
-        <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4">
+        <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 space-y-4">
           {/* Video player */}
           <div
             className="relative w-full overflow-hidden rounded-lg border border-border bg-slate-900"
@@ -514,6 +790,77 @@ export function OutputStage() {
               </div>
             </div>
           </div>
+
+          {hasMapLayer && (
+            <Card>
+              <CardHeader className="space-y-1">
+                <CardTitle className="text-sm">Vehicle Path Map</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Select a tracked vehicle to draw its camera-to-camera path using this dataset&apos;s
+                  geographic camera positions (<code className="text-[10px]">camera_coordinates.json</code>
+                  ).
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">Tracked vehicle</Label>
+                  <select
+                    className="w-full rounded border bg-background px-3 py-2 text-sm"
+                    value={selectedTrajectoryId ?? ""}
+                    onChange={(e) => {
+                      const nextId = Number(e.target.value);
+                      setSelectedTrajectoryId(Number.isFinite(nextId) ? nextId : null);
+                    }}
+                    disabled={trajectories.length === 0}
+                  >
+                    {trajectories.length === 0 && <option value="">No trajectories</option>}
+                    {trajectories.map((trajectory) => (
+                      <option key={trajectory.id} value={trajectory.id}>
+                        {trajectory.vehicleId} ({trajectory.cameras.length} cams)
+                      </option>
+                    ))}
+                  </select>
+                  {selectedTrajectory && pathSummary && (
+                    <p className="text-xs text-muted-foreground break-words">
+                      Path: {pathSummary}
+                    </p>
+                  )}
+                  {selectedTrajectory && !pathSummary && (
+                    <p className="text-xs text-muted-foreground">No camera sequence available for this track.</p>
+                  )}
+                  {missingCameraIds.length > 0 && (
+                    <p className="text-xs text-amber-500">
+                      Missing coordinates: {missingCameraIds.map((id) => `Camera ${id}`).join(", ")}
+                    </p>
+                  )}
+                </div>
+                <div className="relative h-72 overflow-hidden rounded-lg border bg-background">
+                  <VehiclePathMap
+                    center={mapCenter}
+                    fitPoints={mapFitPoints}
+                    cameraPoints={registryCameraPoints}
+                    pathLatLngs={pathLatLngs}
+                    pathPoints={pathPoints}
+                    pathColor={selectedTrajectory?.color}
+                  />
+                  {!selectedTrajectory && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60">
+                      <span className="rounded bg-background/80 px-3 py-1 text-xs text-muted-foreground">
+                        No trajectories to display.
+                      </span>
+                    </div>
+                  )}
+                  {selectedTrajectory && pathPoints.length === 0 && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60">
+                      <span className="rounded bg-background/80 px-3 py-1 text-xs text-muted-foreground">
+                        No coordinates available for this path.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
         </div>
 

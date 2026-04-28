@@ -119,7 +119,16 @@ export function InferenceStage() {
   const { selectedTrackIds, detections } = useDetectionStore();
   const { setCurrentStage, locationFilter, setLocationFilter, dateTimeRange, setDateTimeRange } =
     useSessionStore();
-  const { runId, setRunId, galleryRunId: storeGalleryRunId, setGalleryRunId, setIsRunning, updateStageProgress, stages } = usePipelineStore();
+  const {
+    runId,
+    setRunId,
+    galleryRunId: storeGalleryRunId,
+    setGalleryRunId,
+    setMapCameraCoordinates,
+    setIsRunning,
+    updateStageProgress,
+    stages,
+  } = usePipelineStore();
   const { currentVideo, videos, setCurrentVideo } = useVideoStore();
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -227,6 +236,16 @@ export function InferenceStage() {
     const useDataset = selectedDataset && selectedDataset !== "__uploaded__";
     const selectedDs = useDataset ? datasets.find((d) => d.name === selectedDataset) : null;
 
+    if (
+      useDataset &&
+      selectedDs?.cameraCoordinates &&
+      Object.keys(selectedDs.cameraCoordinates).length > 0
+    ) {
+      setMapCameraCoordinates(selectedDs.cameraCoordinates);
+    } else {
+      setMapCameraCoordinates(null);
+    }
+
     // Stage 2/3 ALWAYS runs on the PROBE (uploaded) video so we get its feature vector.
     // The dataset only contributes its galleryRunId for cross-camera matching.
     const probeVideo = currentVideo;
@@ -305,6 +324,12 @@ export function InferenceStage() {
             : dsList.find((d) => d.hasGallery);
           if (bestDs?.galleryRunId) {
             setGalleryRunId(bestDs.galleryRunId);
+          }
+          if (
+            bestDs?.cameraCoordinates &&
+            Object.keys(bestDs.cameraCoordinates).length > 0
+          ) {
+            setMapCameraCoordinates(bestDs.cameraCoordinates);
           }
         } catch (_) { /* non-fatal */ }
       }

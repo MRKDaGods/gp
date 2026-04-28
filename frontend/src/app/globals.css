@@ -1,3 +1,5 @@
+@import "leaflet/dist/leaflet.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -53,9 +55,11 @@
   * {
     @apply border-border;
   }
+
   html {
     @apply h-full overflow-hidden;
   }
+
   body {
     @apply h-full overflow-hidden bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
@@ -67,6 +71,7 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -144,10 +149,13 @@
 
 /* Splash screen animation */
 @keyframes logo-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
+
   50% {
     transform: scale(1.05);
     opacity: 0.8;
@@ -192,17 +200,34 @@
 
 /* Camera colors */
 .camera-c001,
-.camera-S01_c001 { --camera-color: #3b82f6; }
+.camera-S01_c001 {
+  --camera-color: #3b82f6;
+}
+
 .camera-c002,
-.camera-S01_c002 { --camera-color: #8b5cf6; }
+.camera-S01_c002 {
+  --camera-color: #8b5cf6;
+}
+
 .camera-c003,
-.camera-S01_c003 { --camera-color: #ec4899; }
+.camera-S01_c003 {
+  --camera-color: #ec4899;
+}
+
 .camera-c004,
-.camera-S02_c006 { --camera-color: #f97316; }
+.camera-S02_c006 {
+  --camera-color: #f97316;
+}
+
 .camera-c005,
-.camera-S02_c007 { --camera-color: #14b8a6; }
+.camera-S02_c007 {
+  --camera-color: #14b8a6;
+}
+
 .camera-c006,
-.camera-S02_c008 { --camera-color: #eab308; }
+.camera-S02_c008 {
+  --camera-color: #eab308;
+}
 
 /* Map container */
 .leaflet-container {

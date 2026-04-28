@@ -721,6 +721,13 @@ export function getVideoStreamUrl(videoId: string): string {
 // Dataset endpoints
 // ============================================================================
 
+/** Loaded from dataset/<name>/camera_coordinates.json via GET /datasets */
+export interface CameraMapCoordinateEntry {
+  lat: number;
+  lng: number;
+  label?: string;
+}
+
 export interface DatasetFolder {
   name: string;
   path: string;
@@ -732,6 +739,8 @@ export interface DatasetFolder {
   isProcessing: boolean;
   runId: string | null;
   galleryRunId: string | null;
+  /** Present when camera_coordinates.json exists with at least one valid camera. */
+  cameraCoordinates?: Record<string, CameraMapCoordinateEntry> | null;
 }
 
 export async function getDatasets(): Promise<ApiResponse<DatasetFolder[]>> {
@@ -744,6 +753,19 @@ export async function processDataset(
   return fetchApi<ApiResponse<any>>(`/datasets/${encodeURIComponent(folder)}/process`, {
     method: 'POST',
   });
+}
+
+export async function saveDatasetCameraCoordinates(
+  folder: string,
+  coordinates: Record<string, CameraMapCoordinateEntry>
+): Promise<ApiResponse<Record<string, CameraMapCoordinateEntry>>> {
+  return fetchApi<ApiResponse<Record<string, CameraMapCoordinateEntry>>>(
+    `/datasets/${encodeURIComponent(folder)}/camera-coordinates`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(coordinates),
+    }
+  );
 }
 
 export { ApiError };

@@ -533,7 +533,40 @@ export function TimelineStage() {
     const loadTracks = async () => {
         try {
         let attemptedAssociation = false;
+        let finalTracksSet = false;
         const selectedTrackIdsArr = Array.from(selectedTrackIdSet).map((v) => String(v));
+
+        const showQuickFallback = async () => {
+          if (!currentVideo || selectedTrackIdSet.size === 0) return;
+          try {
+            const fallbackResp = await getTracklets(undefined, currentVideo.id);
+            if (cancelled || finalTracksSet) return;
+            let summary = Array.isArray(fallbackResp.data) ? fallbackResp.data : [];
+
+            const selectedTrackNums = new Set<number>();
+            selectedTrackIdSet.forEach((trackId) => {
+              selectedTrackNums.add(trackId);
+            });
+            summary = summary.filter((item: any) => selectedTrackNums.has(Number(item.id)));
+
+            const fallbackTracks = buildTracksFromSummary(summary);
+            if (fallbackTracks.length > 0 && !cancelled && !finalTracksSet) {
+              setTracks(fallbackTracks);
+              setTracksLoading(false);
+              updateStageProgress(4, {
+                status: "running",
+                progress: 5,
+                message: "Running cross-camera association... showing selected tracklets",
+              });
+            }
+          } catch {
+            // Best-effort fallback only.
+          }
+        };
+
+        if (selectedTrackIdSet.size > 0) {
+          void showQuickFallback();
+        }
 
         console.groupCollapsed("[Stage4][Timeline] loadTracks");
         console.info("context", {
@@ -568,6 +601,7 @@ export function TimelineStage() {
             const rows = buildTracksFromTrajectories(q1Traj);
             if (rows.length > 0) {
               setMatchedFallbackActive(false);
+              finalTracksSet = true;
               setTracks(rows);
               updateStageProgress(4, { status: "completed", progress: 100, message: String(q1Data.message ?? "Association loaded (query-matched)") });
               console.info("decision", "matched trajectories rendered", { rows: rows.length });
@@ -587,6 +621,7 @@ export function TimelineStage() {
               const fallbackRows = buildTracksFromMatchedSummary(summaryResp);
               if (fallbackRows.length > 0) {
                 setMatchedFallbackActive(true);
+                finalTracksSet = true;
                 setTracks(fallbackRows);
                 updateStageProgress(4, { status: "completed", progress: 100, message: "Showing pre-exported matched clips (fallback)" });
                 console.info("decision", "matched summary fallback rendered", { rows: fallbackRows.length });
@@ -640,6 +675,7 @@ export function TimelineStage() {
 
               if (q2Traj.length > 0) {
                 const rows = buildTracksFromTrajectories(q2Traj);
+                finalTracksSet = true;
                 setTracks(rows);
                 updateStageProgress(4, { status: "completed", progress: 100, message: String(q2Data.message ?? "Association complete (query-matched)") });
                 console.info("decision", "matched trajectories rendered after stage4", { rows: rows.length });
@@ -649,6 +685,7 @@ export function TimelineStage() {
 
               if (q2Selected.length > 0) {
                 const fallbackTracks = buildTracksFromSummary(q2Selected);
+                finalTracksSet = true;
                 setTracks(fallbackTracks);
                 updateStageProgress(4, {
                   status: "completed",
@@ -667,6 +704,7 @@ export function TimelineStage() {
           // stage4 exists but no match; show selected single-camera tracklets if available.
           if (q1Selected.length > 0) {
             const fallbackTracks = buildTracksFromSummary(q1Selected);
+            finalTracksSet = true;
             setTracks(fallbackTracks);
             updateStageProgress(4, {
               status: "completed",
@@ -681,6 +719,7 @@ export function TimelineStage() {
           // Critical: if query mode was requested but backend returned neither
           // matches nor selected fallback, do NOT fall through to the non-query
           // path that loads all trajectories.
+          finalTracksSet = true;
           setTracks([]);
           updateStageProgress(4, {
             status: "completed",
@@ -705,6 +744,7 @@ export function TimelineStage() {
             Array.isArray(trajectoryResponse.data) ? trajectoryResponse.data : []
           );
           if (trajectoryRows.length > 0) {
+            finalTracksSet = true;
             setTracks(trajectoryRows);
             updateStageProgress(4, { status: "completed", progress: 100, message: "Association loaded (query-matched)" });
             console.info("decision", "non-query stage4 trajectories rendered", { rows: trajectoryRows.length });
@@ -747,6 +787,7 @@ export function TimelineStage() {
               Array.isArray(traj2.data) ? traj2.data : []
             );
             if (rows2.length > 0) {
+              finalTracksSet = true;
               setTracks(rows2);
               updateStageProgress(4, { status: "completed", progress: 100, message: "Association complete (query-matched)" });
               console.info("decision", "non-query stage4 trajectories rendered after rerun", { rows: rows2.length });
@@ -773,6 +814,7 @@ export function TimelineStage() {
 
           const fallbackTracks = buildTracksFromSummary(fallbackSummary);
           if (fallbackTracks.length > 0) {
+            finalTracksSet = true;
             setTracks(fallbackTracks);
             updateStageProgress(4, {
               status: "completed",
@@ -781,6 +823,7 @@ export function TimelineStage() {
             });
             console.info("decision", "selected stage1 fallback rendered", { rows: fallbackTracks.length });
           } else {
+            finalTracksSet = true;
             setTracks([]);
             updateStageProgress(4, {
               status: "completed",
@@ -808,6 +851,7 @@ export function TimelineStage() {
         }
         const realTracks = buildTracksFromSummary(summary);
         if (realTracks.length > 0) {
+          finalTracksSet = true;
           setTracks(realTracks);
           updateStageProgress(4, { status: "completed", progress: 100, message: "Showing stage 1 tracklets" });
           console.info("decision", "no-query stage1 summary rendered", { rows: realTracks.length });

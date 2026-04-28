@@ -19,6 +19,8 @@ import type {
 interface PipelineState {
   runId: string | null;
   galleryRunId: string | null;
+  /** Map camera id -> lat/lng for vehicle path map; from selected dataset's camera_coordinates.json */
+  mapCameraCoordinates: Record<string, { lat: number; lng: number; label?: string }> | null;
   stages: StageProgress[];
   isRunning: boolean;
   currentStage: StageNumber;
@@ -27,6 +29,9 @@ interface PipelineState {
   // Actions
   setRunId: (id: string | null) => void;
   setGalleryRunId: (id: string | null) => void;
+  setMapCameraCoordinates: (
+    coords: Record<string, { lat: number; lng: number; label?: string }> | null
+  ) => void;
   updateStageProgress: (stage: StageNumber, progress: Partial<StageProgress>) => void;
   setCurrentStage: (stage: StageNumber) => void;
   setIsRunning: (running: boolean) => void;
@@ -49,6 +54,7 @@ export const usePipelineStore = create<PipelineState>()(
     (set) => ({
       runId: null,
       galleryRunId: null,
+      mapCameraCoordinates: null,
       stages: [...initialStages],
       isRunning: false,
       currentStage: 0,
@@ -57,6 +63,8 @@ export const usePipelineStore = create<PipelineState>()(
       setRunId: (id) => set({ runId: id }),
 
       setGalleryRunId: (id) => set({ galleryRunId: id }),
+
+      setMapCameraCoordinates: (coords) => set({ mapCameraCoordinates: coords }),
 
       updateStageProgress: (stage, progress) =>
         set((state) => ({
@@ -75,6 +83,7 @@ export const usePipelineStore = create<PipelineState>()(
         set({
           runId: null,
           galleryRunId: null,
+          mapCameraCoordinates: null,
           stages: [...initialStages],
           isRunning: false,
           currentStage: 0,
