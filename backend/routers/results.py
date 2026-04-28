@@ -66,7 +66,22 @@ async def generate_summary_video(
     if not run_dir.exists():
         raise HTTPException(status_code=404, detail="Run not found")
 
-    # 1. Cached stage6 summary video
+    include_clips: Optional[List[Dict[str, Any]]] = None
+    if isinstance(_config, dict):
+        raw = _config.get("includeClips")
+        if isinstance(raw, list):
+            include_clips = raw
+
+    # Timeline-filtered summary: only stitch confirmed camera clips (separate cache file).
+    if include_clips is not None:
+        generated = _generate_annotated_summary_video(run_id, include_clips=include_clips)
+        if generated and generated.exists():
+            return {
+                "success": True,
+                "data": {"videoUrl": f"/api/download/{run_id}/{generated.name}"},
+            }
+
+    # 1. Cached stage6 summary video (full)
     for candidate in [
         run_dir / "stage6" / "summary.mp4",
         run_dir / "stage6" / "summary_video.mp4",
@@ -77,7 +92,7 @@ async def generate_summary_video(
                 "data": {"videoUrl": f"/api/download/{run_id}/{candidate.name}"},
             }
 
-    # 2. Generate annotated summary on demand from matched tracklets + stage0 frames
+    # 2. Generate annotated summary on demand from matched tracklets + stage0 frames (full)
     generated = _generate_annotated_summary_video(run_id)
     if generated and generated.exists():
         return {

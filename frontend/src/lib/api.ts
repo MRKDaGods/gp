@@ -539,6 +539,8 @@ export async function getEvaluationResults(
 export async function generateSummaryVideo(
   runId: string,
   config?: {
+    /** Only stitch these clips (timeline camera/track); keys match matched/summary.json */
+    includeClips?: Array<{ camera_id: string; track_id: number }>;
     globalIds?: number[];
     speedup?: number;
     dedupe?: boolean;

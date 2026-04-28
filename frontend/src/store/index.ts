@@ -324,6 +324,8 @@ interface TimelineState {
   scrollPosition: number;
   selectedTrackId: string | null;
   confirmedTracks: Set<string>;
+  /** Once true (user confirmed/unconfirmed any clip), output filters to confirmed clips only. */
+  timelineClipFilterEngaged: boolean;
 
   // Actions
   setTracks: (tracks: TimelineTrack[]) => void;
@@ -346,8 +348,10 @@ export const useTimelineStore = create<TimelineState>()(
       scrollPosition: 0,
       selectedTrackId: null,
       confirmedTracks: new Set(),
+      timelineClipFilterEngaged: false,
 
-      setTracks: (tracks) => set({ tracks }),
+      setTracks: (tracks) =>
+        set({ tracks, timelineClipFilterEngaged: false, confirmedTracks: new Set() }),
 
       addTrack: (track) =>
         set((state) => ({ tracks: [...state.tracks, track] })),
@@ -375,6 +379,7 @@ export const useTimelineStore = create<TimelineState>()(
           const newSet = new Set(state.confirmedTracks);
           newSet.add(id);
           return {
+            timelineClipFilterEngaged: true,
             confirmedTracks: newSet,
             tracks: state.tracks.map((t) =>
               t.id === id ? { ...t, confirmed: true } : t
@@ -387,6 +392,7 @@ export const useTimelineStore = create<TimelineState>()(
           const newSet = new Set(state.confirmedTracks);
           newSet.delete(id);
           return {
+            timelineClipFilterEngaged: true,
             confirmedTracks: newSet,
             tracks: state.tracks.map((t) =>
               t.id === id ? { ...t, confirmed: false } : t

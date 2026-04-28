@@ -25,8 +25,9 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
-import { usePipelineStore, useVideoStore } from "@/store";
+import { usePipelineStore, useTimelineStore, useVideoStore } from "@/store";
 import type { CameraMapCoordinateEntry } from "@/lib/api";
+import type { TimelineTrack } from "@/types";
 import {
   exportTrajectories,
   generateSummaryVideo,
@@ -146,6 +147,72 @@ interface OutputTrajectory {
   vehicleType: string;
   confidence: number;
   color: string;
+}
+
+function cameraKeyForMatch(cam: string): string {
+  return normalizeCameraId(cam) ?? String(cam).trim();
+}
+
+/** True if this timeline row is the same vehicle identity as traj (global id or probe tracklet). */
+function trajectoryOwnsRow(traj: OutputTrajectory, row: TimelineTrack): boolean {
+  if (row.globalId != null && Number.isFinite(Number(row.globalId))) {
+    return Number(row.globalId) === traj.id;
+  }
+  if (traj.vehicleId.startsWith("T-") && traj.cameras.length >= 1) {
+    const rc = cameraKeyForMatch(row.cameraId);
+    const tc = cameraKeyForMatch(traj.cameras[0]);
+    return Number(row.trackletId) === traj.id && rc === tc;
+  }
+  return false;
+}
+
+/**
+ * Timeline has one checkbox per camera clip. Trim each trajectory's camera path to
+ * **confirmed** segments only so unchecking a camera removes it from output (path, map, counts).
+ */
+function applyTimelineSelectionToTrajectories(
+  all: OutputTrajectory[],
+  tracks: TimelineTrack[],
+  timelineFilterEngaged: boolean
+): OutputTrajectory[] {
+  if (!timelineFilterEngaged || tracks.length === 0) return all;
+
+  const confirmedRows = tracks.filter((t) => t.confirmed);
+  if (confirmedRows.length === 0) return [];
+
+  const out: OutputTrajectory[] = [];
+
+  for (const traj of all) {
+    const rowsForTraj = confirmedRows.filter((row) => trajectoryOwnsRow(traj, row));
+    if (rowsForTraj.length === 0) continue;
+
+    const allowedKeys = new Set(rowsForTraj.map((row) => cameraKeyForMatch(row.cameraId)));
+
+    const newSequence = traj.cameraSequence.filter((c) => allowedKeys.has(cameraKeyForMatch(c)));
+    if (newSequence.length === 0) continue;
+
+    out.push({
+      ...traj,
+      cameraSequence: newSequence,
+      cameras: Array.from(new Set(newSequence)),
+    });
+  }
+
+  return out;
+}
+
+/** Clip keys for stitched summary video API — must match matched/summary.json (camera + track). */
+function buildIncludeClipsForSummaryApi(
+  tracks: TimelineTrack[],
+  engaged: boolean
+): { camera_id: string; track_id: number }[] | undefined {
+  if (!engaged || tracks.length === 0) return undefined;
+  const rows = tracks.filter((t) => t.confirmed);
+  if (rows.length === 0) return [];
+  return rows.map((r) => ({
+    camera_id: String(r.cameraId ?? ""),
+    track_id: Number(r.trackletId),
+  }));
 }
 
 function trajectoryFromGlobal(item: Record<string, unknown>, index: number): OutputTrajectory {
@@ -292,6 +359,30 @@ export function OutputStage() {
     setMapCameraCoordinates,
   } = usePipelineStore();
   const { currentVideo } = useVideoStore();
+  const { tracks: timelineTracks, timelineClipFilterEngaged } = useTimelineStore();
+
+  const displayTrajectories = useMemo(
+    () =>
+      applyTimelineSelectionToTrajectories(
+        trajectories,
+        timelineTracks,
+        timelineClipFilterEngaged
+      ),
+    [trajectories, timelineTracks, timelineClipFilterEngaged]
+  );
+
+  const summaryVideoPayload = useMemo(():
+    | { includeClips: { camera_id: string; track_id: number }[] }
+    | undefined => {
+    const clips = buildIncludeClipsForSummaryApi(timelineTracks, timelineClipFilterEngaged);
+    if (clips === undefined) return undefined;
+    return { includeClips: clips };
+  }, [timelineTracks, timelineClipFilterEngaged]);
+
+  const summaryVideoRequestKey = useMemo(
+    () => JSON.stringify(summaryVideoPayload ?? null),
+    [summaryVideoPayload]
+  );
 
   const effectiveRunId = useMemo(
     () => runId ?? currentVideo?.latestRunId ?? hydratedLatestRunId ?? null,
@@ -409,7 +500,7 @@ export function OutputStage() {
     }
     try {
       setIsExporting(true);
-      const response = await generateSummaryVideo(effectiveRunId);
+      const response = await generateSummaryVideo(effectiveRunId, summaryVideoPayload);
       const videoUrl = response.data?.videoUrl;
       if (videoUrl) window.open(toAbsoluteUrl(videoUrl), "_blank", "noopener,noreferrer");
       else if (streamUrl) window.open(streamUrl, "_blank", "noopener,noreferrer");
@@ -464,20 +555,23 @@ export function OutputStage() {
         if (ac.signal.aborted) return;
 
         if (eff) {
-          // Fire summary video, matched summary, and trajectories in parallel
-          const [summaryRes, msRes, trajRes] = await Promise.allSettled([
-            generateSummaryVideo(eff),
+          setSummaryVideoUrl(null);
+
+          const [msRes, trajRes] = await Promise.allSettled([
             getMatchedSummary(eff),
             getTrajectories(eff),
           ]);
           if (ac.signal.aborted) return;
 
-          if (summaryRes.status === "fulfilled") {
-            const url = summaryRes.value.data?.videoUrl;
-            setSummaryVideoUrl(url ? toAbsoluteUrl(url) : null);
-          } else {
-            setSummaryVideoUrl(null);
-          }
+          void generateSummaryVideo(eff, summaryVideoPayload)
+            .then((resp) => {
+              if (ac.signal.aborted) return;
+              const url = resp.data?.videoUrl;
+              setSummaryVideoUrl(url ? toAbsoluteUrl(url) : null);
+            })
+            .catch(() => {
+              if (!ac.signal.aborted) setSummaryVideoUrl(null);
+            });
 
           let matchedSummaryData: any = null;
           if (msRes.status === "fulfilled") {
@@ -541,16 +635,18 @@ export function OutputStage() {
     });
 
     return () => { ac.abort(); };
-  }, [currentVideo?.id, runId, currentVideo?.latestRunId]);
+  }, [currentVideo?.id, runId, currentVideo?.latestRunId, summaryVideoRequestKey]);
 
   useEffect(() => {
-    if (trajectories.length === 0) {
+    if (displayTrajectories.length === 0) {
       if (selectedTrajectoryId !== null) setSelectedTrajectoryId(null);
       return;
     }
-    const hasSelected = selectedTrajectoryId != null && trajectories.some((t) => t.id === selectedTrajectoryId);
-    if (!hasSelected) setSelectedTrajectoryId(trajectories[0].id);
-  }, [trajectories, selectedTrajectoryId]);
+    const hasSelected =
+      selectedTrajectoryId != null &&
+      displayTrajectories.some((t) => t.id === selectedTrajectoryId);
+    if (!hasSelected) setSelectedTrajectoryId(displayTrajectories[0].id);
+  }, [displayTrajectories, selectedTrajectoryId]);
 
   // -- Derived stats -------------------------------------------------------
 
@@ -560,7 +656,7 @@ export function OutputStage() {
 
     const camerasFromTrajectories = new Set<string>();
     let crossCameraFromTrajectories = 0;
-    trajectories.forEach((traj) => {
+    displayTrajectories.forEach((traj) => {
       traj.cameras.forEach((cam) => camerasFromTrajectories.add(cam));
       if (traj.cameras.length > 1) crossCameraFromTrajectories += 1;
     });
@@ -570,8 +666,8 @@ export function OutputStage() {
       : camerasFromTrajectories.size;
 
     const uniqueVehicles = hasMatched
-      ? Math.max(ms.totalMatchedTracklets ?? 0, trajectories.length)
-      : trajectories.length;
+      ? Math.max(ms.totalMatchedTracklets ?? 0, displayTrajectories.length)
+      : displayTrajectories.length;
 
     const crossCameraMatches = hasMatched
       ? ms.totalMatchedTrajectories ?? 0
@@ -581,16 +677,16 @@ export function OutputStage() {
     const clipConfidences = clips.map((c: any) => Number(c.confidence ?? 0)).filter((c: number) => c > 0);
     const avgConfidence = clipConfidences.length > 0
       ? clipConfidences.reduce((a: number, b: number) => a + b, 0) / clipConfidences.length
-      : trajectories.length > 0
-        ? trajectories.reduce((sum, traj) => sum + traj.confidence, 0) / trajectories.length
+      : displayTrajectories.length > 0
+        ? displayTrajectories.reduce((sum, traj) => sum + traj.confidence, 0) / displayTrajectories.length
         : 0;
 
     return { camerasAnalyzed, uniqueVehicles, crossCameraMatches, avgConfidence };
-  }, [trajectories, matchedSummary]);
+  }, [displayTrajectories, matchedSummary]);
 
   const selectedTrajectory = useMemo(
-    () => trajectories.find((t) => t.id === selectedTrajectoryId) ?? null,
-    [trajectories, selectedTrajectoryId]
+    () => displayTrajectories.find((t) => t.id === selectedTrajectoryId) ?? null,
+    [displayTrajectories, selectedTrajectoryId]
   );
 
   const coordRegistry = useMemo(
@@ -811,10 +907,10 @@ export function OutputStage() {
                       const nextId = Number(e.target.value);
                       setSelectedTrajectoryId(Number.isFinite(nextId) ? nextId : null);
                     }}
-                    disabled={trajectories.length === 0}
+                    disabled={displayTrajectories.length === 0}
                   >
-                    {trajectories.length === 0 && <option value="">No trajectories</option>}
-                    {trajectories.map((trajectory) => (
+                    {displayTrajectories.length === 0 && <option value="">No trajectories</option>}
+                    {displayTrajectories.map((trajectory) => (
                       <option key={trajectory.id} value={trajectory.id}>
                         {trajectory.vehicleId} ({trajectory.cameras.length} cams)
                       </option>

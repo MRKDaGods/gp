@@ -26,6 +26,26 @@ export function formatTimestamp(timestamp: number): string {
   });
 }
 
+const DEFAULT_PUBLIC_API_URL = "http://localhost:8004/api";
+
+/** Turn fetch() failures into a short actionable message for stage banners / toasts. */
+export function formatNetworkFailure(err: unknown): string {
+  const base =
+    typeof process !== "undefined" &&
+    process.env?.NEXT_PUBLIC_API_URL &&
+    String(process.env.NEXT_PUBLIC_API_URL).trim() !== ""
+      ? String(process.env.NEXT_PUBLIC_API_URL)
+      : DEFAULT_PUBLIC_API_URL;
+  const raw = err instanceof Error ? err.message : String(err);
+  if (/failed to fetch|network error|networkerror|load failed|network request failed/i.test(raw)) {
+    return (
+      `Cannot reach the API at ${base}. ` +
+      "Start the backend (e.g. python start.py) or set NEXT_PUBLIC_API_URL to match the server."
+    );
+  }
+  return raw;
+}
+
 export function formatBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let unitIndex = 0;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Loader2, CheckCircle2, XCircle, ChevronDown, ChevronUp, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatNetworkFailure } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -73,9 +73,8 @@ export function GlobalProcessingBanner() {
       } catch (err) {
         pollFailCountRef.current += 1;
         if (pollFailCountRef.current >= 5) {
-          const msg = err instanceof Error ? err.message : String(err);
           setIsRunning(false);
-          setError(`Backend unreachable after 5 attempts: ${msg}`);
+          setError(formatNetworkFailure(err));
         }
       }
     };

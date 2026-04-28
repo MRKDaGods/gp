@@ -1,4 +1,5 @@
 """Frame path resolution, clip export, and video transcoding helpers."""
+import hashlib
 import json
 import shutil
 import subprocess
@@ -220,12 +221,38 @@ def _export_tracklet_clip(
     return True, f"frames_written={written}"
 
 
-def _generate_annotated_summary_video(run_id: str, target_fps: float = 10.0) -> Optional[Path]:
+def _allowed_clip_keys_from_request(
+    include_clips: List[Dict[str, Any]],
+) -> set:
+    """Normalize (camera_id, track_id) keys the same way matched/summary.json clips do."""
+    allowed: set = set()
+    for item in include_clips:
+        raw_cam = str(item.get("camera_id") or item.get("cameraId") or "").strip()
+        tid_raw = item.get("track_id")
+        if tid_raw is None:
+            tid_raw = item.get("trackletId")
+        try:
+            tid = int(tid_raw)
+        except (TypeError, ValueError):
+            continue
+        cam = _normalize_camera_id(raw_cam)
+        if cam and tid >= 0:
+            allowed.add((cam, tid))
+    return allowed
+
+
+def _generate_annotated_summary_video(
+    run_id: str,
+    target_fps: float = 10.0,
+    include_clips: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[Path]:
     """Generate a stitched full-frame annotated video for a run's matched trajectory.
 
     Reads matched/summary.json, loads stage1 tracklets, draws bounding boxes
     on stage0 frames, and concatenates all camera segments with transition cards.
-    Saves to stage6/summary.mp4.  Returns the path on success, None on failure.
+    Saves to stage6/summary.mp4 (full) or stage6/summary_sel_<hash>.mp4 (subset).
+    Optional ``include_clips`` limits which cameras/tracks are stitched (timeline selection).
+    Returns the path on success, None on failure.
     """
     if not _HAS_CV2:
         return None
@@ -245,13 +272,30 @@ def _generate_annotated_summary_video(run_id: str, target_fps: float = 10.0) -> 
     if not clips:
         return None
 
+    allowed: Optional[set] = None
+    if include_clips is not None:
+        if len(include_clips) == 0:
+            return None
+        allowed = _allowed_clip_keys_from_request(include_clips)
+        if not allowed:
+            return None
+
     dataset_run_id = str(summary.get("datasetRunId", run_id))
     probe_run_id = str(summary.get("probeRunId", run_id))
 
     out_dir = run_dir / "stage6"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "summary.mp4"
-    tmp_path = out_dir / "summary.tmp.mp4"
+    if include_clips is None:
+        out_path = out_dir / "summary.mp4"
+    else:
+        blob = json.dumps(include_clips, sort_keys=True, default=str).encode("utf-8")
+        h = hashlib.sha256(blob).hexdigest()[:24]
+        out_path = out_dir / f"summary_sel_{h}.mp4"
+
+    if include_clips is not None and out_path.exists():
+        return out_path
+
+    tmp_path = out_dir / f"_tmp_{out_path.stem}_frames.mp4"
 
     writer = None
     vid_w, vid_h = 0, 0
@@ -270,6 +314,10 @@ def _generate_annotated_summary_video(run_id: str, target_fps: float = 10.0) -> 
             confidence = float(clip_info.get("confidence", 0))
 
             if not camera_id or track_id < 0:
+                continue
+
+            cam_key = _normalize_camera_id(camera_id)
+            if allowed is not None and (cam_key, track_id) not in allowed:
                 continue
 
             tracklet = _find_tracklet_for_clip(
@@ -635,6 +683,6 @@ def _export_matched_clips(
 
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(
-        f"[matched] {len(ok_clips)} clip(s) across {len(cameras_seen)} camera(s) → {out_dir}",
+        f"[matched] {len(ok_clips)} clip(s) across {len(cameras_seen)} camera(s) -> {out_dir}",
         flush=True,
     )

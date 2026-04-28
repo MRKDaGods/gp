@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import {
-  Image,
+  Image as ImageIcon,
   X,
   Check,
   RefreshCw,
@@ -64,7 +64,7 @@ export function RefinementStage() {
     bbox?: number[];
   }>>([]);
 
-  const confirmedTrackList = tracks.filter((t) => t.confirmed);
+  const confirmedTrackList = useMemo(() => tracks.filter((t) => t.confirmed), [tracks]);
   const selectedFrameCount = refinementFrames.length;
   const maxFrames = 16;
   const cropRunId = galleryRunId ?? runId ?? null;
@@ -85,7 +85,7 @@ export function RefinementStage() {
       }
 
       setFramesLoading(true);
-      const rows: Array<{
+      type Row = {
         id: string;
         frameId: number;
         timestamp: number;
@@ -93,49 +93,57 @@ export function RefinementStage() {
         trackId: number;
         imageUrl?: string;
         bbox?: number[];
-      }> = [];
+      };
 
-      for (const track of confirmedTrackList) {
-        try {
-          const sequence = await getTrackletSequence(cropRunId, track.cameraId, track.trackletId, 16);
-          if (cancelled) return;
+      const trackRows = await Promise.all(
+        confirmedTrackList.map(async (track): Promise<Row[]> => {
+          try {
+            const sequence = await getTrackletSequence(cropRunId, track.cameraId, track.trackletId, 16);
 
-          const samples = Array.isArray(sequence.frames) ? sequence.frames.slice(0, 8) : [];
-          if (samples.length > 0) {
-            for (const sample of samples) {
-              const start = Number(track.startTime ?? 0);
-              const end = Number(track.endTime ?? start + 0.1);
-              const rel = Number(sample.timeRel ?? 0);
-              rows.push({
-                id: `${track.id}-frame-${sample.frameId}`,
-                frameId: sample.frameId,
-                timestamp: Number.isFinite(sample.timestamp as number)
-                  ? Number(sample.timestamp)
-                  : start + rel * Math.max(end - start, 0.1),
+            const samples = Array.isArray(sequence.frames) ? sequence.frames.slice(0, 8) : [];
+            if (samples.length > 0) {
+              const out: Row[] = [];
+              for (const sample of samples) {
+                const start = Number(track.startTime ?? 0);
+                const end = Number(track.endTime ?? start + 0.1);
+                const rel = Number(sample.timeRel ?? 0);
+                out.push({
+                  id: `${track.id}-frame-${sample.frameId}`,
+                  frameId: sample.frameId,
+                  timestamp: Number.isFinite(sample.timestamp as number)
+                    ? Number(sample.timestamp)
+                    : start + rel * Math.max(end - start, 0.1),
+                  cameraId: track.cameraId,
+                  trackId: track.trackletId,
+                  imageUrl: getRunFullFrameUrl(cropRunId, track.cameraId, sample.frameId),
+                  bbox: Array.isArray(sample.bbox) ? sample.bbox : undefined,
+                });
+              }
+              return out;
+            }
+          } catch {
+            /* fall through */
+          }
+
+          if (track.representativeFrame != null) {
+            return [
+              {
+                id: `${track.id}-rep-${track.representativeFrame}`,
+                frameId: Number(track.representativeFrame),
+                timestamp: Number(track.startTime ?? 0),
                 cameraId: track.cameraId,
                 trackId: track.trackletId,
-                imageUrl: getRunFullFrameUrl(cropRunId, track.cameraId, sample.frameId),
-                bbox: Array.isArray(sample.bbox) ? sample.bbox : undefined,
-              });
-            }
-            continue;
+                imageUrl: getRunFullFrameUrl(cropRunId, track.cameraId, Number(track.representativeFrame)),
+                bbox: Array.isArray(track.representativeBbox) ? track.representativeBbox : undefined,
+              },
+            ];
           }
-        } catch {
-          // Fall through to representative frame fallback below.
-        }
+          return [];
+        })
+      );
 
-        if (track.representativeFrame != null) {
-          rows.push({
-            id: `${track.id}-rep-${track.representativeFrame}`,
-            frameId: Number(track.representativeFrame),
-            timestamp: Number(track.startTime ?? 0),
-            cameraId: track.cameraId,
-            trackId: track.trackletId,
-            imageUrl: getRunFullFrameUrl(cropRunId, track.cameraId, Number(track.representativeFrame)),
-            bbox: Array.isArray(track.representativeBbox) ? track.representativeBbox : undefined,
-          });
-        }
-      }
+      if (cancelled) return;
+      const rows = trackRows.flat();
 
       if (!cancelled) {
         setRefinementCandidateFrames(rows.slice(0, 64));
@@ -444,7 +452,7 @@ export function RefinementStage() {
             <div className="p-4">
               {refinementFrames.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <Image className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" aria-hidden />
                   <p>No frames selected</p>
                   <p className="text-sm">Click frames to add as reference</p>
                 </div>
@@ -467,7 +475,7 @@ export function RefinementStage() {
                           />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <Image className="h-6 w-6 text-muted-foreground/50" />
+                            <ImageIcon className="h-6 w-6 text-muted-foreground/50" aria-hidden />
                           </div>
                         )}
                         <Button
@@ -559,7 +567,7 @@ function FrameCard({ frame, isSelected, onSelect, disabled }: FrameCardProps) {
         )
       ) : (
         <div className="absolute inset-0 bg-muted flex items-center justify-center">
-          <Image className="h-8 w-8 text-muted-foreground/30" />
+          <ImageIcon className="h-8 w-8 text-muted-foreground/30" aria-hidden />
         </div>
       )}
 
