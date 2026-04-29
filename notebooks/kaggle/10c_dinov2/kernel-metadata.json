@@ -1,0 +1,16 @@
+{
+  "id": "yahiaakhalafallah/mtmc-10c-dinov2-stages-4-5-association-eval",
+  "title": "MTMC 10c DINOv2 - Stages 4-5 (Association + Eval)",
+  "code_file": "10c-dinov2-stages-4-5-association-eval.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/mtmc-10b-dinov2-stage-3-faiss-indexing"
+  ]
+}

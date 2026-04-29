@@ -1,7 +1,7 @@
 ---
 name: 'MTMC Orchestrator'
 description: 'Orchestrates multi-model workflows for MTMC Tracker. Decomposes complex tasks, delegates to @planner (Opus) for strategy and @coder (GPT-5.4) for implementation, synthesizes results. Use for: complex multi-stage work, breakthrough attempts, coordinated pipeline changes, experiment campaigns, autonomous optimization, experiment loops, iterative hill climbing, autoresearch.'
-model: Claude Sonnet 4.6 (copilot)
+model: Claude Opus 4.7 (copilot)
 tools: [execute/runNotebookCell, execute/testFailure, execute/getTerminalOutput, execute/awaitTerminal, execute/killTerminal, execute/runTask, execute/createAndRunTask, execute/runInTerminal, execute/runTests, read/getNotebookSummary, read/problems, read/readFile, read/viewImage, read/readNotebookCellOutput, read/terminalSelection, read/terminalLastCommand, read/getTaskOutput, agent/runSubagent, web/fetch, web/githubRepo, todo]
 ---
 

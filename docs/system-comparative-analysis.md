@@ -1,192 +1,142 @@
 # System Comparative Analysis
 
-*Conservative note: any value marked with an asterisk uses a published or spec-default literature estimate rather than a re-measurement from this repository.*
+*Conservative note: any value marked with an asterisk (*) is a literature claim, not measured in this repository. The new VeRi-776 comparison figures render citation-pending literature rows as hollow markers or hatched white bars rather than presenting them as fully verified.*
+
+## 1. Abstract
 
-## 1. Executive summary
-
-- We achieve **90.8% of AIC22 1st-place MTMC IDF1** (0.7703 / 0.8486) with a **verified 2-model CLIP+DINOv2 fusion** versus a 5-model ensemble, which still places this system on the accuracy-compute Pareto frontier for CityFlowV2.
-- Our person pipeline reaches **0.947 ground-plane IDF1 on WildTrack**, within **0.6 pp** of the published SOTA default used in the spec, while preserving the same Stage 1-4 pipeline shell across domains.
-- The remaining **7.4 pp** CityFlowV2 gap is best explained by **cross-camera feature invariance**, not missed association tuning, as supported by [findings.md](findings.md) and [experiment-log.md](experiment-log.md), which document 225+ association sweeps and a growing dead-end catalog.
-- The training and deployment recipe remains accessible on a **single Kaggle T4 or P100 (16GB)** rather than a multi-A100 ensemble workflow, as documented in [findings.md](findings.md) and the project instructions.
-- The strongest currently supported angle is a **reproducible efficiency-plus-negative-results story** centered on the verified **0.7703** CLIP+DINOv2 result, with the historical **0.784** OSNet-assisted path explicitly labeled unreproducible because it depended on unavailable weights.
-
-![](figures/G1_pareto.png)
-
-Figure 1. CityFlowV2 Pareto position. The CLIP+DINOv2 fusion point is the current verified headline result. The historical 0.784 OSNet-assisted path is not treated as reproducible because it depended on a now-unavailable checkpoint.
-
-## 2. Per-dataset breakdown
-
-### CityFlowV2
-
-CityFlowV2 is the main vehicle MTMC benchmark in this repo and the only vehicle dataset on which the full seven-stage pipeline is evaluated end-to-end. It is the hardest comparison in this document because the leaderboard winners relied on multi-model ensembles and heavyweight matching logic. The relevant repository evidence is summarized in [findings.md](findings.md) and the broader sweep history is tracked in [experiment-log.md](experiment-log.md). The historical **0.784** v80 result is retained only as context because it depended on an OSNet checkpoint that is no longer available.
-
-| Metric | Our result | Published SOTA | Notes |
-|---|---:|---:|---|
-| MTMC IDF1 (verified current best) | **0.7703** | **0.8486** | 2-model CLIP+DINOv2 score fusion |
-| MTMC IDF1 (historical peak, not reproducible) | **0.784** | **0.8486** | v80 / v44 path with now-unavailable OSNet checkpoint |
-| Vehicle ReID mAP / R1 | **80.14 / 92.27** | **86.79 / 96.15** | DINOv2 is stronger on ReID but weaker on MTMC |
-
-Relevant figures: [G1](figures/G1_pareto.png), [G2](figures/G2_mtmc_idf1_datasets.png), [G3](figures/G3_reid_map_benchmarks.png), [G4](figures/G4_ablation_waterfall.png), [G5](figures/G5_dead_ends.png), [G6](figures/G6_compute_cost.png).
-
-![](figures/G2_mtmc_idf1_datasets.png)
-
-Figure 2. Ours versus published SOTA on the two MTMC datasets discussed in this paper. WildTrack uses the spec default literature reference value rather than a re-measurement in this repo.
-
-### WildTrack
-
-WildTrack provides the cross-domain validation case for people rather than vehicles. The pipeline keeps the same overall stage structure, but the front-end detector changes to MVDeTr and the association step operates on ground-plane trajectories. The key measured results are documented in [findings.md](findings.md).
-
-| Metric | Our result | Published SOTA | Notes |
-|---|---:|---:|---|
-| Ground-plane IDF1 | **0.947** | **0.953*** | Spec default literature comparator |
-| Ground-plane MODA | **0.903** | **0.915*** | MVDeTr-family reference value |
-| Detector MODA | **0.921** | n/a | Measured repo detector result |
-
-Relevant figure: [G2](figures/G2_mtmc_idf1_datasets.png).
-
-### VeRi-776
-
-VeRi-776 is not evaluated directly by this repo's MTMC pipeline, but it is still relevant because it benchmarks the same backbone family that underpins the vehicle branch. The numbers reported here are therefore backbone-class literature references rather than system-level measurements. That limitation needs to be stated explicitly in any paper draft.
-
-| Metric | Our result | Published SOTA | Notes |
-|---|---:|---:|---|
-| mAP / Rank-1 | **82.1 / 97.4*** | **87.0 / 97.7*** | Backbone-class comparison only |
-| Direct repo evaluation | n/a | n/a | Not run in this work |
-
-Relevant figure: [G3](figures/G3_reid_map_benchmarks.png).
-
-### Market-1501
-
-Market-1501 plays the same supporting role as VeRi-776: it is a benchmark for the backbone class rather than a direct end-to-end MTMC evaluation for this repo. The comparison is still useful because it shows that the backbone family is not intrinsically weak on standard ReID leaderboards. The paper should still frame these rows as context, not as headline evidence.
-
-| Metric | Our result | Published SOTA | Notes |
-|---|---:|---:|---|
-| mAP / Rank-1 | **89.8 / 95.7*** | **95.6 / 96.7** | Our row is a CLIP-ReID literature proxy |
-| Direct repo evaluation | n/a | n/a | Not run in this work |
-
-Relevant figure: [G3](figures/G3_reid_map_benchmarks.png).
-
-![](figures/G3_reid_map_benchmarks.png)
-
-Figure 3. Single-model ReID mAP. The CityFlowV2 pair is measured in this repo; VeRi-776 and Market-1501 are literature-only backbone-class comparisons.
-
-<!-- [CITE_NEEDED: WildTrack GP IDF1 citation retained as literature default 0.953.] -->
-<!-- [CITE_NEEDED: WildTrack GP MODA citation retained as literature default 0.915.] -->
-<!-- [CITE_NEEDED: VeRi-776 current SOTA retained as spec default 87.0 / 97.7.] -->
-<!-- [CITE_NEEDED: Market-1501 CLIP-ReID value retained as spec default 89.8 / 95.7.] -->
-
-## 3. Hypothesis validation
-
-### H1 - Efficiency frontier
-
-**Claim:** Our system achieves about 91% of CityFlowV2 SOTA accuracy with fewer models and a materially lower compute footprint.
-
-**Evidence:**
-- The measured verified result is **0.7703 MTMC IDF1** versus **0.8486** for AIC22 Team28, which is **90.8%** of the published SOTA score in relative terms; see [findings.md](findings.md) and [paper-strategy.md](paper-strategy.md).
-- The comparison is **2 models versus 5 models** for the verified current best. The historical **0.784** path used fewer models as well, but it depended on an unavailable OSNet checkpoint and is therefore not a reproducible headline number.
-- The absolute SOTA GPU footprint is still a literature estimate, so the safest hard claim is the model-count efficiency gap rather than an exact GPU-hour ratio.
-
-**Verdict:** **SUPPORTED**.
-
-### H2 - Low-end accessibility
-
-**Claim:** The full practical recipe fits on a single free-tier Kaggle GPU.
-
-**Evidence:**
-- The repository instructions and results consistently target **Kaggle T4 / P100 16GB** hardware for both training and staged execution; see [findings.md](findings.md).
-- The spec-default compute summary for the backbone training is about **5-6 hours** and stage 0-2 inference is about **50 minutes** on that hardware class.
-- The competing AIC22 leaderboard systems are described as multi-model ensemble recipes rather than single-backbone runs.
-
-**Verdict:** **SUPPORTED**.
-
-### H3 - Reproducibility moat
-
-**Claim:** The repo offers a stronger reproducibility story than a typical MTMC paper.
-
-**Evidence:**
-- [experiment-log.md](experiment-log.md) documents **225+ configs** and continuous experiment history.
-- [findings.md](findings.md) maintains a large dead-end catalog, including CSLS, AFLink, CID_BIAS, DMT, reranking, hierarchical clustering, and multiple ensemble routes.
-- The public kernel-style workflow, named stage notebooks, and linked experimental outcomes make the negative results auditable rather than anecdotal.
-
-**Verdict:** **SUPPORTED**.
-
-### H4 - Cross-domain consistency
-
-**Claim:** One architecture family handles both vehicles and people without a full redesign.
-
-**Evidence:**
-- The CityFlowV2 branch reaches **0.7703 MTMC IDF1** as its verified current best and the WildTrack branch reaches **0.947 ground-plane IDF1** using the same overall seven-stage shell; see [findings.md](findings.md).
-- Stages 2-4 remain conceptually shared: appearance features, indexing, and graph-style association still define the backbone of the system.
-- The front-end detector is not actually identical across domains because WildTrack uses **MVDeTr** rather than the CityFlowV2 detector path, so this is not a pure single-model detector story.
-
-**Verdict:** **PARTIAL**.
-
-### H5 - Inference cost
-
-**Claim:** A single-model design should cost less per camera than a five-model ensemble.
-
-**Evidence:**
-- The model-count comparison is direct: one ReID forward path versus five in the AIC22 Team28 recipe.
-- The repo's measured stage 0-2 execution is about **50 minutes** for the single-model system, while the SOTA inference footprint is not directly reported in this repo and remains a literature estimate.
-- The strongest honest statement is qualitative: fewer backbones imply lower per-camera feature extraction cost even when the exact GPU-hour multiplier is not fully pinned down.
-
-**Verdict:** **SUPPORTED (qualitative)**.
-
-![](figures/G4_ablation_waterfall.png)
-
-Figure 4. Waterfall from a conservative baseline estimate to the measured CLIP and fusion endpoints. The large final jump is the cumulative effect of the restored stage-4 recipe rather than a single isolated tweak.
-
-![](figures/G5_dead_ends.png)
-
-Figure 5. Negative results matter here because they are the clearest evidence that the bottleneck is not an untried association knob.
-
-## 4. Where we stand (Pareto position)
-
-The CityFlowV2 comparison in [G1](figures/G1_pareto.png) is the clearest summary of the paper angle. This system occupies the lower-left part of the frontier: low model count, moderate compute, and still-competitive MTMC accuracy. The leaderboard winners occupy the upper-right corner: better accuracy, but only by paying with more models and more system complexity.
-
-The most important negative conclusion from [findings.md](findings.md) and [experiment-log.md](experiment-log.md) is that the frontier will not move by adding yet another stage-4 sweep. The repo already records **225+** association settings and a long list of harmful structural variants. The best frontier-shifting move is therefore **better cross-camera invariance training**, not more association tuning and not indiscriminate ensembling.
-
-![](figures/G6_compute_cost.png)
-
-Figure 6. Compute cost comparison. The Team28 bar is an estimate-driven visualization, so the prose claim should stay tied to model count and hardware class rather than pretending to know exact GPU-hour parity.
-
-## 5. Publishing recommendation (decision tree)
-
-```text
-H1 (efficiency) SUPPORTED?
-├── YES → "Beyond Accuracy: Efficient MTMC at 91% SOTA with One Model"
-│         Targets: IEEE T-ITS, IEEE Access
-├── PARTIAL + H3 (reproducibility) SUPPORTED?
-│   └── YES → "A Reproducible Single-Model Baseline for Multi-Camera Tracking"
-│             Targets: MDPI Sensors, Multimedia Tools & Applications
-└── H4 (cross-domain) SUPPORTED?
-    └── YES → "One Pipeline, Two Domains: Unified MTMC for Vehicles and People"
-              Targets: MTA, IEEE Access
-```
-
-If the stronger efficiency framing weakens under review because of the literature-estimate compute numbers, the fallback title should remain **"A Reproducible Single-Model Baseline for Multi-Camera Tracking"**. That still leaves a publishable contribution because the repo has unusually strong negative-result coverage and a conservative, fully documented baseline story.
-
-**Recommended primary target:** **IEEE Access**. It is the best fit for an honest efficiency-plus-reproducibility paper that lands below absolute SOTA but has a defensible systems contribution. **Backup target:** **Multimedia Tools and Applications**, which is more tolerant of a narrower engineering contribution and can still accommodate the exhaustive-ablation angle.
-
-## 6. Risk register
-
-| Risk | Severity | Mitigation |
-|---|---|---|
-| No direct evaluation on VeRi-776 / Market-1501 (only backbone-class literature numbers) | HIGH | Keep an explicit limitation in the paper and avoid presenting those rows as system-level evidence. |
-| Single-dataset MTMC coverage on the vehicle side | MEDIUM | Use WildTrack as the cross-domain validation case and keep the claim scoped to CityFlowV2 for vehicles. |
-| No human evaluation / qualitative study | LOW | Add one qualitative trajectory panel per scene in the paper draft if time permits. |
-| Compute footprint of SOTA baselines remains estimate-driven | HIGH | State the hard claim as 1 model versus 5 models and treat GPU-hour deltas as approximate. |
-| Historical 0.784 result depended on an unavailable OSNet checkpoint | MEDIUM | Report **0.7703** as the verified current best and label **0.784** as historical-only context tied to unavailable weights. |
-| Person pipeline uses MVDeTr rather than the vehicle detector path | MEDIUM | Keep H4 at **PARTIAL** and explain exactly which stages are shared. |
-
-## 7. Limitations
-
-The backbone-class comparisons on VeRi-776 and Market-1501 are not direct experiments from this repo, so they should be treated as context only. The compute comparison against AIC22 Team28 is directionally useful but still partly estimate-driven. Those limitations do not erase the efficiency result, but they do constrain how aggressively it should be framed.
-
-## 8. Source trail
-
-- Core vehicle and person results: [findings.md](findings.md)
-- Exhaustive sweeps and dead ends: [experiment-log.md](experiment-log.md)
-- Comparative venue and leaderboard framing: [paper-strategy.md](paper-strategy.md)
-
-* Literature value, not re-measured in this repo.
+This document compares the MTMC Tracker system against published references on CityFlowV2, VeRi-776, and WILDTRACK. The headline CityFlowV2 result remains unchanged: a single **TransReID ViT-B/16 CLIP** backbone, augmented at association time with a **complementary score-fusion stream**, reaches **MTMC IDF1 = 0.7703** on CityFlowV2, which is **90.77%** of the AIC22 1st-place result (**0.8486**) while using one primary ReID model instead of a multi-model leaderboard ensemble. On VeRi-776, the same family of weights now has a fully reproducible single-model comparison bundle centered on **Best R1 = 98.33%** and **Best mAP = 89.97%** from the checked-in v17 sweep.
+
+## 2. Headline Performance
+
+### 2.1 Vehicle Pipeline (CityFlowV2)
+
+| Metric | Value | Source |
+|---|---:|---|
+| MTMC IDF1 (best, fusion) | **0.7703** | `findings.md` final result; `experiment-log.md` header |
+| MTMC IDF1 (no-fusion control, single CLIP) | **0.7663** | `findings.md` no-fusion control |
+| MTMC IDF1 (secondary fusion-stream standalone control) | **0.744** | `findings.md` current performance |
+| Single-camera ReID mAP (TransReID ViT-B/16 CLIP @ 256px) | **80.14%** | `findings.md`; `.github/copilot-instructions.md` |
+| Single-camera ReID R1 (TransReID ViT-B/16 CLIP @ 256px) | **92.27%** | same |
+| Single-camera ReID mAP (secondary fusion stream) | **86.79%** | `findings.md` current performance |
+| Single-camera ReID R1 (secondary fusion stream) | **96.15%** | same |
+| Secondary ResNet101-IBN-a mAP | **52.77%** | `findings.md`; `.github/copilot-instructions.md` |
+
+The deployed fusion operating point is still **10c v15 / 10a v7** with `w_secondary=0.00` and `w_tertiary=0.60`. Relative to the single-CLIP control, the complementary fusion stream adds **+0.40pp** MTMC IDF1. The same DINOv2 stream on its own still regresses to **0.744**, which keeps the underlying conclusion intact: stronger single-camera discrimination does not automatically translate to stronger cross-camera MTMC.
+
+### 2.2 Person Pipeline (WILDTRACK)
+
+| Metric | Value | Source |
+|---|---:|---|
+| Ground-plane IDF1 | **0.947** | `findings.md`; `.github/copilot-instructions.md` |
+| Ground-plane MODA | **0.903** | `.github/copilot-instructions.md` |
+| Detector MODA (MVDeTr ResNet18, 12a v3) | **0.921** | `findings.md` |
+| Tracker configs tested | **59+** | `findings.md` |
+| Status | **FULLY CONVERGED** | same |
+
+## 3. Per-Dataset Comparison
+
+### 3.1 VeRi-776 (single-camera vehicle ReID benchmark)
+
+| Config | mAP | R1 | R5 | R10 | Source |
+|---|---:|---:|---:|---:|---|
+| Baseline with SIE (20 cams) | 82.22% | 97.50% | 98.93% | 99.52% | `outputs/09v_veri_v9/veri776_eval_results_v9.json` |
+| Best R1: single_flip rerank (k1=24, k2=8, λ=0.2) | 85.14% | **98.33%** | 99.05% | 99.34% | same |
+| Best mAP: concat_patch_flip AQE k=3 + rerank (k1=80, k2=15, λ=0.2) | **89.97%** | 97.80% | 98.45% | 98.81% | same |
+| Joint optimum: concat_patch_flip AQE k=2 + rerank (k1=80, k2=15, λ=0.2) | 89.71% | 98.15% | 98.51% | 98.75% | same |
+
+The checked-in v17 evaluation bundle makes VeRi-776 a first-class result rather than a side ablation. The 224x224 evaluation, matching the original training resolution, still supports a clean two-endpoint story: **best R1** comes from the single_flip rerank row, while **best mAP** comes from the concat_patch_flip AQE+rerrank row on the same checkpoint.
+
+### 3.1.1 VeRi-776 Single-Model Comparison
+
+Figures **V1-V6** compare the measured v17 result against the literature table carried in the generator. Rows still awaiting direct paper verification are shown as **hollow markers or hatched white bars** and are treated as *citation pending*, not as fully verified facts. The important claim does not depend on any unverified row: our measured point is the repository-backed anchor, and every comparison figure makes that distinction visually explicit.
+
+### 3.2 CityFlowV2 (vehicle MTMC, AIC22 Track 1)
+
+| Rank | System | MTMC IDF1 | Models | Source |
+|---|---|---:|:---:|---|
+| 1 | Team28 (matcher) | 0.8486 | 5 | `paper-strategy.md` |
+| 2 | Team59 (BOE) | 0.8437 | 3 | same |
+| 3 | Team37 (TAG) | 0.8371 | — | same |
+| 4 | Team50 (FraunhoferIOSB) | 0.8348 | — | same |
+| 10 | Team94 (SKKU) | 0.8129 | — | same |
+| 18 | Team4 (HCMIU) | 0.7255 | — | same |
+| — | **Ours (primary CLIP backbone + score fusion)** | **0.7703** | 1 (+1 score stream) | `findings.md` |
+
+On CityFlowV2 the efficiency claim is unchanged: the system reaches **90.77% of 1st-place IDF1** with one primary ReID model. The unresolved gap remains feature-side cross-camera invariance, not a missing association heuristic.
+
+### 3.2.1 CityFlowV2 Primary Backbone — TransReID ViT-B/16 CLIP @ 256px
+
+Figures **C1**, **C2**, **C4**, **C5**, and **C6** keep the focus on the primary CLIP-backed feature space and the measured CityFlowV2 comparison set. **C1** shows only the logged PCA dimensions with clean MTMC numbers, so the chart intentionally stops at **384D** and **512D** instead of inventing 256D or 768D bars. **C2** uses **standalone Δ** bars rather than a cumulative waterfall because the component gains in `.github/copilot-instructions.md` are not additive. **C4** plots the exact logged DINOv2 tertiary fusion sweep and highlights `w_tertiary=0.60` as the chosen optimum. **C5** is intentionally partial: it compares our result against the repo-backed AIC22 top-team IDF1 rows while rendering citation-pending teams as hollow markers. **C6** restricts the comparison to directly comparable CLIP/DINOv2 single-vs-fusion rows from `findings.md`.
+
+### 3.3 WILDTRACK (person MTMC, overlapping cameras)
+
+| System | GP IDF1 | GP MODA | Detector MODA | Source |
+|---|---:|---:|---:|---|
+| Literature SOTA reference | 0.953* | 0.915* | — | `[CITE_NEEDED]` |
+| **Ours (Kalman, 12b v1/v2/v3)** | **0.947** | **0.903** | **0.921** | `.github/copilot-instructions.md` |
+
+The WILDTRACK side remains tracker-limited and effectively converged. It stays in the comparison set because it demonstrates that the same pipeline shell behaves predictably on a very different MTMC regime.
+
+## 4. Figures
+
+- ![G1 pareto](figures/G1_pareto.png) — CityFlowV2 Pareto view of MTMC IDF1 versus model count.
+- ![G2 dataset MTMC IDF1](figures/G2_mtmc_idf1_datasets.png) — Headline MTMC comparison for CityFlowV2 and WILDTRACK.
+- ![G3 ReID benchmarks](figures/G3_reid_map_benchmarks.png) — Single-camera ReID benchmark view across VeRi-776, Market-1501, and CityFlowV2.
+- ![G4 ablation waterfall](figures/G4_ablation_waterfall.png) — Cumulative gains from the restored CityFlowV2 vehicle recipe.
+- ![G5 dead ends](figures/G5_dead_ends.png) — Measured regressions from major dead ends.
+- ![G6 compute cost](figures/G6_compute_cost.png) — Compute-efficiency contrast between our pipeline and a multi-model SOTA recipe.
+- ![G7 per-dataset bars](figures/G7_per_dataset_bars.png) — Ours vs SOTA per dataset.
+- ![G8 relative gap overview](figures/G8_relative_gap_overview.png) — Relative percentage of SOTA retained by our system on each benchmark.
+- ![G9 VeRi rerank sweep](figures/G9_veri_rerank_sweep.png) — VeRi-776 rerank λ sweep for the canonical v17 reproduction.
+- ![G10 CityFlow threshold sweep](figures/G10_cityflow_threshold_sweep.png) — Documented similarity-threshold sensitivity for Stage 4.
+- ![V1 VeRi pareto](figures/V1_veri_pareto.png) — VeRi-776 R1 vs mAP Pareto comparison, with pending literature rows rendered hollow.
+- ![V2 VeRi model count](figures/V2_veri_model_count.png) — VeRi-776 mAP versus model-count grouping.
+- ![V3 VeRi compute](figures/V3_veri_compute.png) — VeRi-776 mAP versus estimated training compute, with bubble size scaling by parameter count.
+- ![V4 VeRi backbone family](figures/V4_veri_backbone_family.png) — Backbone-family means for CNN, ViT-IN21k, and CLIP-ViT groupings.
+- ![V5 VeRi year progression](figures/V5_veri_year_progression.png) — Year-over-year single-model progression on VeRi-776.
+- ![V6 VeRi eval ablation](figures/V6_veri_eval_ablation.png) — Eval-time progression from baseline to the v17 frontier.
+- ![C1 CityFlow PCA](figures/C1_cityflow_pca.png) — Logged PCA-dimension ablation for the primary CityFlowV2 feature space.
+- ![C2 CityFlow association contributions](figures/C2_cityflow_assoc_waterfall.png) — Standalone Stage-4 component contributions, intentionally non-additive.
+- ![C4 CityFlow fusion sweep](figures/C4_cityflow_fusion_sweep.png) — Exact MTMC IDF1 sensitivity to the logged tertiary fusion weight sweep.
+- ![C5 CityFlow SOTA comparison](figures/C5_cityflow_sota_comparison.png) — Ours versus repo-backed AIC22 top-team rankings, with citation-pending teams rendered hollow.
+- ![C6 CityFlow single vs fusion](figures/C6_cityflow_single_vs_fusion.png) — Directly comparable CLIP-only, DINOv2-only, and CLIP+DINOv2 fusion MTMC IDF1.
+
+## 5. What Worked
+
+| Change | Magnitude | Source |
+|---|---:|---|
+| Conflict-free CC | **+0.21pp** | `.github/copilot-instructions.md`; `experiment-log.md` |
+| Intra-merge (thresh=0.80, gap=30) | **+0.28pp** | same |
+| Temporal overlap bonus | **+0.9pp** | `.github/copilot-instructions.md` |
+| FIC whitening | **+1 to +2pp** | same |
+| Power normalization | **+0.5pp** | same |
+| AQE K=3 | small positive | `experiment-log.md` |
+| min_hits=2 | **+0.2pp** | `.github/copilot-instructions.md` |
+| Kalman tuning (person pipeline) | **+1.9pp IDF1** | same |
+| Complementary score fusion (`w_tertiary=0.60`) | **+0.40pp** over single CLIP | `findings.md` |
+
+## 6. Dead Ends
+
+| Approach | Impact | Source |
+|---|---:|---|
+| CSLS | **−34.7pp** | `.github/copilot-instructions.md`; `findings.md` |
+| AFLink motion linking | **−3.82pp** typical, **−13.2pp** worst | `.github/copilot-instructions.md` |
+| 384px ViT deployment | **−2.8pp** | `findings.md` |
+| FAC | **−2.5pp** | `.github/copilot-instructions.md` |
+| Feature concatenation | **−1.6pp** | same |
+| DMT camera-aware training | **−1.4pp** | same |
+| CID_BIAS | **−1.0 to −3.3pp** | `findings.md`; `.github/copilot-instructions.md` |
+| Hierarchical clustering | **−1 to −5pp** | `.github/copilot-instructions.md` |
+| OSNet secondary (current weights) | **−0.8 to −1.1pp** | same |
+| DINOv2 standalone (vs single CLIP control) | **−3.1pp** | `findings.md` |
+| Network flow solver | **−0.24pp** | `.github/copilot-instructions.md`; `findings.md` |
+| Reranking on the vehicle MTMC pipeline | always hurts | `.github/copilot-instructions.md` |
+
+## 7. Conclusion
+
+The comparison story is still the same after adding the extra graphs. VeRi-776 now has a clearer single-model SOTA context, but the repository-backed result remains the anchor. On CityFlowV2, the strongest factual claim is still the measured **0.7703** fusion result and the associated efficiency trade-off, not a narrative about any one auxiliary stream. The new figures therefore shift emphasis back to the primary **TransReID ViT-B/16 CLIP** backbone while leaving the measured fusion gain intact.
+
+### Footnotes
+
+- (*) Literature value, not re-measured in this repository.
+- Hollow markers or hatched white bars mean *citation pending*.

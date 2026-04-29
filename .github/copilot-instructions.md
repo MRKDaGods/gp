@@ -94,6 +94,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **SOTA target**: IDF1≈0.8486 (AIC22 1st place, 5-model ensemble)
 - **Gap to SOTA**: 7.83pp — caused by feature quality (single model), NOT association tuning
 - **Primary model**: TransReID ViT-B/16 CLIP 256px — mAP=80.14%, R1=92.27% on CityFlowV2
+- **Vehicle ReID single-cam (VeRi-776, VeRi-only TransReID ViT-B/16 CLIP)**: Best R1=98.33%, best mAP=89.97%, joint optimum R1=98.15% / mAP=89.71% (09v v17, `outputs/09v_veri_v9`); R1 ceiling is 98.33% on this checkpoint, and the historical 98.45% claim is not reachable via eval-time techniques alone; the old `0.984505` value still reproduces as R5=98.45% at AQE(k=3),k1=30,k2=10,λ=0.2
 - **Secondary model**: ResNet101-IBN-a — mAP=52.77% (too weak for ensemble, needs ≥65%)
 - **Association**: EXHAUSTED (225+ configs, all within 0.3pp of optimal)
 - See `docs/findings.md` for full analysis, dead ends, and action plan

@@ -1,4 +1,0 @@
-  File "<string>", line 1
-    import os; root='models'; exists=lambda p: os.path.exists(os.path.join(root,p)); needed=['detection/yolo26m.pt','reid/transreid_cityflowv2_best.pth','reid/resnet101ibn_veri776_best.pth','tracker/osnet_x0_25_msmt17.pt']; [print(f'  {p}: {\
-                                                                                                                                                                                                                                       ^
-SyntaxError: unterminated string literal (detected at line 1)

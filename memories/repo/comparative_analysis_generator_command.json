@@ -1,0 +1,10 @@
+{
+  "subject": "Comparative analysis regeneration",
+  "fact": "The comparative analysis markdown and all figure assets can be regenerated successfully with .\\.venv\\Scripts\\python.exe scripts/generate_comparative_analysis.py.",
+  "citations": [
+    "scripts/generate_comparative_analysis.py",
+    "docs/system-comparative-analysis.md"
+  ],
+  "reason": "Future figure or narrative updates should use this verified end-to-end command instead of editing generated markdown by hand.",
+  "category": "build-command"
+}

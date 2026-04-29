@@ -12,8 +12,10 @@
   "dataset_sources": [
     "gumfreddy/mtmc-weights",
     "thanhnguyenle/data-aicity-2023-track-2",
-    "gumfreddy/09p-r50-ibn-cityflowv2-extended-checkpoint",
     "yahiaakhalafallah/mtmc-10a-checkpoints"
   ],
-  "competition_sources": []
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/09s-dinov2-large-cityflowv2"
+  ]
 }

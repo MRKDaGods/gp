@@ -1,0 +1,19 @@
+{
+ "id": "yahiaakhalafallah/09s-dinov2-large-cityflowv2",
+ "title": "09s DINOv2-Large CityFlowV2",
+ "code_file": "09s_dinov2_large_cityflowv2.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_tpu": false,
+ "enable_internet": true,
+ "dataset_sources": [
+  "gumfreddy/mtmc-weights",
+  "thanhnguyenle/data-aicity-2023-track-2"
+ ],
+ "competition_sources": [],
+ "kernel_sources": [],
+ "model_sources": [],
+ "machine_shape": "NvidiaTeslaT4"
+}

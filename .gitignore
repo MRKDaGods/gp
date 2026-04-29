@@ -57,6 +57,19 @@ scripts/_*.py
 # Root-level temp scripts
 _*.py
 
+# Scratch / debug artifacts
+_patch_*.py
+_tmp_*.py
+_tmp_*.json
+_poll_*.py
+_monitor_*.py
+_check_*.py
+_fix_*.py
+_scan_*.py
+_scratch_*/
+tmp_*.txt
+tmp_*.json
+
 # Logs
 *.log
 logs/
@@ -82,3 +95,6 @@ tmp_09d_notebook_inspect.txt
 notebooks/kaggle/tmp_md5_check/
 tmp_*
 tmp_09v2_output/
+
+.pytest_cache/
+tmp_*/
