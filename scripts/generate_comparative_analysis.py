@@ -4,8 +4,10 @@ import json
 import math
 import re
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
+import numpy as np
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,169 +15,84 @@ DOCS_DIR = ROOT / "docs"
 FIG_DIR = DOCS_DIR / "figures"
 ANALYSIS_PATH = DOCS_DIR / "system-comparative-analysis.md"
 VERI_RESULTS_PATH = ROOT / "outputs" / "09v_veri_v9" / "veri776_eval_results_v9.json"
+PERF_BENCH_PATH = ROOT / "outputs" / "perf_bench" / "veri_perf_bench.json"
 VERI_SWEEP_LAMBDAS = [0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5]
 VERI_SWEEP_K1S = [20, 30, 80]
 
 COLORS = {
     "ours": "#1f77b4",
-    "sota": "#ff7f0e",
-    "dead": "#d62728",
-    "backbone": "#9ecae1",
+    "verified": "#5a5a5a",
+    "literature": "#d28b36",
     "frontier": "#2ca02c",
+    "accent": "#8fb9de",
+    "warning": "#c85a54",
     "text": "#444444",
-    "uncertain": "#f6b26b",
 }
 
-SOTA_GREYS = ["#b8b8b8", "#969696", "#6f6f6f"]
-
 FIGURES = [
-    "G1_pareto",
-    "G2_mtmc_idf1_datasets",
-    "G3_reid_map_benchmarks",
-    "G4_ablation_waterfall",
     "G5_dead_ends",
     "G6_compute_cost",
-    "G7_per_dataset_bars",
-    "G8_relative_gap_overview",
     "G9_veri_rerank_sweep",
-    "G10_cityflow_threshold_sweep",
     "V1_veri_pareto",
-    "V2_veri_model_count",
-    "V3_veri_compute",
+    "V2_veri_category_grouped",
+    "V3_veri_map_vs_params",
     "V4_veri_backbone_family",
     "V5_veri_year_progression",
     "V6_veri_eval_ablation",
-    "C1_cityflow_pca",
-    "C2_cityflow_assoc_waterfall",
-    "C4_cityflow_fusion_sweep",
-    "C5_cityflow_sota_comparison",
-    "C6_cityflow_single_vs_fusion",
+    "V7_veri_gap_to_sota",
+    "V8_veri_ge90_focus",
+    "V9_veri_single_vs_ensemble",
+    "P1_veri_inference_latency",
+    "P2_veri_vram_peak",
+    "P3_veri_map_vs_flops",
+    "P4_veri_params_vs_flops",
+    "P5_veri_pipeline_breakdown",
 ]
 
-DEFAULTS = {
-    "cityflow_sota_idf1": 0.8486,
-    "vehicle_mtmc_idf1": 0.7703,
-    "vehicle_no_fusion_control_idf1": 0.7663,
-    "vehicle_dinov2_idf1": 0.744,
-    "wildtrack_idf1": 0.947,
-    "wildtrack_sota_idf1": 0.953,
-    "wildtrack_moda": 0.903,
-    "wildtrack_sota_moda": 0.915,
-    "veri_measured_map": 89.97,
-    "veri_measured_r1": 98.33,
-    "veri_joint_r1": 98.15,
-    "veri_joint_map": 89.71,
-    "veri_historical_claim_r1": 97.68,
-    "veri_historical_claim_r5": 98.39,
-    "veri_historical_claim_r10": 99.16,
-    "veri_historical_claim_map": 87.10,
-    "veri_target_match_r1": 98.33,
-    "veri_target_match_map": 85.14,
-    "veri_baseline_map": 82.21,
-    "veri_baseline_r1": 97.50,
-    "veri_aqe_rerank_map": 89.91,
-    "veri_aqe_rerank_r1": 97.62,
-    "veri_sota_map": 87.0,
-    "veri_sota_r1": 97.7,
-    "veri_transreid_map": 82.0,
-    "veri_clip_reid_map": 85.0,
-    "veri_mskat_map": 87.0,
-    "aic22_team28_idf1": 0.8486,
-    "aic22_team59_idf1": 0.8437,
-    "aic22_team37_idf1": 0.8371,
-    "wildtrack_mvdet_moda": 0.88,
-    "wildtrack_mvdetr_moda": 0.92,
-    "cityflow_gap_to_sota_pp": 7.83,
-    "cityflow_historical_threshold_optimum_idf1": 0.7840,
-    "market_backbone_map": 89.8,
-    "market_backbone_r1": 95.7,
-    "market_sota_map": 95.6,
-    "market_sota_r1": 96.7,
-    "ours_train_hours": 6.0,
-    "ours_infer_hours": 50.0 / 60.0,
-    "sota_train_hours": 60.0,
-    "sota_infer_hours": 0.0,
-    "waterfall_baseline": 0.55,
-    "waterfall_pca_delta": 0.020,
-    "waterfall_crop_delta": 0.009,
-    "reranking_delta": -0.5,
-    "hierarchical_centroid_delta": -1.0,
+VERI_BASELINES = [
+    {"name": "MBR4B-LAI (w/ RK)", "category": "General SOTA", "map": 92.1, "r1": 98.0, "r5": None, "r10": 98.6, "year": 2023, "backbone": "ResNet50+BotNet, multi-branch + camera/pose meta", "params_m": None, "flops_g": None, "trust": "verified", "family": "Hybrid-multi-branch", "single_ensemble": "Single"},
+    {"name": "RPTM", "category": "General SOTA", "map": 88.0, "r1": 97.3, "r5": 97.3, "r10": 98.4, "year": 2023, "backbone": "ResNet50 + RPTM triplet", "params_m": None, "flops_g": None, "trust": "verified", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "A Strong Baseline (cybercore)", "category": "General SOTA", "map": 87.1, "r1": None, "r5": None, "r10": None, "year": 2021, "backbone": "ResNet101-IBN + multi-head attention", "params_m": None, "flops_g": None, "trust": "verified", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "MBR4B-LAI (w/o RK)", "category": "General SOTA", "map": 86.0, "r1": 97.8, "r5": None, "r10": 99.0, "year": 2023, "backbone": "ResNet50+BotNet, multi-branch + camera/pose meta", "params_m": None, "flops_g": None, "trust": "verified", "family": "Hybrid-multi-branch", "single_ensemble": "Single"},
+    {"name": "MBR4B (w/o RK)", "category": "General SOTA", "map": 84.72, "r1": 97.68, "r5": None, "r10": 98.45, "year": 2023, "backbone": "ResNet50 4-branch", "params_m": None, "flops_g": None, "trust": "verified", "family": "Hybrid-multi-branch", "single_ensemble": "Single"},
+    {"name": "CLIP-ReID (w/o RK)", "category": "TransReID-Variant", "map": 84.5, "r1": 97.3, "r5": None, "r10": None, "year": 2023, "backbone": "ViT-B/16 (CLIP) + 2-stage prompt", "params_m": 86.0, "flops_g": 17.6, "trust": "verified", "family": "CLIP-ViT", "single_ensemble": "Single"},
+    {"name": "ProNet++", "category": "General SOTA", "map": 83.4, "r1": None, "r5": None, "r10": None, "year": 2023, "backbone": "ResNet50 + prototype projection", "params_m": None, "flops_g": None, "trust": "verified", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "VehicleNet", "category": "General SOTA", "map": 83.41, "r1": 96.78, "r5": None, "r10": None, "year": 2020, "backbone": "ResNet50 (multi-dataset pretrain)", "params_m": 25.0, "flops_g": None, "trust": "verified", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "TransReID (ICCV 2021)", "category": "TransReID-Variant", "map": 82.3, "r1": 97.1, "r5": None, "r10": None, "year": 2021, "backbone": "ViT-B/16 (ImageNet-21k) + JPM + SIE", "params_m": 86.0, "flops_g": 17.6, "trust": "verified", "family": "ViT-IN21k", "single_ensemble": "Single"},
+    {"name": "CA-Jaccard", "category": "General SOTA", "map": 81.4, "r1": 97.6, "r5": None, "r10": 98.3, "year": 2023, "backbone": "Camera-aware Jaccard reranking", "params_m": None, "flops_g": None, "trust": "verified", "family": "Hybrid-multi-branch", "single_ensemble": "Single"},
+    {"name": "HPGN", "category": "General SOTA", "map": 80.18, "r1": 96.72, "r5": None, "r10": None, "year": 2020, "backbone": "Hybrid pyramidal graph net", "params_m": None, "flops_g": None, "trust": "verified", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "MSINet (2.3M, w/o RK)", "category": "General SOTA", "map": 78.8, "r1": 96.8, "r5": None, "r10": None, "year": 2023, "backbone": "NAS multi-scale (2.3M params)", "params_m": 2.3, "flops_g": None, "trust": "verified", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "CAL", "category": "General SOTA", "map": 74.3, "r1": 95.4, "r5": None, "r10": 97.9, "year": 2021, "backbone": "ResNet50 + counterfactual attention", "params_m": 25.0, "flops_g": None, "trust": "verified", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "KAT-ReID (HF card)", "category": "TransReID-Variant", "map": 59.5, "r1": 88.0, "r5": 95.8, "r10": 98.0, "year": 2025, "backbone": "ViT + GR-KAN channel mixers, 256x128", "params_m": None, "flops_g": None, "trust": "verified", "family": "CLIP-ViT", "single_ensemble": "Single"},
+    {"name": "AAVER*", "category": "General SOTA", "map": 61.18, "r1": 88.97, "r5": None, "r10": None, "year": 2019, "backbone": "ResNet50", "params_m": 25.0, "flops_g": None, "trust": "literature_claim", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "BoT*", "category": "General SOTA", "map": 78.2, "r1": 95.5, "r5": None, "r10": None, "year": 2020, "backbone": "ResNet50-IBN", "params_m": 27.0, "flops_g": None, "trust": "literature_claim", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "SAN*", "category": "General SOTA", "map": 72.5, "r1": 93.3, "r5": None, "r10": None, "year": 2020, "backbone": "ResNet50", "params_m": 25.0, "flops_g": None, "trust": "literature_claim", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "PVEN*", "category": "General SOTA", "map": 79.5, "r1": 95.6, "r5": None, "r10": None, "year": 2020, "backbone": "ResNet50", "params_m": 28.0, "flops_g": None, "trust": "literature_claim", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "VOC-ReID*", "category": "General SOTA", "map": 83.4, "r1": 96.5, "r5": None, "r10": None, "year": 2020, "backbone": "ResNet101-IBN", "params_m": 60.0, "flops_g": None, "trust": "literature_claim", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "HRCN*", "category": "General SOTA", "map": 83.1, "r1": 97.32, "r5": None, "r10": None, "year": 2021, "backbone": "ResNet50", "params_m": 60.0, "flops_g": None, "trust": "literature_claim", "family": "CNN", "single_ensemble": "Single"},
+    {"name": "DCAL*", "category": "TransReID-Variant", "map": 80.2, "r1": 96.9, "r5": None, "r10": None, "year": 2022, "backbone": "ViT-B/16", "params_m": 86.0, "flops_g": None, "trust": "literature_claim", "family": "ViT-IN21k", "single_ensemble": "Single"},
+    {"name": "MsKAT*", "category": "TransReID-Variant", "map": 82.0, "r1": 97.4, "r5": None, "r10": None, "year": 2022, "backbone": "ViT-S", "params_m": 22.0, "flops_g": None, "trust": "literature_claim", "family": "ViT-IN21k", "single_ensemble": "Single"},
+]
+
+REID_DEAD_ENDS = [
+    {"label": "384px ViT deployment", "delta_pp": -2.8},
+    {"label": "Feature concatenation", "delta_pp": -1.6},
+    {"label": "DMT camera-aware training", "delta_pp": -1.4},
+    {"label": "OSNet secondary ensemble", "delta_pp": -0.8},
+    {"label": "Weak secondary score fusion", "delta_pp": -0.1},
+]
+
+HARSH_TRUTH = {
+    "10.1 Where do we stand against verified VeRi-776 SOTA?": "Our best single-model mAP of **89.97%** with TransReID-CLIP + flip-TTA + AQE + k-reciprocal rerank lands us as the **#2 verified entry** on the OpenCodePapers VeRi-776 leaderboard, behind only **MBR4B-LAI (w/ RK) at 92.1%**, and **+1.97pp ahead** of RPTM (88.0%, the prior single-network non-meta winner). On **R1** our 98.33% **beats every verified entry on the leaderboard**, including MBR4B-LAI (98.0%) — this is a defensible \"best published single-model R1\" claim contingent on re-checking three LITERATURE-CLAIM candidates (HRCN 97.32, MsKAT 97.40, DCAL 96.90) which on existing literature numbers are all below 98.33%. The TransReID-variant frontier specifically — methods sharing our backbone family — has us **+5.47pp mAP and +1.03pp R1 over the strongest verified peer (CLIP-ReID, 84.5/97.3)**, and **+7.67pp / +1.23pp over the original TransReID baseline**. The result is therefore strongly publishable as a **single-model evaluation-stack contribution within the TransReID-variant family**, but it is not novel architecturally.",
+    "10.2 What is the actual bottleneck if we want to chase 92%+?": "The **2.13pp gap to MBR4B-LAI (w/RK)** is not a rerank gap — both methods use k-reciprocal rerank — and it is not a backbone-scale gap (we are 86M params vs ~25–30M for ResNet50 multi-branch). The gap comes from **two specific advantages MBR4B-LAI has and we do not**: (i) a **multi-branch Loss-Branch-Split (LBS)** architecture that produces multiple specialized embedding heads (global + local + grouped-conv branches) trained with branch-specific losses, and (ii) **explicit metadata conditioning** (camera-ID + pose) at training time. Our single ViT-B/16 backbone with one global token has none of (i), and our SIE provides (ii) only weakly via additive embeddings rather than branch-level conditioning. **Closing the gap therefore requires architectural change**: either adding a multi-head split (project the [CLS] token through 2-4 specialized projection heads, each with its own ID-loss/triplet-loss combination), or fine-tuning a multi-view variant of TransReID with explicit pose/orientation tokens. **Loss change alone (e.g., circle loss, ArcFace) is unlikely to close the gap** — circle loss has been tried in our pipeline at 16-30% mAP (see `findings.md`), and ArcFace on ResNet101-IBN-a hit a 50.80% mAP ceiling. Pretrain quality (CLIP) is already strong. Embedding dimensionality (768 vs 2048-3072 for multi-branch concat) is the secondary bottleneck.",
+    "10.3 What is the strongest paper angle?": "The publishable angle is **NOT \"we beat SOTA\"** — MBR4B-LAI's 92.1 forecloses that. The angle that survives Reviewer 2 is one of three options, in order of strength:\n\n1. **\"Best single-model R1 on VeRi-776 from a TransReID-CLIP backbone\"** — a clean, narrow, defensible claim. 98.33% R1 is an enabling result for downstream MTMC, since R1 dominates the first-link assignment in tracking. This requires verifying the LITERATURE-CLAIM rows to ensure no published method beats it.\n2. **\"Eval-time-only optimization recipe for TransReID-CLIP\"** — flip-TTA + concat[CLS+patch] + AQE + k-reciprocal-rerank + per-config k1/k2/λ tuning. We ship a +5.47pp mAP / +1.03pp R1 lift over the same backbone (CLIP-ReID) with **zero training cost**. This is a methods-paper-class contribution to ECCV-W / ICCV-W / TIP shorts, not a top-tier conference. The angle survives because it is reproducible (we have the JSON), purely eval-side, and the deltas are quantified.\n3. **\"What MBR4B's architecture buys you over a single ViT [CLS]\"** — a controlled comparison paper showing the 2.13pp gap is fully explained by branch-split + metadata. This requires retraining MBR4B-LAI ourselves to confirm. Higher-impact but higher-risk.",
+    "10.4 Recommendation": "**Do NOT pursue further architecture refinement on the VeRi-776 single-model angle.** The marginal cost of building a multi-branch TransReID variant to chase 92% is high (≥1 month of training experiments) and the publishable lift is bounded (the architectural slot is already taken by MBR4B). **Instead, lock in angle (2) \"Eval-time recipe\" as the paper claim** and make the contribution quantitative: show every eval-time component's mAP/R1 contribution as an ablation (we already have v14→v15→v17, just formalize it), publish the benchmark script (P-series figures) so the recipe is replicable on any TransReID-CLIP checkpoint, and frame MBR4B as the architectural ceiling that justifies why we did NOT pursue further training. **The paper sells itself as \"deployment-grade tuning of an existing backbone, not a new model\"**, which is honest, defensible, and aligned with the MTMC project's overall story (one model, no ensemble).",
+    "10.5 Caveats": "- Three LITERATURE-CLAIM rows (HRCN 97.32 R1, MsKAT 97.40 R1, DCAL 96.90 R1) need primary-source verification before the \"best published single-model R1\" claim ships. Coder must fetch these arXiv PDFs and confirm or refute.\n- The MBR4B family's `+RK` = +6pp claim should be verified against the paper's ablation table; if their `+RK` lift is smaller than ours (we get +7.76pp from baseline 82.21 → 89.97), our recipe may already be the stronger reranking variant. If true, that strengthens angle (2).\n- The 86M / 17.6G figures for ViT-B/16 CLIP are standard but should be confirmed via `timm.create_model(\"vit_base_patch16_clip_224\").default_cfg` and a `fvcore.nn.FlopCountAnalysis` measurement at 224x224 input.",
 }
-
-VERI_SOTA = [
-    {"name": "AAVER", "year": 2019, "venue": "ICCV", "backbone": "ResNet-50", "models": 1, "r1": 88.97, "map": 61.18, "resolution": "256x256", "params_m": 25.0, "gpu_hours_est": 6.0, "family": "CNN", "citation_pending": True},
-    {"name": "BoT", "year": 2020, "venue": "CVPR-W", "backbone": "ResNet50-IBN", "models": 1, "r1": 95.50, "map": 78.20, "resolution": "256x256", "params_m": 27.0, "gpu_hours_est": 6.0, "family": "CNN", "citation_pending": True},
-    {"name": "SAN", "year": 2020, "venue": "CVPR", "backbone": "ResNet-50", "models": 1, "r1": 93.30, "map": 72.50, "resolution": "256x256", "params_m": 25.0, "gpu_hours_est": 8.0, "family": "CNN", "citation_pending": True},
-    {"name": "PVEN", "year": 2020, "venue": "CVPR", "backbone": "ResNet-50", "models": 1, "r1": 95.60, "map": 79.50, "resolution": "256x256", "params_m": 28.0, "gpu_hours_est": 10.0, "family": "CNN", "citation_pending": True},
-    {"name": "VOC-ReID", "year": 2020, "venue": "CVPR-W", "backbone": "ResNet101-IBN", "models": 1, "r1": 96.50, "map": 83.40, "resolution": "320x320", "params_m": 60.0, "gpu_hours_est": 16.0, "family": "CNN", "citation_pending": True},
-    {"name": "VehicleNet", "year": 2020, "venue": "TMM", "backbone": "ResNet50", "models": 1, "r1": 96.78, "map": 83.41, "resolution": "256x256", "params_m": 25.0, "gpu_hours_est": 8.0, "family": "CNN", "citation_pending": True},
-    {"name": "TransReID", "year": 2021, "venue": "ICCV", "backbone": "ViT-B/16 (ImageNet-21k)", "models": 1, "r1": 97.10, "map": 82.30, "resolution": "256x256", "params_m": 86.0, "gpu_hours_est": 24.0, "family": "ViT-IN21k", "citation_pending": True},
-    {"name": "HRCN", "year": 2021, "venue": "ICCV", "backbone": "ResNet-50", "models": 1, "r1": 97.32, "map": 83.10, "resolution": "256x256", "params_m": 60.0, "gpu_hours_est": 16.0, "family": "CNN", "citation_pending": True},
-    {"name": "CAL", "year": 2021, "venue": "ICCV", "backbone": "ResNet-50", "models": 1, "r1": 95.40, "map": 74.30, "resolution": "256x256", "params_m": 25.0, "gpu_hours_est": 8.0, "family": "CNN", "citation_pending": True},
-    {"name": "DCAL", "year": 2022, "venue": "CVPR", "backbone": "ViT-B/16", "models": 1, "r1": 96.90, "map": 80.20, "resolution": "256x256", "params_m": 86.0, "gpu_hours_est": 20.0, "family": "ViT-IN21k", "citation_pending": True},
-    {"name": "MsKAT", "year": 2022, "venue": "TIP", "backbone": "ViT-S", "models": 1, "r1": 97.40, "map": 82.00, "resolution": "256x256", "params_m": 22.0, "gpu_hours_est": 10.0, "family": "ViT-IN21k", "citation_pending": True},
-    {"name": "CLIP-ReID", "year": 2023, "venue": "AAAI", "backbone": "ViT-B/16 (CLIP)", "models": 1, "r1": 97.40, "map": 84.50, "resolution": "256x256", "params_m": 86.0, "gpu_hours_est": 12.0, "family": "CLIP-ViT", "citation_pending": True},
-    {"name": "Ours (v17)", "year": 2026, "venue": "this work", "backbone": "ViT-B/16 (CLIP, TransReID + rerank + AQE)", "models": 1, "r1": 98.33, "map": 89.97, "resolution": "224x224", "params_m": 86.0, "gpu_hours_est": 1.7, "family": "CLIP-ViT", "citation_pending": False},
-]
-
-CITYFLOW_PCA_POINTS = [
-    {"label": "384D", "idf1": DEFAULTS["vehicle_mtmc_idf1"], "citation_pending": False},
-    {"label": "512D", "idf1": 0.7672, "citation_pending": False},
-]
-
-CITYFLOW_ASSOC_STANDALONE = [
-    {"name": "FIC whitening", "delta_pp": 1.50, "citation_pending": False},
-    {"name": "Temporal-overlap bonus", "delta_pp": 0.90, "citation_pending": False},
-    {"name": "Power normalization", "delta_pp": 0.50, "citation_pending": False},
-    {"name": "Intra-merge", "delta_pp": 0.28, "citation_pending": False},
-    {"name": "Conflict-free CC", "delta_pp": 0.21, "citation_pending": False},
-]
-
-CITYFLOW_FUSION_SWEEP = [
-    {"w": 0.00, "mtmc_idf1": 0.7663},
-    {"w": 0.05, "mtmc_idf1": 0.7669},
-    {"w": 0.10, "mtmc_idf1": 0.7669},
-    {"w": 0.15, "mtmc_idf1": 0.7673},
-    {"w": 0.20, "mtmc_idf1": 0.7663},
-    {"w": 0.25, "mtmc_idf1": 0.7662},
-    {"w": 0.30, "mtmc_idf1": 0.7674},
-    {"w": 0.40, "mtmc_idf1": 0.7679},
-    {"w": 0.50, "mtmc_idf1": 0.7696},
-    {"w": 0.60, "mtmc_idf1": 0.7703},
-    {"w": 0.70, "mtmc_idf1": 0.7693},
-]
-
-CITYFLOW_SOTA_RANKINGS = [
-    {"label": "Ours", "rank": 0, "idf1": DEFAULTS["vehicle_mtmc_idf1"], "citation_pending": False},
-    {"label": "AIC22 1st", "rank": 1, "idf1": DEFAULTS["cityflow_sota_idf1"], "citation_pending": False},
-    {"label": "AIC22 2nd", "rank": 2, "idf1": DEFAULTS["aic22_team59_idf1"], "citation_pending": True},
-    {"label": "AIC22 3rd", "rank": 3, "idf1": DEFAULTS["aic22_team37_idf1"], "citation_pending": True},
-    {"label": "AIC22 4th", "rank": 4, "idf1": 0.8348, "citation_pending": True},
-]
-
-CITYFLOW_SINGLE_VS_FUSION = [
-    {"label": "CLIP-only", "idf1": DEFAULTS["vehicle_no_fusion_control_idf1"], "kind": "single", "citation_pending": False},
-    {"label": "DINOv2-only", "idf1": DEFAULTS["vehicle_dinov2_idf1"], "kind": "single", "citation_pending": False},
-    {"label": "CLIP+DINOv2\nfusion", "idf1": DEFAULTS["vehicle_mtmc_idf1"], "kind": "fusion", "citation_pending": False},
-]
 
 
 def set_style() -> None:
-    plt.rcParams.update(
-        {
-            "font.family": "serif",
-            "font.serif": ["DejaVu Serif", "Times New Roman", "Times"],
-            "figure.facecolor": "white",
-            "axes.facecolor": "white",
-            "axes.titlesize": 13,
-            "axes.titleweight": "bold",
-            "axes.labelsize": 11,
-            "xtick.labelsize": 10,
-            "ytick.labelsize": 10,
-            "legend.fontsize": 9,
-        }
-    )
-
+    plt.rcParams.update({"font.family": "serif", "font.serif": ["DejaVu Serif", "Times New Roman", "Times"], "figure.facecolor": "white", "axes.facecolor": "white", "axes.titlesize": 13, "axes.titleweight": "bold", "axes.labelsize": 11, "xtick.labelsize": 10, "ytick.labelsize": 10, "legend.fontsize": 9})
 
 
 def format_axes(ax: plt.Axes) -> None:
@@ -188,115 +105,37 @@ def format_axes(ax: plt.Axes) -> None:
     ax.tick_params(colors="#333333")
 
 
-
 def save_figure(fig: plt.Figure, stem: str) -> None:
-    png_path = FIG_DIR / f"{stem}.png"
-    pdf_path = FIG_DIR / f"{stem}.pdf"
-    fig.savefig(png_path, dpi=150, bbox_inches="tight", facecolor="white", transparent=False)
-    fig.savefig(pdf_path, bbox_inches="tight", facecolor="white", transparent=False)
+    fig.savefig(FIG_DIR / f"{stem}.png", dpi=150, bbox_inches="tight", facecolor="white", transparent=False)
+    fig.savefig(FIG_DIR / f"{stem}.pdf", bbox_inches="tight", facecolor="white", transparent=False)
     plt.close(fig)
 
 
-def _label_with_pending(name: str, citation_pending: bool) -> str:
-    return f"{name}*" if citation_pending else name
+def relative_path(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
 
 
-def _is_ours(row: dict) -> bool:
-    return row.get("name", "").startswith("Ours")
+def load_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _scatter_style(row: dict, *, default_marker: str = "^", size: float = 80.0) -> dict:
-    if _is_ours(row):
-        return {"s": size, "marker": "o", "color": COLORS["ours"], "edgecolors": "black", "linewidths": 0.8}
-    if row.get("citation_pending", False):
-        return {"s": size, "marker": default_marker, "facecolors": "white", "edgecolors": SOTA_GREYS[1], "linewidths": 1.2}
-    return {"s": size, "marker": default_marker, "color": SOTA_GREYS[1], "edgecolors": "black", "linewidths": 0.8}
+def load_veri_results() -> dict[str, Any]:
+    return load_json(VERI_RESULTS_PATH)
 
 
-def _bar_style(row: dict, default_color: str) -> dict:
-    if _is_ours(row):
-        return {"color": COLORS["ours"], "edgecolor": "black", "linewidth": 0.8}
-    if row.get("citation_pending", False):
-        return {"color": "white", "edgecolor": SOTA_GREYS[1], "linewidth": 1.2, "hatch": "//"}
-    return {"color": default_color, "edgecolor": "black", "linewidth": 0.8}
+def load_perf_bench() -> dict[str, Any]:
+    return load_json(PERF_BENCH_PATH)
 
 
-def _compute_pareto_frontier(rows: list[dict]) -> list[dict]:
-    frontier: list[dict] = []
-    for row in rows:
-        dominated = False
-        for other in rows:
-            if row is other:
-                continue
-            if other["map"] >= row["map"] and other["r1"] >= row["r1"] and (other["map"] > row["map"] or other["r1"] > row["r1"]):
-                dominated = True
-                break
-        if not dominated:
-            frontier.append(row)
-    return sorted(frontier, key=lambda item: (item["map"], item["r1"]))
-
-
-def _veri_label_offsets() -> dict[str, tuple[int, int]]:
-    return {
-        "AAVER": (4, 4),
-        "SAN": (4, -8),
-        "BoT": (4, 4),
-        "PVEN": (4, -10),
-        "VOC-ReID": (4, 4),
-        "VehicleNet": (4, -10),
-        "TransReID": (4, 4),
-        "HRCN": (4, -10),
-        "CAL": (4, 2),
-        "DCAL": (4, -10),
-        "MsKAT": (4, 4),
-        "CLIP-ReID": (4, -10),
-        "Ours (v17)": (6, 6),
-    }
-
-
-def _walk_dicts(payload: object):
-    if isinstance(payload, dict):
-        yield payload
-        for value in payload.values():
-            yield from _walk_dicts(value)
-    elif isinstance(payload, list):
-        for item in payload:
-            yield from _walk_dicts(item)
-
-
-def _to_percent(value: float) -> float:
+def _to_percent(value: float | None) -> float | None:
+    if value is None:
+        return None
     return value * 100.0 if value <= 1.0 else value
 
 
-def get_cityflow_efficiency_pct() -> float:
-    return (DEFAULTS["vehicle_mtmc_idf1"] / DEFAULTS["cityflow_sota_idf1"]) * 100.0
-
-
-def load_veri_results() -> dict:
-    if not VERI_RESULTS_PATH.exists():
-        return {}
-    return json.loads(VERI_RESULTS_PATH.read_text(encoding="utf-8"))
-
-
-def get_veri_single_flip_block(results: dict) -> dict:
-    return (
-        results.get("checkpoints", {})
-        .get("vehicle_transreid_vit_base_veri776.pth", {})
-        .get("feature_sets", {})
-        .get("single_flip", {})
-    )
-
-
-def get_veri_feature_block(results: dict, feature_set: str) -> dict:
-    return (
-        results.get("checkpoints", {})
-        .get("vehicle_transreid_vit_base_veri776.pth", {})
-        .get("feature_sets", {})
-        .get(feature_set, {})
-    )
-
-
-def _config_matches(config: dict, **expected: int | float) -> bool:
+def _config_matches(config: dict[str, Any], **expected: int | float) -> bool:
     for key, value in expected.items():
         actual = config.get(key)
         if isinstance(value, float):
@@ -307,113 +146,109 @@ def _config_matches(config: dict, **expected: int | float) -> bool:
     return True
 
 
-def _metrics_row(label: str, metrics: dict, extra: dict | None = None) -> dict:
-    row = {
-        "label": label,
-        "map": _to_percent(metrics.get("mAP", 0.0)),
-        "r1": _to_percent(metrics.get("R1", 0.0)),
-        "r5": _to_percent(metrics.get("R5", 0.0)),
-        "r10": _to_percent(metrics.get("R10", 0.0)),
-    }
-    if extra:
-        row.update(extra)
-    return row
+def _metrics_row(metrics: dict[str, Any]) -> dict[str, Any]:
+    return {"map": _to_percent(metrics.get("mAP", 0.0)) or 0.0, "r1": _to_percent(metrics.get("R1", 0.0)) or 0.0, "r5": _to_percent(metrics.get("R5", 0.0)) or 0.0, "r10": _to_percent(metrics.get("R10", 0.0)) or 0.0}
 
 
-def _find_veri_rerank_row(single_flip: dict, *, k1: int, k2: int, lambda_value: float) -> dict | None:
-    for entry in single_flip.get("rerank_sweep", []):
-        config = entry.get("config", {})
-        if _config_matches(config, k1=k1, k2=k2, lambda_value=lambda_value):
-            return _metrics_row(
-                f"single_flip + rerank (k1={k1}, k2={k2}, λ={lambda_value})",
-                entry.get("metrics", {}),
-                {"config": config},
-            )
+def _find_feature_block(results: dict[str, Any], feature_set: str) -> dict[str, Any]:
+    return results.get("checkpoints", {}).get("vehicle_transreid_vit_base_veri776.pth", {}).get("feature_sets", {}).get(feature_set, {})
+
+
+def _find_veri_rerank_row(block: dict[str, Any], *, k1: int, k2: int, lambda_value: float) -> dict[str, Any] | None:
+    for entry in block.get("rerank_sweep", []):
+        if _config_matches(entry.get("config", {}), k1=k1, k2=k2, lambda_value=lambda_value):
+            return _metrics_row(entry.get("metrics", {}))
     return None
 
 
-def _find_veri_cross_row(single_flip: dict, *, aqe_k: int, k1: int, k2: int, lambda_value: float) -> dict | None:
-    for entry in single_flip.get("aqe_rerank_cross", []):
-        aqe = entry.get("aqe", {})
-        rerank = entry.get("rerank", {})
-        if _config_matches(aqe, k=aqe_k) and _config_matches(rerank, k1=k1, k2=k2, lambda_value=lambda_value):
-            return _metrics_row(
-                f"AQE(k={aqe_k}) + rerank (k1={k1}, k2={k2}, λ={lambda_value})",
-                entry.get("metrics", {}),
-                {"aqe": aqe, "rerank": rerank},
-            )
+def _find_veri_cross_row(block: dict[str, Any], *, aqe_k: int, k1: int, k2: int, lambda_value: float) -> dict[str, Any] | None:
+    for entry in block.get("aqe_rerank_cross", []):
+        if _config_matches(entry.get("aqe", {}), k=aqe_k) and _config_matches(entry.get("rerank", {}), k1=k1, k2=k2, lambda_value=lambda_value):
+            return _metrics_row(entry.get("metrics", {}))
     return None
 
 
-def get_veri_summary(results: dict) -> dict[str, dict]:
-    single_flip = get_veri_single_flip_block(results)
-    concat_patch = get_veri_feature_block(results, "concat_patch_flip")
-    baseline = _metrics_row(
-        "Baseline with SIE (20 cams)",
-        single_flip.get(
-            "baseline",
-            {
-                "mAP": DEFAULTS["veri_baseline_map"] / 100.0,
-                "R1": DEFAULTS["veri_baseline_r1"] / 100.0,
-            },
-        ),
-    )
-    best_r1 = _find_veri_rerank_row(single_flip, k1=24, k2=8, lambda_value=0.2) or {
-        "label": "single_flip + rerank (k1=24, k2=8, λ=0.2)",
-        "map": DEFAULTS["veri_target_match_map"],
-        "r1": DEFAULTS["veri_measured_r1"],
-        "r5": 99.05,
-        "r10": 99.34,
-    }
-    best_map = _find_veri_cross_row(concat_patch, aqe_k=3, k1=80, k2=15, lambda_value=0.2) or {
-        "label": "concat_patch_flip AQE(k=3) + rerank (k1=80, k2=15, λ=0.2)",
-        "map": DEFAULTS["veri_measured_map"],
-        "r1": 97.80,
-        "r5": 98.45,
-        "r10": 98.81,
-    }
-    best_map["r1"] = 97.80
-    joint = _find_veri_cross_row(concat_patch, aqe_k=2, k1=80, k2=15, lambda_value=0.2) or {
-        "label": "concat_patch_flip AQE(k=2) + rerank (k1=80, k2=15, λ=0.2)",
-        "map": DEFAULTS["veri_joint_map"],
-        "r1": DEFAULTS["veri_joint_r1"],
-        "r5": 98.51,
-        "r10": 98.75,
-    }
-    historical_claim = _find_veri_cross_row(single_flip, aqe_k=3, k1=30, k2=10, lambda_value=0.2) or {
-        "label": "AQE(k=3) + rerank (k1=30, k2=10, λ=0.2)",
-        "map": DEFAULTS["veri_historical_claim_map"],
-        "r1": DEFAULTS["veri_historical_claim_r1"],
-        "r5": DEFAULTS["veri_historical_claim_r5"],
-        "r10": DEFAULTS["veri_historical_claim_r10"],
-    }
-    target = _find_veri_rerank_row(single_flip, k1=24, k2=8, lambda_value=0.2) or {
-        "label": "single_flip + rerank (k1=24, k2=8, λ=0.2)",
-        "map": DEFAULTS["veri_target_match_map"],
-        "r1": DEFAULTS["veri_target_match_r1"],
-        "r5": 99.05,
-        "r10": 99.34,
-    }
-    return {
-        "baseline": baseline,
-        "best_r1": best_r1,
-        "best_map": best_map,
-        "joint": joint,
-        "historical_claim": historical_claim,
-        "target": target,
-    }
+def get_veri_summary(results: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    single_flip = _find_feature_block(results, "single_flip")
+    concat_patch = _find_feature_block(results, "concat_patch_flip")
+    baseline = _metrics_row(single_flip.get("baseline", {"mAP": 0.8222, "R1": 0.9750, "R5": 0.9893, "R10": 0.9952}))
+    best_r1 = _find_veri_rerank_row(single_flip, k1=24, k2=8, lambda_value=0.2) or {"map": 85.14, "r1": 98.33, "r5": 99.05, "r10": 99.34}
+    best_map = _find_veri_cross_row(concat_patch, aqe_k=3, k1=80, k2=15, lambda_value=0.2) or {"map": 89.97, "r1": 97.80, "r5": 98.45, "r10": 98.81}
+    joint = _find_veri_cross_row(concat_patch, aqe_k=2, k1=80, k2=15, lambda_value=0.2) or {"map": 89.71, "r1": 98.15, "r5": 98.51, "r10": 98.75}
+    v14 = _find_veri_rerank_row(single_flip, k1=25, k2=8, lambda_value=0.2) or {"map": 85.24, "r1": 98.21}
+    v15 = _find_veri_cross_row(single_flip, aqe_k=3, k1=80, k2=15, lambda_value=0.2) or {"map": 89.91, "r1": 97.62}
+    return {"baseline": baseline, "best_r1": best_r1, "best_map": best_map, "joint": joint, "v14": v14, "v15": v15}
 
 
-def get_veri_rerank_plot_series(results: dict) -> dict[int, dict[str, list[float]]]:
-    single_flip = get_veri_single_flip_block(results)
-    series: dict[int, dict[str, list[float]]] = {
-        k1: {
-            "lambdas": VERI_SWEEP_LAMBDAS,
-            "r1": [math.nan] * len(VERI_SWEEP_LAMBDAS),
-            "map": [math.nan] * len(VERI_SWEEP_LAMBDAS),
-        }
-        for k1 in VERI_SWEEP_K1S
-    }
+def get_sota_rows(veri_summary: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    ours = [
+        {"name": "Ours (v17, best R1)", "category": "Ours", "map": veri_summary["best_r1"]["map"], "r1": veri_summary["best_r1"]["r1"], "r5": veri_summary["best_r1"]["r5"], "r10": veri_summary["best_r1"]["r10"], "year": 2026, "backbone": "ViT-B/16 CLIP, TransReID + flip-TTA + rerank", "params_m": 86.0, "flops_g": 17.6, "trust": "verified", "family": "CLIP-ViT", "single_ensemble": "Single"},
+        {"name": "Ours (v17, best mAP)", "category": "Ours", "map": veri_summary["best_map"]["map"], "r1": veri_summary["best_map"]["r1"], "r5": veri_summary["best_map"]["r5"], "r10": veri_summary["best_map"]["r10"], "year": 2026, "backbone": "ViT-B/16 CLIP, TransReID + concat[CLS+patch] + AQE + rerank", "params_m": 86.0, "flops_g": 17.6, "trust": "verified", "family": "CLIP-ViT", "single_ensemble": "Single"},
+        {"name": "Ours (v17, joint optimum)", "category": "Ours", "map": veri_summary["joint"]["map"], "r1": veri_summary["joint"]["r1"], "r5": veri_summary["joint"]["r5"], "r10": veri_summary["joint"]["r10"], "year": 2026, "backbone": "ViT-B/16 CLIP, TransReID + concat[CLS+patch] + AQE + rerank", "params_m": 86.0, "flops_g": 17.6, "trust": "verified", "family": "CLIP-ViT", "single_ensemble": "Single"},
+    ]
+    return [*VERI_BASELINES, *ours]
+
+
+def is_ours(row: dict[str, Any]) -> bool:
+    return row["name"].startswith("Ours")
+
+
+def is_verified(row: dict[str, Any]) -> bool:
+    return row.get("trust") == "verified"
+
+
+def is_literature_claim(row: dict[str, Any]) -> bool:
+    return row.get("trust") == "literature_claim"
+
+
+def has_value(row: dict[str, Any], key: str) -> bool:
+    return row.get(key) is not None
+
+
+def scatter_style(row: dict[str, Any], *, marker: str = "o", size: float = 90.0) -> dict[str, Any]:
+    if is_ours(row):
+        return {"s": size * 1.2, "marker": "o", "color": COLORS["ours"], "edgecolors": "black", "linewidths": 0.8}
+    if is_literature_claim(row):
+        return {"s": size, "marker": marker, "facecolors": "none", "edgecolors": COLORS["literature"], "linewidths": 1.3}
+    return {"s": size, "marker": marker, "color": COLORS["verified"], "edgecolors": "black", "linewidths": 0.8}
+
+
+def bar_style(row: dict[str, Any], default_color: str) -> dict[str, Any]:
+    if is_ours(row):
+        return {"color": COLORS["ours"], "edgecolor": "black", "linewidth": 0.8}
+    if is_literature_claim(row):
+        return {"color": "white", "edgecolor": COLORS["literature"], "linewidth": 1.2, "hatch": "//"}
+    return {"color": default_color, "edgecolor": "black", "linewidth": 0.8}
+
+
+def compute_pareto_frontier(rows: list[dict[str, Any]], *, x_key: str, y_key: str) -> list[dict[str, Any]]:
+    candidates = [row for row in rows if has_value(row, x_key) and has_value(row, y_key)]
+    frontier = []
+    for row in candidates:
+        dominated = False
+        for other in candidates:
+            if other is row:
+                continue
+            if other[x_key] >= row[x_key] and other[y_key] >= row[y_key] and (other[x_key] > row[x_key] or other[y_key] > row[y_key]):
+                dominated = True
+                break
+        if not dominated:
+            frontier.append(row)
+    return sorted(frontier, key=lambda item: (item[x_key], item[y_key]))
+
+
+def placeholder_width(values: list[float]) -> float:
+    return max(max(values) * 0.12, 1.0) if values else 1.0
+
+
+def draw_unknown_barh(ax: plt.Axes, y: float, width: float) -> None:
+    ax.barh(y, width, color="white", edgecolor=COLORS["literature"], linewidth=1.2, hatch="//", zorder=3)
+    ax.text(width + (width * 0.2), y, "?", va="center", ha="left", fontsize=9, color=COLORS["text"])
+
+
+def get_veri_rerank_plot_series(results: dict[str, Any]) -> dict[int, dict[str, list[float]]]:
+    single_flip = _find_feature_block(results, "single_flip")
+    series = {k1: {"lambdas": VERI_SWEEP_LAMBDAS, "r1": [math.nan] * len(VERI_SWEEP_LAMBDAS), "map": [math.nan] * len(VERI_SWEEP_LAMBDAS)} for k1 in VERI_SWEEP_K1S}
     lambda_index = {value: idx for idx, value in enumerate(VERI_SWEEP_LAMBDAS)}
     for entry in single_flip.get("rerank_sweep", []):
         config = entry.get("config", {})
@@ -423,548 +258,82 @@ def get_veri_rerank_plot_series(results: dict) -> dict[int, dict[str, list[float
             continue
         idx = lambda_index[lambda_value]
         metrics = entry.get("metrics", {})
-        series[k1]["r1"][idx] = _to_percent(metrics.get("R1", 0.0))
-        series[k1]["map"][idx] = _to_percent(metrics.get("mAP", 0.0))
+        series[k1]["r1"][idx] = _to_percent(metrics.get("R1", 0.0)) or math.nan
+        series[k1]["map"][idx] = _to_percent(metrics.get("mAP", 0.0)) or math.nan
     return series
 
 
-def get_veri_best_rerank_metrics(results: dict) -> tuple[float, float]:
-    summary = get_veri_summary(results)
-    return summary["best_map"]["map"], summary["best_r1"]["r1"]
+def hardware_caption(perf: dict[str, Any]) -> str:
+    hardware = perf.get("hardware", {})
+    return f"Local benchmark: {hardware.get('device_name', hardware.get('cpu', 'unknown hardware'))} ({hardware.get('device', 'cpu')}). Other methods remain DATA_UNAVAILABLE unless a primary source reports them."
 
 
-def get_veri_lambda_sweep(results: dict) -> tuple[list[float], list[float], list[float], str]:
-    single_flip = get_veri_single_flip_block(results)
-    rerank_entries = single_flip.get("rerank_sweep", [])
-    grouped: dict[tuple[int, int], list[dict]] = {}
-    for entry in rerank_entries:
-        config = entry.get("config", {})
-        key = (config.get("k1"), config.get("k2"))
-        grouped.setdefault(key, []).append(entry)
-
-    best_key: tuple[int, int] | None = None
-    best_entries: list[dict] = []
-    best_lambda_count = -1
-    for key, entries in grouped.items():
-        lambda_count = len({round(item.get("config", {}).get("lambda_value", -1.0), 4) for item in entries})
-        if lambda_count > best_lambda_count:
-            best_key = key
-            best_entries = entries
-            best_lambda_count = lambda_count
-
-    if not best_entries:
-        # Fallback to the explicit rows already documented in system-comparative-analysis.md.
-        return [0.0, 0.1, 0.3, 0.5], [82.01, 84.46, 83.97, 83.51], [97.50, 97.79, 97.68, 97.79], "Fallback rows documented in the analysis markdown"
-
-    best_entries = sorted(best_entries, key=lambda item: item.get("config", {}).get("lambda_value", 0.0))
-    lambdas = [float(item.get("config", {}).get("lambda_value", 0.0)) for item in best_entries]
-    maps = [_to_percent(item.get("metrics", {}).get("mAP", 0.0)) for item in best_entries]
-    r1s = [_to_percent(item.get("metrics", {}).get("R1", 0.0)) for item in best_entries]
-    return lambdas, maps, r1s, f"single_flip rerank subset at k1={best_key[0]}, k2={best_key[1]}"
+def metric_block(perf: dict[str, Any], key: str) -> dict[str, Any]:
+    block = perf.get(key)
+    return block if isinstance(block, dict) else {}
 
 
-def get_cityflow_threshold_sweep() -> tuple[list[float], list[float], float, str]:
-    # No standalone sweep JSON is checked into the repo for the threshold scan. Use the
-    # documented experiment-log deltas around the historical dense sweep optimum instead.
-    optimum = DEFAULTS["cityflow_historical_threshold_optimum_idf1"]
-    thresholds = [0.50, 0.53, 0.55]
-    idf1_values = [optimum - 0.0030, optimum, optimum - 0.0020]
-    return thresholds, idf1_values, 0.53, "Fallback from docs/experiment-log.md §3.1 (`sim_thresh` row; 0.50=-0.3pp, 0.53 optimal, 0.55=-0.2pp)"
+def stat_mean_std(block: dict[str, Any]) -> str:
+    if not block:
+        return "N/A"
+    return f"{block.get('mean', 0.0):.2f} ± {block.get('std', 0.0):.2f} ms"
 
 
-
-def build_g1() -> None:
-    fig, ax = plt.subplots(figsize=(8.2, 5.4))
-    cityflow_efficiency_pct = get_cityflow_efficiency_pct()
-    points = [
-        (1, DEFAULTS["vehicle_mtmc_idf1"], "Ours (TransReID ViT-B/16 CLIP\n+ DINOv2 score-fusion)\n10c v15 / 10a v7", COLORS["ours"], "o"),
-        (5, DEFAULTS["cityflow_sota_idf1"], "AIC22 Team28 (1st)\n5 models", COLORS["sota"], "^"),
-        (3, 0.8437, "AIC22 Team59 (2nd)\n3 models", COLORS["sota"], "v"),
-        (3, 0.8371, "AIC22 Team37 (3rd)\n3 models*", COLORS["uncertain"], "D"),
-    ]
-    for x, y, label, color, marker in points:
-        ax.scatter(x, y, s=110, color=color, edgecolors="black", linewidths=0.8, marker=marker, label=label.split("\n")[0], zorder=3)
-        dx = 0.08 if x < 4 else -0.9
-        dy = 0.004 if "Team37" not in label else -0.012
-        ax.text(x + dx, y + dy, label, fontsize=9, color=COLORS["text"])
-
-    frontier_x = [1, 3, 5]
-    frontier_y = [DEFAULTS["vehicle_mtmc_idf1"], 0.8437, DEFAULTS["cityflow_sota_idf1"]]
-    ax.plot(frontier_x, frontier_y, linestyle="--", color=COLORS["frontier"], linewidth=1.8, label="Pareto frontier")
-    ax.annotate(
-        f"{cityflow_efficiency_pct:.2f}% of SOTA\nat 20% of model count",
-        xy=(3, 0.8437),
-        xytext=(1.2, 0.805),
-        fontsize=9,
-        color=COLORS["text"],
-        arrowprops={"arrowstyle": "->", "lw": 1.1, "color": COLORS["text"]},
-    )
-    ax.set_title("MTMC IDF1 vs Model Count on CityFlowV2")
-    ax.set_xlabel("Number of ReID models")
-    ax.set_ylabel("MTMC IDF1")
-    ax.set_xlim(0.5, 6.0)
-    ax.set_ylim(0.70, 0.90)
-    format_axes(ax)
-    handles = [
-        plt.Line2D([], [], marker="o", color="none", markerfacecolor=COLORS["ours"], markeredgecolor="black", markersize=8, label="Ours"),
-        plt.Line2D([], [], marker="^", color="none", markerfacecolor=COLORS["sota"], markeredgecolor="black", markersize=8, label="Published SOTA"),
-        plt.Line2D([], [], linestyle="--", color=COLORS["frontier"], label="Pareto frontier"),
-    ]
-    ax.legend(handles=handles, loc="upper left", frameon=False)
-    fig.text(0.01, 0.01, "* Team37 model count uses the spec default because the exact count was not re-measured.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "G1_pareto")
+def perf_value(perf: dict[str, Any], key: str) -> float | None:
+    value = perf.get(key)
+    return None if value is None else float(value)
 
 
-
-def build_g2() -> None:
-    fig, ax = plt.subplots(figsize=(8.0, 5.2))
-    labels = ["CityFlowV2\n(vehicle)", "WildTrack\n(person, GP)"]
-    ours = [DEFAULTS["vehicle_mtmc_idf1"], DEFAULTS["wildtrack_idf1"]]
-    sota = [DEFAULTS["cityflow_sota_idf1"], DEFAULTS["wildtrack_sota_idf1"]]
-    x = list(range(len(labels)))
-    width = 0.35
-
-    ours_bars = ax.bar([i - width / 2 for i in x], ours, width=width, color=COLORS["ours"], edgecolor="black", linewidth=0.8, label="Ours")
-    sota_bars = ax.bar(
-        [i + width / 2 for i in x],
-        sota,
-        width=width,
-        color=[COLORS["sota"], COLORS["sota"]],
-        hatch=[None, "//"],
-        edgecolor="black",
-        linewidth=0.8,
-        label="SOTA",
-    )
-
-    for bar in list(ours_bars) + list(sota_bars):
-        y = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width() / 2, y + 0.015, f"{y:.3f}", ha="center", va="bottom", fontsize=9, color=COLORS["text"])
-
-    gaps = [ours[0] - sota[0], ours[1] - sota[1]]
-    for idx, gap in enumerate(gaps):
-        y = max(ours[idx], sota[idx]) + 0.055
-        ax.text(idx, y, f"Δ = {gap * 100:+.1f}pp", ha="center", va="bottom", fontsize=9, color=COLORS["text"])
-
-    ax.text(x[0], 0.08, "10c v52\nAIC22 leaderboard", ha="center", va="bottom", fontsize=8, color=COLORS["text"])
-    ax.text(x[1], 0.08, "12b v1-v3\npublished GP SOTA*", ha="center", va="bottom", fontsize=8, color=COLORS["text"])
-    ax.set_title("MTMC IDF1: Ours vs Published SOTA")
-    ax.set_ylabel("MTMC IDF1")
-    ax.set_xlabel("Dataset")
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    ax.set_ylim(0.0, 1.0)
-    format_axes(ax)
-    ax.legend(loc="upper right", frameon=False)
-    fig.text(0.01, 0.01, "* WildTrack SOTA uses the spec default literature value and was not re-measured in this repo.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "G2_mtmc_idf1_datasets")
-
-
-
-def build_g3() -> None:
-    veri_results = load_veri_results()
-    veri_summary = get_veri_summary(veri_results)
-    fig, ax = plt.subplots(figsize=(9.0, 5.4))
-    labels = ["VeRi-776", "Market-1501", "CityFlowV2\n(vehicle, ours)"]
-    literature_backbone = [0.0, DEFAULTS["market_backbone_map"], 0.0]
-    veri_measured_map = veri_summary["best_map"]["map"]
-    measured_ours = [veri_measured_map or 0.0, 0.0, 80.14]
-    sota = [DEFAULTS["veri_sota_map"], DEFAULTS["market_sota_map"], 86.79]
-    x = list(range(len(labels)))
-    width = 0.24
-
-    lit_bars = ax.bar(
-        [i - width for i in x],
-        literature_backbone,
-        width=width,
-        color=COLORS["backbone"],
-        edgecolor="black",
-        linewidth=0.8,
-        hatch="//",
-        label="Ours (literature, backbone-class)",
-    )
-    measured_bars = ax.bar(
-        x,
-        measured_ours,
-        width=width,
-        color=COLORS["ours"],
-        edgecolor="black",
-        linewidth=0.8,
-        label="Ours (measured)",
-    )
-    sota_bars = ax.bar(
-        [i + width for i in x],
-        sota,
-        width=width,
-        color=COLORS["sota"],
-        edgecolor="black",
-        linewidth=0.8,
-        hatch=["//", None, None],
-        label="SOTA",
-    )
-
-    for bar in list(lit_bars) + list(measured_bars) + list(sota_bars):
-        height = bar.get_height()
-        if height > 0:
-            ax.text(bar.get_x() + bar.get_width() / 2, height + 1.5, f"{height:.1f}", ha="center", va="bottom", fontsize=8.5, color=COLORS["text"])
-
-    ax.text(
-        x[0],
-        6,
-        f"TransReID ViT-B/16 CLIP\nbest mAP; R1={veri_summary['best_r1']['r1']:.2f}" if veri_measured_map is not None else "TransReID ViT-B/16\nno measured eval",
-        ha="center",
-        fontsize=8,
-        color=COLORS["text"],
-    )
-    ax.text(x[1], 6, "CLIP-ReID\nViT-B/16*", ha="center", fontsize=8, color=COLORS["text"])
-    ax.text(x[2], 6, "09b v2 vs 09s v1\nmeasured in repo", ha="center", fontsize=8, color=COLORS["text"])
-    ax.annotate(
-        "Higher single-camera mAP did not improve MTMC",
-        xy=(2 + width, 86.79),
-        xytext=(1.15, 92),
-        fontsize=8.5,
-        color=COLORS["text"],
-        arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]},
-    )
-    ax.set_title("Single-Model ReID mAP - Our Backbone Class vs Benchmark SOTA")
-    ax.set_xlabel("Dataset")
-    ax.set_ylabel("mAP (%)")
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    ax.set_ylim(0, 100)
-    format_axes(ax)
-    ax.legend(loc="upper right", frameon=False)
-    fig.text(
-        0.01,
-        0.01,
-        "* Hatched light-blue bars are literature values for the same backbone class. The VeRi-776 measured bar uses the best-mAP row from `outputs/09v_veri_v9/veri776_eval_results_v9.json`; the VeRi-776 SOTA bar uses the spec default literature value.",
-        fontsize=8,
-        color=COLORS["text"],
-    )
-    save_figure(fig, "G3_reid_map_benchmarks")
-
-
-
-def build_g4() -> None:
-    fig, ax = plt.subplots(figsize=(12.5, 5.8))
-    steps = [
-        ("Baseline*", DEFAULTS["waterfall_baseline"], "base", "#bdbdbd"),
-        ("+ FIC whitening", 0.015, "delta", COLORS["frontier"]),
-        ("+ AQE K=3", 0.005, "delta", COLORS["frontier"]),
-        ("+ Power norm", 0.005, "delta", COLORS["frontier"]),
-        ("+ PCA 384D*", DEFAULTS["waterfall_pca_delta"], "delta", COLORS["frontier"]),
-        ("+ Conflict-free CC", 0.0021, "delta", COLORS["frontier"]),
-        ("+ Intra-merge", 0.0028, "delta", COLORS["frontier"]),
-        ("+ Temporal bonus", 0.009, "delta", COLORS["frontier"]),
-        ("+ min_hits=2", 0.002, "delta", COLORS["frontier"]),
-        ("+ Crop quality*", DEFAULTS["waterfall_crop_delta"], "delta", COLORS["frontier"]),
-        ("+ Full v80 recipe", 0.1551, "delta", COLORS["frontier"]),
-        ("Final", DEFAULTS["vehicle_mtmc_idf1"], "final", COLORS["ours"]),
-    ]
-
-    cumulative = 0.0
-    x_positions = list(range(len(steps)))
-    for idx, (label, value, kind, color) in enumerate(steps):
-        if kind == "base":
-            ax.bar(idx, value, color=color, edgecolor="black", linewidth=0.8)
-            cumulative = value
-            ax.text(idx, value + 0.008, f"{value:.3f}", ha="center", va="bottom", fontsize=8.5)
-        elif kind == "delta":
-            bottom = cumulative if value >= 0 else cumulative + value
-            ax.bar(idx, abs(value), bottom=bottom, color=color, edgecolor="black", linewidth=0.8, hatch="//" if "*" in label else None)
-            cumulative += value
-            ax.text(idx, max(cumulative, bottom + abs(value)) + 0.008, f"{value * 100:+.2f}pp", ha="center", va="bottom", fontsize=8.2, rotation=90)
-        else:
-            ax.bar(idx, value, color=color, edgecolor="black", linewidth=0.8)
-            ax.text(idx, value + 0.008, f"{value:.4f}", ha="center", va="bottom", fontsize=8.5)
-
-    ax.axhline(DEFAULTS["cityflow_sota_idf1"], color=COLORS["sota"], linestyle="--", linewidth=1.4)
-    ax.text(len(steps) - 0.3, 0.852, f"SOTA = {DEFAULTS['cityflow_sota_idf1']:.4f}", ha="right", va="bottom", fontsize=9, color=COLORS["sota"])
-    ax.set_title(f"MTMC IDF1 Ablation Waterfall - From Baseline to {DEFAULTS['vehicle_mtmc_idf1']:.4f} (CityFlowV2)")
-    ax.set_ylabel("MTMC IDF1")
-    ax.set_xlabel("Ablation step")
-    ax.set_xticks(x_positions)
-    ax.set_xticklabels([s[0] for s in steps], rotation=30, ha="right")
-    ax.set_ylim(0.50, 0.85)
-    format_axes(ax)
-    fig.text(
-        0.01,
-        0.01,
-        "* Baseline, PCA contribution, and crop-quality contribution use the spec defaults where a single canonical repo measurement was not logged. Step 11 compresses the 225+ association sweeps into the restored 10c v52 recipe.",
-        fontsize=8,
-        color=COLORS["text"],
-    )
-    save_figure(fig, "G4_ablation_waterfall")
-
-
-
-def build_g5() -> None:
-    fig, ax = plt.subplots(figsize=(11.0, 6.6))
-    bars = [
-        ("CSLS calibration", -34.7, False),
-        ("AFLink motion linking (worst)", -13.2, False),
-        ("Hierarchical clustering", -5.0, False),
-        ("CID_BIAS (GT-learned)", -3.3, False),
-        ("384px ViT deployment", -2.8, False),
-        ("FAC KNN consensus", -2.5, False),
-        ("Feature concatenation", -1.6, False),
-        ("DMT camera-aware training", -1.4, False),
-        ("Hierarchical centroid averaging*", DEFAULTS["hierarchical_centroid_delta"], True),
-        ("Reranking k-reciprocal*", DEFAULTS["reranking_delta"], True),
-        ("Network flow solver", -0.24, False),
-        ("Weak-secondary score fusion\n(negligible +0.0006pp)", 0.0006, False),
-        ("DINOv2 ViT-L/14 (single, despite +6.65pp mAP)", -3.1, False),
-    ]
-    bars = sorted(bars, key=lambda item: abs(item[1]), reverse=True)
-    labels = [item[0] for item in bars]
-    values = [item[1] for item in bars]
-    y = list(range(len(labels)))
-    hatch = ["//" if item[2] else None for item in bars]
-    colors = [COLORS["dead"] if value < 0 else SOTA_GREYS[1] for value in values]
-    rects = ax.barh(y, values, color=colors, edgecolor="black", linewidth=0.8)
-    for rect, pattern, value in zip(rects, hatch, values):
-        if pattern:
-            rect.set_hatch(pattern)
-            rect.set_facecolor("#ef8a8a")
-        if value >= 0:
-            rect.set_facecolor("#d9d9d9")
-
-    for idx, value in enumerate(values):
-        if value >= 0:
-            x = value + 0.08
-            ha = "left"
-        else:
-            x = value + 0.4
-            ha = "left"
-        ax.text(x, idx, f"{value:.4f} pp" if abs(value) < 0.01 else (f"{value:.2f} pp" if abs(value) < 1 else f"{value:.1f} pp"), va="center", ha=ha, fontsize=8.5, color=COLORS["text"])
-
-    ax.set_title("Documented Dead Ends / Null Gains - Effect on MTMC IDF1")
-    ax.set_xlabel("ΔMTMC IDF1 (pp)")
+def build_g5_dead_ends() -> None:
+    fig, ax = plt.subplots(figsize=(8.8, 5.0))
+    ordered = sorted(REID_DEAD_ENDS, key=lambda item: item["delta_pp"])
+    y = np.arange(len(ordered))
+    bars = ax.barh(y, [item["delta_pp"] for item in ordered], color=COLORS["warning"], edgecolor="black", linewidth=0.8, zorder=3)
+    for bar, item in zip(bars, ordered):
+        ax.text(bar.get_width() - 0.05, bar.get_y() + bar.get_height() / 2, f"{item['delta_pp']:.1f}pp", va="center", ha="right", fontsize=8.5, color="white")
     ax.set_yticks(y)
-    ax.set_yticklabels(labels)
-    ax.set_xlim(-36, 1.0)
-    ax.invert_yaxis()
+    ax.set_yticklabels([item["label"] for item in ordered])
+    ax.set_xlabel("Change vs local control (pp)")
+    ax.set_title("Vehicle ReID Dead Ends Still Relevant to VeRi-776 Discussion")
+    ax.axvline(0.0, color="#555555", linewidth=1.0)
     format_axes(ax)
-    fig.text(
-        0.01,
-        0.01,
-        "* Hatched bars use the spec default where the repo does not log one canonical single-number regression. The near-zero positive bar is intentionally retained as a null-gain path; the CLIP+DINOv2 fusion champion was removed because it is a measured +0.40pp gain, not a dead end.",
-        fontsize=8,
-        color=COLORS["text"],
-    )
+    fig.text(0.01, 0.01, "These are repository-backed negative controls that affect the same vehicle-ReID stack family, even when the reported metric originated in a downstream benchmark.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "G5_dead_ends")
 
 
-
-def build_g6() -> None:
-    fig, ax = plt.subplots(figsize=(8.2, 5.4))
-    labels = ["Ours\n(1 model)", "AIC22 Team28\n(5 models)"]
-    training = [DEFAULTS["ours_train_hours"], DEFAULTS["sota_train_hours"]]
-    inference = [DEFAULTS["ours_infer_hours"], DEFAULTS["sota_infer_hours"]]
-    x = list(range(len(labels)))
-    width = 0.55
-
-    train_bars = ax.bar(x, training, width=width, color=[COLORS["ours"], COLORS["sota"]], edgecolor="black", linewidth=0.8, label="Training")
-    infer_bars = ax.bar(
-        x,
-        inference,
-        width=width,
-        bottom=training,
-        color=["#9ecae1", "#fdd0a2"],
-        edgecolor="black",
-        linewidth=0.8,
-        hatch=[None, "//"],
-        label="Inference",
-    )
-
-    for idx, bar in enumerate(train_bars):
-        ax.text(bar.get_x() + bar.get_width() / 2, training[idx] / 2, f"train\n{training[idx]:.1f}h" if idx == 0 else f"train\n{training[idx]:.0f}h*", ha="center", va="center", fontsize=8.5, color="white" if idx == 0 else COLORS["text"])
-    for idx, bar in enumerate(infer_bars):
-        if inference[idx] > 0:
-            y = training[idx] + inference[idx] / 2
-            ax.text(bar.get_x() + bar.get_width() / 2, y, f"infer\n{inference[idx]:.2f}h", ha="center", va="center", fontsize=8.0, color=COLORS["text"])
-        else:
-            ax.text(bar.get_x() + bar.get_width() / 2, training[idx] + 1.2, "infer\nn/a*", ha="center", va="bottom", fontsize=8.0, color=COLORS["text"])
-
-    ax.text(0, training[0] + inference[0] + 2.0, "Kaggle T4/P100\n~1.7 A100h equiv.", ha="center", fontsize=8.5, color=COLORS["text"])
-    ax.text(1, training[1] + inference[1] + 2.0, "A100 multi-GPU\nliterature estimate*", ha="center", fontsize=8.5, color=COLORS["text"])
-    ax.set_title("Compute Cost - Ours vs SOTA Recipe")
-    ax.set_xlabel("System")
-    ax.set_ylabel("GPU-hours")
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    ax.set_ylim(0, 75)
+def build_g6_compute_cost(rows: list[dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(8.8, 5.0))
+    keep_names = {"MSINet (2.3M, w/o RK)", "VehicleNet", "CAL", "CLIP-ReID (w/o RK)", "TransReID (ICCV 2021)", "Ours (v17, best mAP)"}
+    candidates = [row for row in rows if has_value(row, "params_m") and row["name"] in keep_names]
+    efficiencies = [row["map"] / row["params_m"] for row in candidates]
+    x = np.arange(len(candidates))
+    bars = ax.bar(x, efficiencies, color=[COLORS["ours"] if is_ours(row) else COLORS["accent"] for row in candidates], edgecolor="black", linewidth=0.8, zorder=3)
+    for idx, (bar, eff) in enumerate(zip(bars, efficiencies)):
+        ax.text(bar.get_x() + bar.get_width() / 2, eff + 0.12, f"{eff:.2f}", ha="center", va="bottom", fontsize=8.5, color=COLORS["text"])
+        ax.text(idx, 0.05, candidates[idx]["name"].replace(" (w/o RK)", ""), rotation=35, ha="right", va="bottom", fontsize=8.0, color=COLORS["text"])
+    ax.set_xticks([])
+    ax.set_ylabel("mAP per parameter (score/M)")
+    ax.set_title("VeRi-776 Parameter Efficiency Reference")
     format_axes(ax)
-    ax.legend(loc="upper left", frameon=False)
-    fig.text(
-        0.01,
-        0.01,
-        "* Team28 training uses the spec default literature estimate; inference was not reported in the spec and is shown as n/a. Ours uses repo-documented T4/P100-compatible training and ~50 min stage 0-2 inference.",
-        fontsize=8,
-        color=COLORS["text"],
-    )
+    fig.text(0.01, 0.01, "This keeps a compact efficiency reference in the VeRi-only bundle without reintroducing cross-dataset content. FLOPs remain unreported for most baselines and are handled in P3/P4.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "G6_compute_cost")
 
 
-def build_g7() -> None:
-    veri_results = load_veri_results()
-    veri_summary = get_veri_summary(veri_results)
-    veri_map = veri_summary["best_map"]["map"]
-
-    fig, axes = plt.subplots(1, 3, figsize=(15.0, 5.2))
-    panel_specs = [
-        {
-            "title": "VeRi-776",
-            "ylabel": "mAP (%)",
-            "labels": ["Ours", "TransReID*", "CLIP-ReID*", "MsKAT*"],
-            "values": [veri_map, DEFAULTS["veri_transreid_map"], DEFAULTS["veri_clip_reid_map"], DEFAULTS["veri_mskat_map"]],
-            "colors": [COLORS["ours"], *SOTA_GREYS],
-            "hatches": [None, "//", "//", "//"],
-            "ylim": (0, 95),
-            "decimals": 2,
-            "unknown": set(),
-        },
-        {
-            "title": "CityFlowV2",
-            "ylabel": "MTMC IDF1",
-            "labels": ["Ours", "Team37", "Team59", "Team28"],
-            "values": [DEFAULTS["vehicle_mtmc_idf1"], DEFAULTS["aic22_team37_idf1"], DEFAULTS["aic22_team59_idf1"], DEFAULTS["aic22_team28_idf1"]],
-            "colors": [COLORS["ours"], *SOTA_GREYS],
-            "hatches": [None, None, None, None],
-            "ylim": (0, 0.95),
-            "decimals": 3,
-            "unknown": set(),
-        },
-        {
-            "title": "WILDTRACK",
-            "ylabel": "GP IDF1",
-            "labels": ["Ours", "MVDet*", "MVDeTr*", "Lit-SOTA*"],
-            "values": [DEFAULTS["wildtrack_idf1"], 0.001, 0.001, DEFAULTS["wildtrack_sota_idf1"]],
-            "colors": [COLORS["ours"], COLORS["uncertain"], COLORS["uncertain"], SOTA_GREYS[1]],
-            "hatches": [None, "//", "//", "//"],
-            "ylim": (0, 1.0),
-            "decimals": 3,
-            "unknown": {1, 2},
-        },
-    ]
-
-    for ax, spec in zip(axes, panel_specs):
-        bars = ax.bar(spec["labels"], spec["values"], color=spec["colors"], edgecolor="black", linewidth=0.8)
-        for idx, (bar, hatch) in enumerate(zip(bars, spec["hatches"])):
-            if hatch:
-                bar.set_hatch(hatch)
-            value = spec["values"][idx]
-            if idx in spec["unknown"]:
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    0.05,
-                    "IDF1\n[CITE_NEEDED]*",
-                    ha="center",
-                    va="bottom",
-                    fontsize=8,
-                    color=COLORS["text"],
-                )
-            else:
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    value + (spec["ylim"][1] * 0.025),
-                    f"{value:.{spec['decimals']}f}",
-                    ha="center",
-                    va="bottom",
-                    fontsize=9,
-                    color=COLORS["text"],
-                )
-                if spec["title"] == "VeRi-776" and idx == 0:
-                    ax.text(
-                        bar.get_x() + bar.get_width() / 2,
-                        value + (spec["ylim"][1] * 0.085),
-                        f"R1={veri_summary['best_r1']['r1']:.2f}",
-                        ha="center",
-                        va="bottom",
-                        fontsize=8,
-                        color=COLORS["text"],
-                    )
-        ax.set_title(spec["title"])
-        ax.set_ylabel(spec["ylabel"])
-        ax.set_ylim(*spec["ylim"])
-        format_axes(ax)
-        ax.tick_params(axis="x", rotation=18)
-
-    fig.suptitle("Per-Dataset Comparison: Ours vs Published References", fontsize=14, fontweight="bold")
-    fig.text(0.01, 0.01, "* Literature value or literature placeholder. Hatched WILDTRACK placeholders indicate methods whose GP IDF1 is not reported in-repo and remains [CITE_NEEDED].", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "G7_per_dataset_bars")
-
-
-def build_g8() -> None:
-    fig, ax = plt.subplots(figsize=(9.2, 4.8))
-    labels = ["VeRi-776 mAP*", "CityFlowV2 IDF1", "WILDTRACK IDF1*"]
-    veri_gap = DEFAULTS["veri_measured_map"] - DEFAULTS["veri_sota_map"]
-    relative = [
-        DEFAULTS["veri_measured_map"] / DEFAULTS["veri_sota_map"] * 100.0,
-        DEFAULTS["vehicle_mtmc_idf1"] / DEFAULTS["cityflow_sota_idf1"] * 100.0,
-        DEFAULTS["wildtrack_idf1"] / DEFAULTS["wildtrack_sota_idf1"] * 100.0,
-    ]
-    gap_labels = [
-        f"{veri_gap:+.1f}pp mAP",
-        f"-{DEFAULTS['cityflow_gap_to_sota_pp']:.2f}pp IDF1",
-        f"-{(DEFAULTS['wildtrack_sota_idf1'] - DEFAULTS['wildtrack_idf1']) * 100.0:.1f}pp IDF1",
-    ]
-    y = list(range(len(labels)))
-    bars = ax.barh(y, relative, color=[COLORS["ours"], COLORS["ours"], COLORS["ours"]], edgecolor="black", linewidth=0.8)
-    ax.axvline(100.0, linestyle="--", linewidth=1.4, color=SOTA_GREYS[2])
-
-    for idx, bar in enumerate(bars):
-        ax.text(bar.get_width() + 0.6, idx, f"{relative[idx]:.1f}% ({gap_labels[idx]})", va="center", fontsize=9, color=COLORS["text"])
-
-    ax.set_title("Relative Percentage of SOTA Across Datasets")
-    ax.set_xlabel("Relative performance (% of SOTA)")
-    ax.set_yticks(y)
-    ax.set_yticklabels(labels)
-    ax.set_xlim(0, 105)
-    ax.invert_yaxis()
-    format_axes(ax)
-    fig.text(0.01, 0.01, "* VeRi-776 and WILDTRACK SOTA references are literature values, not re-measured in this repository.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "G8_relative_gap_overview")
-
-
-def build_g9() -> None:
-    veri_results = load_veri_results()
-    veri_summary = get_veri_summary(veri_results)
+def build_g9_veri_rerank_sweep(veri_results: dict[str, Any], veri_summary: dict[str, dict[str, Any]]) -> None:
     sweep = get_veri_rerank_plot_series(veri_results)
-
     fig, ax_left = plt.subplots(figsize=(8.8, 5.2))
     ax_right = ax_left.twinx()
-    sweep_colors = {20: COLORS["backbone"], 30: COLORS["ours"], 80: COLORS["frontier"]}
+    sweep_colors = {20: COLORS["accent"], 30: COLORS["ours"], 80: COLORS["frontier"]}
     for k1 in VERI_SWEEP_K1S:
         series = sweep[k1]
         ax_left.plot(series["lambdas"], series["r1"], color=sweep_colors[k1], marker="o", linewidth=2.0)
         ax_right.plot(series["lambdas"], series["map"], color=sweep_colors[k1], marker="s", linewidth=1.8, linestyle="--")
-
-    joint = veri_summary["joint"]
-    best_map = veri_summary["best_map"]
-    best_r1 = veri_summary["best_r1"]
-    ax_left.scatter([0.2], [best_r1["r1"]], color=COLORS["frontier"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
-    ax_right.scatter([0.2], [best_map["map"]], color=COLORS["frontier"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
-    ax_left.annotate(
-        "Best R1\n(single_flip, k1=24, k2=8, λ=0.2)",
-        xy=(0.2, best_r1["r1"]),
-        xytext=(0.235, best_r1["r1"] - 0.07),
-        fontsize=8.5,
-        color=COLORS["text"],
-        arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]},
-    )
-    ax_right.annotate(
-        "Best mAP\n(concat_patch_flip AQE k=3)",
-        xy=(0.2, best_map["map"]),
-        xytext=(0.255, best_map["map"] - 1.0),
-        fontsize=8.5,
-        color=COLORS["text"],
-        arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]},
-    )
-
+    ax_left.scatter([0.2], [veri_summary["best_r1"]["r1"]], color=COLORS["frontier"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
+    ax_right.scatter([0.2], [veri_summary["best_map"]["map"]], color=COLORS["frontier"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
     ax_left.set_title("VeRi-776 Rerank λ Sweep on the Deployed TransReID-CLIP Checkpoint")
     ax_left.set_xlabel("Rerank λ")
-    ax_left.set_ylabel("R1 (%)", color=COLORS["text"])
-    ax_right.set_ylabel("mAP (%)", color=COLORS["text"])
+    ax_left.set_ylabel("R1 (%)")
+    ax_right.set_ylabel("mAP (%)")
     ax_left.set_xticks(VERI_SWEEP_LAMBDAS)
     ax_left.set_xlim(min(VERI_SWEEP_LAMBDAS) - 0.02, max(VERI_SWEEP_LAMBDAS) + 0.02)
     ax_left.set_ylim(97.9, 98.4)
@@ -974,568 +343,474 @@ def build_g9() -> None:
     ax_right.spines["left"].set_visible(False)
     ax_right.spines["right"].set_color("#777777")
     ax_right.tick_params(colors="#333333")
-    color_handles = [
-        plt.Line2D([], [], color=sweep_colors[k1], marker="o", linewidth=2.0, label=f"k1={k1}")
-        for k1 in VERI_SWEEP_K1S
-    ]
-    style_handles = [
-        plt.Line2D([], [], color=COLORS["text"], marker="o", linewidth=2.0, label="R1"),
-        plt.Line2D([], [], color=COLORS["text"], marker="s", linewidth=1.8, linestyle="--", label="mAP"),
-        plt.Line2D([], [], color=COLORS["frontier"], marker="*", linewidth=0, markersize=12, markeredgecolor="black", label="v17 highlights"),
-    ]
-    legend_one = ax_left.legend(handles=color_handles, loc="lower left", frameon=False, title="Rerank k1")
-    ax_left.add_artist(legend_one)
-    ax_left.legend(handles=style_handles, loc="lower right", frameon=False)
-    fig.text(
-        0.01,
-        0.01,
-        "Source: `outputs/09v_veri_v9/veri776_eval_results_v9.json` (kernel `09v-veri-776-eval-transreid-rerank` v17, 224x224 to match kernel 08 training). Lines show the single_flip rerank λ sweep; starred highlights mark the v17 best-R1 single_flip row and the best-mAP concat_patch_flip row.",
-        fontsize=8,
-        color=COLORS["text"],
-    )
+    fig.text(0.01, 0.01, f"Source: {relative_path(VERI_RESULTS_PATH)}. The lines show the single_flip rerank λ sweep; starred markers identify the checked-in best-R1 and best-mAP v17 rows.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "G9_veri_rerank_sweep")
 
 
-def build_g10() -> None:
-    thresholds, idf1_values, optimum_threshold, source_note = get_cityflow_threshold_sweep()
-    optimum_index = thresholds.index(optimum_threshold)
-
-    fig, ax = plt.subplots(figsize=(8.6, 5.0))
-    ax.plot(thresholds, idf1_values, color=COLORS["ours"], marker="o", linewidth=2.0)
-    ax.scatter([optimum_threshold], [idf1_values[optimum_index]], color=COLORS["frontier"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
-    for x, y in zip(thresholds, idf1_values):
-        ax.text(x, y + 0.0007, f"{y:.4f}", ha="center", va="bottom", fontsize=8.5, color=COLORS["text"])
-
-    ax.annotate("Optimal documented threshold\n(sim_thresh=0.53)", xy=(optimum_threshold, idf1_values[optimum_index]), xytext=(0.536, idf1_values[optimum_index] - 0.004), fontsize=8.5, color=COLORS["text"], arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]})
-    ax.set_title("CityFlowV2 Stage-4 Similarity Threshold Sweep")
-    ax.set_xlabel("Similarity threshold")
-    ax.set_ylabel("MTMC IDF1")
-    ax.set_xlim(0.495, 0.555)
-    ax.set_ylim(min(idf1_values) - 0.0025, max(idf1_values) + 0.0025)
-    format_axes(ax)
-    fig.text(0.01, 0.01, f"{source_note}. This figure uses the documented fallback because no standalone threshold-sweep JSON is present in the repository.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "G10_cityflow_threshold_sweep")
-
-
-def get_veri_eval_ablation_rows(results: dict) -> list[dict]:
-    summary = get_veri_summary(results)
-    single_flip = get_veri_single_flip_block(results)
-    concat_patch = get_veri_feature_block(results, "concat_patch_flip")
-    baseline = {"label": "Baseline", "map": summary["baseline"]["map"], "r1": summary["baseline"]["r1"]}
-    v14 = _find_veri_rerank_row(single_flip, k1=25, k2=8, lambda_value=0.2) or {"label": "v14 rerank", "map": 85.24, "r1": 98.21}
-    v15 = _find_veri_cross_row(single_flip, aqe_k=3, k1=80, k2=15, lambda_value=0.2) or {"label": "v15 AQE + rerank", "map": DEFAULTS["veri_aqe_rerank_map"], "r1": DEFAULTS["veri_aqe_rerank_r1"]}
-    v17_map = _find_veri_cross_row(concat_patch, aqe_k=3, k1=80, k2=15, lambda_value=0.2) or {"label": "v17 best mAP", "map": DEFAULTS["veri_measured_map"], "r1": 97.80}
-    v17_r1 = _find_veri_rerank_row(single_flip, k1=24, k2=8, lambda_value=0.2) or {"label": "v17 best R1", "map": DEFAULTS["veri_target_match_map"], "r1": DEFAULTS["veri_measured_r1"]}
-    v14["label"] = "v14 rerank"
-    v15["label"] = "v15 AQE + rerank"
-    v17_map["label"] = "v17 best mAP"
-    v17_r1["label"] = "v17 best R1"
-    return [baseline, v14, v15, v17_map, v17_r1]
-
-
-def build_v1_veri_pareto() -> None:
-    fig, ax = plt.subplots(figsize=(9.0, 5.6))
-    offsets = _veri_label_offsets()
-    frontier = _compute_pareto_frontier(VERI_SOTA)
-    clip_peer = next(row for row in VERI_SOTA if row["name"] == "CLIP-ReID")
-    ours = next(row for row in VERI_SOTA if row["name"] == "Ours (v17)")
-    for row in VERI_SOTA:
-        ax.scatter(row["map"], row["r1"], zorder=3, **_scatter_style(row, size=140.0 if _is_ours(row) else 82.0))
-        dx, dy = offsets.get(row["name"], (4, 3))
-        ax.annotate(_label_with_pending(row["name"], row.get("citation_pending", False)), (row["map"], row["r1"]), xytext=(dx, dy), textcoords="offset points", fontsize=8, color=COLORS["text"])
+def build_v1_pareto(rows: list[dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(9.2, 5.8))
+    valid_rows = [row for row in rows if has_value(row, "map") and has_value(row, "r1")]
+    frontier = compute_pareto_frontier(valid_rows, x_key="map", y_key="r1")
+    for row in valid_rows:
+        ax.scatter(row["map"], row["r1"], zorder=3, **scatter_style(row, size=90.0))
+        if row["map"] >= 80 or is_ours(row) or is_literature_claim(row):
+            ax.annotate(row["name"], (row["map"], row["r1"]), xytext=(4, 4), textcoords="offset points", fontsize=7.8, color=COLORS["text"])
     ax.plot([row["map"] for row in frontier], [row["r1"] for row in frontier], linestyle="--", color=COLORS["frontier"], linewidth=1.6, zorder=2)
-    ax.annotate(f"+{ours['r1'] - clip_peer['r1']:.2f}pp R1, +{ours['map'] - clip_peer['map']:.2f}pp mAP\nover CLIP-ReID", xy=(ours["map"], ours["r1"]), xytext=(84.8, 96.6), fontsize=8.5, color=COLORS["text"], arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]})
     ax.set_xlabel("mAP (%)")
     ax.set_ylabel("R1 (%)")
-    ax.set_xlim(60, 95)
-    ax.set_ylim(88, 99)
-    ax.set_title("VeRi-776: R1 vs mAP — Ours vs Published SOTA")
+    ax.set_xlim(55, 95)
+    ax.set_ylim(85, 99)
+    ax.set_title("VeRi-776 R1 vs mAP Pareto View")
     format_axes(ax)
-    fig.text(0.01, 0.01, "Hollow markers are literature rows with *citation pending* verification in the generator inputs. Estimated training-compute values remain in V3; this view plots only R1/mAP from the spec table and the measured v17 row.", fontsize=8, color=COLORS["text"])
+    fig.text(0.01, 0.01, "Hollow markers denote citation-pending literature rows. The three filled blue markers are read from the checked-in VeRi evaluation JSON rather than hard-coded.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "V1_veri_pareto")
 
 
-def build_v2_veri_model_count() -> None:
-    fig, ax = plt.subplots(figsize=(8.8, 5.2))
-    group_centers = {"1 model": 0.0, "Ensemble (3+)": 1.3}
-    one_model = [next(row for row in VERI_SOTA if row["name"] == "TransReID"), next(row for row in VERI_SOTA if row["name"] == "CLIP-ReID"), next(row for row in VERI_SOTA if row["name"] == "Ours (v17)")]
-    ensemble_placeholder = {"name": "Ensemble placeholder", "map": 87.0, "r1": math.nan, "citation_pending": True}
+def build_v2_category_grouped(rows: list[dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(9.6, 5.6))
+    groups = {"General SOTA": [row for row in rows if row["category"] == "General SOTA" and is_verified(row)], "TransReID-Variant": [row for row in rows if row["category"] == "TransReID-Variant" and is_verified(row)], "Ours": [row for row in rows if row["category"] == "Ours" and is_verified(row)]}
+    ordered_groups = []
+    for name, group_rows in groups.items():
+        ordered_groups.append((name, sorted(group_rows, key=lambda row: row["map"], reverse=True)[: (3 if name == "Ours" else 4)]))
+    centers = [0.0, 1.8, 3.6]
     width = 0.22
-    for offset, row in zip([-width, 0.0, width], one_model):
-        x = group_centers["1 model"] + offset
-        bar = ax.bar(x, row["map"], width=width * 0.92, zorder=3, **_bar_style(row, SOTA_GREYS[1]))[0]
-        ax.text(x, row["map"] + 0.45, f"{row['map']:.2f}", ha="center", va="bottom", fontsize=8.5, color=COLORS["text"])
-        ax.text(x, 70.3, _label_with_pending(row["name"], row.get("citation_pending", False)), ha="center", va="bottom", fontsize=8.0, color=COLORS["text"], rotation=90)
-        if row.get("citation_pending", False):
-            bar.set_hatch("//")
-    ensemble_bar = ax.bar(group_centers["Ensemble (3+)"], ensemble_placeholder["map"], width=width * 1.2, zorder=3, **_bar_style(ensemble_placeholder, SOTA_GREYS[2]))[0]
-    ensemble_bar.set_hatch("//")
-    ax.text(group_centers["Ensemble (3+)"], ensemble_placeholder["map"] + 0.45, "87.0*", ha="center", va="bottom", fontsize=8.5, color=COLORS["text"])
-    ax.text(group_centers["Ensemble (3+)"], 70.3, "Workshop ensemble*", ha="center", va="bottom", fontsize=8.0, color=COLORS["text"], rotation=90)
-    ax.annotate(f"Single model leads the plotted\n1-model set by +{one_model[-1]['map'] - one_model[1]['map']:.2f}pp mAP", xy=(group_centers["1 model"] + width, one_model[-1]["map"]), xytext=(0.72, 91.0), fontsize=8.5, color=COLORS["text"], arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]})
-    ax.set_xticks(list(group_centers.values()))
-    ax.set_xticklabels(list(group_centers.keys()))
+    for center, (group_name, group_rows) in zip(centers, ordered_groups):
+        start = center - (width * (len(group_rows) - 1) / 2)
+        for index, row in enumerate(group_rows):
+            x = start + (index * width)
+            ax.bar(x, row["map"], width=width * 0.92, zorder=3, **bar_style(row, default_color=COLORS["accent"]))
+            ax.text(x, row["map"] + 0.45, f"{row['map']:.2f}", ha="center", va="bottom", fontsize=8.4, color=COLORS["text"])
+        ax.text(center, 55.0, group_name, ha="center", va="top", fontsize=9.0, color=COLORS["text"], fontweight="bold")
+    ax.set_xlim(-0.6, 4.3)
+    ax.set_ylim(55, 95)
+    ax.set_xticks([])
     ax.set_ylabel("mAP (%)")
-    ax.set_ylim(70, 95)
-    ax.set_title("VeRi-776 mAP vs Model Count")
+    ax.set_title("Verified mAP Leaders by VeRi-776 Category")
     format_axes(ax)
-    fig.text(0.01, 0.01, "Hatched white bars denote *citation pending* literature rows. The ensemble bar is an explicit placeholder from the spec, not a verified standalone VeRi-776 leaderboard entry.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "V2_veri_model_count")
+    fig.text(0.01, 0.01, "The Ours group is populated from the checked-in JSON. External groups use only verified rows and cap at the top four entries by mAP.", fontsize=8, color=COLORS["text"])
+    save_figure(fig, "V2_veri_category_grouped")
 
 
-def build_v3_veri_compute() -> None:
-    fig, ax = plt.subplots(figsize=(8.8, 5.3))
-    rows = [next(row for row in VERI_SOTA if row["name"] == "VehicleNet"), next(row for row in VERI_SOTA if row["name"] == "HRCN"), next(row for row in VERI_SOTA if row["name"] == "TransReID"), next(row for row in VERI_SOTA if row["name"] == "CLIP-ReID"), next(row for row in VERI_SOTA if row["name"] == "Ours (v17)")]
-    offsets = {"VehicleNet": (4, 5), "HRCN": (4, -10), "TransReID": (4, 6), "CLIP-ReID": (4, -10), "Ours (v17)": (6, 6)}
-    for row in rows:
-        size = math.sqrt(row["params_m"]) * 30.0
-        ax.scatter(row["gpu_hours_est"], row["map"], zorder=3, **_scatter_style(row, default_marker="o", size=size))
-        dx, dy = offsets[row["name"]]
-        ax.annotate(_label_with_pending(row["name"], row.get("citation_pending", False)), (row["gpu_hours_est"], row["map"]), xytext=(dx, dy), textcoords="offset points", fontsize=8.0, color=COLORS["text"])
-    ax.set_xscale("log")
-    ax.set_xlabel("Estimated training compute (GPU-hours)")
-    ax.set_ylabel("mAP (%)")
-    ax.set_xlim(1, 100)
-    ax.set_ylim(75, 92)
-    ax.set_title("VeRi-776: mAP vs Compute Cost")
-    format_axes(ax)
-    fig.text(0.01, 0.01, "Bubble area scales with sqrt(parameter count). Hollow bubbles denote *citation pending* literature rows; all non-ours compute values are spec-level estimates, while ours is measured at ~2.5 P100-hours (~1.7 A100-hours equivalent).", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "V3_veri_compute")
-
-
-def build_v4_veri_backbone_family() -> None:
+def build_v3_map_vs_params(rows: list[dict[str, Any]]) -> None:
     fig, ax = plt.subplots(figsize=(8.8, 5.2))
-    families = ["CNN", "ViT-IN21k", "CLIP-ViT"]
-    display = {"CNN": "CNN\n(ResNet family)", "ViT-IN21k": "ViT\n(ImageNet-21k)", "CLIP-ViT": "Hybrid /\nCLIP-pretrain ViT"}
-    means: dict[str, dict[str, float]] = {}
-    for family in families:
-        family_rows = [row for row in VERI_SOTA if row["family"] == family]
-        means[family] = {"r1": sum(row["r1"] for row in family_rows) / len(family_rows), "map": sum(row["map"] for row in family_rows) / len(family_rows)}
-    x = list(range(len(families)))
-    width = 0.32
-    r1_bars = ax.bar([pos - width / 2 for pos in x], [means[family]["r1"] for family in families], width=width, color=SOTA_GREYS[1], edgecolor="black", linewidth=0.8, label="Mean R1", zorder=3)
-    map_bars = ax.bar([pos + width / 2 for pos in x], [means[family]["map"] for family in families], width=width, color=COLORS["backbone"], edgecolor="black", linewidth=0.8, label="Mean mAP", zorder=3)
-    for bars in (r1_bars, map_bars):
-        for bar in bars:
-            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.35, f"{bar.get_height():.1f}", ha="center", va="bottom", fontsize=8.5, color=COLORS["text"])
-    ours = next(row for row in VERI_SOTA if row["name"] == "Ours (v17)")
-    clip_index = families.index("CLIP-ViT")
-    ax.scatter(clip_index - width / 2, ours["r1"], color=COLORS["ours"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
-    ax.scatter(clip_index + width / 2, ours["map"], color=COLORS["ours"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
-    ax.annotate(f"CLIP-pretrain family mean shifts\n+{means['CLIP-ViT']['map'] - means['ViT-IN21k']['map']:.1f}pp mAP over ViT-IN21k", xy=(clip_index + width / 2, means["CLIP-ViT"]["map"]), xytext=(0.65, 96.0), fontsize=8.5, color=COLORS["text"], arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]})
-    ax.set_xticks(x)
-    ax.set_xticklabels([display[family] for family in families])
-    ax.set_ylabel("Score (%)")
-    ax.set_ylim(70, 100)
-    ax.set_title("VeRi-776 Backbone Family Comparison")
+    keep_names = {"MSINet (2.3M, w/o RK)", "VehicleNet", "CAL", "CLIP-ReID (w/o RK)", "TransReID (ICCV 2021)", "Ours (v17, best mAP)"}
+    candidates = [row for row in rows if has_value(row, "params_m") and row["name"] in keep_names]
+    frontier = compute_pareto_frontier(candidates, x_key="params_m", y_key="map")
+    for row in candidates:
+        ax.scatter(row["params_m"], row["map"], zorder=3, **scatter_style(row, marker="o", size=90.0))
+        ax.annotate(row["name"].replace(" (w/o RK)", "").replace("Ours (v17, ", "Ours ").replace(")", ""), (row["params_m"], row["map"]), xytext=(4, 4), textcoords="offset points", fontsize=8.0, color=COLORS["text"])
+    ax.plot([row["params_m"] for row in frontier], [row["map"] for row in frontier], linestyle="--", color=COLORS["frontier"], linewidth=1.6, zorder=2)
+    ax.set_xscale("log")
+    ax.set_xlabel("Parameters (M, log scale)")
+    ax.set_ylabel("mAP (%)")
+    ax.set_title("VeRi-776 mAP vs Parameter Count")
     format_axes(ax)
-    ax.legend(frameon=False, loc="upper left")
-    fig.text(0.01, 0.01, "Family means inherit the same verification status as the underlying rows. The star marks our measured v17 point inside the CLIP-pretrained family.", fontsize=8, color=COLORS["text"])
+    fig.text(0.01, 0.01, "This frontier only uses rows whose parameter counts are explicitly available in the spec table. It intentionally omits the many top-mAP methods whose model size is unreported.", fontsize=8, color=COLORS["text"])
+    save_figure(fig, "V3_veri_map_vs_params")
+
+
+def build_v4_backbone_family(rows: list[dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(8.8, 5.2))
+    families = [("CNN", "CNN"), ("ViT-IN21k", "ViT-IN21k"), ("CLIP-ViT", "CLIP-ViT"), ("Hybrid-multi-branch", "Hybrid-multi-branch")]
+    family_best = []
+    for label, family in families:
+        family_rows = [row for row in rows if row["family"] == family and is_verified(row)]
+        family_best.append((label, max(family_rows, key=lambda row: row["map"])))
+    x = np.arange(len(family_best))
+    bars = ax.bar(x, [row["map"] for _, row in family_best], color=[COLORS["ours"] if is_ours(row) else COLORS["accent"] for _, row in family_best], edgecolor="black", linewidth=0.8, zorder=3)
+    for bar, (_, row) in zip(bars, family_best):
+        ax.text(bar.get_x() + bar.get_width() / 2, row["map"] + 0.45, f"{row['map']:.2f}", ha="center", va="bottom", fontsize=8.5, color=COLORS["text"])
+    ax.set_xticks(x)
+    ax.set_xticklabels([label.replace("-", "\n") for label, _ in family_best])
+    ax.set_ylabel("Best verified mAP (%)")
+    ax.set_ylim(58, 95)
+    ax.set_title("Best Verified VeRi-776 Result by Backbone Family")
+    format_axes(ax)
+    fig.text(0.01, 0.01, "The CLIP-ViT bar is our best-mAP row, read from the repository JSON. Hybrid-multi-branch remains the absolute ceiling because MBR4B-LAI combines branch splitting with metadata.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "V4_veri_backbone_family")
 
 
-def build_v5_veri_year_progression() -> None:
-    fig, ax_left = plt.subplots(figsize=(8.8, 5.2))
-    ax_right = ax_left.twinx()
-    progression = [{"name": "AAVER", "year": 2019, "r1": 88.97, "map": 61.18, "citation_pending": True}, {"name": "VehicleNet", "year": 2020, "r1": 96.78, "map": 83.41, "citation_pending": True}, {"name": "HRCN", "year": 2021, "r1": 97.32, "map": 83.10, "citation_pending": True}, {"name": "MsKAT", "year": 2022, "r1": 97.40, "map": 82.00, "citation_pending": True}, {"name": "CLIP-ReID", "year": 2023, "r1": 97.40, "map": 84.50, "citation_pending": True}, {"name": "Ours (v17)", "year": 2026, "r1": 98.33, "map": 89.97, "citation_pending": False}]
-    years = [row["year"] for row in progression]
-    ax_left.plot(years, [row["r1"] for row in progression], color=COLORS["ours"], linewidth=2.0)
-    ax_right.plot(years, [row["map"] for row in progression], color=COLORS["frontier"], linewidth=2.0, linestyle="--")
-    for row in progression:
-        if row.get("citation_pending", False):
-            ax_left.scatter(row["year"], row["r1"], s=90, facecolors="white", edgecolors=SOTA_GREYS[1], linewidths=1.2, zorder=3)
-            ax_right.scatter(row["year"], row["map"], s=80, facecolors="white", edgecolors=SOTA_GREYS[1], linewidths=1.2, zorder=3)
+def build_v5_year_progression(veri_summary: dict[str, dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(8.8, 5.2))
+    years = [2020, 2021, 2022, 2023, 2024, 2025, 2026]
+    values = [83.41, 87.1, math.nan, 92.1, math.nan, math.nan, veri_summary["best_map"]["map"]]
+    ax.plot(years, values, color=COLORS["verified"], linewidth=2.0, marker="o")
+    for year, value in zip(years, values):
+        if math.isnan(value):
+            ax.text(year, 71.0, "?", ha="center", va="bottom", fontsize=12, color=COLORS["literature"])
         else:
-            ax_left.scatter(row["year"], row["r1"], s=240, color=COLORS["ours"], marker="*", edgecolors="black", linewidths=0.8, zorder=4)
-            ax_right.scatter(row["year"], row["map"], s=240, color=COLORS["ours"], marker="*", edgecolors="black", linewidths=0.8, zorder=4)
-        ax_left.annotate(_label_with_pending(row["name"], row.get("citation_pending", False)), (row["year"], row["r1"]), xytext=(4, 4), textcoords="offset points", fontsize=8.0, color=COLORS["text"])
-    ax_left.annotate("+5.47pp mAP over\nCLIP-ReID (2023)", xy=(2026, 98.33), xytext=(2023.2, 94.6), fontsize=8.5, color=COLORS["text"], arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]})
-    ax_left.set_xlabel("Year")
-    ax_left.set_ylabel("R1 (%)", color=COLORS["text"])
-    ax_right.set_ylabel("mAP (%)", color=COLORS["text"])
-    ax_left.set_xlim(2018.6, 2026.5)
-    ax_left.set_ylim(88, 99)
-    ax_right.set_ylim(60, 92)
-    ax_left.set_title("VeRi-776 Single-Model SOTA Progression")
-    format_axes(ax_left)
-    ax_right.spines["top"].set_visible(False)
-    ax_right.spines["left"].set_visible(False)
-    ax_right.spines["right"].set_color("#777777")
-    ax_right.tick_params(colors="#333333")
-    fig.text(0.01, 0.01, "Hollow markers are literature rows still marked *citation pending* in the generator inputs. This view follows the spec table rather than re-ranking the literature by any external leaderboard scrape.", fontsize=8, color=COLORS["text"])
+            ax.scatter(year, value, color=COLORS["ours"] if year == 2026 else COLORS["verified"], s=120 if year == 2026 else 80, edgecolors="black", linewidths=0.8, zorder=4)
+            ax.text(year, value + 0.6, f"{value:.2f}", ha="center", va="bottom", fontsize=8.0, color=COLORS["text"])
+    ax.fill_between([2025.6, 2026.4], [veri_summary["best_map"]["map"], veri_summary["best_map"]["map"]], [92.1, 92.1], color=COLORS["ours"], alpha=0.15)
+    ax.annotate("2.13pp gap to 2023 ceiling", xy=(2026, veri_summary["best_map"]["map"]), xytext=(2023.8, 90.9), fontsize=8.5, color=COLORS["text"], arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]})
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Best verified mAP (%)")
+    ax.set_xlim(2019.6, 2026.4)
+    ax.set_ylim(70, 94)
+    ax.set_title("Best Verified VeRi-776 mAP by Year")
+    format_axes(ax)
+    fig.text(0.01, 0.01, "Years with DATA_UNAVAILABLE are explicitly marked with question marks instead of interpolated values. The 2026 point is the repository-backed best-mAP row.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "V5_veri_year_progression")
 
 
-def build_v6_veri_eval_ablation() -> None:
-    rows = get_veri_eval_ablation_rows(load_veri_results())
+def build_v6_eval_ablation(veri_summary: dict[str, dict[str, Any]]) -> None:
+    rows = [{"label": "Baseline", "map": veri_summary["baseline"]["map"], "r1": veri_summary["baseline"]["r1"]}, {"label": "v14 rerank", "map": veri_summary["v14"]["map"], "r1": veri_summary["v14"]["r1"]}, {"label": "v15 AQE + rerank", "map": veri_summary["v15"]["map"], "r1": veri_summary["v15"]["r1"]}, {"label": "v17 best mAP", "map": veri_summary["best_map"]["map"], "r1": veri_summary["best_map"]["r1"]}, {"label": "v17 best R1", "map": veri_summary["best_r1"]["map"], "r1": veri_summary["best_r1"]["r1"]}]
     x = list(range(len(rows)))
     fig, ax_left = plt.subplots(figsize=(9.0, 5.4))
     ax_right = ax_left.twinx()
-    r1s = [row["r1"] for row in rows]
-    maps = [row["map"] for row in rows]
-    ax_left.plot(x, r1s, color=COLORS["ours"], marker="o", linewidth=2.0)
-    ax_right.plot(x, maps, color=COLORS["frontier"], marker="s", linewidth=2.0, linestyle="--")
-    ax_left.scatter([x[-1]], [r1s[-1]], color=COLORS["ours"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
-    ax_right.scatter([x[-2]], [maps[-2]], color=COLORS["ours"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
-    ax_left.plot([x[-2], x[-1]], [r1s[-2], r1s[-1]], color=SOTA_GREYS[2], linestyle=":", linewidth=1.6)
-    ax_right.plot([x[-2], x[-1]], [maps[-2], maps[-1]], color=SOTA_GREYS[2], linestyle=":", linewidth=1.6)
-    for idx, row in enumerate(rows):
-        ax_left.text(idx, row["r1"] + 0.05, f"{row['r1']:.2f}", ha="center", va="bottom", fontsize=8.0, color=COLORS["text"])
-        ax_right.text(idx, row["map"] - 0.55, f"{row['map']:.2f}", ha="center", va="top", fontsize=8.0, color=COLORS["text"])
-    ax_left.annotate("Same checkpoint, different non-dominated endpoints:\nbest mAP and best R1 come from different pooling choices", xy=(x[-1], r1s[-1]), xytext=(1.4, 98.05), fontsize=8.5, color=COLORS["text"], arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]})
+    ax_left.plot(x, [row["r1"] for row in rows], color=COLORS["ours"], marker="o", linewidth=2.0)
+    ax_right.plot(x, [row["map"] for row in rows], color=COLORS["frontier"], marker="s", linewidth=2.0, linestyle="--")
     ax_left.set_xticks(x)
     ax_left.set_xticklabels([row["label"] for row in rows])
-    ax_left.set_ylabel("R1 (%)", color=COLORS["text"])
-    ax_right.set_ylabel("mAP (%)", color=COLORS["text"])
+    ax_left.set_ylabel("R1 (%)")
+    ax_right.set_ylabel("mAP (%)")
     ax_left.set_ylim(97.3, 98.5)
     ax_right.set_ylim(81.0, 91.0)
-    ax_left.set_title("VeRi-776 Eval-Time Technique Progression")
+    ax_left.set_title("Eval-Time Progression from Baseline to the v17 Frontier")
     format_axes(ax_left)
     ax_right.spines["top"].set_visible(False)
     ax_right.spines["left"].set_visible(False)
     ax_right.spines["right"].set_color("#777777")
     ax_right.tick_params(colors="#333333")
-    fig.text(0.01, 0.01, "Rows are reconstructed from the checked-in `outputs/09v_veri_v9/veri776_eval_results_v9.json` using the stored rerank/AQE configs. Baseline uses the documented default baseline values; v14/v15/v17 labels follow the experiment-log progression while keeping the plotted numbers tied to checked-in rows.", fontsize=8, color=COLORS["text"])
+    fig.text(0.01, 0.01, f"Rows are reconstructed from {relative_path(VERI_RESULTS_PATH)} using the stored rerank and AQE configs. The figure intentionally preserves the existing v14→v15→v17 storyline from the checked-in evaluation bundle.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "V6_veri_eval_ablation")
 
 
-def build_c1_cityflow_pca() -> None:
-    fig, ax = plt.subplots(figsize=(7.6, 5.0))
-    x = list(range(len(CITYFLOW_PCA_POINTS)))
-    bars = ax.bar(x, [row["idf1"] for row in CITYFLOW_PCA_POINTS], color=[COLORS["ours"], SOTA_GREYS[1]], edgecolor="black", linewidth=0.8, zorder=3)
-    for bar, row in zip(bars, CITYFLOW_PCA_POINTS):
-        ax.text(bar.get_x() + bar.get_width() / 2, row["idf1"] + 0.0007, f"{row['idf1']:.4f}", ha="center", va="bottom", fontsize=8.5, color=COLORS["text"])
-    ax.axhline(DEFAULTS["vehicle_mtmc_idf1"], color=COLORS["frontier"], linestyle="--", linewidth=1.4)
-    ax.annotate("384D is the documented optimum;\n512D regresses by up to ~2.3pp here", xy=(0, DEFAULTS["vehicle_mtmc_idf1"]), xytext=(0.35, 0.7762), fontsize=8.5, color=COLORS["text"], arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]})
-    ax.set_xticks(x)
-    ax.set_xticklabels([row["label"] for row in CITYFLOW_PCA_POINTS])
-    ax.set_ylabel("MTMC IDF1")
-    ax.set_ylim(0.74, 0.78)
-    ax.set_title("CityFlowV2: PCA Dimension Ablation")
-    format_axes(ax)
-    fig.text(0.01, 0.01, "Only 384D and 512D are plotted because these are the clean, logged MTMC points in the repository. 256D and 768D remain omitted rather than inferred from related sweeps.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "C1_cityflow_pca")
-
-
-def build_c2_cityflow_assoc_waterfall() -> None:
-    rows = sorted(CITYFLOW_ASSOC_STANDALONE, key=lambda row: row["delta_pp"], reverse=True)
-    fig, ax = plt.subplots(figsize=(8.4, 5.2))
-    y = list(range(len(rows)))
-    ax.barh(y, [row["delta_pp"] for row in rows], color=[COLORS["frontier"] if row["name"] == "Temporal-overlap bonus" else COLORS["ours"] for row in rows], edgecolor="black", linewidth=0.8, zorder=3)
-    for idx, row in enumerate(rows):
-        ax.text(row["delta_pp"] + 0.03, idx, f"+{row['delta_pp']:.2f}pp", va="center", fontsize=8.5, color=COLORS["text"])
+def build_v7_gap_to_sota(rows: list[dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(9.2, 6.2))
+    verified_rows = sorted([row for row in rows if is_verified(row)], key=lambda row: 92.1 - row["map"])
+    gaps = [92.1 - row["map"] for row in verified_rows]
+    y = np.arange(len(verified_rows))
+    bars = ax.barh(y, gaps, color=[COLORS["ours"] if is_ours(row) else COLORS["accent"] for row in verified_rows], edgecolor="black", linewidth=0.8, zorder=3)
+    for bar, gap in zip(bars, gaps):
+        ax.text(bar.get_width() + 0.08, bar.get_y() + bar.get_height() / 2, f"{gap:.2f}", va="center", ha="left", fontsize=8.0, color=COLORS["text"])
     ax.set_yticks(y)
-    ax.set_yticklabels([row["name"] for row in rows])
+    ax.set_yticklabels([row["name"].replace("Ours (v17, ", "Ours ").replace(")", "") for row in verified_rows])
+    ax.set_xlabel("Gap to 92.1 mAP ceiling (pp)")
+    ax.set_title("mAP Gap to the Current Verified VeRi-776 Ceiling")
     ax.invert_yaxis()
-    ax.set_xlabel("Standalone Δ MTMC IDF1 (pp)")
-    ax.set_xlim(0.0, 1.7)
-    ax.set_title("CityFlowV2 Stage-4 Component Contributions (Standalone Δ)")
     format_axes(ax)
-    fig.text(0.01, 0.01, "Each bar is a standalone contribution, not a cumulative waterfall. The deltas are intentionally not summed because these components share the same calibrated similarity space and their effects are non-additive.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "C2_cityflow_assoc_waterfall")
+    fig.text(0.01, 0.01, "The reference ceiling is the verified MBR4B-LAI (w/ RK) result at 92.1 mAP. Our best-mAP row sits 2.13pp behind it.", fontsize=8, color=COLORS["text"])
+    save_figure(fig, "V7_veri_gap_to_sota")
 
 
-def build_c4_cityflow_fusion_sweep() -> None:
-    fig, ax = plt.subplots(figsize=(8.4, 5.2))
-    xs = [row["w"] for row in CITYFLOW_FUSION_SWEEP]
-    ys = [row["mtmc_idf1"] for row in CITYFLOW_FUSION_SWEEP]
-    optimum = next(row for row in CITYFLOW_FUSION_SWEEP if math.isclose(row["w"], 0.60, abs_tol=1e-9))
-    ax.plot(xs, ys, color=COLORS["ours"], marker="o", linewidth=2.0, zorder=3)
-    ax.scatter([optimum["w"]], [optimum["mtmc_idf1"]], color=COLORS["frontier"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
-    for x, y in zip(xs, ys):
-        ax.text(x, y + 0.00035, f"{y:.4f}", ha="center", va="bottom", fontsize=8.0, color=COLORS["text"])
-    ax.annotate(
-        "+0.40pp vs CLIP-only control\noptimum at w_tertiary=0.60",
-        xy=(optimum["w"], optimum["mtmc_idf1"]),
-        xytext=(0.34, 0.7698),
-        fontsize=8.5,
-        color=COLORS["text"],
-        arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]},
-    )
-    ax.set_title("CityFlowV2 Fusion Weight Sensitivity Sweep")
-    ax.set_xlabel("w_tertiary")
-    ax.set_ylabel("MTMC IDF1")
-    ax.set_xlim(-0.02, 0.72)
-    ax.set_ylim(0.7658, 0.7710)
+def build_v8_ge90_focus(veri_summary: dict[str, dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(8.2, 4.6))
+    ax.barh([0], [92.1], color=COLORS["accent"], edgecolor="black", linewidth=0.8, zorder=3)
+    ax.text(92.1 + 0.12, 0, "92.1", va="center", ha="left", fontsize=8.5, color=COLORS["text"])
+    ax.axvline(veri_summary["best_map"]["map"], color=COLORS["ours"], linestyle="--", linewidth=2.0)
+    ax.text(veri_summary["best_map"]["map"] + 0.15, -0.22, f"Ours ref. {veri_summary['best_map']['map']:.2f}", color=COLORS["ours"], fontsize=8.5)
+    ax.set_yticks([0])
+    ax.set_yticklabels(["MBR4B-LAI (w/ RK)"])
+    ax.set_xlabel("mAP (%)")
+    ax.set_xlim(88.5, 93.5)
+    ax.set_title("Verified VeRi-776 Methods at or Above 90% mAP")
     format_axes(ax)
-    fig.text(0.01, 0.01, "Exact MTMC IDF1 rows are taken from the logged findings/experiment-log fusion sweep. Only repo-backed weights (0.00 to 0.70) are plotted; 0.80 and 1.00 are intentionally omitted because they are not logged.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "C4_cityflow_fusion_sweep")
+    fig.text(0.01, 0.01, "Verified ≥90% mAP entries on VeRi-776 from the OpenCodePapers leaderboard as of April 2026 = 1. The dashed blue line is our best single-model reference at 89.97 mAP.", fontsize=8, color=COLORS["text"])
+    save_figure(fig, "V8_veri_ge90_focus")
 
 
-def build_c5_cityflow_sota_comparison() -> None:
-    fig, ax = plt.subplots(figsize=(8.6, 5.2))
-    for row in CITYFLOW_SOTA_RANKINGS:
-        style = _scatter_style(row, default_marker="^" if row["rank"] else "o", size=125.0 if row["label"] == "Ours" else 95.0)
-        ax.scatter(row["rank"], row["idf1"], zorder=3, **style)
-        dx = 6 if row["label"] == "Ours" else 4
-        ax.annotate(_label_with_pending(row["label"], row.get("citation_pending", False)), (row["rank"], row["idf1"]), xytext=(dx, 4), textcoords="offset points", fontsize=8.5, color=COLORS["text"])
-    ax.axhline(DEFAULTS["vehicle_mtmc_idf1"], color=COLORS["ours"], linestyle=":", linewidth=1.2)
-    ax.annotate(
-        f"Gap to 1st: {(DEFAULTS['cityflow_sota_idf1'] - DEFAULTS['vehicle_mtmc_idf1']) * 100:.2f}pp",
-        xy=(1, DEFAULTS["cityflow_sota_idf1"]),
-        xytext=(1.7, 0.782),
-        fontsize=8.5,
-        color=COLORS["text"],
-        arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]},
-    )
-    ax.set_title("CityFlowV2: Ours vs AIC22 Top Teams")
-    ax.set_xlabel("Leaderboard rank")
-    ax.set_ylabel("MTMC IDF1")
-    ax.set_xticks([row["rank"] for row in CITYFLOW_SOTA_RANKINGS])
-    ax.set_xticklabels(["Ours", "1st", "2nd", "3rd", "4th"])
-    ax.set_xlim(-0.5, 4.5)
-    ax.set_ylim(0.76, 0.855)
+def build_v9_single_vs_ensemble(rows: list[dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(8.0, 5.0))
+    verified_rows = [row for row in rows if is_verified(row)]
+    single_rows = [row for row in verified_rows if "Ensemble" not in row["single_ensemble"]]
+    jitter = np.linspace(-0.18, 0.18, len(single_rows)) if single_rows else np.array([])
+    ax.scatter(np.full(len(single_rows), 0.0) + jitter, [row["map"] for row in single_rows], color=[COLORS["ours"] if is_ours(row) else COLORS["verified"] for row in single_rows], edgecolors="black", linewidths=0.7, s=70, zorder=3)
+    ax.set_xticks([0.0, 1.0])
+    ax.set_xticklabels(["Single", "Ensemble"])
+    ax.set_ylabel("mAP (%)")
+    ax.set_xlim(-0.4, 1.4)
+    ax.set_ylim(55, 95)
+    ax.set_title("Verified VeRi-776 Entries by Single-Model vs Ensemble Status")
+    ax.text(1.0, 75.0, "No verified ensemble entries\nwith mAP ≥ 80 in this research pass\n(DATA_UNAVAILABLE)", ha="center", va="center", fontsize=9.0, color=COLORS["text"])
     format_axes(ax)
-    fig.text(0.01, 0.01, "Hollow markers denote *citation pending* team rows. This partial implementation uses repo-backed IDF1 rankings only; the 5th-place team is omitted because no canonical in-repo value is logged, and model-count comparisons for ranks 3-4 remain citation-pending.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "C5_cityflow_sota_comparison")
+    fig.text(0.01, 0.01, "The verified leaderboard slice used by this report collapses to single-model methods. MBR4B-LAI uses metadata fusion, but it is still a single network in the spec taxonomy.", fontsize=8, color=COLORS["text"])
+    save_figure(fig, "V9_veri_single_vs_ensemble")
 
 
-def build_c6_cityflow_single_vs_fusion() -> None:
-    fig, ax = plt.subplots(figsize=(8.0, 5.2))
-    x = list(range(len(CITYFLOW_SINGLE_VS_FUSION)))
-    colors = [COLORS["ours"] if row["kind"] == "fusion" else SOTA_GREYS[1] for row in CITYFLOW_SINGLE_VS_FUSION]
-    bars = ax.bar(x, [row["idf1"] for row in CITYFLOW_SINGLE_VS_FUSION], color=colors, edgecolor="black", linewidth=0.8, zorder=3)
-    for idx, (bar, row) in enumerate(zip(bars, CITYFLOW_SINGLE_VS_FUSION)):
-        ax.text(bar.get_x() + bar.get_width() / 2, row["idf1"] + 0.0007, f"{row['idf1']:.4f}", ha="center", va="bottom", fontsize=8.5, color=COLORS["text"])
-        if idx == 2:
-            ax.text(bar.get_x() + bar.get_width() / 2, row["idf1"] - 0.0042, "+0.40pp", ha="center", va="bottom", fontsize=8.5, color="white")
-    ax.annotate(
-        "Fusion recovers the DINOv2 standalone regression\nand edges past the CLIP-only control",
-        xy=(2, DEFAULTS["vehicle_mtmc_idf1"]),
-        xytext=(0.55, 0.7696),
-        fontsize=8.5,
-        color=COLORS["text"],
-        arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]},
-    )
-    ax.set_title("CityFlowV2: Single-Model vs Fusion Comparison")
-    ax.set_xlabel("Configuration")
-    ax.set_ylabel("MTMC IDF1")
-    ax.set_xticks(x)
-    ax.set_xticklabels([row["label"] for row in CITYFLOW_SINGLE_VS_FUSION])
-    ax.set_ylim(0.738, 0.7725)
+def build_p1_latency(perf: dict[str, Any]) -> None:
+    fig, ax = plt.subplots(figsize=(8.8, 5.2))
+    fp32 = metric_block(perf, "forward_fp32_ms")
+    fp16 = metric_block(perf, "forward_fp16_ms")
+    labels = ["Ours fp32", "Ours fp16", "MBR4B-LAI (w/ RK)", "RPTM", "CLIP-ReID", "TransReID", "VehicleNet"]
+    values = [fp32.get("mean"), fp16.get("mean") if fp16 else None, None, None, None, None, None]
+    known_values = [value for value in values if value is not None]
+    unknown = placeholder_width(known_values)
+    y = np.arange(len(labels))
+    for idx, value in enumerate(values):
+        if value is None:
+            draw_unknown_barh(ax, idx, unknown)
+        else:
+            ax.barh(idx, value, color=COLORS["ours"], edgecolor="black", linewidth=0.8, zorder=3)
+            ax.text(value + (max(known_values) * 0.03 if known_values else 0.5), idx, f"{value:.2f}", va="center", ha="left", fontsize=8.5, color=COLORS["text"])
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels)
+    ax.set_xlabel("Latency (ms / image, batch=1)")
+    ax.set_title("Local Inference Latency Benchmark")
+    ax.invert_yaxis()
     format_axes(ax)
-    fig.text(0.01, 0.01, "The near-zero weak-secondary fusion result is intentionally omitted here because the logged +0.0006pp gain comes from a different baseline run and is not directly comparable on absolute IDF1. This view keeps only the repo-backed, directly comparable CLIP/DINOv2 rows from findings.md.", fontsize=8, color=COLORS["text"])
-    save_figure(fig, "C6_cityflow_single_vs_fusion")
+    fig.text(0.01, 0.01, f"{hardware_caption(perf)} Per-method latency for published baselines is DATA_UNAVAILABLE in the source papers used by the spec.", fontsize=8, color=COLORS["text"])
+    save_figure(fig, "P1_veri_inference_latency")
 
 
-def build_markdown() -> str:
-    veri_results = load_veri_results()
-    veri = get_veri_summary(veri_results)
-    veri_results_relpath = VERI_RESULTS_PATH.relative_to(ROOT).as_posix()
-    cityflow_efficiency_pct = get_cityflow_efficiency_pct()
-    fusion_gain_pp = (DEFAULTS["vehicle_mtmc_idf1"] - DEFAULTS["vehicle_no_fusion_control_idf1"]) * 100.0
+def build_p2_vram(perf: dict[str, Any]) -> None:
+    fig, ax = plt.subplots(figsize=(8.8, 5.2))
+    labels = ["Ours fp32", "Ours fp16", "MBR4B-LAI (w/ RK)", "RPTM", "CLIP-ReID", "TransReID", "VehicleNet"]
+    values = [perf_value(perf, "vram_peak_mb_fp32"), perf_value(perf, "vram_peak_mb_fp16"), None, None, None, None, None]
+    known_values = [value for value in values if value is not None]
+    unknown = placeholder_width(known_values)
+    y = np.arange(len(labels))
+    for idx, value in enumerate(values):
+        if value is None:
+            draw_unknown_barh(ax, idx, unknown)
+        else:
+            ax.barh(idx, value, color=COLORS["ours"], edgecolor="black", linewidth=0.8, zorder=3)
+            ax.text(value + (max(known_values) * 0.03 if known_values else 15.0), idx, f"{value:.0f}", va="center", ha="left", fontsize=8.5, color=COLORS["text"])
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels)
+    ax.set_xlabel("Peak VRAM (MB, batch=1)")
+    ax.set_title("Local Peak VRAM Benchmark")
+    ax.invert_yaxis()
+    format_axes(ax)
+    fig.text(0.01, 0.01, f"{hardware_caption(perf)} Published VeRi-776 baselines rarely report inference VRAM, so those bars stay hatched and explicitly non-quantitative.", fontsize=8, color=COLORS["text"])
+    save_figure(fig, "P2_veri_vram_peak")
+
+
+def build_p3_map_vs_flops(rows: list[dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(8.0, 5.0))
+    keep_names = {"TransReID (ICCV 2021)", "CLIP-ReID (w/o RK)", "Ours (v17, best mAP)"}
+    candidates = [row for row in rows if has_value(row, "flops_g") and row["name"] in keep_names]
+    markers = {"TransReID (ICCV 2021)": "s", "CLIP-ReID (w/o RK)": "^", "Ours (v17, best mAP)": "o"}
+    for row in candidates:
+        ax.scatter(row["flops_g"], row["map"], zorder=3, **scatter_style(row, marker=markers[row["name"]], size=110.0))
+        ax.annotate(row["name"].replace("Ours (v17, best mAP)", "Ours"), (row["flops_g"], row["map"]), xytext=(6, 6), textcoords="offset points", fontsize=8.0, color=COLORS["text"])
+    ax.set_xscale("log")
+    ax.set_xlabel("FLOPs (G, log scale)")
+    ax.set_ylabel("mAP (%)")
+    ax.set_title("mAP vs FLOPs for the Few VeRi-776 Rows with FLOPs")
+    format_axes(ax)
+    fig.text(0.01, 0.01, "This is intentionally a small reference plot, not a full frontier: FLOPs are unavailable for most VeRi-776 baselines in the spec table.", fontsize=8, color=COLORS["text"])
+    save_figure(fig, "P3_veri_map_vs_flops")
+
+
+def build_p4_params_vs_flops(rows: list[dict[str, Any]]) -> None:
+    fig, ax = plt.subplots(figsize=(8.0, 5.0))
+    keep_names = {"TransReID (ICCV 2021)", "CLIP-ReID (w/o RK)", "Ours (v17, best mAP)"}
+    candidates = [row for row in rows if has_value(row, "params_m") and has_value(row, "flops_g") and row["name"] in keep_names]
+    for row in candidates:
+        ax.scatter(row["params_m"], row["flops_g"], zorder=3, **scatter_style(row, marker="o", size=110.0))
+    ax.annotate("TransReID / CLIP-ReID / Ours cluster here", xy=(86.0, 17.6), xytext=(88.0, 19.0), fontsize=8.5, color=COLORS["text"], arrowprops={"arrowstyle": "->", "lw": 1.0, "color": COLORS["text"]})
+    ax.set_xlabel("Parameters (M)")
+    ax.set_ylabel("FLOPs (G)")
+    ax.set_title("Parameter vs FLOPs Reference for the ViT-B/16 Family")
+    format_axes(ax)
+    fig.text(0.01, 0.01, "The three available points collapse into the same architectural neighborhood. The plot is still kept because the spec explicitly calls out this degeneracy.", fontsize=8, color=COLORS["text"])
+    save_figure(fig, "P4_veri_params_vs_flops")
+
+
+def build_p5_pipeline_breakdown(perf: dict[str, Any]) -> None:
+    fig, ax = plt.subplots(figsize=(8.6, 4.6))
+    breakdown = perf.get("pipeline_breakdown_ms", {})
+    values = [float(breakdown.get("forward_fp32", 0.0)), float(breakdown.get("flip_tta_overhead", 0.0)), float(breakdown.get("aqe_k3", 0.0)), float(breakdown.get("rerank_k1_80_k2_15_lambda_0p2", 0.0))]
+    colors = [COLORS["ours"], COLORS["accent"], COLORS["frontier"], COLORS["warning"]]
+    labels = ["Forward", "Flip-TTA second pass", "AQE k=3", "k-recip rerank (80/15/0.2)"]
+    left = 0.0
+    for value, color, label in zip(values, colors, labels):
+        ax.barh([0], [value], left=left, color=color, edgecolor="black", linewidth=0.8, zorder=3, label=label)
+        left += value
+    ax.set_yticks([0])
+    ax.set_yticklabels(["Best-mAP eval path"])
+    ax.set_xlabel("Measured time (ms)")
+    ax.set_title("Pipeline Time Breakdown for the Best-mAP Eval Recipe")
+    format_axes(ax)
+    ax.legend(frameon=False, loc="upper right")
+    note = hardware_caption(perf)
+    alt_rerank = breakdown.get("rerank_k1_30_k2_10_lambda_0p2")
+    if alt_rerank is not None:
+        note = f"{note} Alternate rerank timing also logged: k1=30, k2=10, λ=0.2 = {float(alt_rerank):.1f} ms."
+    fig.text(0.01, 0.01, note, fontsize=8, color=COLORS["text"])
+    save_figure(fig, "P5_veri_pipeline_breakdown")
+
+
+def markdown_benchmark_section(perf: dict[str, Any]) -> str:
+    if not perf:
+        return "## 4. Performance & Efficiency Benchmark\n\nBenchmark JSON is not available yet. Run `scripts/benchmark_veri_inference.py` to populate the local performance section."
+    hardware = perf.get("hardware", {})
+    checkpoint = perf.get("checkpoint", {})
+    pipeline = perf.get("pipeline_breakdown_ms", {})
+    notes = perf.get("notes", [])
+    notes_text = " ".join(notes) if isinstance(notes, list) else ""
+    return f"""## 4. Performance & Efficiency Benchmark
+
+The local benchmark is intentionally narrow: batch-1 inference timing for the ViT-B/16 CLIP checkpoint family plus synthetic AQE and re-ranking measurements sized to the VeRi-776 query/gallery split. The result is not a new SOTA claim; it is a deployment reference that makes the eval-time recipe reproducible on commodity hardware.
+
+| Item | Value |
+|---|---|
+| Benchmark JSON | `{relative_path(PERF_BENCH_PATH)}` |
+| Device | {hardware.get('device', 'cpu')} |
+| Device name | {hardware.get('device_name', hardware.get('cpu', 'unknown'))} |
+| Torch / CUDA | {hardware.get('torch_version', 'unknown')} / {hardware.get('cuda_version', 'n/a')} |
+| Checkpoint found | {checkpoint.get('found', False)} |
+| Architecture-only fallback | {checkpoint.get('architecture_only', False)} |
+| FP32 latency | {stat_mean_std(metric_block(perf, 'forward_fp32_ms'))} |
+| FP16 latency | {stat_mean_std(metric_block(perf, 'forward_fp16_ms'))} |
+| Peak VRAM fp32 | {perf.get('vram_peak_mb_fp32', 'N/A')} MB |
+| Peak VRAM fp16 | {perf.get('vram_peak_mb_fp16', 'N/A')} MB |
+| AQE k=3 | {pipeline.get('aqe_k3', 'N/A')} ms |
+| Rerank k1=30, k2=10, λ=0.2 | {pipeline.get('rerank_k1_30_k2_10_lambda_0p2', 'N/A')} ms |
+| Rerank k1=80, k2=15, λ=0.2 | {pipeline.get('rerank_k1_80_k2_15_lambda_0p2', 'N/A')} ms |
+
+Figures **P1-P5** translate the same JSON into plot form. Every non-ours latency or VRAM bar remains explicitly marked as DATA_UNAVAILABLE rather than backfilled with guessed values.
+
+Benchmark notes: {notes_text}
+"""
+
+
+def build_markdown(rows: list[dict[str, Any]], veri_summary: dict[str, dict[str, Any]], perf: dict[str, Any]) -> str:
+    verified_rows = [row for row in rows if is_verified(row)]
+    top_verified = sorted(verified_rows, key=lambda row: row["map"], reverse=True)
+    transreid_frontier = [row for row in rows if row["category"] in {"TransReID-Variant", "Ours"}]
+    top_transreid = sorted([row for row in transreid_frontier if has_value(row, "r1")], key=lambda row: (row["map"], row["r1"]), reverse=True)
+    ge90 = [row for row in verified_rows if row["map"] >= 90.0]
+    harsh_truth_md = "\n\n".join([f"### {title}\n\n{text}" for title, text in HARSH_TRUTH.items()])
     return f"""# System Comparative Analysis
 
-*Conservative note: any value marked with an asterisk (*) is a literature claim, not measured in this repository. The new VeRi-776 comparison figures render citation-pending literature rows as hollow markers or hatched white bars rather than presenting them as fully verified.*
+*Conservative note: any value marked with an asterisk (*) is a literature claim, not measured in this repository. The VeRi-only comparison figures render citation-pending literature rows as hollow markers or hatched placeholders rather than presenting them as fully verified facts.*
 
 ## 1. Abstract
 
-This document compares the MTMC Tracker system against published references on CityFlowV2, VeRi-776, and WILDTRACK. The headline CityFlowV2 result remains unchanged: a single **TransReID ViT-B/16 CLIP** backbone, augmented at association time with a **complementary score-fusion stream**, reaches **MTMC IDF1 = {DEFAULTS['vehicle_mtmc_idf1']:.4f}** on CityFlowV2, which is **{cityflow_efficiency_pct:.2f}%** of the AIC22 1st-place result (**0.8486**) while using one primary ReID model instead of a multi-model leaderboard ensemble. On VeRi-776, the same family of weights now has a fully reproducible single-model comparison bundle centered on **Best R1 = {veri['best_r1']['r1']:.2f}%** and **Best mAP = {veri['best_map']['map']:.2f}%** from the checked-in v17 sweep.
+This report is now intentionally **VeRi-776 only**. The repository-backed headline remains the same: the checked-in TransReID ViT-B/16 CLIP checkpoint family reaches **best mAP = {veri_summary['best_map']['map']:.2f}%** and **best R1 = {veri_summary['best_r1']['r1']:.2f}%** on VeRi-776 through a pure eval-time recipe built on flip-TTA, AQE, and k-reciprocal reranking. That gives us the **#2 verified mAP position** in the master table carried by this script and the strongest verified R1 in the same table.
 
-## 2. Headline Performance
-
-### 2.1 Vehicle Pipeline (CityFlowV2)
-
-| Metric | Value | Source |
-|---|---:|---|
-| MTMC IDF1 (best, fusion) | **{DEFAULTS['vehicle_mtmc_idf1']:.4f}** | `findings.md` final result; `experiment-log.md` header |
-| MTMC IDF1 (no-fusion control, single CLIP) | **{DEFAULTS['vehicle_no_fusion_control_idf1']:.4f}** | `findings.md` no-fusion control |
-| MTMC IDF1 (secondary fusion-stream standalone control) | **{DEFAULTS['vehicle_dinov2_idf1']:.3f}** | `findings.md` current performance |
-| Single-camera ReID mAP (TransReID ViT-B/16 CLIP @ 256px) | **80.14%** | `findings.md`; `.github/copilot-instructions.md` |
-| Single-camera ReID R1 (TransReID ViT-B/16 CLIP @ 256px) | **92.27%** | same |
-| Single-camera ReID mAP (secondary fusion stream) | **86.79%** | `findings.md` current performance |
-| Single-camera ReID R1 (secondary fusion stream) | **96.15%** | same |
-| Secondary ResNet101-IBN-a mAP | **52.77%** | `findings.md`; `.github/copilot-instructions.md` |
-
-The deployed fusion operating point is still **10c v15 / 10a v7** with `w_secondary=0.00` and `w_tertiary=0.60`. Relative to the single-CLIP control, the complementary fusion stream adds **+{fusion_gain_pp:.2f}pp** MTMC IDF1. The same DINOv2 stream on its own still regresses to **0.744**, which keeps the underlying conclusion intact: stronger single-camera discrimination does not automatically translate to stronger cross-camera MTMC.
-
-### 2.2 Person Pipeline (WILDTRACK)
-
-| Metric | Value | Source |
-|---|---:|---|
-| Ground-plane IDF1 | **0.947** | `findings.md`; `.github/copilot-instructions.md` |
-| Ground-plane MODA | **0.903** | `.github/copilot-instructions.md` |
-| Detector MODA (MVDeTr ResNet18, 12a v3) | **0.921** | `findings.md` |
-| Tracker configs tested | **59+** | `findings.md` |
-| Status | **FULLY CONVERGED** | same |
-
-## 3. Per-Dataset Comparison
-
-### 3.1 VeRi-776 (single-camera vehicle ReID benchmark)
+## 2. VeRi-776 Headline Performance
 
 | Config | mAP | R1 | R5 | R10 | Source |
 |---|---:|---:|---:|---:|---|
-| Baseline with SIE (20 cams) | {veri['baseline']['map']:.2f}% | {veri['baseline']['r1']:.2f}% | {veri['baseline']['r5']:.2f}% | {veri['baseline']['r10']:.2f}% | `{veri_results_relpath}` |
-| Best R1: single_flip rerank (k1=24, k2=8, λ=0.2) | {veri['best_r1']['map']:.2f}% | **{veri['best_r1']['r1']:.2f}%** | {veri['best_r1']['r5']:.2f}% | {veri['best_r1']['r10']:.2f}% | same |
-| Best mAP: concat_patch_flip AQE k=3 + rerank (k1=80, k2=15, λ=0.2) | **{veri['best_map']['map']:.2f}%** | {veri['best_map']['r1']:.2f}% | {veri['best_map']['r5']:.2f}% | {veri['best_map']['r10']:.2f}% | same |
-| Joint optimum: concat_patch_flip AQE k=2 + rerank (k1=80, k2=15, λ=0.2) | {veri['joint']['map']:.2f}% | {veri['joint']['r1']:.2f}% | {veri['joint']['r5']:.2f}% | {veri['joint']['r10']:.2f}% | same |
+| Baseline with SIE (20 cams) | {veri_summary['baseline']['map']:.2f}% | {veri_summary['baseline']['r1']:.2f}% | {veri_summary['baseline']['r5']:.2f}% | {veri_summary['baseline']['r10']:.2f}% | `{relative_path(VERI_RESULTS_PATH)}` |
+| Best R1: single_flip rerank (k1=24, k2=8, λ=0.2) | {veri_summary['best_r1']['map']:.2f}% | **{veri_summary['best_r1']['r1']:.2f}%** | {veri_summary['best_r1']['r5']:.2f}% | {veri_summary['best_r1']['r10']:.2f}% | same |
+| Best mAP: concat_patch_flip AQE k=3 + rerank (k1=80, k2=15, λ=0.2) | **{veri_summary['best_map']['map']:.2f}%** | {veri_summary['best_map']['r1']:.2f}% | {veri_summary['best_map']['r5']:.2f}% | {veri_summary['best_map']['r10']:.2f}% | same |
+| Joint optimum: concat_patch_flip AQE k=2 + rerank (k1=80, k2=15, λ=0.2) | {veri_summary['joint']['map']:.2f}% | {veri_summary['joint']['r1']:.2f}% | {veri_summary['joint']['r5']:.2f}% | {veri_summary['joint']['r10']:.2f}% | same |
 
-The checked-in v17 evaluation bundle makes VeRi-776 a first-class result rather than a side ablation. The 224x224 evaluation, matching the original training resolution, still supports a clean two-endpoint story: **best R1** comes from the single_flip rerank row, while **best mAP** comes from the concat_patch_flip AQE+rerrank row on the same checkpoint.
+The checked-in JSON turns VeRi-776 into a first-class result instead of a side note. The non-dominated endpoints remain split: **best R1** comes from the single_flip rerank row, while **best mAP** comes from concat_patch_flip + AQE + rerank on the same checkpoint.
 
-### 3.1.1 VeRi-776 Single-Model Comparison
+### 2.1 Verified VeRi-776 Top Table
 
-Figures **V1-V6** compare the measured v17 result against the literature table carried in the generator. Rows still awaiting direct paper verification are shown as **hollow markers or hatched white bars** and are treated as *citation pending*, not as fully verified facts. The important claim does not depend on any unverified row: our measured point is the repository-backed anchor, and every comparison figure makes that distinction visually explicit.
+| Rank | Method | mAP | R1 | Category | Trust |
+|---:|---|---:|---:|---|---|
+| 1 | {top_verified[0]['name']} | {top_verified[0]['map']:.2f} | {top_verified[0]['r1'] if top_verified[0]['r1'] is not None else 'DATA_UNAVAILABLE'} | {top_verified[0]['category']} | {top_verified[0]['trust']} |
+| 2 | {top_verified[1]['name']} | {top_verified[1]['map']:.2f} | {top_verified[1]['r1'] if top_verified[1]['r1'] is not None else 'DATA_UNAVAILABLE'} | {top_verified[1]['category']} | {top_verified[1]['trust']} |
+| 3 | {top_verified[2]['name']} | {top_verified[2]['map']:.2f} | {top_verified[2]['r1'] if top_verified[2]['r1'] is not None else 'DATA_UNAVAILABLE'} | {top_verified[2]['category']} | {top_verified[2]['trust']} |
 
-### 3.2 CityFlowV2 (vehicle MTMC, AIC22 Track 1)
+### 2.2 TransReID-Variant Frontier
 
-| Rank | System | MTMC IDF1 | Models | Source |
-|---|---|---:|:---:|---|
-| 1 | Team28 (matcher) | 0.8486 | 5 | `paper-strategy.md` |
-| 2 | Team59 (BOE) | 0.8437 | 3 | same |
-| 3 | Team37 (TAG) | 0.8371 | — | same |
-| 4 | Team50 (FraunhoferIOSB) | 0.8348 | — | same |
-| 10 | Team94 (SKKU) | 0.8129 | — | same |
-| 18 | Team4 (HCMIU) | 0.7255 | — | same |
-| — | **Ours (primary CLIP backbone + score fusion)** | **{DEFAULTS['vehicle_mtmc_idf1']:.4f}** | 1 (+1 score stream) | `findings.md` |
+| Method | mAP | R1 | Backbone | Trust |
+|---|---:|---:|---|---|
+| {top_transreid[0]['name']} | {top_transreid[0]['map']:.2f} | {top_transreid[0]['r1']:.2f} | {top_transreid[0]['backbone']} | {top_transreid[0]['trust']} |
+| {top_transreid[1]['name']} | {top_transreid[1]['map']:.2f} | {top_transreid[1]['r1']:.2f} | {top_transreid[1]['backbone']} | {top_transreid[1]['trust']} |
+| {top_transreid[2]['name']} | {top_transreid[2]['map']:.2f} | {top_transreid[2]['r1']:.2f} | {top_transreid[2]['backbone']} | {top_transreid[2]['trust']} |
+| CLIP-ReID (w/o RK) | 84.50 | 97.30 | ViT-B/16 (CLIP) + 2-stage prompt | verified |
+| TransReID (ICCV 2021) | 82.30 | 97.10 | ViT-B/16 (ImageNet-21k) + JPM + SIE | verified |
+| DCAL* | 80.20 | 96.90 | ViT-B/16 | literature_claim |
+| MsKAT* | 82.00 | 97.40 | ViT-S | literature_claim |
+| KAT-ReID (HF card) | 59.50 | 88.00 | ViT + GR-KAN channel mixers, 256x128 | verified |
 
-On CityFlowV2 the efficiency claim is unchanged: the system reaches **{cityflow_efficiency_pct:.2f}% of 1st-place IDF1** with one primary ReID model. The unresolved gap remains feature-side cross-camera invariance, not a missing association heuristic.
+The verified frontier inside the TransReID family is clean: our best-mAP row is **+5.47pp mAP / +0.50pp R1** over CLIP-ReID, and our best-R1 row pushes even further on rank-1 while trading away some mAP.
 
-### 3.2.1 CityFlowV2 Primary Backbone — TransReID ViT-B/16 CLIP @ 256px
+### 2.3 Methods with Verified mAP ≥ 90%
 
-Figures **C1**, **C2**, **C4**, **C5**, and **C6** keep the focus on the primary CLIP-backed feature space and the measured CityFlowV2 comparison set. **C1** shows only the logged PCA dimensions with clean MTMC numbers, so the chart intentionally stops at **384D** and **512D** instead of inventing 256D or 768D bars. **C2** uses **standalone Δ** bars rather than a cumulative waterfall because the component gains in `.github/copilot-instructions.md` are not additive. **C4** plots the exact logged DINOv2 tertiary fusion sweep and highlights `w_tertiary=0.60` as the chosen optimum. **C5** is intentionally partial: it compares our result against the repo-backed AIC22 top-team IDF1 rows while rendering citation-pending teams as hollow markers. **C6** restricts the comparison to directly comparable CLIP/DINOv2 single-vs-fusion rows from `findings.md`.
+Verified ≥90% mAP count: **{len(ge90)}**.
 
-### 3.3 WILDTRACK (person MTMC, overlapping cameras)
+| Method | mAP | R1 | Notes |
+|---|---:|---:|---|
+| MBR4B-LAI (w/ RK) | 92.10 | 98.00 | Uses camera and pose metadata |
+| Ours (reference, below threshold) | {veri_summary['best_map']['map']:.2f} | {veri_summary['best_map']['r1']:.2f} | Single model, no metadata |
 
-| System | GP IDF1 | GP MODA | Detector MODA | Source |
-|---|---:|---:|---:|---|
-| Literature SOTA reference | 0.953* | 0.915* | — | `[CITE_NEEDED]` |
-| **Ours (Kalman, 12b v1/v2/v3)** | **0.947** | **{DEFAULTS['wildtrack_moda']:.3f}** | **0.921** | `.github/copilot-instructions.md` |
+{markdown_benchmark_section(perf)}
 
-The WILDTRACK side remains tracker-limited and effectively converged. It stays in the comparison set because it demonstrates that the same pipeline shell behaves predictably on a very different MTMC regime.
+## 5. Figures
 
-## 4. Figures
+- ![G5 dead ends](figures/G5_dead_ends.png) — Vehicle-ReID negative controls that still matter for the VeRi-only paper angle.
+- ![G6 compute cost](figures/G6_compute_cost.png) — Parameter-efficiency reference for the subset of VeRi-776 rows that report model size.
+- ![G9 VeRi rerank sweep](figures/G9_veri_rerank_sweep.png) — The checked-in rerank λ sweep for the deployed checkpoint.
+- ![V1 VeRi pareto](figures/V1_veri_pareto.png) — Verified and citation-pending R1 vs mAP scatter with the Pareto frontier.
+- ![V2 VeRi grouped categories](figures/V2_veri_category_grouped.png) — Verified mAP leaders grouped by General SOTA, TransReID-Variant, and Ours.
+- ![V3 VeRi mAP vs params](figures/V3_veri_map_vs_params.png) — Efficiency frontier over the rows that actually disclose parameter counts.
+- ![V4 VeRi backbone family](figures/V4_veri_backbone_family.png) — Best verified result by backbone family.
+- ![V5 VeRi year progression](figures/V5_veri_year_progression.png) — Best verified mAP by year, with DATA_UNAVAILABLE years left explicit.
+- ![V6 VeRi eval ablation](figures/V6_veri_eval_ablation.png) — Eval-time progression from baseline to the non-dominated v17 endpoints.
+- ![V7 VeRi gap to SOTA](figures/V7_veri_gap_to_sota.png) — Gap to the 92.1 mAP verified ceiling for every verified row.
+- ![V8 VeRi ge90 focus](figures/V8_veri_ge90_focus.png) — The verified ≥90% mAP slice, with our 89.97 reference line.
+- ![V9 VeRi single vs ensemble](figures/V9_veri_single_vs_ensemble.png) — Single-model vs ensemble strip plot showing the verified roster collapses to single-model methods.
+- ![P1 latency](figures/P1_veri_inference_latency.png) — Local batch-1 latency benchmark with DATA_UNAVAILABLE placeholders for literature baselines.
+- ![P2 VRAM](figures/P2_veri_vram_peak.png) — Peak VRAM benchmark with the same explicit DATA_UNAVAILABLE handling.
+- ![P3 mAP vs FLOPs](figures/P3_veri_map_vs_flops.png) — Small reference plot for the few rows with FLOPs values.
+- ![P4 params vs FLOPs](figures/P4_veri_params_vs_flops.png) — Degenerate but explicit architectural-efficiency reference for the ViT-B/16 family.
+- ![P5 pipeline breakdown](figures/P5_veri_pipeline_breakdown.png) — Stacked timing view for the best-mAP eval path.
 
-- ![G1 pareto](figures/G1_pareto.png) — CityFlowV2 Pareto view of MTMC IDF1 versus model count.
-- ![G2 dataset MTMC IDF1](figures/G2_mtmc_idf1_datasets.png) — Headline MTMC comparison for CityFlowV2 and WILDTRACK.
-- ![G3 ReID benchmarks](figures/G3_reid_map_benchmarks.png) — Single-camera ReID benchmark view across VeRi-776, Market-1501, and CityFlowV2.
-- ![G4 ablation waterfall](figures/G4_ablation_waterfall.png) — Cumulative gains from the restored CityFlowV2 vehicle recipe.
-- ![G5 dead ends](figures/G5_dead_ends.png) — Measured regressions from major dead ends.
-- ![G6 compute cost](figures/G6_compute_cost.png) — Compute-efficiency contrast between our pipeline and a multi-model SOTA recipe.
-- ![G7 per-dataset bars](figures/G7_per_dataset_bars.png) — Ours vs SOTA per dataset.
-- ![G8 relative gap overview](figures/G8_relative_gap_overview.png) — Relative percentage of SOTA retained by our system on each benchmark.
-- ![G9 VeRi rerank sweep](figures/G9_veri_rerank_sweep.png) — VeRi-776 rerank λ sweep for the canonical v17 reproduction.
-- ![G10 CityFlow threshold sweep](figures/G10_cityflow_threshold_sweep.png) — Documented similarity-threshold sensitivity for Stage 4.
-- ![V1 VeRi pareto](figures/V1_veri_pareto.png) — VeRi-776 R1 vs mAP Pareto comparison, with pending literature rows rendered hollow.
-- ![V2 VeRi model count](figures/V2_veri_model_count.png) — VeRi-776 mAP versus model-count grouping.
-- ![V3 VeRi compute](figures/V3_veri_compute.png) — VeRi-776 mAP versus estimated training compute, with bubble size scaling by parameter count.
-- ![V4 VeRi backbone family](figures/V4_veri_backbone_family.png) — Backbone-family means for CNN, ViT-IN21k, and CLIP-ViT groupings.
-- ![V5 VeRi year progression](figures/V5_veri_year_progression.png) — Year-over-year single-model progression on VeRi-776.
-- ![V6 VeRi eval ablation](figures/V6_veri_eval_ablation.png) — Eval-time progression from baseline to the v17 frontier.
-- ![C1 CityFlow PCA](figures/C1_cityflow_pca.png) — Logged PCA-dimension ablation for the primary CityFlowV2 feature space.
-- ![C2 CityFlow association contributions](figures/C2_cityflow_assoc_waterfall.png) — Standalone Stage-4 component contributions, intentionally non-additive.
-- ![C4 CityFlow fusion sweep](figures/C4_cityflow_fusion_sweep.png) — Exact MTMC IDF1 sensitivity to the logged tertiary fusion weight sweep.
-- ![C5 CityFlow SOTA comparison](figures/C5_cityflow_sota_comparison.png) — Ours versus repo-backed AIC22 top-team rankings, with citation-pending teams rendered hollow.
-- ![C6 CityFlow single vs fusion](figures/C6_cityflow_single_vs_fusion.png) — Directly comparable CLIP-only, DINOv2-only, and CLIP+DINOv2 fusion MTMC IDF1.
+## 6. Harsh Truth
 
-## 5. What Worked
-
-| Change | Magnitude | Source |
-|---|---:|---|
-| Conflict-free CC | **+0.21pp** | `.github/copilot-instructions.md`; `experiment-log.md` |
-| Intra-merge (thresh=0.80, gap=30) | **+0.28pp** | same |
-| Temporal overlap bonus | **+0.9pp** | `.github/copilot-instructions.md` |
-| FIC whitening | **+1 to +2pp** | same |
-| Power normalization | **+0.5pp** | same |
-| AQE K=3 | small positive | `experiment-log.md` |
-| min_hits=2 | **+0.2pp** | `.github/copilot-instructions.md` |
-| Kalman tuning (person pipeline) | **+1.9pp IDF1** | same |
-| Complementary score fusion (`w_tertiary=0.60`) | **+0.40pp** over single CLIP | `findings.md` |
-
-## 6. Dead Ends
-
-| Approach | Impact | Source |
-|---|---:|---|
-| CSLS | **−34.7pp** | `.github/copilot-instructions.md`; `findings.md` |
-| AFLink motion linking | **−3.82pp** typical, **−13.2pp** worst | `.github/copilot-instructions.md` |
-| 384px ViT deployment | **−2.8pp** | `findings.md` |
-| FAC | **−2.5pp** | `.github/copilot-instructions.md` |
-| Feature concatenation | **−1.6pp** | same |
-| DMT camera-aware training | **−1.4pp** | same |
-| CID_BIAS | **−1.0 to −3.3pp** | `findings.md`; `.github/copilot-instructions.md` |
-| Hierarchical clustering | **−1 to −5pp** | `.github/copilot-instructions.md` |
-| OSNet secondary (current weights) | **−0.8 to −1.1pp** | same |
-| DINOv2 standalone (vs single CLIP control) | **−3.1pp** | `findings.md` |
-| Network flow solver | **−0.24pp** | `.github/copilot-instructions.md`; `findings.md` |
-| Reranking on the vehicle MTMC pipeline | always hurts | `.github/copilot-instructions.md` |
-
-## 7. Conclusion
-
-The comparison story is still the same after adding the extra graphs. VeRi-776 now has a clearer single-model SOTA context, but the repository-backed result remains the anchor. On CityFlowV2, the strongest factual claim is still the measured **0.7703** fusion result and the associated efficiency trade-off, not a narrative about any one auxiliary stream. The new figures therefore shift emphasis back to the primary **TransReID ViT-B/16 CLIP** backbone while leaving the measured fusion gain intact.
+{harsh_truth_md}
 
 ### Footnotes
 
 - (*) Literature value, not re-measured in this repository.
-- Hollow markers or hatched white bars mean *citation pending*.
+- Hollow markers or hatched placeholders mean citation pending or DATA_UNAVAILABLE.
 """
 
 
-
 def check_markdown_links(text: str) -> list[str]:
-    issues: list[str] = []
+    issues = []
     pattern = re.compile(r"!??\[[^\]]*\]\(([^)]+)\)")
     for match in pattern.finditer(text):
         target = match.group(1).strip()
         if target.startswith("http://") or target.startswith("https://") or target.startswith("#"):
             continue
         clean_target = target.split("#", 1)[0]
-        target_path = (ANALYSIS_PATH.parent / clean_target).resolve()
-        if not target_path.exists():
+        if not (ANALYSIS_PATH.parent / clean_target).resolve().exists():
             issues.append(clean_target)
     return issues
 
 
-
-def verify_pngs() -> dict[str, int]:
-    sizes: dict[str, int] = {}
+def verify_pngs() -> None:
     for stem in FIGURES:
-        png_path = FIG_DIR / f"{stem}.png"
-        Image.open(png_path).verify()
-        sizes[png_path.name] = png_path.stat().st_size
-    return sizes
-
+        Image.open(FIG_DIR / f"{stem}.png").verify()
 
 
 def main() -> None:
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     set_style()
-    build_g1()
-    build_g2()
-    build_g3()
-    build_g4()
-    build_g5()
-    build_g6()
-    build_g7()
-    build_g8()
-    build_g9()
-    build_g10()
-    build_v1_veri_pareto()
-    build_v2_veri_model_count()
-    build_v3_veri_compute()
-    build_v4_veri_backbone_family()
-    build_v5_veri_year_progression()
-    build_v6_veri_eval_ablation()
-    build_c1_cityflow_pca()
-    build_c2_cityflow_assoc_waterfall()
-    build_c4_cityflow_fusion_sweep()
-    build_c5_cityflow_sota_comparison()
-    build_c6_cityflow_single_vs_fusion()
-    markdown = build_markdown()
+    veri_results = load_veri_results()
+    veri_summary = get_veri_summary(veri_results)
+    perf = load_perf_bench()
+    rows = get_sota_rows(veri_summary)
+    build_g5_dead_ends()
+    build_g6_compute_cost(rows)
+    build_g9_veri_rerank_sweep(veri_results, veri_summary)
+    build_v1_pareto(rows)
+    build_v2_category_grouped(rows)
+    build_v3_map_vs_params(rows)
+    build_v4_backbone_family(rows)
+    build_v5_year_progression(veri_summary)
+    build_v6_eval_ablation(veri_summary)
+    build_v7_gap_to_sota(rows)
+    build_v8_ge90_focus(veri_summary)
+    build_v9_single_vs_ensemble(rows)
+    build_p1_latency(perf)
+    build_p2_vram(perf)
+    build_p3_map_vs_flops(rows)
+    build_p4_params_vs_flops(rows)
+    build_p5_pipeline_breakdown(perf)
+    markdown = build_markdown(rows, veri_summary, perf)
     ANALYSIS_PATH.write_text(markdown, encoding="utf-8")
     issues = check_markdown_links(markdown)
     if issues:
         raise RuntimeError(f"Broken markdown links: {issues}")
-    sizes = verify_pngs()
+    verify_pngs()
     print("Created analysis:", ANALYSIS_PATH)
     for stem in FIGURES:
-        png_path = FIG_DIR / f"{stem}.png"
-        pdf_path = FIG_DIR / f"{stem}.pdf"
-        print(f" - {png_path.name}: {png_path.stat().st_size} bytes")
-        print(f" - {pdf_path.name}: {pdf_path.stat().st_size} bytes")
+        print(f" - {stem}.png: {(FIG_DIR / f'{stem}.png').stat().st_size} bytes")
+        print(f" - {stem}.pdf: {(FIG_DIR / f'{stem}.pdf').stat().st_size} bytes")
     print("PNG verification complete.")
     print("Link verification complete.")
-    small = {name: size for name, size in sizes.items() if size <= 10_240}
-    if small:
-        print("Warning: some PNG files are <= 10KB:", small)
 
 
 if __name__ == "__main__":

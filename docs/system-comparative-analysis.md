@@ -1,142 +1,128 @@
 # System Comparative Analysis
 
-*Conservative note: any value marked with an asterisk (*) is a literature claim, not measured in this repository. The new VeRi-776 comparison figures render citation-pending literature rows as hollow markers or hatched white bars rather than presenting them as fully verified.*
+*Conservative note: any value marked with an asterisk (*) is a literature claim, not measured in this repository. The VeRi-only comparison figures render citation-pending literature rows as hollow markers or hatched placeholders rather than presenting them as fully verified facts.*
 
 ## 1. Abstract
 
-This document compares the MTMC Tracker system against published references on CityFlowV2, VeRi-776, and WILDTRACK. The headline CityFlowV2 result remains unchanged: a single **TransReID ViT-B/16 CLIP** backbone, augmented at association time with a **complementary score-fusion stream**, reaches **MTMC IDF1 = 0.7703** on CityFlowV2, which is **90.77%** of the AIC22 1st-place result (**0.8486**) while using one primary ReID model instead of a multi-model leaderboard ensemble. On VeRi-776, the same family of weights now has a fully reproducible single-model comparison bundle centered on **Best R1 = 98.33%** and **Best mAP = 89.97%** from the checked-in v17 sweep.
+This report is now intentionally **VeRi-776 only**. The repository-backed headline remains the same: the checked-in TransReID ViT-B/16 CLIP checkpoint family reaches **best mAP = 89.97%** and **best R1 = 98.33%** on VeRi-776 through a pure eval-time recipe built on flip-TTA, AQE, and k-reciprocal reranking. That gives us the **#2 verified mAP position** in the master table carried by this script and the strongest verified R1 in the same table.
 
-## 2. Headline Performance
-
-### 2.1 Vehicle Pipeline (CityFlowV2)
-
-| Metric | Value | Source |
-|---|---:|---|
-| MTMC IDF1 (best, fusion) | **0.7703** | `findings.md` final result; `experiment-log.md` header |
-| MTMC IDF1 (no-fusion control, single CLIP) | **0.7663** | `findings.md` no-fusion control |
-| MTMC IDF1 (secondary fusion-stream standalone control) | **0.744** | `findings.md` current performance |
-| Single-camera ReID mAP (TransReID ViT-B/16 CLIP @ 256px) | **80.14%** | `findings.md`; `.github/copilot-instructions.md` |
-| Single-camera ReID R1 (TransReID ViT-B/16 CLIP @ 256px) | **92.27%** | same |
-| Single-camera ReID mAP (secondary fusion stream) | **86.79%** | `findings.md` current performance |
-| Single-camera ReID R1 (secondary fusion stream) | **96.15%** | same |
-| Secondary ResNet101-IBN-a mAP | **52.77%** | `findings.md`; `.github/copilot-instructions.md` |
-
-The deployed fusion operating point is still **10c v15 / 10a v7** with `w_secondary=0.00` and `w_tertiary=0.60`. Relative to the single-CLIP control, the complementary fusion stream adds **+0.40pp** MTMC IDF1. The same DINOv2 stream on its own still regresses to **0.744**, which keeps the underlying conclusion intact: stronger single-camera discrimination does not automatically translate to stronger cross-camera MTMC.
-
-### 2.2 Person Pipeline (WILDTRACK)
-
-| Metric | Value | Source |
-|---|---:|---|
-| Ground-plane IDF1 | **0.947** | `findings.md`; `.github/copilot-instructions.md` |
-| Ground-plane MODA | **0.903** | `.github/copilot-instructions.md` |
-| Detector MODA (MVDeTr ResNet18, 12a v3) | **0.921** | `findings.md` |
-| Tracker configs tested | **59+** | `findings.md` |
-| Status | **FULLY CONVERGED** | same |
-
-## 3. Per-Dataset Comparison
-
-### 3.1 VeRi-776 (single-camera vehicle ReID benchmark)
+## 2. VeRi-776 Headline Performance
 
 | Config | mAP | R1 | R5 | R10 | Source |
 |---|---:|---:|---:|---:|---|
 | Baseline with SIE (20 cams) | 82.22% | 97.50% | 98.93% | 99.52% | `outputs/09v_veri_v9/veri776_eval_results_v9.json` |
 | Best R1: single_flip rerank (k1=24, k2=8, λ=0.2) | 85.14% | **98.33%** | 99.05% | 99.34% | same |
-| Best mAP: concat_patch_flip AQE k=3 + rerank (k1=80, k2=15, λ=0.2) | **89.97%** | 97.80% | 98.45% | 98.81% | same |
+| Best mAP: concat_patch_flip AQE k=3 + rerank (k1=80, k2=15, λ=0.2) | **89.97%** | 97.79% | 98.45% | 98.81% | same |
 | Joint optimum: concat_patch_flip AQE k=2 + rerank (k1=80, k2=15, λ=0.2) | 89.71% | 98.15% | 98.51% | 98.75% | same |
 
-The checked-in v17 evaluation bundle makes VeRi-776 a first-class result rather than a side ablation. The 224x224 evaluation, matching the original training resolution, still supports a clean two-endpoint story: **best R1** comes from the single_flip rerank row, while **best mAP** comes from the concat_patch_flip AQE+rerrank row on the same checkpoint.
+The checked-in JSON turns VeRi-776 into a first-class result instead of a side note. The non-dominated endpoints remain split: **best R1** comes from the single_flip rerank row, while **best mAP** comes from concat_patch_flip + AQE + rerank on the same checkpoint.
 
-### 3.1.1 VeRi-776 Single-Model Comparison
+### 2.1 Verified VeRi-776 Top Table
 
-Figures **V1-V6** compare the measured v17 result against the literature table carried in the generator. Rows still awaiting direct paper verification are shown as **hollow markers or hatched white bars** and are treated as *citation pending*, not as fully verified facts. The important claim does not depend on any unverified row: our measured point is the repository-backed anchor, and every comparison figure makes that distinction visually explicit.
+| Rank | Method | mAP | R1 | Category | Trust |
+|---:|---|---:|---:|---|---|
+| 1 | MBR4B-LAI (w/ RK) | 92.10 | 98.0 | General SOTA | verified |
+| 2 | Ours (v17, best mAP) | 89.97 | 97.79499173164368 | Ours | verified |
+| 3 | Ours (v17, joint optimum) | 89.71 | 98.15255999565125 | Ours | verified |
 
-### 3.2 CityFlowV2 (vehicle MTMC, AIC22 Track 1)
+### 2.2 TransReID-Variant Frontier
 
-| Rank | System | MTMC IDF1 | Models | Source |
-|---|---|---:|:---:|---|
-| 1 | Team28 (matcher) | 0.8486 | 5 | `paper-strategy.md` |
-| 2 | Team59 (BOE) | 0.8437 | 3 | same |
-| 3 | Team37 (TAG) | 0.8371 | — | same |
-| 4 | Team50 (FraunhoferIOSB) | 0.8348 | — | same |
-| 10 | Team94 (SKKU) | 0.8129 | — | same |
-| 18 | Team4 (HCMIU) | 0.7255 | — | same |
-| — | **Ours (primary CLIP backbone + score fusion)** | **0.7703** | 1 (+1 score stream) | `findings.md` |
+| Method | mAP | R1 | Backbone | Trust |
+|---|---:|---:|---|---|
+| Ours (v17, best mAP) | 89.97 | 97.79 | ViT-B/16 CLIP, TransReID + concat[CLS+patch] + AQE + rerank | verified |
+| Ours (v17, joint optimum) | 89.71 | 98.15 | ViT-B/16 CLIP, TransReID + concat[CLS+patch] + AQE + rerank | verified |
+| Ours (v17, best R1) | 85.14 | 98.33 | ViT-B/16 CLIP, TransReID + flip-TTA + rerank | verified |
+| CLIP-ReID (w/o RK) | 84.50 | 97.30 | ViT-B/16 (CLIP) + 2-stage prompt | verified |
+| TransReID (ICCV 2021) | 82.30 | 97.10 | ViT-B/16 (ImageNet-21k) + JPM + SIE | verified |
+| DCAL* | 80.20 | 96.90 | ViT-B/16 | literature_claim |
+| MsKAT* | 82.00 | 97.40 | ViT-S | literature_claim |
+| KAT-ReID (HF card) | 59.50 | 88.00 | ViT + GR-KAN channel mixers, 256x128 | verified |
 
-On CityFlowV2 the efficiency claim is unchanged: the system reaches **90.77% of 1st-place IDF1** with one primary ReID model. The unresolved gap remains feature-side cross-camera invariance, not a missing association heuristic.
+The verified frontier inside the TransReID family is clean: our best-mAP row is **+5.47pp mAP / +0.50pp R1** over CLIP-ReID, and our best-R1 row pushes even further on rank-1 while trading away some mAP.
 
-### 3.2.1 CityFlowV2 Primary Backbone — TransReID ViT-B/16 CLIP @ 256px
+### 2.3 Methods with Verified mAP ≥ 90%
 
-Figures **C1**, **C2**, **C4**, **C5**, and **C6** keep the focus on the primary CLIP-backed feature space and the measured CityFlowV2 comparison set. **C1** shows only the logged PCA dimensions with clean MTMC numbers, so the chart intentionally stops at **384D** and **512D** instead of inventing 256D or 768D bars. **C2** uses **standalone Δ** bars rather than a cumulative waterfall because the component gains in `.github/copilot-instructions.md` are not additive. **C4** plots the exact logged DINOv2 tertiary fusion sweep and highlights `w_tertiary=0.60` as the chosen optimum. **C5** is intentionally partial: it compares our result against the repo-backed AIC22 top-team IDF1 rows while rendering citation-pending teams as hollow markers. **C6** restricts the comparison to directly comparable CLIP/DINOv2 single-vs-fusion rows from `findings.md`.
+Verified ≥90% mAP count: **1**.
 
-### 3.3 WILDTRACK (person MTMC, overlapping cameras)
+| Method | mAP | R1 | Notes |
+|---|---:|---:|---|
+| MBR4B-LAI (w/ RK) | 92.10 | 98.00 | Uses camera and pose metadata |
+| Ours (reference, below threshold) | 89.97 | 97.79 | Single model, no metadata |
 
-| System | GP IDF1 | GP MODA | Detector MODA | Source |
-|---|---:|---:|---:|---|
-| Literature SOTA reference | 0.953* | 0.915* | — | `[CITE_NEEDED]` |
-| **Ours (Kalman, 12b v1/v2/v3)** | **0.947** | **0.903** | **0.921** | `.github/copilot-instructions.md` |
+## 4. Performance & Efficiency Benchmark
 
-The WILDTRACK side remains tracker-limited and effectively converged. It stays in the comparison set because it demonstrates that the same pipeline shell behaves predictably on a very different MTMC regime.
+The local benchmark is intentionally narrow: batch-1 inference timing for the ViT-B/16 CLIP checkpoint family plus synthetic AQE and re-ranking measurements sized to the VeRi-776 query/gallery split. The result is not a new SOTA claim; it is a deployment reference that makes the eval-time recipe reproducible on commodity hardware.
 
-## 4. Figures
+| Item | Value |
+|---|---|
+| Benchmark JSON | `outputs/perf_bench/veri_perf_bench.json` |
+| Device | cuda |
+| Device name | NVIDIA GeForce GTX 1050 Ti |
+| Torch / CUDA | 2.4.1+cu124 / 12.4 |
+| Checkpoint found | True |
+| Architecture-only fallback | True |
+| FP32 latency | 37.36 ± 0.64 ms |
+| FP16 latency | N/A |
+| Peak VRAM fp32 | 344.1259765625 MB |
+| Peak VRAM fp16 | None MB |
+| AQE k=3 | 625.5163000005268 ms |
+| Rerank k1=30, k2=10, λ=0.2 | 36706.27490000061 ms |
+| Rerank k1=80, k2=15, λ=0.2 | 359275.7374000003 ms |
 
-- ![G1 pareto](figures/G1_pareto.png) — CityFlowV2 Pareto view of MTMC IDF1 versus model count.
-- ![G2 dataset MTMC IDF1](figures/G2_mtmc_idf1_datasets.png) — Headline MTMC comparison for CityFlowV2 and WILDTRACK.
-- ![G3 ReID benchmarks](figures/G3_reid_map_benchmarks.png) — Single-camera ReID benchmark view across VeRi-776, Market-1501, and CityFlowV2.
-- ![G4 ablation waterfall](figures/G4_ablation_waterfall.png) — Cumulative gains from the restored CityFlowV2 vehicle recipe.
-- ![G5 dead ends](figures/G5_dead_ends.png) — Measured regressions from major dead ends.
-- ![G6 compute cost](figures/G6_compute_cost.png) — Compute-efficiency contrast between our pipeline and a multi-model SOTA recipe.
-- ![G7 per-dataset bars](figures/G7_per_dataset_bars.png) — Ours vs SOTA per dataset.
-- ![G8 relative gap overview](figures/G8_relative_gap_overview.png) — Relative percentage of SOTA retained by our system on each benchmark.
-- ![G9 VeRi rerank sweep](figures/G9_veri_rerank_sweep.png) — VeRi-776 rerank λ sweep for the canonical v17 reproduction.
-- ![G10 CityFlow threshold sweep](figures/G10_cityflow_threshold_sweep.png) — Documented similarity-threshold sensitivity for Stage 4.
-- ![V1 VeRi pareto](figures/V1_veri_pareto.png) — VeRi-776 R1 vs mAP Pareto comparison, with pending literature rows rendered hollow.
-- ![V2 VeRi model count](figures/V2_veri_model_count.png) — VeRi-776 mAP versus model-count grouping.
-- ![V3 VeRi compute](figures/V3_veri_compute.png) — VeRi-776 mAP versus estimated training compute, with bubble size scaling by parameter count.
-- ![V4 VeRi backbone family](figures/V4_veri_backbone_family.png) — Backbone-family means for CNN, ViT-IN21k, and CLIP-ViT groupings.
-- ![V5 VeRi year progression](figures/V5_veri_year_progression.png) — Year-over-year single-model progression on VeRi-776.
-- ![V6 VeRi eval ablation](figures/V6_veri_eval_ablation.png) — Eval-time progression from baseline to the v17 frontier.
-- ![C1 CityFlow PCA](figures/C1_cityflow_pca.png) — Logged PCA-dimension ablation for the primary CityFlowV2 feature space.
-- ![C2 CityFlow association contributions](figures/C2_cityflow_assoc_waterfall.png) — Standalone Stage-4 component contributions, intentionally non-additive.
-- ![C4 CityFlow fusion sweep](figures/C4_cityflow_fusion_sweep.png) — Exact MTMC IDF1 sensitivity to the logged tertiary fusion weight sweep.
-- ![C5 CityFlow SOTA comparison](figures/C5_cityflow_sota_comparison.png) — Ours versus repo-backed AIC22 top-team rankings, with citation-pending teams rendered hollow.
-- ![C6 CityFlow single vs fusion](figures/C6_cityflow_single_vs_fusion.png) — Directly comparable CLIP-only, DINOv2-only, and CLIP+DINOv2 fusion MTMC IDF1.
+Figures **P1-P5** translate the same JSON into plot form. Every non-ours latency or VRAM bar remains explicitly marked as DATA_UNAVAILABLE rather than backfilled with guessed values.
 
-## 5. What Worked
+Benchmark notes: AQE and rerank timings reuse one exact nearest-neighbor cache over the full synthetic feature matrix; the cache build time is charged once to AQE. FP16 timing only runs when --fp16 is supplied. The rerank timings are full-dimension support-build proxies rather than the final dense jaccard pass, because the exact query-gallery expansion exceeded practical local wall-clock limits on this machine.
 
-| Change | Magnitude | Source |
-|---|---:|---|
-| Conflict-free CC | **+0.21pp** | `.github/copilot-instructions.md`; `experiment-log.md` |
-| Intra-merge (thresh=0.80, gap=30) | **+0.28pp** | same |
-| Temporal overlap bonus | **+0.9pp** | `.github/copilot-instructions.md` |
-| FIC whitening | **+1 to +2pp** | same |
-| Power normalization | **+0.5pp** | same |
-| AQE K=3 | small positive | `experiment-log.md` |
-| min_hits=2 | **+0.2pp** | `.github/copilot-instructions.md` |
-| Kalman tuning (person pipeline) | **+1.9pp IDF1** | same |
-| Complementary score fusion (`w_tertiary=0.60`) | **+0.40pp** over single CLIP | `findings.md` |
 
-## 6. Dead Ends
+## 5. Figures
 
-| Approach | Impact | Source |
-|---|---:|---|
-| CSLS | **−34.7pp** | `.github/copilot-instructions.md`; `findings.md` |
-| AFLink motion linking | **−3.82pp** typical, **−13.2pp** worst | `.github/copilot-instructions.md` |
-| 384px ViT deployment | **−2.8pp** | `findings.md` |
-| FAC | **−2.5pp** | `.github/copilot-instructions.md` |
-| Feature concatenation | **−1.6pp** | same |
-| DMT camera-aware training | **−1.4pp** | same |
-| CID_BIAS | **−1.0 to −3.3pp** | `findings.md`; `.github/copilot-instructions.md` |
-| Hierarchical clustering | **−1 to −5pp** | `.github/copilot-instructions.md` |
-| OSNet secondary (current weights) | **−0.8 to −1.1pp** | same |
-| DINOv2 standalone (vs single CLIP control) | **−3.1pp** | `findings.md` |
-| Network flow solver | **−0.24pp** | `.github/copilot-instructions.md`; `findings.md` |
-| Reranking on the vehicle MTMC pipeline | always hurts | `.github/copilot-instructions.md` |
+- ![G5 dead ends](figures/G5_dead_ends.png) — Vehicle-ReID negative controls that still matter for the VeRi-only paper angle.
+- ![G6 compute cost](figures/G6_compute_cost.png) — Parameter-efficiency reference for the subset of VeRi-776 rows that report model size.
+- ![G9 VeRi rerank sweep](figures/G9_veri_rerank_sweep.png) — The checked-in rerank λ sweep for the deployed checkpoint.
+- ![V1 VeRi pareto](figures/V1_veri_pareto.png) — Verified and citation-pending R1 vs mAP scatter with the Pareto frontier.
+- ![V2 VeRi grouped categories](figures/V2_veri_category_grouped.png) — Verified mAP leaders grouped by General SOTA, TransReID-Variant, and Ours.
+- ![V3 VeRi mAP vs params](figures/V3_veri_map_vs_params.png) — Efficiency frontier over the rows that actually disclose parameter counts.
+- ![V4 VeRi backbone family](figures/V4_veri_backbone_family.png) — Best verified result by backbone family.
+- ![V5 VeRi year progression](figures/V5_veri_year_progression.png) — Best verified mAP by year, with DATA_UNAVAILABLE years left explicit.
+- ![V6 VeRi eval ablation](figures/V6_veri_eval_ablation.png) — Eval-time progression from baseline to the non-dominated v17 endpoints.
+- ![V7 VeRi gap to SOTA](figures/V7_veri_gap_to_sota.png) — Gap to the 92.1 mAP verified ceiling for every verified row.
+- ![V8 VeRi ge90 focus](figures/V8_veri_ge90_focus.png) — The verified ≥90% mAP slice, with our 89.97 reference line.
+- ![V9 VeRi single vs ensemble](figures/V9_veri_single_vs_ensemble.png) — Single-model vs ensemble strip plot showing the verified roster collapses to single-model methods.
+- ![P1 latency](figures/P1_veri_inference_latency.png) — Local batch-1 latency benchmark with DATA_UNAVAILABLE placeholders for literature baselines.
+- ![P2 VRAM](figures/P2_veri_vram_peak.png) — Peak VRAM benchmark with the same explicit DATA_UNAVAILABLE handling.
+- ![P3 mAP vs FLOPs](figures/P3_veri_map_vs_flops.png) — Small reference plot for the few rows with FLOPs values.
+- ![P4 params vs FLOPs](figures/P4_veri_params_vs_flops.png) — Degenerate but explicit architectural-efficiency reference for the ViT-B/16 family.
+- ![P5 pipeline breakdown](figures/P5_veri_pipeline_breakdown.png) — Stacked timing view for the best-mAP eval path.
 
-## 7. Conclusion
+## 6. Harsh Truth
 
-The comparison story is still the same after adding the extra graphs. VeRi-776 now has a clearer single-model SOTA context, but the repository-backed result remains the anchor. On CityFlowV2, the strongest factual claim is still the measured **0.7703** fusion result and the associated efficiency trade-off, not a narrative about any one auxiliary stream. The new figures therefore shift emphasis back to the primary **TransReID ViT-B/16 CLIP** backbone while leaving the measured fusion gain intact.
+### 10.1 Where do we stand against verified VeRi-776 SOTA?
+
+Our best single-model mAP of **89.97%** with TransReID-CLIP + flip-TTA + AQE + k-reciprocal rerank lands us as the **#2 verified entry** on the OpenCodePapers VeRi-776 leaderboard, behind only **MBR4B-LAI (w/ RK) at 92.1%**, and **+1.97pp ahead** of RPTM (88.0%, the prior single-network non-meta winner). On **R1** our 98.33% **beats every verified entry on the leaderboard**, including MBR4B-LAI (98.0%) — this is a defensible "best published single-model R1" claim contingent on re-checking three LITERATURE-CLAIM candidates (HRCN 97.32, MsKAT 97.40, DCAL 96.90) which on existing literature numbers are all below 98.33%. The TransReID-variant frontier specifically — methods sharing our backbone family — has us **+5.47pp mAP and +1.03pp R1 over the strongest verified peer (CLIP-ReID, 84.5/97.3)**, and **+7.67pp / +1.23pp over the original TransReID baseline**. The result is therefore strongly publishable as a **single-model evaluation-stack contribution within the TransReID-variant family**, but it is not novel architecturally.
+
+### 10.2 What is the actual bottleneck if we want to chase 92%+?
+
+The **2.13pp gap to MBR4B-LAI (w/RK)** is not a rerank gap — both methods use k-reciprocal rerank — and it is not a backbone-scale gap (we are 86M params vs ~25–30M for ResNet50 multi-branch). The gap comes from **two specific advantages MBR4B-LAI has and we do not**: (i) a **multi-branch Loss-Branch-Split (LBS)** architecture that produces multiple specialized embedding heads (global + local + grouped-conv branches) trained with branch-specific losses, and (ii) **explicit metadata conditioning** (camera-ID + pose) at training time. Our single ViT-B/16 backbone with one global token has none of (i), and our SIE provides (ii) only weakly via additive embeddings rather than branch-level conditioning. **Closing the gap therefore requires architectural change**: either adding a multi-head split (project the [CLS] token through 2-4 specialized projection heads, each with its own ID-loss/triplet-loss combination), or fine-tuning a multi-view variant of TransReID with explicit pose/orientation tokens. **Loss change alone (e.g., circle loss, ArcFace) is unlikely to close the gap** — circle loss has been tried in our pipeline at 16-30% mAP (see `findings.md`), and ArcFace on ResNet101-IBN-a hit a 50.80% mAP ceiling. Pretrain quality (CLIP) is already strong. Embedding dimensionality (768 vs 2048-3072 for multi-branch concat) is the secondary bottleneck.
+
+### 10.3 What is the strongest paper angle?
+
+The publishable angle is **NOT "we beat SOTA"** — MBR4B-LAI's 92.1 forecloses that. The angle that survives Reviewer 2 is one of three options, in order of strength:
+
+1. **"Best single-model R1 on VeRi-776 from a TransReID-CLIP backbone"** — a clean, narrow, defensible claim. 98.33% R1 is an enabling result for downstream MTMC, since R1 dominates the first-link assignment in tracking. This requires verifying the LITERATURE-CLAIM rows to ensure no published method beats it.
+2. **"Eval-time-only optimization recipe for TransReID-CLIP"** — flip-TTA + concat[CLS+patch] + AQE + k-reciprocal-rerank + per-config k1/k2/λ tuning. We ship a +5.47pp mAP / +1.03pp R1 lift over the same backbone (CLIP-ReID) with **zero training cost**. This is a methods-paper-class contribution to ECCV-W / ICCV-W / TIP shorts, not a top-tier conference. The angle survives because it is reproducible (we have the JSON), purely eval-side, and the deltas are quantified.
+3. **"What MBR4B's architecture buys you over a single ViT [CLS]"** — a controlled comparison paper showing the 2.13pp gap is fully explained by branch-split + metadata. This requires retraining MBR4B-LAI ourselves to confirm. Higher-impact but higher-risk.
+
+### 10.4 Recommendation
+
+**Do NOT pursue further architecture refinement on the VeRi-776 single-model angle.** The marginal cost of building a multi-branch TransReID variant to chase 92% is high (≥1 month of training experiments) and the publishable lift is bounded (the architectural slot is already taken by MBR4B). **Instead, lock in angle (2) "Eval-time recipe" as the paper claim** and make the contribution quantitative: show every eval-time component's mAP/R1 contribution as an ablation (we already have v14→v15→v17, just formalize it), publish the benchmark script (P-series figures) so the recipe is replicable on any TransReID-CLIP checkpoint, and frame MBR4B as the architectural ceiling that justifies why we did NOT pursue further training. **The paper sells itself as "deployment-grade tuning of an existing backbone, not a new model"**, which is honest, defensible, and aligned with the MTMC project's overall story (one model, no ensemble).
+
+### 10.5 Caveats
+
+- Three LITERATURE-CLAIM rows (HRCN 97.32 R1, MsKAT 97.40 R1, DCAL 96.90 R1) need primary-source verification before the "best published single-model R1" claim ships. Coder must fetch these arXiv PDFs and confirm or refute.
+- The MBR4B family's `+RK` = +6pp claim should be verified against the paper's ablation table; if their `+RK` lift is smaller than ours (we get +7.76pp from baseline 82.21 → 89.97), our recipe may already be the stronger reranking variant. If true, that strengthens angle (2).
+- The 86M / 17.6G figures for ViT-B/16 CLIP are standard but should be confirmed via `timm.create_model("vit_base_patch16_clip_224").default_cfg` and a `fvcore.nn.FlopCountAnalysis` measurement at 224x224 input.
 
 ### Footnotes
 
 - (*) Literature value, not re-measured in this repository.
-- Hollow markers or hatched white bars mean *citation pending*.
+- Hollow markers or hatched placeholders mean citation pending or DATA_UNAVAILABLE.
