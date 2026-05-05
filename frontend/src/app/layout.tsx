@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ATHAR - City-Wide Vehicle Tracking System",
+  title: "ATHAR",
   description:
     "Multi-Target Multi-Camera tracking system for city-wide vehicle surveillance and forensic analysis",
   keywords: [
