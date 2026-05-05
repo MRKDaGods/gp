@@ -121,7 +121,7 @@ export function TimelineStage() {
   const [playingTrackletsOnly, setPlayingTrackletsOnly] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
   const trajectoryListRef = useRef<HTMLDivElement>(null);
-  /** Monotonic id so parallel `showQuickFallback` from an old load cannot overwrite a newer load. */
+  /** Monotonic id so stale async loads cannot overwrite newer results. */
   const loadTracksSeqRef = useRef(0);
   /** One automatic Stage 4 rerun per video when query returns empty (avoids forcing users to click "Rerun association"). */
   const autoAssociationRefreshForVideoRef = useRef<string | null>(null);
@@ -129,6 +129,11 @@ export function TimelineStage() {
   useEffect(() => {
     autoAssociationRefreshForVideoRef.current = null;
   }, [currentVideo?.id]);
+
+  /** Let "Rerun association" (`triggerReload`) attempt auto Stage-4 refresh again on the next load. */
+  useEffect(() => {
+    autoAssociationRefreshForVideoRef.current = null;
+  }, [triggerReload]);
 
   /** Backend-resolved probe run (session `runId` can be stale vs disk outputs). */
   const [resolvedProbeRunId, setResolvedProbeRunId] = useState<string | null>(null);
@@ -238,14 +243,14 @@ export function TimelineStage() {
       const segs: TrajectorySegment[] = track.segments && track.segments.length > 0
         ? track.segments
         : [{
-            cameraId: track.cameraId,
-            trackId: track.trackletId,
-            start: track.startTime,
-            end: track.endTime,
-            color: getCameraColor(track.cameraId),
-            representativeFrame: track.representativeFrame,
-            representativeBbox: track.representativeBbox,
-          }];
+          cameraId: track.cameraId,
+          trackId: track.trackletId,
+          start: track.startTime,
+          end: track.endTime,
+          color: getCameraColor(track.cameraId),
+          representativeFrame: track.representativeFrame,
+          representativeBbox: track.representativeBbox,
+        }];
 
       segs.forEach((seg) => {
         const list = laneMap.get(seg.cameraId) ?? [];
@@ -459,13 +464,13 @@ export function TimelineStage() {
     // alone is not globally unique across cameras.
     const filtered = selectedTrackKeys !== undefined
       ? trajectories.filter((traj: any) => {
-          const tracklets = Array.isArray(traj.tracklets) ? traj.tracklets : [];
-          return tracklets.some((t: any) => {
-            const cam = normalizeCameraId(String(t.camera_id ?? t.cameraId ?? ""));
-            const tid = Number(t.track_id ?? t.trackId ?? -1);
-            return selectedTrackKeys.has(`${cam}:${tid}`);
-          });
-        })
+        const tracklets = Array.isArray(traj.tracklets) ? traj.tracklets : [];
+        return tracklets.some((t: any) => {
+          const cam = normalizeCameraId(String(t.camera_id ?? t.cameraId ?? ""));
+          const tid = Number(t.track_id ?? t.trackId ?? -1);
+          return selectedTrackKeys.has(`${cam}:${tid}`);
+        });
+      })
       : trajectories;
 
     const rows: TimelineTrack[] = [];
@@ -563,47 +568,24 @@ export function TimelineStage() {
       return;
     }
     setTracksLoading(true);
+    setTracks([]);
+    setMatchedFallbackActive(false);
+    if (selectedTrackIdSet.size > 0) {
+      updateStageProgress(4, {
+        status: "running",
+        progress: 5,
+        message: "Running cross-camera association…",
+      });
+    }
 
     const loadTracks = async () => {
-        const seq = ++loadTracksSeqRef.current;
-        /** Deferred until loader finishes — avoids effect re-entry + cancelled mid-flight when runId syncs from diagnostics */
-        let pendingRunIdFromDiagnostics: string | null = null;
-        try {
+      const seq = ++loadTracksSeqRef.current;
+      /** Deferred until loader finishes — avoids effect re-entry + cancelled mid-flight when runId syncs from diagnostics */
+      let pendingRunIdFromDiagnostics: string | null = null;
+      try {
         let attemptedAssociation = false;
         let finalTracksSet = false;
         const selectedTrackIdsArr = Array.from(selectedTrackIdSet).map((v) => String(v));
-
-        const showQuickFallback = async () => {
-          if (!currentVideo || selectedTrackIdSet.size === 0) return;
-          try {
-            const fallbackResp = await getTracklets(undefined, currentVideo.id);
-            if (cancelled || seq !== loadTracksSeqRef.current) return;
-            let summary = Array.isArray(fallbackResp.data) ? fallbackResp.data : [];
-
-            const selectedTrackNums = new Set<number>();
-            selectedTrackIdSet.forEach((trackId) => {
-              selectedTrackNums.add(trackId);
-            });
-            summary = summary.filter((item: any) => selectedTrackNums.has(Number(item.id)));
-
-            const fallbackTracks = buildTracksFromSummary(summary);
-            if (fallbackTracks.length > 0 && !cancelled && seq === loadTracksSeqRef.current && !finalTracksSet) {
-              setTracks(fallbackTracks);
-              setTracksLoading(false);
-              updateStageProgress(4, {
-                status: "running",
-                progress: 5,
-                message: "Running cross-camera association... showing selected tracklets",
-              });
-            }
-          } catch {
-            // Best-effort fallback only.
-          }
-        };
-
-        if (selectedTrackIdSet.size > 0) {
-          void showQuickFallback();
-        }
 
         console.groupCollapsed("[Stage4][Timeline] loadTracks");
         console.info("context", {
@@ -948,7 +930,7 @@ export function TimelineStage() {
 
           const selectedTrackNums = new Set<number>();
           selectedTrackIdSet.forEach((trackId) => {
-            selectedTrackNums.add(trackId); 
+            selectedTrackNums.add(trackId);
           });
           fallbackSummary = fallbackSummary.filter((item: any) => selectedTrackNums.has(Number(item.id)));
 
@@ -1016,7 +998,11 @@ export function TimelineStage() {
         ) {
           setRunId(pendingRunIdFromDiagnostics);
         }
-        if (!cancelled) setTracksLoading(false);
+        // Only the latest load invocation may clear loading — avoids Strict Mode / runId churn
+        // flipping loading off mid-fetch or leaving it stuck when an older async completes later.
+        if (seq === loadTracksSeqRef.current) {
+          setTracksLoading(false);
+        }
       }
     };
 
@@ -1024,7 +1010,6 @@ export function TimelineStage() {
 
     return () => {
       cancelled = true;
-      setTracksLoading(false);
     };
   }, [
     currentVideo,
@@ -1063,8 +1048,8 @@ export function TimelineStage() {
         ?? (
           probeRunIdForMedia && track.globalId != null
             ? `${API_BASE}/runs/${encodeURIComponent(probeRunIdForMedia)}/matched_clips/${encodeURIComponent(
-                `global_${track.globalId}_cam_${String(track.cameraId).replace(/[/\\]/g, "_")}_track_${track.trackletId}.mp4`
-              )}`
+              `global_${track.globalId}_cam_${String(track.cameraId).replace(/[/\\]/g, "_")}_track_${track.trackletId}.mp4`
+            )}`
             : undefined
         ),
       rank: 0,
@@ -1290,7 +1275,9 @@ export function TimelineStage() {
   };
 
   const handleRerunAssociation = async () => {
-    if (!currentVideo || !runId) return;
+    if (!currentVideo) return;
+    const associationRunId = galleryRunId ?? runId;
+    if (!associationRunId) return;
     setTracks([]);
     setTracksLoading(true);
     updateStageProgress(4, { status: "running", progress: 5, message: "Manually re-running association..." });
@@ -1298,8 +1285,8 @@ export function TimelineStage() {
     const MAX_POLLS = 800;
 
     try {
-      const stageResp = await runStage(4, { runId, videoId: currentVideo.id });
-      const pollRunId = String((stageResp.data as any)?.runId ?? runId);
+      const stageResp = await runStage(4, { runId: associationRunId, videoId: currentVideo.id });
+      const pollRunId = String((stageResp.data as any)?.runId ?? associationRunId);
 
       let done = false;
       for (let i = 0; !done && i < MAX_POLLS; i += 1) {
@@ -1462,12 +1449,12 @@ export function TimelineStage() {
       const representativeBbox = primarySeg?.representativeBbox;
       const trackForPreview = primarySeg
         ? {
-            ...cam,
-            representativeFrame,
-            representativeBbox,
-            cameraId: cam.id,
-            color: activeSegment?.color ?? primarySeg.color ?? laneSegments[0]?.color,
-          }
+          ...cam,
+          representativeFrame,
+          representativeBbox,
+          cameraId: cam.id,
+          color: activeSegment?.color ?? primarySeg.color ?? laneSegments[0]?.color,
+        }
         : undefined;
       return {
         ...cam,
@@ -1516,13 +1503,13 @@ export function TimelineStage() {
             {confirmedCount} confirmed
           </Badge>
           <Button
-              className="shrink-0"
-              variant="outline"
-              disabled={tracksLoading}
-              onClick={handleRerunAssociation}
-            >
-              <RefreshCw className={cn("mr-2 h-4 w-4", tracksLoading && "animate-spin")} />
-              Rerun Association
+            className="shrink-0"
+            variant="outline"
+            disabled={tracksLoading}
+            onClick={handleRerunAssociation}
+          >
+            <RefreshCw className={cn("mr-2 h-4 w-4", tracksLoading && "animate-spin")} />
+            Rerun Association
           </Button>
           <Button className="shrink-0" onClick={handleProceed}>
             Continue to Refinement
@@ -1693,8 +1680,8 @@ export function TimelineStage() {
                       alt.previewUrl
                         ? alt.previewUrl
                         : probeRunIdForMedia && alt.clipPath
-                        ? getMatchedAlternativeClipUrl(probeRunIdForMedia, alt.clipPath)
-                        : ""
+                          ? getMatchedAlternativeClipUrl(probeRunIdForMedia, alt.clipPath)
+                          : ""
                     }
                     onUse={() => handleApplyAlternative(alt)}
                   />
@@ -2083,7 +2070,7 @@ function CameraPreview({
     const v = videoRef.current;
     if (!v || !clipUrl) return;
     if (isPlaying) {
-      v.play().catch(() => {});
+      v.play().catch(() => { });
     } else {
       v.pause();
     }
@@ -2131,10 +2118,10 @@ function CameraPreview({
   const trackletFullSrc =
     trackletFramePick && cropRunId
       ? getRunFullFrameUrl(
-          cropRunId,
-          String(primarySeg!.cameraId),
-          trackletFramePick.frame.frameId
-        )
+        cropRunId,
+        String(primarySeg!.cameraId),
+        trackletFramePick.frame.frameId
+      )
       : null;
 
   const showTrackletFrames = Boolean(trackletFullSrc && trackletFramePick);
@@ -2145,25 +2132,25 @@ function CameraPreview({
     ? isActive
       ? "ring-2 ring-green-500"
       : isPast
-      ? "ring-1 ring-orange-500/60 opacity-70"
-      : isNext
-      ? "ring-1 ring-blue-400/60 opacity-70"
-      : "opacity-50"
+        ? "ring-1 ring-orange-500/60 opacity-70"
+        : isNext
+          ? "ring-1 ring-blue-400/60 opacity-70"
+          : "opacity-50"
     : clipUrl && !clipFailed
-    ? isActive
-      ? "ring-2 ring-green-500"
-      : isPast
-      ? "ring-1 ring-orange-500/60 opacity-70"
-      : isNext
-      ? "ring-1 ring-blue-400/60 opacity-70"
-      : "opacity-50"
-    : isActive
-    ? "ring-2 ring-green-500"
-    : isPast
-    ? "ring-1 ring-orange-400/50 opacity-50"
-    : isNext
-    ? "ring-1 ring-blue-400/50 opacity-40"
-    : "opacity-30";
+      ? isActive
+        ? "ring-2 ring-green-500"
+        : isPast
+          ? "ring-1 ring-orange-500/60 opacity-70"
+          : isNext
+            ? "ring-1 ring-blue-400/60 opacity-70"
+            : "opacity-50"
+      : isActive
+        ? "ring-2 ring-green-500"
+        : isPast
+          ? "ring-1 ring-orange-400/50 opacity-50"
+          : isNext
+            ? "ring-1 ring-blue-400/50 opacity-40"
+            : "opacity-30";
 
   const statusLabel = isActive ? null : isPast ? "PAST" : isNext ? "NEXT" : null;
   const statusColor = isPast ? "text-orange-400" : "text-blue-400";
@@ -2291,8 +2278,8 @@ function TrackletItem({
         <div className="flex gap-0.5 flex-shrink-0">
           {track.segments
             ? Array.from(new Set(track.segments.map((s) => s.cameraId))).slice(0, 4).map((cid) => (
-                <div key={cid} className="h-3 w-1.5 rounded-full" style={{ backgroundColor: getCameraColor(cid) }} />
-              ))
+              <div key={cid} className="h-3 w-1.5 rounded-full" style={{ backgroundColor: getCameraColor(cid) }} />
+            ))
             : <div className="h-3 w-3 rounded-full" style={{ backgroundColor: primaryColor }} />}
         </div>
         <div className="flex-1 min-w-0">
