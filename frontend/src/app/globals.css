@@ -1,5 +1,10 @@
 @import "leaflet/dist/leaflet.css";
 
+.leaflet-container .vehicle-path-leaflet-pin {
+  background: transparent !important;
+  border: none !important;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -233,6 +238,28 @@
 .leaflet-container {
   @apply h-full w-full rounded-lg;
   background: hsl(var(--background));
+  /* Leaflet defaults top out ~1000; keep overlays above tiles/markers */
+  z-index: 0;
+}
+
+.leaflet-container .leaflet-tooltip-pane {
+  z-index: 8000 !important;
+}
+
+.leaflet-container .leaflet-popup-pane {
+  z-index: 8100 !important;
+}
+
+.leaflet-container .leaflet-marker-pane {
+  z-index: 650 !important;
+}
+
+.leaflet-container .leaflet-overlay-pane {
+  z-index: 500 !important;
+}
+
+.leaflet-container .leaflet-tile-pane {
+  z-index: 200 !important;
 }
 
 .leaflet-popup-content-wrapper {

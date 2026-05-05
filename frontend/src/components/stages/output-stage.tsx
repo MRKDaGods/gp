@@ -17,7 +17,9 @@ import {
   TrendingUp,
   Route,
   Gauge,
+  Copy,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { getCameraColor, formatDuration } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +39,11 @@ import {
   getTrajectories,
   getVideo,
 } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import {
+  buildGoogleMapsDirectionsToDestination,
+  buildGoogleMapsPathShareUrl,
+} from "@/lib/maps-share";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 const outputPalette = ["#22c55e", "#3b82f6", "#f97316", "#e11d48", "#06b6d4", "#8b5cf6", "#f59e0b"];
@@ -151,6 +158,23 @@ interface OutputTrajectory {
 
 function cameraKeyForMatch(cam: string): string {
   return normalizeCameraId(cam) ?? String(cam).trim();
+}
+
+/** Options for truncating the highlighted segment on the dashboard map (rule B: QR still uses full path). */
+function buildMapsDestinationOptions(points: MapPathPoint[]): { endInclusiveIndex: number; label: string }[] {
+  const opts: { endInclusiveIndex: number; label: string }[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const key = cameraKeyForMatch(points[i].cameraId);
+    const next = points[i + 1];
+    const nextKey = next ? cameraKeyForMatch(next.cameraId) : null;
+    if (nextKey !== key) {
+      opts.push({
+        endInclusiveIndex: i,
+        label: `${points[i].label} (stop #${points[i].sequence})`,
+      });
+    }
+  }
+  return opts;
 }
 
 /** True if this timeline row is the same vehicle identity as traj (global id or probe tracklet). */
@@ -351,6 +375,7 @@ export function OutputStage() {
   const [outputFetchState, setOutputFetchState] = useState<"idle" | "loading" | "ready">("idle");
   const [summaryVideoUrl, setSummaryVideoUrl] = useState<string | null>(null);
   const [matchedSummary, setMatchedSummary] = useState<any>(null);
+  const [mapsDestEndInclusiveIndex, setMapsDestEndInclusiveIndex] = useState<number | null>(null);
 
   const {
     runId,
@@ -360,6 +385,7 @@ export function OutputStage() {
   } = usePipelineStore();
   const { currentVideo } = useVideoStore();
   const { tracks: timelineTracks, timelineClipFilterEngaged } = useTimelineStore();
+  const { toast } = useToast();
 
   const displayTrajectories = useMemo(
     () =>
@@ -722,6 +748,23 @@ export function OutputStage() {
     [pathPoints]
   );
 
+  const mapPathLatLngsDisplayed = useMemo<LatLngTuple[]>(() => {
+    if (mapsDestEndInclusiveIndex == null || pathPoints.length === 0) return pathLatLngs;
+    return pathPoints.slice(0, mapsDestEndInclusiveIndex + 1).map((point) => [point.lat, point.lng]);
+  }, [pathLatLngs, pathPoints, mapsDestEndInclusiveIndex]);
+
+  const pathCameraKeys = useMemo(() => {
+    const s = new Set<string>();
+    pathPoints.forEach((p) => s.add(cameraKeyForMatch(p.cameraId)));
+    return s;
+  }, [pathPoints]);
+
+  const mapsDestinationCameraKey = useMemo(() => {
+    if (mapsDestEndInclusiveIndex == null) return null;
+    const p = pathPoints[mapsDestEndInclusiveIndex];
+    return p ? cameraKeyForMatch(p.cameraId) : null;
+  }, [mapsDestEndInclusiveIndex, pathPoints]);
+
   const missingCameraIds = useMemo(() => {
     if (!selectedTrajectory) return [];
     const missing = selectedTrajectory.cameraSequence.filter(
@@ -756,6 +799,94 @@ export function OutputStage() {
     if (!selectedTrajectory || selectedTrajectory.cameraSequence.length === 0) return "";
     return selectedTrajectory.cameraSequence.map(formatCameraLabel).join(" -> ");
   }, [selectedTrajectory]);
+
+  const mapsPathDestKey = useMemo(
+    () => `${selectedTrajectoryId ?? ""}:${pathPoints.map((p) => p.cameraId).join(">")}`,
+    [selectedTrajectoryId, pathPoints]
+  );
+
+  const mapsDestinationOptions = useMemo(
+    () => buildMapsDestinationOptions(pathPoints),
+    [pathPoints]
+  );
+
+  useEffect(() => {
+    const opts = buildMapsDestinationOptions(pathPoints);
+    if (opts.length === 0) {
+      setMapsDestEndInclusiveIndex(null);
+      return;
+    }
+    setMapsDestEndInclusiveIndex(opts[opts.length - 1].endInclusiveIndex);
+  }, [mapsPathDestKey, pathPoints]);
+
+  /** QR / Copy link: full vehicle path in Google Maps (rule B). Preview map uses selected segment below. */
+  const mapsShareUrl = useMemo(() => {
+    if (pathPoints.length === 0) return null;
+    return buildGoogleMapsPathShareUrl(pathPoints);
+  }, [pathPoints]);
+
+  const copyMapsShareLink = useCallback(async () => {
+    if (!mapsShareUrl) return;
+    try {
+      await navigator.clipboard.writeText(mapsShareUrl);
+      toast({ title: "Link copied", description: "Google Maps URL is on the clipboard." });
+    } catch {
+      toast({
+        title: "Copy failed",
+        description: "Could not copy to clipboard.",
+        variant: "destructive",
+      });
+    }
+  }, [mapsShareUrl, toast]);
+
+  const handleCameraPinClick = useCallback(
+    (cameraId: string) => {
+      const clickKey = cameraKeyForMatch(cameraId);
+      let lastIdx = -1;
+      pathPoints.forEach((p, i) => {
+        if (cameraKeyForMatch(p.cameraId) === clickKey) lastIdx = i;
+      });
+
+      const openMaps = (url: string | null) => {
+        if (!url) return;
+        window.open(url, "_blank", "noopener,noreferrer");
+      };
+
+      if (lastIdx >= 0) {
+        setMapsDestEndInclusiveIndex(lastIdx);
+        const slice = pathPoints.slice(0, lastIdx + 1);
+        const url =
+          slice.length <= 1
+            ? buildGoogleMapsDirectionsToDestination(slice[0].lat, slice[0].lng)
+            : buildGoogleMapsPathShareUrl(slice);
+        openMaps(url);
+        toast({
+          title: "Opening Google Maps",
+          description:
+            slice.length <= 1
+              ? `Driving directions to ${formatCameraLabel(cameraId)}.`
+              : `Driving directions through each track stop, ending at ${formatCameraLabel(cameraId)}.`,
+        });
+        return;
+      }
+
+      const coord = resolveCameraCoord(coordRegistry, cameraId);
+      if (coord) {
+        openMaps(buildGoogleMapsDirectionsToDestination(coord.lat, coord.lng));
+        toast({
+          title: "Opening Google Maps",
+          description: `Directions to ${coord.label}. Use your location in Maps as the start if prompted.`,
+        });
+      } else {
+        toast({
+          title: "No coordinates",
+          description: "This camera has no location on the map.",
+          variant: "destructive",
+        });
+      }
+    },
+    [pathPoints, toast, coordRegistry]
+  );
 
   // -- Render --------------------------------------------------------------
 
@@ -892,9 +1023,11 @@ export function OutputStage() {
               <CardHeader className="space-y-1">
                 <CardTitle className="text-sm">Vehicle Path Map</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Select a tracked vehicle to draw its camera-to-camera path using this dataset&apos;s
-                  geographic camera positions (<code className="text-[10px]">camera_coordinates.json</code>
-                  ).
+                  Colored pins are on the vehicle track; gray pins are other cameras.{" "}
+                  <strong className="font-medium text-foreground">Click any pin</strong> to open Google Maps with driving
+                  directions (multi-stop along the track to that camera, or to that location if it is off-track). Use
+                  the dropdown to change which part of the track is highlighted here; the QR code still shares the{" "}
+                  <strong className="font-medium text-foreground">full path</strong>.
                 </p>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -930,14 +1063,60 @@ export function OutputStage() {
                     </p>
                   )}
                 </div>
-                <div className="relative h-72 overflow-hidden rounded-lg border bg-background">
+
+                {pathPoints.length >= 1 && mapsShareUrl && (
+                  <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <Label className="text-xs">Highlight preview up to this camera (dashboard map only)</Label>
+                      <select
+                        className="w-full rounded border bg-background px-3 py-2 text-sm"
+                        aria-label="Truncate highlighted route segment on dashboard map"
+                        value={mapsDestEndInclusiveIndex ?? ""}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (Number.isFinite(v)) setMapsDestEndInclusiveIndex(v);
+                        }}
+                      >
+                        {mapsDestinationOptions.map((opt) => (
+                          <option key={opt.endInclusiveIndex} value={opt.endInclusiveIndex}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-muted-foreground">
+                        Scan to open Google Maps with numbered pins and driving directions along the{" "}
+                        <strong className="font-medium text-foreground">entire</strong> tracked path above (not limited to
+                        the preview segment).
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={() => void copyMapsShareLink()}
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" aria-hidden />
+                        Copy link
+                      </Button>
+                    </div>
+                    <div className="flex shrink-0 justify-center sm:justify-end" aria-hidden>
+                      <div className="rounded-md border bg-white p-2 dark:bg-white">
+                        <QRCodeSVG value={mapsShareUrl} size={128} level="M" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="relative z-0 h-72 overflow-visible rounded-lg border bg-background">
                   <VehiclePathMap
                     center={mapCenter}
                     fitPoints={mapFitPoints}
                     cameraPoints={registryCameraPoints}
-                    pathLatLngs={pathLatLngs}
-                    pathPoints={pathPoints}
+                    pathLatLngs={mapPathLatLngsDisplayed}
                     pathColor={selectedTrajectory?.color}
+                    pathCameraKeys={pathCameraKeys}
+                    highlightedDestinationCameraKey={mapsDestinationCameraKey}
+                    onCameraMarkerClick={selectedTrajectory ? handleCameraPinClick : undefined}
                   />
                   {!selectedTrajectory && (
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60">
