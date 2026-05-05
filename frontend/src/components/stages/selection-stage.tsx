@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   CheckCircle2,
   XCircle,
@@ -24,6 +24,7 @@ import {
   useVideoStore,
 } from "@/store";
 import { getTracklets } from "@/lib/api";
+import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 
@@ -101,6 +102,19 @@ export function SelectionStage() {
   useEffect(() => {
     void fetchTracklets();
   }, [fetchTracklets]);
+
+  const selectionSig = useMemo(
+    () => Array.from(selectedTrackIds).sort((a, b) => a - b).join(","),
+    [selectedTrackIds]
+  );
+  const skipSelectionFlushRef = useRef(true);
+  useEffect(() => {
+    if (skipSelectionFlushRef.current) {
+      skipSelectionFlushRef.current = false;
+      return;
+    }
+    flushPipelineFromStage(2);
+  }, [selectionSig]);
 
   const selectedTracklets = tracklets.filter((t) => selectedTrackIds.has(t.id));
   // Group selected by class

@@ -37,7 +37,7 @@ import type { TimelineTrack } from "@/types";
 
 
 export function RefinementStage() {
-  const { tracks, setTracks } = useTimelineStore();
+  const { tracks, replaceTracksSyncingRowFlags } = useTimelineStore();
   const { runId, galleryRunId } = usePipelineStore();
   const { currentVideo } = useVideoStore();
   const {
@@ -277,7 +277,7 @@ export function RefinementStage() {
         });
 
         if (refinedTracks.length > 0) {
-          setTracks(refinedTracks);
+          replaceTracksSyncingRowFlags(refinedTracks);
           clearRefinementFrames();
           setReSearchStatus(
             `Re-search complete: ${refinedTracks.length} refined candidates from ${selected.length} selected frame(s).`

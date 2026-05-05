@@ -16,6 +16,17 @@ import type {
 // Pipeline Store - Manages pipeline execution state
 // ============================================================================
 
+/** Canonical sidebar pipeline labels — shared by pipeline store reset + downstream flush. */
+export const PIPELINE_STAGE_DEFAULTS: StageProgress[] = [
+  { stage: 0, status: 'idle', progress: 0, message: 'Ingestion' },
+  { stage: 1, status: 'idle', progress: 0, message: 'Detection & Tracking' },
+  { stage: 2, status: 'idle', progress: 0, message: 'Feature Extraction' },
+  { stage: 3, status: 'idle', progress: 0, message: 'Indexing' },
+  { stage: 4, status: 'idle', progress: 0, message: 'Association' },
+  { stage: 5, status: 'idle', progress: 0, message: 'Evaluation' },
+  { stage: 6, status: 'idle', progress: 0, message: 'Visualization' },
+];
+
 interface PipelineState {
   runId: string | null;
   galleryRunId: string | null;
@@ -25,6 +36,8 @@ interface PipelineState {
   isRunning: boolean;
   currentStage: StageNumber;
   error: string | null;
+  /** Incremented when upstream edits invalidate timeline/output; Stage 4 effect must not skip reload. */
+  downstreamInvalidateGeneration: number;
 
   // Actions
   setRunId: (id: string | null) => void;
@@ -39,26 +52,17 @@ interface PipelineState {
   reset: () => void;
 }
 
-const initialStages: StageProgress[] = [
-  { stage: 0, status: 'idle', progress: 0, message: 'Ingestion' },
-  { stage: 1, status: 'idle', progress: 0, message: 'Detection & Tracking' },
-  { stage: 2, status: 'idle', progress: 0, message: 'Feature Extraction' },
-  { stage: 3, status: 'idle', progress: 0, message: 'Indexing' },
-  { stage: 4, status: 'idle', progress: 0, message: 'Association' },
-  { stage: 5, status: 'idle', progress: 0, message: 'Evaluation' },
-  { stage: 6, status: 'idle', progress: 0, message: 'Visualization' },
-];
-
 export const usePipelineStore = create<PipelineState>()(
   devtools(
     (set) => ({
       runId: null,
       galleryRunId: null,
       mapCameraCoordinates: null,
-      stages: [...initialStages],
+      stages: PIPELINE_STAGE_DEFAULTS.map((s) => ({ ...s })),
       isRunning: false,
       currentStage: 0,
       error: null,
+      downstreamInvalidateGeneration: 0,
 
       setRunId: (id) => set({ runId: id }),
 
@@ -84,10 +88,11 @@ export const usePipelineStore = create<PipelineState>()(
           runId: null,
           galleryRunId: null,
           mapCameraCoordinates: null,
-          stages: [...initialStages],
+          stages: PIPELINE_STAGE_DEFAULTS.map((s) => ({ ...s })),
           isRunning: false,
           currentStage: 0,
           error: null,
+          downstreamInvalidateGeneration: 0,
         }),
     }),
     { name: 'pipeline-store' }
@@ -329,6 +334,12 @@ interface TimelineState {
 
   // Actions
   setTracks: (tracks: TimelineTrack[]) => void;
+  /** Full reset after upstream stage edits (video, selection, re-inference). */
+  resetAfterUpstreamEdit: () => void;
+  /** Replace rows from Stage-4 loaders; keep user confirmations for the same row ids. */
+  applyTracksReplaceKeepingMeta: (tracks: TimelineTrack[]) => void;
+  /** Replace rows and rebuild confirmed Sets from each row's `confirmed` flag (e.g. refinement). */
+  replaceTracksSyncingRowFlags: (tracks: TimelineTrack[]) => void;
   addTrack: (track: TimelineTrack) => void;
   removeTrack: (id: string) => void;
   reorderTracks: (fromIndex: number, toIndex: number) => void;
@@ -352,6 +363,44 @@ export const useTimelineStore = create<TimelineState>()(
 
       setTracks: (tracks) =>
         set({ tracks, timelineClipFilterEngaged: false, confirmedTracks: new Set() }),
+
+      resetAfterUpstreamEdit: () =>
+        set({
+          tracks: [],
+          confirmedTracks: new Set(),
+          timelineClipFilterEngaged: false,
+          selectedTrackId: null,
+        }),
+
+      applyTracksReplaceKeepingMeta: (tracks) =>
+        set((state) => {
+          const prevConfirmed = state.confirmedTracks;
+          const engaged = state.timelineClipFilterEngaged;
+          const merged = tracks.map((t) => ({
+            ...t,
+            confirmed: prevConfirmed.has(t.id),
+          }));
+          const nextConfirmed = new Set(
+            merged.filter((t) => t.confirmed).map((t) => t.id)
+          );
+          return {
+            tracks: merged,
+            confirmedTracks: nextConfirmed,
+            timelineClipFilterEngaged: engaged || nextConfirmed.size > 0,
+          };
+        }),
+
+      replaceTracksSyncingRowFlags: (tracks) =>
+        set(() => {
+          const nextConfirmed = new Set(
+            tracks.filter((t) => t.confirmed).map((t) => t.id)
+          );
+          return {
+            tracks,
+            confirmedTracks: nextConfirmed,
+            timelineClipFilterEngaged: nextConfirmed.size > 0,
+          };
+        }),
 
       addTrack: (track) =>
         set((state) => ({ tracks: [...state.tracks, track] })),
@@ -435,6 +484,7 @@ interface SessionStore extends SessionState {
   addRefinementFrame: (frameId: string) => void;
   removeRefinementFrame: (frameId: string) => void;
   clearRefinementFrames: () => void;
+  clearConfirmedClips: () => void;
   updatePreferences: (prefs: Partial<UserPreferences>) => void;
   resetSession: () => void;
 }
@@ -516,6 +566,8 @@ export const useSessionStore = create<SessionStore>()(
           })),
 
         clearRefinementFrames: () => set({ refinementFrames: [] }),
+
+        clearConfirmedClips: () => set({ confirmedClips: [] }),
 
         updatePreferences: (prefs) =>
           set((state) => ({

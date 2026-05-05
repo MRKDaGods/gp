@@ -44,6 +44,7 @@ import {
   useVideoStore,
 } from "@/store";
 import { getPipelineStatus, runStage, getDatasets, type DatasetFolder } from "@/lib/api";
+import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 
 const REID_MODELS = [
   {
@@ -162,6 +163,16 @@ export function InferenceStage() {
     void fetchDatasets();
   }, [fetchDatasets]);
 
+  const inferenceContextSig = `${selectedDataset}:${selectedModel}`;
+  const skipInferContextFlushRef = useRef(true);
+  useEffect(() => {
+    if (skipInferContextFlushRef.current) {
+      skipInferContextFlushRef.current = false;
+      return;
+    }
+    flushPipelineFromStage(4);
+  }, [inferenceContextSig]);
+
   useEffect(() => {
     if (!isProcessing) return;
     const id = requestAnimationFrame(() => {
@@ -268,6 +279,8 @@ export function InferenceStage() {
       });
       return;
     }
+
+    flushPipelineFromStage(4);
 
     // If gallery is already precomputed, store its runId immediately.
     if (useDataset && selectedDs?.galleryRunId) {

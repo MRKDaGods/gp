@@ -22,6 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useVideoStore, useSessionStore, usePipelineStore } from "@/store";
+import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import { getVideos, importKaggleRunArtifacts, runStage, uploadVideo } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import type { VideoFile } from "@/types";
@@ -155,6 +156,7 @@ export function UploadStage() {
   };
 
   const handleSelectAndProceed = async (video: VideoFile) => {
+    flushPipelineFromStage(1);
     setCurrentVideo(video);
     setRunId(null);
     setIsRunning(true);
@@ -270,6 +272,8 @@ export function UploadStage() {
       return;
     }
 
+    flushPipelineFromStage(1);
+    setRunId(null);
     setCurrentVideo(candidate);
     setCurrentStage(1);
     toast({

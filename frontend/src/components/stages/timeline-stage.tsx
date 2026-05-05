@@ -92,6 +92,7 @@ export function TimelineStage() {
   const {
     tracks,
     setTracks,
+    applyTracksReplaceKeepingMeta,
     zoom,
     setZoom,
     selectedTrackId,
@@ -100,8 +101,15 @@ export function TimelineStage() {
     unconfirmTrack,
     removeTrack,
   } = useTimelineStore();
-  const { runId, galleryRunId, setRunId, updateStageProgress, stages } = usePipelineStore();
-  const { setCurrentStage } = useSessionStore();
+  const {
+    runId,
+    galleryRunId,
+    setRunId,
+    updateStageProgress,
+    stages,
+    downstreamInvalidateGeneration,
+  } = usePipelineStore();
+  const { currentStage, setCurrentStage } = useSessionStore();
   const { currentVideo } = useVideoStore();
   const { selectedTrackIds: selectedTrackIdSet } = useDetectionStore();
 
@@ -123,8 +131,19 @@ export function TimelineStage() {
   const trajectoryListRef = useRef<HTMLDivElement>(null);
   /** Monotonic id so stale async loads cannot overwrite newer results. */
   const loadTracksSeqRef = useRef(0);
+  /** Skip redundant timeline reload when revisiting Stage 4 with same inputs + tracks already populated. */
+  const timelineHandledStampRef = useRef<string | null>(null);
+  /** Last timeline inputs key (video/runs/selection); used to detect association-context changes. */
+  const prevTimelineLoadKeyRef = useRef<string>("");
+  /** Dedupe probe-side exports across repeated timeline queries within one loader run / navigation. */
+  const lastExportedQueryKeyRef = useRef<string | null>(null);
   /** One automatic Stage 4 rerun per video when query returns empty (avoids forcing users to click "Rerun association"). */
   const autoAssociationRefreshForVideoRef = useRef<string | null>(null);
+
+  const timelineLoadKey = useMemo(() => {
+    const ids = Array.from(selectedTrackIdSet).sort((a, b) => a - b);
+    return [currentVideo?.id ?? "", runId ?? "", galleryRunId ?? "", ...ids.map(String)].join("\u0001");
+  }, [currentVideo?.id, runId, galleryRunId, selectedTrackIdSet]);
 
   useEffect(() => {
     autoAssociationRefreshForVideoRef.current = null;
@@ -560,16 +579,40 @@ export function TimelineStage() {
     return rows;
   };
 
-  // Stage 4: run real association, then load tracks
+  // Stage 4: run real association, then load tracks.
+  // When the tab is inactive (user is on another stage), do not fetch — avoids hammering the API during Selection edits.
   useEffect(() => {
     let cancelled = false;
+
+    if (currentStage !== 4) {
+      return;
+    }
+
     if (!currentVideo) {
       setTracksLoading(false);
       return;
     }
+
+    const loadKeyChanged = prevTimelineLoadKeyRef.current !== timelineLoadKey;
+    if (loadKeyChanged) {
+      prevTimelineLoadKeyRef.current = timelineLoadKey;
+      lastExportedQueryKeyRef.current = null;
+      timelineHandledStampRef.current = null;
+      setTracks([]);
+      setMatchedFallbackActive(false);
+    }
+
+    const stamp = `${timelineLoadKey}\0${triggerReload}\0${downstreamInvalidateGeneration}`;
+
+    if (
+      !loadKeyChanged
+      && timelineHandledStampRef.current === stamp
+    ) {
+      setTracksLoading(false);
+      return;
+    }
+
     setTracksLoading(true);
-    setTracks([]);
-    setMatchedFallbackActive(false);
     if (selectedTrackIdSet.size > 0) {
       updateStageProgress(4, {
         status: "running",
@@ -582,10 +625,26 @@ export function TimelineStage() {
       const seq = ++loadTracksSeqRef.current;
       /** Deferred until loader finishes — avoids effect re-entry + cancelled mid-flight when runId syncs from diagnostics */
       let pendingRunIdFromDiagnostics: string | null = null;
+      let loadErrored = false;
       try {
         let attemptedAssociation = false;
         let finalTracksSet = false;
         const selectedTrackIdsArr = Array.from(selectedTrackIdSet).map((v) => String(v));
+        const sortedSel = selectedTrackIdsArr.slice().sort().join(",");
+        const exportDedupeKey = (probeKey: string) =>
+          `${probeKey}|${galleryRunId ?? ""}|${currentVideo.id}|${sortedSel}`;
+        const callQueryTimeline = async (probeHint: string | undefined) => {
+          const dk = exportDedupeKey(probeHint ?? runId ?? "");
+          const skipExports = lastExportedQueryKeyRef.current === dk;
+          const res = await queryTimeline(probeHint ?? runId ?? undefined, currentVideo.id, selectedTrackIdsArr, {
+            galleryRunId: galleryRunId ?? undefined,
+            skipExports,
+          });
+          if (!cancelled && seq === loadTracksSeqRef.current && !skipExports) {
+            lastExportedQueryKeyRef.current = dk;
+          }
+          return res;
+        };
 
         console.groupCollapsed("[Stage4][Timeline] loadTracks");
         console.info("context", {
@@ -600,7 +659,7 @@ export function TimelineStage() {
         const effectiveGalleryRunId = galleryRunId ?? runId;
         if (effectiveGalleryRunId && selectedTrackIdSet.size > 0) {
           attemptedAssociation = true;
-          const q1 = await queryTimeline(effectiveGalleryRunId, currentVideo.id, selectedTrackIdsArr);
+          const q1 = await callQueryTimeline(runId ?? undefined);
           if (cancelled || seq !== loadTracksSeqRef.current) return;
 
           const q1Data: any = q1.data ?? {};
@@ -625,7 +684,7 @@ export function TimelineStage() {
               setMatchedFallbackActive(false);
               finalTracksSet = true;
               if (seq !== loadTracksSeqRef.current) return;
-              setTracks(rows);
+              applyTracksReplaceKeepingMeta(rows);
               updateStageProgress(4, { status: "completed", progress: 100, message: String(q1Data.message ?? "Association loaded (query-matched)") });
               console.info("decision", "matched trajectories rendered", { rows: rows.length });
               console.groupEnd();
@@ -646,7 +705,7 @@ export function TimelineStage() {
               if (fallbackRows.length > 0) {
                 setMatchedFallbackActive(true);
                 finalTracksSet = true;
-                setTracks(fallbackRows);
+                applyTracksReplaceKeepingMeta(fallbackRows);
                 updateStageProgress(4, { status: "completed", progress: 100, message: "Showing pre-exported matched clips (fallback)" });
                 console.info("decision", "matched summary fallback rendered", { rows: fallbackRows.length });
                 console.groupEnd();
@@ -682,7 +741,9 @@ export function TimelineStage() {
             }
 
             if (!cancelled) {
-              const q2 = await queryTimeline(stage4RunId ?? effectiveGalleryRunId, currentVideo.id, selectedTrackIdsArr);
+              const q2 = await callQueryTimeline(
+                typeof stage4RunId === "string" ? stage4RunId : undefined
+              );
               if (cancelled || seq !== loadTracksSeqRef.current) return;
               const q2Data: any = q2.data ?? {};
               const pr2 = applyTimelineResolvedProbe(q2Data.diagnostics);
@@ -703,7 +764,7 @@ export function TimelineStage() {
                 const rows = buildTracksFromTrajectories(q2Traj);
                 finalTracksSet = true;
                 if (seq !== loadTracksSeqRef.current) return;
-                setTracks(rows);
+                applyTracksReplaceKeepingMeta(rows);
                 updateStageProgress(4, { status: "completed", progress: 100, message: String(q2Data.message ?? "Association complete (query-matched)") });
                 console.info("decision", "matched trajectories rendered after stage4", { rows: rows.length });
                 console.groupEnd();
@@ -714,7 +775,7 @@ export function TimelineStage() {
                 const fallbackTracks = buildTracksFromSummary(q2Selected);
                 finalTracksSet = true;
                 if (seq !== loadTracksSeqRef.current) return;
-                setTracks(fallbackTracks);
+                applyTracksReplaceKeepingMeta(fallbackTracks);
                 updateStageProgress(4, {
                   status: "completed",
                   progress: 100,
@@ -767,10 +828,8 @@ export function TimelineStage() {
             }
 
             if (!cancelled && seq === loadTracksSeqRef.current) {
-              const qRefresh = await queryTimeline(
-                refreshStage4RunId ?? effectiveGalleryRunId,
-                currentVideo.id,
-                selectedTrackIdsArr
+              const qRefresh = await callQueryTimeline(
+                typeof refreshStage4RunId === "string" ? refreshStage4RunId : undefined
               );
               if (cancelled || seq !== loadTracksSeqRef.current) return;
               const qRefreshData: any = qRefresh.data ?? {};
@@ -787,7 +846,7 @@ export function TimelineStage() {
                   setMatchedFallbackActive(false);
                   finalTracksSet = true;
                   if (seq !== loadTracksSeqRef.current) return;
-                  setTracks(refreshRows);
+                  applyTracksReplaceKeepingMeta(refreshRows);
                   updateStageProgress(4, {
                     status: "completed",
                     progress: 100,
@@ -804,7 +863,7 @@ export function TimelineStage() {
                 const refreshFallback = buildTracksFromSummary(qRefreshSelected);
                 finalTracksSet = true;
                 if (seq !== loadTracksSeqRef.current) return;
-                setTracks(refreshFallback);
+                applyTracksReplaceKeepingMeta(refreshFallback);
                 updateStageProgress(4, {
                   status: "completed",
                   progress: 100,
@@ -826,7 +885,7 @@ export function TimelineStage() {
             const fallbackTracks = buildTracksFromSummary(q1Selected);
             finalTracksSet = true;
             if (seq !== loadTracksSeqRef.current) return;
-            setTracks(fallbackTracks);
+            applyTracksReplaceKeepingMeta(fallbackTracks);
             updateStageProgress(4, {
               status: "completed",
               progress: 100,
@@ -867,7 +926,7 @@ export function TimelineStage() {
           );
           if (trajectoryRows.length > 0) {
             finalTracksSet = true;
-            setTracks(trajectoryRows);
+            applyTracksReplaceKeepingMeta(trajectoryRows);
             updateStageProgress(4, { status: "completed", progress: 100, message: "Association loaded (query-matched)" });
             console.info("decision", "non-query stage4 trajectories rendered", { rows: trajectoryRows.length });
             console.groupEnd();
@@ -910,7 +969,7 @@ export function TimelineStage() {
             );
             if (rows2.length > 0) {
               finalTracksSet = true;
-              setTracks(rows2);
+              applyTracksReplaceKeepingMeta(rows2);
               updateStageProgress(4, { status: "completed", progress: 100, message: "Association complete (query-matched)" });
               console.info("decision", "non-query stage4 trajectories rendered after rerun", { rows: rows2.length });
               console.groupEnd();
@@ -937,7 +996,7 @@ export function TimelineStage() {
           const fallbackTracks = buildTracksFromSummary(fallbackSummary);
           if (fallbackTracks.length > 0) {
             finalTracksSet = true;
-            setTracks(fallbackTracks);
+            applyTracksReplaceKeepingMeta(fallbackTracks);
             updateStageProgress(4, {
               status: "completed",
               progress: 100,
@@ -974,12 +1033,13 @@ export function TimelineStage() {
         const realTracks = buildTracksFromSummary(summary);
         if (realTracks.length > 0) {
           finalTracksSet = true;
-          setTracks(realTracks);
+          applyTracksReplaceKeepingMeta(realTracks);
           updateStageProgress(4, { status: "completed", progress: 100, message: "Showing stage 1 tracklets" });
           console.info("decision", "no-query stage1 summary rendered", { rows: realTracks.length });
         }
         console.groupEnd();
       } catch (err) {
+        loadErrored = true;
         if (!cancelled) {
           updateStageProgress(4, {
             status: "error",
@@ -1002,6 +1062,9 @@ export function TimelineStage() {
         // flipping loading off mid-fetch or leaving it stuck when an older async completes later.
         if (seq === loadTracksSeqRef.current) {
           setTracksLoading(false);
+          if (!loadErrored) {
+            timelineHandledStampRef.current = stamp;
+          }
         }
       }
     };
@@ -1012,11 +1075,15 @@ export function TimelineStage() {
       cancelled = true;
     };
   }, [
+    currentStage,
     currentVideo,
+    timelineLoadKey,
     runId,
     galleryRunId,
+    downstreamInvalidateGeneration,
     selectedTrackIdSet,
     setTracks,
+    applyTracksReplaceKeepingMeta,
     triggerReload,
     updateStageProgress,
     applyTimelineResolvedProbe,
@@ -1231,9 +1298,9 @@ export function TimelineStage() {
         };
       });
 
-      setTracks(updated);
+      applyTracksReplaceKeepingMeta(updated);
     },
-    [buildAlternativeFromTrack, currentAlternativeByTrackId, selectedTrack, selectedTrackId, setTracks, topAlternatives, tracks]
+    [buildAlternativeFromTrack, currentAlternativeByTrackId, selectedTrack, selectedTrackId, applyTracksReplaceKeepingMeta, topAlternatives, tracks]
   );
 
 
@@ -1278,6 +1345,8 @@ export function TimelineStage() {
     if (!currentVideo) return;
     const associationRunId = galleryRunId ?? runId;
     if (!associationRunId) return;
+    timelineHandledStampRef.current = null;
+    lastExportedQueryKeyRef.current = null;
     setTracks([]);
     setTracksLoading(true);
     updateStageProgress(4, { status: "running", progress: 5, message: "Manually re-running association..." });

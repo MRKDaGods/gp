@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +34,7 @@ import { TimelineStage } from "@/components/stages/timeline-stage";
 import { RefinementStage } from "@/components/stages/refinement-stage";
 import { OutputStage } from "@/components/stages/output-stage";
 import { DatasetProcessing } from "@/components/stages/dataset-processing";
+import type { ComponentType } from "react";
 
 const stages = [
   { id: 0 as StageNumber, label: "Upload", icon: Upload },
@@ -45,11 +46,28 @@ const stages = [
   { id: 6 as StageNumber, label: "Output", icon: Film },
 ];
 
+const PIPELINE_STAGE_COMPONENTS: { id: StageNumber; Component: ComponentType }[] = [
+  { id: 0, Component: UploadStage },
+  { id: 1, Component: DetectionStage },
+  { id: 2, Component: SelectionStage },
+  { id: 3, Component: InferenceStage },
+  { id: 4, Component: TimelineStage },
+  { id: 5, Component: RefinementStage },
+  { id: 6, Component: OutputStage },
+];
+
 export function MainDashboard() {
   const { currentStage, setCurrentStage } = useSessionStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const pipelineStages = usePipelineStore((s) => s.stages);
   const [datasetView, setDatasetView] = useState(false);
+  const [visitedPipelineStages, setVisitedPipelineStages] = useState<Set<StageNumber>>(
+    () => new Set([currentStage])
+  );
+
+  useEffect(() => {
+    setVisitedPipelineStages((prev) => new Set(prev).add(currentStage));
+  }, [currentStage]);
 
   const getStageStatus = (stageId: number) =>
     pipelineStages.find((s) => s.stage === stageId)?.status ?? "idle";
@@ -161,33 +179,27 @@ export function MainDashboard() {
           {datasetView ? (
             <DatasetProcessing />
           ) : (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <StageContent stage={currentStage} />
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {PIPELINE_STAGE_COMPONENTS.map(({ id, Component }) =>
+                visitedPipelineStages.has(id) ? (
+                  <div
+                    key={id}
+                    role="tabpanel"
+                    id={`pipeline-stage-${id}`}
+                    aria-hidden={currentStage !== id}
+                    className={cn(
+                      "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                      currentStage !== id && "hidden"
+                    )}
+                  >
+                    <Component />
+                  </div>
+                ) : null
+              )}
             </div>
           )}
         </div>
       </main>
     </div>
   );
-}
-
-function StageContent({ stage }: { stage: StageNumber }) {
-  switch (stage) {
-    case 0:
-      return <UploadStage />;
-    case 1:
-      return <DetectionStage />;
-    case 2:
-      return <SelectionStage />;
-    case 3:
-      return <InferenceStage />;
-    case 4:
-      return <TimelineStage />;
-    case 5:
-      return <RefinementStage />;
-    case 6:
-      return <OutputStage />;
-    default:
-      return <UploadStage />;
-  }
 }

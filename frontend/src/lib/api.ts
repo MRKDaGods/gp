@@ -451,9 +451,13 @@ export async function getTrajectories(
 }
 
 export async function queryTimeline(
-  runId: string,
+  probeRunId: string | null | undefined,
   videoId: string,
-  selectedTrackIds: string[]
+  selectedTrackIds: string[],
+  opts?: {
+    galleryRunId?: string | null;
+    skipExports?: boolean;
+  }
 ): Promise<ApiResponse<{
   stage4Available: boolean;
   mode: string;
@@ -467,9 +471,17 @@ export async function queryTimeline(
     matchedTrajectoryCount: number;
   };
 }>> {
+  const body: Record<string, unknown> = {
+    videoId,
+    selectedTrackIds,
+    skipExports: opts?.skipExports ?? false,
+  };
+  if (probeRunId) body.runId = probeRunId;
+  const g = opts?.galleryRunId;
+  if (g) body.galleryRunId = g;
   return fetchApi('/timeline/query', {
     method: 'POST',
-    body: JSON.stringify({ runId, videoId, selectedTrackIds }),
+    body: JSON.stringify(body),
   });
 }
 

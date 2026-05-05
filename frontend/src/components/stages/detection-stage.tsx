@@ -32,6 +32,7 @@ import {
   usePipelineStore,
   useSessionStore,
 } from "@/store";
+import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import {
   getDetections,
   getAllDetections,
@@ -289,6 +290,19 @@ export function DetectionStage() {
 
   const frameSyncRef = useRef(currentFrame);
   frameSyncRef.current = currentFrame;
+
+  const prevDetectionVideoIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const id = currentVideo?.id;
+    if (prevDetectionVideoIdRef.current === undefined) {
+      prevDetectionVideoIdRef.current = id;
+      return;
+    }
+    if (prevDetectionVideoIdRef.current !== id) {
+      prevDetectionVideoIdRef.current = id;
+      flushPipelineFromStage(id ? 2 : 1);
+    }
+  }, [currentVideo?.id]);
 
   // Wait for active stage1 run (if any), then load detections.
   useEffect(() => {
