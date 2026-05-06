@@ -44,6 +44,8 @@ Comparison: beats **09v TransReID** on VeRi-776 mAP by **+1.57pp** (91.54 vs 89.
 
 **Implication**: there are now **two competitive single-model VeRi-776 backbones** for score-fusion experiments: TransReID 09v and CLIP-SENet v6. Score-fusion ablation is worth retrying with this new, more diverse pair.
 
+**M4 (VehicleID) abandoned 2026-05-06**: The only available Kaggle VehicleID dataset (`maphat/vehicleid`, 7.5GB `VehicleID_V1.0.zip`) is password-protected (NLPR licensing). No alternative public Kaggle dataset contains the standard VehicleID-V1.0 splits. M4 cannot proceed without dataset access. Pivoting to M5 (CityFlowV2 integration) directly.
+
 ## Current Performance (Last Updated: 2026-04-26)
 
 ### Vehicle Pipeline (CityFlowV2)
