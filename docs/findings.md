@@ -28,6 +28,22 @@ The drift investigation is now closed. The historical **0.784** result depended 
 
 This result confirms that the feature-quality bottleneck is **not** solved by adding stronger ReID features via score-level fusion.
 
+## CLIP-SENet Reproduction (VeRi-776, 2026-05-06)
+
+- **Run**: `yahiaakhalafallah/13-clip-senet-train` v6, 24/24 epochs, ~4h26min on P100; commits `53c2947` (train) and `3df0915` (eval).
+- **Architecture**: ResNet101-IBN-a appearance branch (2048d) + TinyCLIP `vit_medium_patch32_clip_224.tinyclip_laion400m` semantic branch (512d) -> concat -> FC -> `T_u` -> AFEM(G=32) -> `T_s'` -> `T = T_u + T_s'` -> BNNeck; **92.6M params**.
+- **Training**: Adam 5e-4, cosine schedule + 5-epoch warmup, P=8/K=8 micro-batch with accum=2 (effective batch 128), 320x320, RandomErasing + HFlip + Pad + RandomCrop, CE label smoothing 0.1 + SupCon tau=0.07, AMP fp16.
+
+| Setting | mAP | R1 | R5 | R10 |
+|---|---:|---:|---:|---:|
+| Base | 82.34 | 96.54 | 98.51 | 99.11 |
+| AQE k=10 | 89.21 | 96.90 | 98.03 | 98.75 |
+| **Rerank k1=50,k2=10,λ=0.1** | **91.54** | **97.32** | 98.09 | 98.69 |
+
+Comparison: beats **09v TransReID** on VeRi-776 mAP by **+1.57pp** (91.54 vs 89.97), but loses on R1 (97.32 vs 98.33) and remains **1.36pp below** the paper claim of 92.9 mAP. The gap is plausibly from 2-step accumulation on P100 16GB (BN sees 64 images/step instead of 128), plus TinyCLIP-ViT-40M-32-Text-19M being unavailable in `open_clip==2.30.0`; the run fell back to timm TinyCLIP and loaded ResNet101-IBN-a via torch.hub `XingangPan/IBN-Net`.
+
+**Implication**: there are now **two competitive single-model VeRi-776 backbones** for score-fusion experiments: TransReID 09v and CLIP-SENet v6. Score-fusion ablation is worth retrying with this new, more diverse pair.
+
 ## Current Performance (Last Updated: 2026-04-26)
 
 ### Vehicle Pipeline (CityFlowV2)
