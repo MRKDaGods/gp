@@ -32,6 +32,7 @@ dependencies = [
     # Deep Learning
     "torch>=2.1",
     "torchvision>=0.16",
+    "open-clip-torch>=2.26",
 
     # Indexing
     "faiss-cpu>=1.7",
@@ -90,3 +91,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "slow: tests that instantiate large pretrained backbones",
+    "requires_network: tests that may download model weights on first run",
+]
