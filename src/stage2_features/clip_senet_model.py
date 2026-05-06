@@ -9,10 +9,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from loguru import logger
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+    logger.addHandler(_h)
+    logger.setLevel(logging.INFO)
 
 
 @dataclass(frozen=True)
@@ -133,7 +140,7 @@ class ResNet101IBNBranch(nn.Module):
                 continue
             self.backbone, self.loaded_backbone = loaded
             logger.info(
-                "Appearance branch loaded via '{}' model='{}' pretrained_tag='{}'",
+                "Appearance branch loaded via '%s' model='%s' pretrained_tag='%s'",
                 self.loaded_backbone.family,
                 self.loaded_backbone.model_name,
                 self.loaded_backbone.pretrained_tag,
@@ -158,7 +165,7 @@ class ResNet101IBNBranch(nn.Module):
         constructor = getattr(pretrainedmodels, self._IBN_MODEL, None)
         if constructor is None:
             logger.warning(
-                "Appearance branch loader 'pretrainedmodels' has no '{}' entry; trying torch.hub",
+                "Appearance branch loader 'pretrainedmodels' has no '%s' entry; trying torch.hub",
                 self._IBN_MODEL,
             )
             return None
@@ -168,7 +175,7 @@ class ResNet101IBNBranch(nn.Module):
             raw_model = constructor(pretrained=pretrained_tag)
         except Exception as exc:  # noqa: BLE001 - keep fallback chain moving
             logger.warning(
-                "Appearance branch loader 'pretrainedmodels' failed for '{}': {}",
+                "Appearance branch loader 'pretrainedmodels' failed for '%s': %s",
                 self._IBN_MODEL,
                 exc,
             )
@@ -221,7 +228,7 @@ class ResNet101IBNBranch(nn.Module):
         available = set(timm.list_models())
         if self._IBN_MODEL not in available:
             logger.warning(
-                "Appearance branch loader 'timm' has no '{}' entry; trying plain '{}'",
+                "Appearance branch loader 'timm' has no '%s' entry; trying plain '%s'",
                 self._IBN_MODEL,
                 self._FALLBACK_MODEL,
             )
@@ -236,7 +243,7 @@ class ResNet101IBNBranch(nn.Module):
             )
         except Exception as exc:  # noqa: BLE001 - keep fallback chain moving
             logger.warning(
-                "Appearance branch loader 'timm' failed for '{}': {}",
+                "Appearance branch loader 'timm' failed for '%s': %s",
                 self._IBN_MODEL,
                 exc,
             )
@@ -265,14 +272,14 @@ class ResNet101IBNBranch(nn.Module):
             )
         except Exception as exc:  # noqa: BLE001 - keep fallback chain moving
             logger.warning(
-                "Appearance branch loader 'timm' failed for plain '{}': {}",
+                "Appearance branch loader 'timm' failed for plain '%s': %s",
                 self._FALLBACK_MODEL,
                 exc,
             )
             return None
 
         logger.warning(
-            "Appearance branch fell back to plain '{}' because no IBN-a loader succeeded",
+            "Appearance branch fell back to plain '%s' because no IBN-a loader succeeded",
             self._FALLBACK_MODEL,
         )
         return backbone, LoadedBackboneInfo(
@@ -347,7 +354,7 @@ class TinyCLIPImageBranch(nn.Module):
             except Exception as exc:  # noqa: BLE001 - preserve fallback chain context
                 last_error = exc
                 logger.warning(
-                    "TinyCLIP load failed for model='{}' pretrained='{}': {}",
+                    "TinyCLIP load failed for model='%s' pretrained='%s': %s",
                     model_name,
                     pretrained_tag or "hf-hub-default",
                     exc,
@@ -363,7 +370,7 @@ class TinyCLIPImageBranch(nn.Module):
             )
             self.output_dim = self._infer_open_clip_output_dim(model)
             logger.info(
-                "TinyCLIP branch loaded model='{}' pretrained='{}' via open_clip output_dim={}",
+                "TinyCLIP branch loaded model='%s' pretrained='%s' via open_clip output_dim=%s",
                 model_name,
                 pretrained_tag if pretrained_tag is not None and pretrained else "hf-hub-default",
                 self.output_dim,
@@ -389,7 +396,7 @@ class TinyCLIPImageBranch(nn.Module):
             except Exception as exc:  # noqa: BLE001 - preserve fallback chain context
                 last_error = exc
                 logger.warning(
-                    "TinyCLIP-equivalent timm load failed for model='{}': {}",
+                    "TinyCLIP-equivalent timm load failed for model='%s': %s",
                     model_name,
                     exc,
                 )
@@ -404,7 +411,7 @@ class TinyCLIPImageBranch(nn.Module):
             )
             self.output_dim = self._infer_timm_output_dim(model)
             logger.info(
-                "TinyCLIP branch loaded model='{}' via timm output_dim={}",
+                "TinyCLIP branch loaded model='%s' via timm output_dim=%s",
                 model_name,
                 self.output_dim,
             )
@@ -426,7 +433,7 @@ class TinyCLIPImageBranch(nn.Module):
             )
         except Exception as exc:  # noqa: BLE001 - explicit last resort context
             logger.warning(
-                "OpenCLIP last resort load failed for model='{}' pretrained='{}': {}",
+                "OpenCLIP last resort load failed for model='%s' pretrained='%s': %s",
                 model_name,
                 pretrained_tag,
                 exc,
@@ -442,7 +449,7 @@ class TinyCLIPImageBranch(nn.Module):
         )
         self.output_dim = self._infer_open_clip_output_dim(model)
         logger.info(
-            "TinyCLIP branch loaded model='{}' pretrained='{}' via open_clip output_dim={}",
+            "TinyCLIP branch loaded model='%s' pretrained='%s' via open_clip output_dim=%s",
             model_name,
             pretrained_tag if pretrained else "random_init",
             self.output_dim,
@@ -537,13 +544,13 @@ class CLIPSENet(nn.Module):
         detected_sem_dim = self.semantic_branch.output_dim
         if feat_dim_appearance != detected_app_dim:
             logger.warning(
-                "Requested feat_dim_appearance={} but backbone reports {}. Using detected dim.",
+                "Requested feat_dim_appearance=%s but backbone reports %s. Using detected dim.",
                 feat_dim_appearance,
                 detected_app_dim,
             )
         if feat_dim_semantic != detected_sem_dim:
             logger.warning(
-                "Requested feat_dim_semantic={} but backbone reports {}. Using detected dim.",
+                "Requested feat_dim_semantic=%s but backbone reports %s. Using detected dim.",
                 feat_dim_semantic,
                 detected_sem_dim,
             )
