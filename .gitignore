@@ -63,12 +63,17 @@ _tmp_*.py
 _tmp_*.json
 _poll_*.py
 _monitor_*.py
+_monitor_*.ps1
 _check_*.py
+_check_*/
 _fix_*.py
 _scan_*.py
 _scratch_*/
 tmp_*.txt
 tmp_*.json
+
+# Workspace memory (not source-of-truth)
+memories/session/
 
 # Logs
 *.log
