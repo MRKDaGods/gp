@@ -1,14 +1,15 @@
 # MTMC Tracker — Comprehensive Experiment Log
 
 > **Purpose**: Prevent re-running experiments. Every parameter combination and approach is logged here.
-> **Last updated**: 2026-04-28
-> **Current verified best (Kaggle)**: MTMC IDF1 = **77.03%** (10c v15 / 10a v7, CLIP+DINOv2 score-level fusion, `w_tertiary=0.60`)
+> **Last updated**: 2026-05-11
+> **Current verified best (Kaggle)**: MTMC IDF1 = **77.94% headline** (14e B1 / 14f A20 / 14h M0 / 14i F0 / 14j W0 / 14k K0 / 14u U0, TTA features + `aqe_k=2`, `w_tertiary=0.525`, `similarity_threshold=0.48`, `fic_regularisation=0.5`); 14k K7 reached a non-promoted **78.08% MARGINAL** point in 4-way fusion
+> **VeRi-776 reproducible best**: **mAP=0.9330 / R1=0.9845** (14t fusion, 2026-05-11)
 > **Historical best (not reproducible)**: MTMC IDF1 = **78.4%** (10c v44 / ali369 / code v80, depended on the now-unavailable `vehicle_osnet_veri776.pth` checkpoint)
 > **Current best (local, recent)**: MTMC IDF1 = **77.7%** (10c v28, CamTTA + power_norm=0.5)
 > **Historical local claim**: IDF1 = 82.97% (v47 — unverifiable, predates current experiment log)
 > **SOTA target**: IDF1 ≈ 84.1% (AIC21 1st place) / 84.86% (AIC22 1st)
 > **Gap**: ~7.1–7.8pp — caused by **feature quality**, NOT association tuning
-> **Total experiments**: 225+ configs across ~14h GPU
+> **Total experiments**: 294+ configs across ~14h GPU plus VeRi-776 14p3/14q/14r single-model chase, 14t fusion WIN, and 14u CityFlow port FAIL
 
 ---
 
@@ -177,6 +178,447 @@ Note: The control run for this retest measured **IDF1 = 0.7921** and **HOTA = 0.
 | 10c DINOv2 v2 baseline | 09s v1 DINOv2 ViT-L/14 @ 252px (mAP=86.79%, R1=96.15%) | v52 baseline params (`sim=0.46`, `app=0.60`, `fic=0.20`, `aqe_k=3`, `gallery=0.48`, `orphan=0.38`, `intra_merge=True/0.80`), no AFLink | 0.688 | REJECTED | Per-camera IDF1=0.794 (single-cam quality strong); MTMC -8.7pp vs ViT-B/16 CLIP baseline despite +6.65pp mAP |
 | 10c DINOv2 v2 best | 09s v1 DINOv2 ViT-L/14 @ 252px | Same params + AFLink `gap=150px`, `dir_cos=0.85` | **0.744** | REJECTED | AFLink surprisingly helps DINOv2 (+5.6pp: 0.688→0.744); best full metrics: IDF1=0.755, MOTA=0.624, HOTA=0.547; still -3.1pp vs ViT-B/16 CLIP (0.775) |
 
+### 2.9 2026-05-07 SAM2 Foreground Masking at Stage 2
+
+| Version | Upstream Model | Config Changes | MTMC IDF1 | Verdict | Key Insight |
+|:-------:|----------------|----------------|:---------:|:-------:|-------------|
+| 14a v8 | 10a v7 Stage 0/1 outputs (`run_kaggle_20260425_202123`) + TransReID 256px CLIP/DINOv2 fusion | SAM2 `sam2_hiera_base_plus` box-prompt masking during Stage 2 ReID extraction; 5px dilation, `bbox_expand=1.10`, zeros background; downstream production-like `w_tertiary=0.60` fusion | **0.7647** | DEAD END | Clean foreground masks removed useful cross-camera context; -0.56pp vs production 0.7703 despite preserving vehicle silhouette |
+
+The split between `trackeval_idf1=0.7866` and `mtmc_idf1=0.7647` suggests within-camera identity consistency held while cross-camera association regressed. Results are recorded in `outputs/14a_v8_summary/14a_summary.json`.
+
+### 2.10 2026-05-07 Multi-Crop TTA at Stage 2
+
+| Version | Upstream Model | Config Changes | MTMC IDF1 | Verdict | Key Insight |
+|:-------:|----------------|----------------|:---------:|:-------:|-------------|
+| 14c v2 | 10a v7 Stage 0/1 outputs (`run_kaggle_20260425_202123`) + TransReID 256px CLIP/DINOv2 fusion | Multi-crop TTA at Stage 2: primary {original, hflip, scale_0.95, scale_1.05}, tertiary DINOv2 {original, hflip}, L2-mean aggregation; downstream production-like `w_tertiary=0.60`, `sim_thresh=0.50` fusion | **0.77085** | MARGINAL | +0.05pp vs production 0.7703 — within ~0.24pp run-to-run noise; id_switches regressed 158→212 suggesting TTA smoothing slightly hurt within-camera disambiguation; Stage 2 walltime 99.42 min (faster than 14a SAM2 at 146.67 min) |
+
+Per `docs/subagent-specs/post-14a-next.md` stop criteria, 0.77085 falls in the NEUTRAL band (0.7680–0.7720). Before escalating to a GNN edge classifier, the next experiment is a CPU-only fusion-weight sweep on the existing 14c v2 features (`14d`, see `docs/subagent-specs/post-14c-next.md`). Results recorded in `outputs/14c_v2_summary/14c_summary.json`.
+
+
+### 2.11 2026-05-07 14d v1 — CPU Fusion Sweep on 14c v2 TTA Features
+
+CPU-only sweep on the existing 14c v2 TTA Stage 2 outputs (no Stage 0/1/2 re-run). 8 configs across `w_tertiary∈{0.55,0.60,0.65,0.70}` and `sim_thresh∈{0.40,0.50}`. Total walltime 4.9 min on Kaggle CPU.
+
+| Config | `w_tertiary` | `sim_thresh` | MTMC IDF1 | trackeval_idf1 | id_switches | Verdict |
+|:------:|:------------:|:------------:|:---------:|:--------------:|:-----------:|:-------:|
+| C0 control | 0.60 | 0.50 | 0.77085 | 0.7881 | 212 | reproduces 14c v2 |
+| C1 | 0.55 | 0.50 | 0.77149 | 0.7896 | 214 | +0.06pp |
+| C2 | 0.65 | 0.50 | 0.77124 | 0.7885 | 212 | +0.04pp |
+| **C3 best** | **0.50** | **0.50** | **0.77155** | **0.7897** | 214 | **+0.07pp vs C0, +0.13pp vs production** |
+| C4 | 0.70 | 0.50 | 0.77115 | 0.7887 | 212 | +0.03pp |
+| C5 | 0.60 | 0.40 | 0.7566 | 0.7775 | 217 | -1.42pp (threshold dominates) |
+| C6 | 0.55 | 0.40 | 0.7566 | — | — | -1.42pp |
+| C7 | 0.65 | 0.40 | 0.7566 | — | — | -1.42pp |
+
+**Verdict**: MARGINAL POSITIVE per `docs/subagent-specs/post-14c-next.md` stop criteria — best config 0.77155 falls in the NEUTRAL band (0.7680–0.7720) but the lift is consistent across `w_t∈[0.50,0.70]` at `thr=0.50`, the optimum shifted from production `w_t=0.60` to `w_t=0.50` on TTA features, and trackeval IDF1 rose +0.31pp. The `thr=0.40` family is universally -1.4pp worse, confirming the production threshold is correct. Next experiment is `14e`, a tighter `w_t × thr` grid around C3 plus AQE/FIC re-tune at the new optimum (single CPU kernel, ~10-15 min, zero GPU). Results recorded in `outputs/14d_v1_summary/14d_summary.json`. Spec: `docs/subagent-specs/post-14d-next.md`.
+
+### 2.12 2026-05-07 14e v1 — Expanded TTA Fusion + AQE/FIC Sweep (WIN)
+
+CPU-only sweep on the existing 14c v2 TTA Stage 2 outputs (no Stage 0/1/2 re-run). Two blocks: Block A is a fine `w_tertiary × similarity_threshold` grid at production AQE/FIC; Block B is an AQE/FIC sweep anchored at the Block A best.
+
+#### Block A — fine `w_t × thr` at `aqe_k=3, fic_reg=0.5` (12 configs, all flat)
+
+| Label | w_tertiary | sim_thresh | MTMC IDF1 | id_switches |
+|:-----:|:----------:|:----------:|:---------:|:-----------:|
+| A1 | 0.45 | 0.48 | 0.77157 | 213 |
+| A2 | 0.45 | 0.50 | 0.77155 | 214 |
+| A3 | 0.45 | 0.52 | 0.77167 | 212 |
+| A4 | 0.475 | 0.48 | 0.77157 | 213 |
+| A5 | 0.475 | 0.50 | 0.77155 | 214 |
+| A6 | 0.475 | 0.52 | 0.77167 | 212 |
+| A7 | 0.50 | 0.48 | 0.77157 | 213 |
+| A8 | 0.50 | 0.50 | 0.77155 | 214 |
+| A9 | 0.50 | 0.52 | 0.77070 | 212 |
+| **A10** | **0.525** | **0.48** | **0.77171** | **213** |
+| A11 | 0.525 | 0.50 | 0.77170 | 214 |
+| A12 | 0.525 | 0.52 | 0.77100 | 212 |
+
+A8 reproduces 14d C3 at 0.77155 (drift check ✓). All Block A points cluster in 0.7707–0.7717 (~0.001 spread) — fusion-weight surface is flat at production AQE/FIC.
+
+#### Block B — AQE/FIC sweep at A10 anchor (w_t=0.525, thr=0.48)
+
+| Label | aqe_k | fic_reg | MTMC IDF1 | id_switches | trackeval_idf1 | Δ vs A10 |
+|:-----:|:-----:|:-------:|:---------:|:-----------:|:--------------:|:--------:|
+| **B1** | **2** | **0.5** | **0.77936** | **154** | **0.79461** | **+0.77pp** |
+| B2 | 4 | 0.5 | 0.77052 | 162 | 0.79255 | -1.19pp |
+| B3 | 3 | 0.3 | 0.77268 | 213 | 0.79036 | +0.10pp |
+| B4 | 3 | 0.7 | 0.77192 | 215 | 0.79005 | +0.02pp |
+
+**Verdict**: WIN per `docs/subagent-specs/post-14d-next.md` thresholds (≥0.7720). **B1 = 0.77936** is +0.91pp vs production 0.7703 and +0.78pp vs the 14d floor 0.77155, with ID-switch count dropping from 213 → **154** (-28%). The discovery is **AQE k=2** unlocks the gain on TTA features — production has been at k=3 forever; TTA pre-smooths the embedding so production k=3 was over-smoothing. k=4 makes it worse (162 IDS, 0.77052). FIC sensitivity is small (B3 vs B4 differ by 0.0008 IDF1 at k=3). New reproducible headline = **0.77936**; production-deployed 0.7703 retained as previous baseline. Next experiment: 14f tighter AQE sweep around k=2 plus k=1 probes — spec `docs/subagent-specs/post-14e-next.md`. Results: `outputs/14e_v1_summary/14e_summary.json`.
+
+### 2.13 2026-05-07 14f v1 — TTA AQE Confirmation Sweep (NEUTRAL, Plateau Confirmed)
+
+CPU-only 54-config sweep on 14c v2 TTA features (45 Block A confirmation cells at `aqe_k=2`, 9 Block B `aqe_k=1` probes at FIC=0.5). Drift check passed: **A20 (B1 replicate at `w_t=0.525, thr=0.48, aqe_k=2, fic_reg=0.5`) = 0.77936 exact, id_switches=154 exact** — kernel and metric pipeline are stable.
+
+**Plateau structure (8 ties at 0.77936, all with `id_switches=154`)**: at `aqe_k=2, w_t=0.525`, configs with `fic_reg ∈ {0.3, 0.4, 0.5, 0.6}` × `thr ∈ {0.46, 0.48}` all hit 0.77936. `thr=0.50` regresses by ~0.0012 with the same id_switches. `fic_reg=0.7` and `w_t ∈ {0.50, 0.55}` cluster at 0.7791 (~−0.0003pp). Stage-4 `(w_t, thr, FIC)` axis at `aqe_k=2` is **fully saturated** — no measurable signal remaining.
+
+**k=1 family (9 configs, universally worse)**: MTMC IDF1 ∈ [0.76933, 0.77059], id_switches ∈ [143, 193]. AQE k=1 over-trims the gallery and re-introduces noise. **k=2 is the discrete optimum** — concave around k=2 (k=1 worse, k=3 worse, k=4 even worse per 14e B2).
+
+**Verdict**: NEUTRAL per `docs/subagent-specs/post-14e-next.md` thresholds (best in 0.7785–0.7795 band by ≤0.001; effectively at-baseline). **The TTA × Stage-4-tuning family is EXHAUSTED at 0.77936** — this is a *confirmed-win plateau*, not a dead end. 0.77936 stays as the new reproducible headline. Stage-4 hyperparameter tuning cannot close the 0.77936 → 0.7810 gap. Next experiment is **14g DINOv2 4-view TTA expansion** at Stage 2 (GPU) — symmetrize the tertiary DINOv2 stream from 2 views {original, hflip} to 4 views {original, hflip, scale_0.95, scale_1.05} matching the primary, on the same Stage-2 TTA axis that delivered 14e's +0.91pp. With `w_t=0.525` the tertiary stream is ~half the fused score, so improving its stability has a fusion-level multiplier. Spec: `docs/subagent-specs/post-14f-next.md`. Results: `outputs/14f_v1_summary/14f_summary.json`.
+
+### 2.14 2026-05-08 14g v1 — DINOv2 4-View TTA Expansion at Stage 2 (NEUTRAL)
+
+GPU P100 Stage-2 rerun on the 14c v2 TTA recipe with the tertiary DINOv2 ViT-L/14 stream symmetrized from 2 views `{original, hflip}` to 4 views `{original, hflip, scale_0.95, scale_1.05}` (matching the primary CLIP TransReID stream). Followed by an 8-config CPU mini-sweep at the 14e B1 anchor.
+
+**Drift check**: S0 (B1 anchor: `w_t=0.525, thr=0.48, aqe_k=2, fic_reg=0.5`) on the new tertiary features = **0.77902** MTMC IDF1, drift **−0.00034** vs 14e B1 0.77936 — within ±0.005 tolerance, gate passed.
+
+**Mini-sweep result table (8 configs at the new feature build)**:
+
+| Label | aqe_k | w_tertiary | sim_thresh | fic_reg | MTMC IDF1 | id_switches | Δ vs 14e B1 |
+|:-----:|:-----:|:----------:|:----------:|:-------:|:---------:|:-----------:|:-----------:|
+| S0 (anchor) | 2 | 0.525 | 0.48 | 0.5 | 0.77902 | 154 | −0.00034 |
+| S1 | 2 | 0.500 | 0.48 | 0.5 | 0.77902 | 154 | −0.00034 |
+| **S2** | **2** | **0.550** | **0.48** | **0.5** | **0.77926** | **154** | **−0.00010** |
+| S3 | 2 | 0.575 | 0.48 | 0.5 | 0.77926 | 154 | −0.00010 |
+| S4 | 2 | 0.525 | 0.46 | 0.5 | 0.77926 | 154 | −0.00010 |
+| S5 | 2 | 0.525 | 0.50 | 0.5 | 0.77805 | 154 | −0.00131 |
+| S6 | 3 | 0.525 | 0.48 | 0.5 | 0.77149 | 213 | −0.00787 |
+| S7 | 2 | 0.525 | 0.48 | 0.4 | 0.77902 | 154 | −0.00034 |
+
+**Verdict**: NEUTRAL per `docs/subagent-specs/post-14f-next.md` thresholds (best ∈ [0.7785, 0.7795]). No promotion. The 0.77936 14e B1 headline stands.
+
+**Key signal**: every `aqe_k=2` config landed at `id_switches=154` exact — identical to 14e B1 on the original 2-view tertiary features. Adding two scale views to DINOv2 produced **zero change in association decisions**. With `w_t=0.525` the fused score is dominated by the primary CLIP TransReID stream, and the tertiary stream's TTA noise is already below the threshold where it could affect cross-camera matches. **The tertiary DINOv2 stream is saturated.** S6 at `aqe_k=3` reproduces the −0.79pp regression seen in 14e B3/B4 and the 14f k=3 family, confirming the AQE k=2 unlock is a property of TTA-smoothed primary features, not of how many DINOv2 views are used.
+
+**Implication**: TTA expansion family is **fully saturated** — both primary 4-view (14c v2) and tertiary 4-view (14g) are now exhausted. Further IDF1 gains require a **non-view-coverage axis**: tracklet aggregation quality, feature diversity, or learned association.
+
+**Next experiment**: 14h — robust tracklet pooling. Single GPU Stage-2 rerun on the proven 14c v2 TTA recipe with `stage2.multi_query.k=24` enabled, then CPU sweep over 7–8 aggregation rules (mean / median / geometric-median / medoid / trimmed-mean@10/25 / top-K-nearest-to-mean / top-K-nearest-to-medoid) computed from the saved per-tracklet K=24 best-quality TTA frame embeddings. Spec: `docs/subagent-specs/post-14g-next.md`.
+
+**Files**: kernel `yahiaakhalafallah/14g-dinov2-4view-tta-stage2` v1; results `outputs/14g_v1_summary/14g_summary.json`; source 10a run `run_kaggle_20260425_202123`.
+
+### 2.15 2026-05-08 14h v3 — Robust Tracklet Pooling Sweep (NEUTRAL)
+
+GPU P100 Stage-2 rerun on the 14c v2 TTA recipe with `stage2.multi_query.k=24` enabled, saving the top-24 highest-quality TTA-smoothed embeddings per tracklet to `multi_query_embeddings.npz`. A CPU-side post-processor (`scripts/repool_stage2.py`) computed 8 robust aggregation modes from those rows, then Stages 3–5 were re-run for each mode at the 14e B1 anchor (`aqe_k=2, fic_reg=0.5, thr=0.48, w_t=0.525`). Stage-2 walltime was 124.0 min on P100; Stages 3–5 sweep walltime was 4.76 min CPU.
+
+**Drift check**: M0 (existing softmax-quality mean, no robust repooling) reproduced **0.77936 EXACT**, `id_switches=154 EXACT` vs 14e B1; gate passed bit-identically.
+
+**Robust-pooling result table (9 configs at the 14e B1 anchor)**:
+
+| Label | mode | MTMC IDF1 | id_switches | trackeval_idf1 | Δ vs 14e B1 (0.77936) | fallback_count |
+|:-----:|:-----|:---------:|:-----------:|:--------------:|:---------------------:|:--------------:|
+| **M0** | **existing_softmax_quality_mean (drift gate)** | **0.77936** | **154** | **0.79461** | **+0.00000** | **0** |
+| M1 | mean | 0.77829 | 163 | 0.79444 | −0.00107 | 158 |
+| M2 | median | 0.77107 | 162 | 0.79299 | −0.00829 | 158 |
+| M3 | geo_median | 0.77514 | 163 | 0.79367 | −0.00422 | 158 |
+| M4 | medoid | 0.77234 | **134** | 0.79151 | −0.00702 | 158 |
+| M5 | trimmed_mean_10 | 0.77522 | 167 | 0.79468 | −0.00414 | 158 |
+| M6 | trimmed_mean_25 | 0.77146 | 162 | 0.79367 | −0.00790 | 158 |
+| M7 | top12_to_mean | 0.76933 | 149 | 0.79291 | −0.01003 | 158 |
+| M8 | top12_to_medoid | 0.76881 | 149 | 0.79177 | −0.01055 | 158 |
+
+**Verdict**: NEUTRAL per `docs/subagent-specs/post-14g-next.md` thresholds. No promotion. The 0.77936 14e B1 headline stands.
+
+**Key signal**: every robust mode underperforms the existing softmax-quality mean. Medoid achieves the lowest `id_switches` (134, −20 vs M0) but lower IDF1 (0.77234, −0.70pp), demonstrating ID-switch count is not a reliable proxy for IDF1 on this floor. The existing softmax pool is already optimal because TTA pre-smoothing removed the per-frame outliers that robust statistics would clip.
+
+**Implication**: this is the third consecutive feature-side NEUTRAL after 14g (tertiary view expansion) and 14e Stage-4 saturation; the plateau is confirmed across three independent axes (view coverage, tracklet aggregation, Stage-4 tuning). Remaining levers: track-quality pre-filter (cheap hedge), new third feature stream (high cost), GNN edge classifier (very high cost).
+
+**Next experiment**: 14i — track-quality pre-filter, CPU only, ~30 min, 20-config sweep. Spec: `docs/subagent-specs/post-14h-next.md`.
+
+**Files**: kernel `yahiaakhalafallah/14h-robust-tracklet-pooling` v3; results `outputs/14h_v3_summary/14h_summary.json`; source 10a run `run_kaggle_20260425_202123`.
+
+### 2.16 2026-05-08 14i v2 — Track-Quality Pre-Filter Sweep (MARGINAL)
+
+CPU-only sweep on the existing 14h v3 Stage 1/2 outputs. F0 is the no-filter identity drift gate; F1–F20 sweep `min_length ∈ {3,5,8,12}` × `min_avg_confidence ∈ {0.30,0.35,0.40,0.45,0.50}` at the 14e B1 anchor (`aqe_k=2, fic_reg=0.5, thr=0.48, w_t=0.525`). Total Stage 3–5 walltime was 11.21 min CPU.
+
+**v1 failure and fix**: 14i v1 returned all-zero metrics despite 929/929 pass-through because the notebook accepted an unvalidated Kaggle dataset root for Stage 5 ground truth. v2 validates that all six expected `Sxx_cxxx/gt/gt.txt` files are directly under the selected GT root and copies recovery artifacts for each label to `/kaggle/working/outputs/14i_v2_recovery/<label>`.
+
+**F0 drift check**: F0 reproduced **0.77935962** with **id_switches=154**, retaining 929/929 tracklets and writing 6 MOT prediction files with 26,523 rows. Gate passed.
+
+| Label | `min_length` | `min_avg_confidence` | kept | MTMC IDF1 | id_switches | Verdict |
+|:-----:|-------------:|---------------------:|-----:|----------:|------------:|:--------|
+| **F0** | **0** | **0.00** | **929** | **0.77935962** | **154** | drift gate passed |
+| F1 | 3 | 0.30 | 845 | 0.77953820 | 125 | marginal |
+| **F2** | **3** | **0.35** | **818** | **0.77963534** | **120** | best, not promoted |
+| F6 | 5 | 0.30 | 794 | 0.77910981 | 131 | neutral |
+| F7 | 5 | 0.35 | 769 | 0.77880991 | 126 | neutral |
+| F8 | 5 | 0.40 | 751 | 0.77848421 | 118 | slight regression |
+
+**Verdict**: MARGINAL, not deployable. F2 improves F0 by only **+0.00028 IDF1** (+0.03pp), below the 0.781 WIN threshold and within the established run-to-run noise band. More aggressive filters reduce ID switches but lose IDF1; e.g. F9 (`L=5`, `τ=0.45`) reaches 97 ID switches but drops to 0.77604.
+
+**Implication**: low-quality/short tracklets are not the concentrated source of residual error. The 0.77936 plateau is now confirmed across Stage-4 tuning, TTA view count, robust tracklet pooling, and track-quality filtering. Remaining viable levers: genuinely new feature stream or learned association (GNN edge classifier).
+
+**Files**: kernel `yahiaakhalafallah/14i-track-quality-prefilter` v2; results `outputs/14i_v2_recovery/14i_summary.json`; recovery artifacts under `outputs/14i_v2_recovery/outputs/14i_v2_recovery/<label>/`.
+
+---
+
+### 2.17 2026-05-08 14j v1 — R50-IBN 4-Way Score-Fusion Sweep (MARGINAL)
+
+CPU-only sweep that adds FastReID R50-IBN-a (CityFlowV2-trained, from the 14j R50-IBN feature-extraction GPU kernel) as a fourth score-fusion stream on top of the existing primary CLIP TransReID + tertiary DINOv2 fusion. All 16 configs run at the 14e B1 anchor (`aqe_k=2, fic_reg=0.5, w_t=0.525`). At each `w_quaternary`, `w_primary` and `w_tertiary` are rescaled by `(1 − w_q)` preserving the `0.475 : 0.525` ratio. W0 is the no-quaternary identity drift gate.
+
+**W0 drift check**: reproduced **0.77935962** with **id_switches=154 EXACT**, 929/929 tracklets pass-through, 6 MOT prediction files with 26,523 rows, 594 global trajectories. Gate passed bit-identically.
+
+**Sweep result table (16 configs)**:
+
+| Label | `w_q` | `thr` | `w_p` | MTMC IDF1 | id_switches | Verdict |
+|:-----:|:-----:|:-----:|:-----:|:---------:|:-----------:|:--------|
+| **W0** | **0.00** | **0.48** | **0.475** | **0.77935962** | **154** | drift gate passed |
+| W1 | 0.05 | 0.46 | 0.425 | 0.77712784 | 200 | regression |
+| W2 | 0.05 | 0.48 | 0.425 | 0.77950361 | 154 | neutral |
+| W3 | 0.05 | 0.50 | 0.425 | 0.77853170 | 154 | neutral |
+| W4 | 0.10 | 0.46 | 0.375 | 0.77741785 | 206 | regression |
+| W5 | 0.10 | 0.48 | 0.375 | 0.77727183 | 200 | regression |
+| W6 | 0.10 | 0.50 | 0.375 | 0.77853170 | 154 | neutral |
+| W7 | 0.15 | 0.46 | 0.325 | 0.77828168 | 206 | neutral |
+| W8 | 0.15 | 0.48 | 0.325 | 0.77795774 | 206 | neutral |
+| W9 | 0.15 | 0.50 | 0.325 | 0.77698593 | 206 | regression |
+| W10 | 0.20 | 0.46 | 0.275 | 0.77855537 | 207 | neutral |
+| W11 | 0.20 | 0.48 | 0.275 | 0.77832761 | 206 | neutral |
+| W12 | 0.20 | 0.50 | 0.275 | 0.77735591 | 206 | regression |
+| W13 | 0.30 | 0.46 | 0.175 | 0.77917492 | 207 | neutral |
+| **W14** | **0.30** | **0.48** | **0.175** | **0.78032197** | **207** | **best, MARGINAL, not promoted** |
+| W15 | 0.30 | 0.50 | 0.175 | 0.77854740 | 206 | neutral |
+
+**Verdict**: MARGINAL per the 14j spec bands (WIN ≥0.7810, MARGINAL 0.7795–0.7810). W14 reached 0.78032, +0.00097 over W0 and +0.0010 over the previous deployed baseline 0.7703, but the 0.7810 WIN threshold was not crossed. Headline 0.77936 stands.
+
+**Boundary effect**: W14 sits on the upper boundary of the swept `w_q` grid (max tested = 0.30). At `thr=0.46` the trend across `w_q` is monotonic with no turnover: 0.77713 → 0.77742 → 0.77828 → 0.77856 → 0.77917. At `thr=0.48` after a regime change at `w_q=0.10` (id_switches jumps 154 → 200), the trend climbs cleanly to 0.78032 at the boundary. The optimum may extend into `w_q ∈ [0.35, 0.50]`.
+
+**Primary-suppression caveat**: at `w_q=0.30`, `w_primary=0.175` (already minority vs `w_tertiary=0.525`). At higher `w_q`, primary CLIP TransReID is essentially zero'd out, so any further lift may be expert-rebalancing rather than ensemble diversity. The 14k follow-up includes a K13 sanity probe (`w_p=w_t=0.30, w_q=0.40`) to discriminate.
+
+**Next experiment**: 14k — extended `w_q ∈ {0.35, 0.40, 0.45, 0.50}` × `thr ∈ {0.46, 0.48, 0.50}` sweep + K13 primary-balance sanity. CPU-only, ~10–15 min. Spec: `docs/subagent-specs/post-14j-next.md`.
+
+**Files**: kernel `yahiaakhalafallah/14j-4way-fusion-sweep` v1; results `outputs/14j_4way_sweep/14j_4way_summary.json`; R50-IBN features `yahiaakhalafallah/14j-r50-ibn-features`; source `yahiaakhalafallah/14h-robust-tracklet-pooling` v3.
+
+---
+
+### 2.18 2026-05-08 14k Extended R50-IBN 4-way Fusion Sweep
+
+CPU-only follow-up to 14j that extends the R50-IBN quaternary stream into the upper `w_q ∈ {0.35, 0.40, 0.45, 0.50}` range and adds K13, a literal balanced sanity probe (`w_p=0.30, w_t=0.30, w_q=0.40`). K1–K12 preserve the 14j residual split convention: after assigning `w_q`, the remaining weight is split between primary and tertiary in the `0.475 : 0.525` ratio. All configs use the 14e B1 anchor (`aqe_k=2, fic_reg=0.5`) and vary only `similarity_threshold` plus fusion weights.
+
+**K0 drift check**: reproduced **0.77936** with **id_switches=154 EXACT**. Gate passed.
+
+**Sweep result table (14 configs)**:
+
+| Label | `w_q` | `thr` | `w_p` | `w_t` | MTMC IDF1 | id_switches | Verdict |
+|:-----:|:-----:|:-----:|:-----:|:-----:|:---------:|:-----------:|:--------|
+| **K0** | **0.00** | **0.48** | **0.475** | **0.525** | **0.77936** | **154** | drift gate passed |
+| K1 | 0.35 | 0.46 | 0.150 | 0.500 | 0.77936 | 213 | neutral |
+| K2 | 0.35 | 0.48 | 0.150 | 0.500 | 0.77917 | 207 | neutral |
+| K3 | 0.35 | 0.50 | 0.150 | 0.500 | 0.77753 | 206 | regression |
+| K4 | 0.40 | 0.46 | 0.125 | 0.475 | 0.78041 | 213 | marginal plateau |
+| K5 | 0.40 | 0.48 | 0.125 | 0.475 | 0.78041 | 213 | marginal plateau |
+| K6 | 0.40 | 0.50 | 0.125 | 0.475 | 0.78017 | 212 | marginal plateau |
+| **K7** | **0.45** | **0.46** | **0.100** | **0.450** | **0.78079** | **213** | **peak, MARGINAL, not promoted** |
+| K8 | 0.45 | 0.48 | 0.100 | 0.450 | 0.78048 | 213 | marginal plateau |
+| K9 | 0.45 | 0.50 | 0.100 | 0.450 | 0.78048 | 213 | marginal plateau |
+| K10 | 0.50 | 0.46 | 0.075 | 0.425 | 0.77964 | 213 | turnover |
+| K11 | 0.50 | 0.48 | 0.075 | 0.425 | 0.78048 | 213 | marginal plateau |
+| K12 | 0.50 | 0.50 | 0.075 | 0.425 | 0.78048 | 213 | marginal plateau |
+| **K13** | **0.40** | **0.48** | **0.300** | **0.300** | **0.78048** | **213** | **literal sanity passed** |
+
+**K13 sanity**: passes. The literal balanced probe (`0.30/0.30/0.40`) reaches 0.78048, matching the plateau and confirming the lift is not merely primary CLIP suppression. It is a real ensemble effect, but too small to promote.
+
+**Turnover analysis**: 14j's boundary optimum at `w_q=0.30` extended into a shallow plateau, not a WIN. The curve improves through `w_q=0.40–0.45`, peaks at K7 = 0.78079, then shows turnover at `w_q=0.50` (K10 = 0.77964). Five configs cluster at ~0.78048, so the upper-quaternary regime is saturated rather than under-sampled.
+
+**Verdict**: MARGINAL, not promoted. Best K7 is **0.78079**, +0.0014 vs 14e B1 but below the pre-registered WIN bar **0.7810** and below the historical noise band (~0.24pp). Headline **0.77936** stands. This closes the CPU-only 4-way fusion axis and confirms the feature-quality ceiling across 5 independent axes: Stage-4 tuning, tertiary view expansion, tracklet aggregation, track-quality filter, and 4-way score fusion.
+
+**Next experiment**: 14l — genuinely new feature stream. Prioritize OSNet-IBN-x1.0 trained on VeRi-776 + CityFlowV2 first, then EVA-02-L/14, then CLIP TransReID L/14. Spec: `docs/subagent-specs/post-14k-next.md`.
+
+**Files**: results `outputs/14k_extended/14k_extended_summary.json`; kernel `yahiaakhalafallah/14k-r50-ibn-fusion-extended`; source feature stack from 14h v3 plus 14j R50-IBN quaternary features.
+
+---
+
+### 2.19 2026-05-08 14m OSNet-IBN Training (resolved FAIL)
+
+GPU-side attempt to train an architecture-diverse OSNet-IBN-x1.0 CityFlowV2 ReID model as the fifth stream for the planned 14n 5-way fusion ensemble. This replaced the lost ali369 v80 OSNet checkpoint path, but the completed run failed the single-camera eligibility gate by a wide margin.
+
+**Final resolved run**: `gumfreddy/14m-osnet-ibn-cityflowv2-train` v1 completed **120/120 epochs** after the v3 memory-defense patches: single T4 GPU, batch 64, eval batch 8, `P_IDS=16`, `K=4`, no DataParallel, and per-epoch `gc.collect(); torch.cuda.empty_cache()`. Wall time was about **6.5h on T4**. Metrics below are from `data/outputs/14m_final_metrics.json`.
+
+| Checkpoint | Epoch | mAP | R1 | R5 | R10 | Gate |
+|:--|--:|--:|--:|--:|--:|:--|
+| Best mAP | 60 | **24.27%** | 43.59% | **53.91%** | **60.65%** | FAIL |
+| Best joint | 90 | 23.90% | **43.97%** | 53.89% | 60.32% | FAIL |
+| Final eval | 120 | 23.80% | 43.89% | 53.72% | 60.28% | FAIL |
+
+**Eligibility gate**: required **mAP >=75% AND R1 >=90%** before Stage-2 extraction or 14n fusion. Final eval was **mAP=23.80%, R1=43.89%, R5=53.72%, R10=60.28%**. Best checkpoint by mAP was epoch 60 with **mAP=24.27%, R1=43.59%, R5=53.91%, R10=60.65%**.
+
+**Training trend**: the model peaked at epoch 60 and slowly degraded through epoch 120, so the failure is not an unfinished-training issue. It is over-trained and still far below the eligibility floor.
+
+**Verdict**: **DEAD END** for 14n. OSNet-IBN-x1.0 in-domain CityFlowV2 from-scratch is too weak as a fusion stream: 23.80% final mAP is below the 52.77% R101-IBN floor and far below the 80%+ TransReID CLIP primary. Adding this stream would hurt rather than help.
+
+**Root-cause hypotheses**: (a) 666-class CityFlowV2 is too small for OSNet's design when trained from scratch; (b) v3 single-GPU + batch-64 + `P=16/K=4` changed dynamics from the BoT recipe originally tuned for ResNet-family models and larger batches; (c) the BoT LR schedule may not suit OSNet. Do not retry OSNet-IBN-x1.0 from scratch on CityFlowV2 unless the new attempt explicitly addresses these three issues.
+
+**Operational note**: the `KAGGLE_API_TOKEN` env-var auth pattern with `~/.kaggle/<account>_access_token` is proven for multi-account pushes; gumfreddy ran 14m successfully with this pattern.
+
+---
+
+### 2.20 2026-05-10 14p3 TransReID ViT-L/14 CLIP VeRi-776 (FAIL)
+
+VeRi-first paper-direction experiment: test whether a larger TransReID ViT-L/14 CLIP backbone can beat the 09v v17 ViT-B/16 CLIP VeRi-776 baseline. The completed 14p3 run failed the gate and closes the capacity-only axis.
+
+**Spec**: `docs/subagent-specs/14p-veri-sota-train.md`
+
+**Result source**: `tmp_14p3_outputs/eval_results.json`
+
+**Architecture and recipe**: TransReID ViT-L/14 CLIP @ 224², **304M params**, 100 epochs, LLRD factor **0.65**, `BACKBONE_LR=1.5e-4`, AMP fp16, `P=8/K=4`, batch 32, JPM 4 groups, BNNeck, SIE, AdamW + cosine + 10ep warmup, RandomErasing.
+
+| Variant | mAP | R1 | Verdict |
+|:--|--:|--:|:--|
+| single_flip_cls_base | 80.90% | 96.90% | FAIL vs 09v base |
+| single_flip_cls_aqe2_rerank | 87.88% | 97.50% | FAIL vs 09v post-rerank |
+| concat_patch_flip_aqe2_rerank | **87.95%** | **97.32%** | best 14p3, FAIL |
+
+**Verdict**: **FAIL**. 14p3 is about **2pp mAP / 1pp R1 below** the 09v v17 ViT-B/16 CLIP baseline at base (**89.97% mAP / 98.33% R1**) and about **3.6pp below** the 09v post-rerank mAP ceiling (~**91.54%**). Root cause: ViT-L/14 overfits VeRi-776's **576 train IDs / 37k images**; bigger model capacity is the wrong axis for this dataset size.
+
+---
+
+### 2.21 2026-05-10 14q ViT-B/16 CLIP 256² VeRi-776 Extended Training (FAIL)
+
+Follow-up pivot from capacity to resolution/recipe: rerun the stronger 09v-style ViT-B/16 CLIP family at **256²** with extended training, then compare against the 09v v17 224² ceiling. This run failed the gate and closes the scale-only axis after 14p3.
+
+**Spec**: `docs/subagent-specs/14q-veri-next.md`
+
+**Kernel**: `mrkdagods/14q-veri-vit-b-16-clip-256-transreid-train`, COMPLETE on MRKDaGods. URL: https://www.kaggle.com/code/mrkdagods/14q-veri-vit-b-16-clip-256-transreid-train.
+
+**Result source**: `tmp_14q_outputs/eval_results.json`
+
+**Recipe**: ViT-B/16 CLIP @ 256², 160ep, `P=16/K=4`, batch 64, `BACKBONE_LR=3.5e-4`, head LR `3.5e-3`, LLRD **0.65**, 10ep warmup + cosine, AMP fp16, RandomErasing + geometric RandAugment, JPM 4-group, BNNeck, SIE, AdamW.
+
+| Variant | mAP | R1 | Verdict |
+|:--|--:|--:|:--|
+| single_flip_cls_base | 79.68% | 96.84% | FAIL vs 09v base |
+| single_flip_cls_aqe2_rerank | 88.06% | 96.66% | FAIL vs 09v post-rerank |
+| concat_patch_flip_aqe2_rerank | 88.57% | 96.72% | FAIL vs 09v post-rerank |
+| concat_patch_flip_aqe3_rerank | **89.15%** | **97.20%** | best 14q, FAIL |
+
+**Verdict**: **FAIL**. 14q remains below the 09v v17 224² baseline (**89.97% mAP / 98.33% R1 base; ~91.54% post-rerank**). Triplet loss saturated to **0.005** by epoch 160, indicating full saturation under the current losses. Resolution bump **224->256** plus **60% more epochs** did not beat 09v v17, so the CLIP TransReID scale-only axis is exhausted under standard CE+triplet supervision.
+
+| Band | Post-rerank mAP | R1 | Action |
+|:--|:--|:--|:--|
+| WIN | >=91.54% | >=98.33% | Promote over 09v v17 |
+| MARGINAL | >=90.5% | >=98.0% | Document as near-ceiling but not a clear win |
+| FAIL | otherwise | otherwise | Close this resolution/recipe pivot |
+
+---
+
+### 2.22 2026-05-10 14r Primary CLIP-ReID 2-Stage VeRi-776 (ABORTED, walltime guard)
+
+Architecturally orthogonal follow-up after two scale-axis FAILs (14p3 ViT-L/14 and 14q ViT-B/16 @ 256²). This is the first run to use the CLIP text tower with learned ID-specific prompts rather than only the image tower as a TransReID backbone.
+
+**Spec**: `docs/subagent-specs/14r-primary.md`
+
+**Kernel**: `mrkdagods/14r-clip-reid-veri-776-train`, ABORTED by its own walltime guard on MRKDaGods. URL: https://www.kaggle.com/code/mrkdagods/14r-clip-reid-veri-776-train.
+
+**Recipe**: Stage 1 freezes OpenAI CLIP ViT-B/16 image+text towers and learns 4 shared 512-d context tokens plus per-class 512-d ID token via image-text contrastive (`i2tce`), Adam lr 3.5e-4, wd 1e-4, 120ep, `P=8/K=4`, batch 32. Stage 2 unfreezes timm `vit_base_patch16_clip_224.openai` with CE + triplet + i2tce + JPM-CE, AdamW backbone 3.5e-4 / head 3.5e-3, LLRD 0.65, 120ep, 10ep warmup + cosine, AMP fp16, SIE, JPM 4-group, BNNeck.
+
+**Outcome**: Stage 1 completed 120 epochs in **5.66h**, with loss **2.22 -> 1.53**. Saved prompts are present and finite: `text_features [576,512]`, `ctx [4,512]`, and `id_tokens [576,512]`. Stage 2 completed epoch 1 (loss **9.85**) before the walltime guard raised `RuntimeError`: projected Stage 2 runtime was **12.4h** (~6.2 min/epoch x 120 epochs), on top of the already-spent 5.66h Stage 1, projecting about **18h total > 14h cutoff**.
+
+**Diagnosis**: **ABORTED / INCOMPLETE**, not a methodology failure. The published CLIP-ReID approach has not been evaluated yet. Root cause of slowness was batch 32 (`P=8/K=4`) versus 14q's batch 64 (`P=16/K=4`), causing roughly 2x more steps, plus `i2tce` auxiliary compute per step. Bug found: the kernel raised the abort `RuntimeError` before writing `train_log.json`, so the structured log was lost and only stdout preserved the result. Quota cost: about **9h MRKDaGods**.
+
+**Rationale**: published CLIP-ReID evidence projects to roughly **91-93% mAP post-rerank**, and this tests a genuinely new supervision path rather than more model scale. The recovery run below continues this path from the saved Stage 1 prompts.
+
+**Verdict bands**: WIN >=91.54% mAP AND >=98.33% R1; MARGINAL >=90.5% mAP AND >=98.0% R1; FAIL otherwise.
+
+---
+
+### 2.23 2026-05-10 14r Probe DINOv2 ViT-B/14 VeRi-776 Standalone (FAIL)
+
+Backbone-swap probe that replicates the 09v v17 recipe shape with a DINOv2 ViT-B/14 backbone. This measures SSL-pretrained DINOv2 standalone on VeRi-776, which has not been done before in this repo.
+
+**Spec**: `docs/subagent-specs/14r-probe.md`
+
+**Kernel**: `gumfreddy/14r-probe-dinov2-veri-776-train`, COMPLETE on gumfreddy. URL: https://www.kaggle.com/code/gumfreddy/14r-probe-dinov2-veri-776-train.
+
+**Result source**: `tmp_14r_probe_outputs/eval_results.json`
+
+**Recipe**: timm `vit_base_patch14_dinov2.lvd142m`, 224² (16x16 patch grid), `P=8/K=4`, batch 32, `BACKBONE_LR=3.5e-4`, head LR `3.5e-3`, LLRD 0.65, 100ep, 10ep warmup + cosine, AMP fp16, JPM 4-group, BNNeck, SIE, CE label smoothing 0.1 + triplet 0.3 + JPM CE.
+
+| Variant | mAP | R1 | Note |
+|:--|:--:|:--:|:--|
+| single_flip_cls_base | 81.43% | 97.44% | base |
+| single_flip_cls_aqe2_rerank | 88.92% | 97.97% | rerank |
+| concat_patch_flip_aqe2_rerank | 89.24% | **98.15%** | near-best |
+| concat_patch_flip_aqe3_rerank | **89.27%** | **98.15%** | best 14r-probe, FAIL |
+
+**Verdict**: **FAIL**. Best **89.27% mAP / 98.15% R1** is below WIN (**91.54% / 98.33%**) by about **2.3pp mAP / 0.2pp R1** and below the MARGINAL mAP threshold (**90.5%**) by about **1.2pp**.
+
+**Rationale and significance**: DINOv2 offers an SSL-pretrained representation rather than CLIP image-text pretraining. This probe shows DINOv2 SSL pretraining alone underperforms CLIP pretraining for VeRi-776 (**89.27% vs CLIP's 91.54% post-rerank**), confirming **CLIP pretraining is necessary, not just any SSL**. The R1 result (**98.15%**) is close to 09v v17's **98.33%**, so DINOv2 features may still be diverse enough from CLIP for ensemble use.
+
+**Verdict bands**: WIN >=91.54% mAP AND >=98.33% R1; MARGINAL >=90.5% mAP AND >=98.0% R1; FAIL otherwise.
+
+---
+
+### 2.24 2026-05-11 14r Recovery CLIP-ReID Stage-2 Resume (FAIL)
+
+Stage-2-only recovery of 14r primary after the original kernel aborted from walltime projection. This run resumes from the saved Stage 1 prompts rather than repeating the 5.66h prompt-learning stage.
+
+**Spec**: `docs/subagent-specs/14r-recovery.md` (LOCKED PLAN — 2026-05-10 section)
+
+**Kernel**: `gumfreddy/14r-recovery-clip-reid-stage-2`, v4 COMPLETE on gumfreddy. URL: https://www.kaggle.com/code/gumfreddy/14r-recovery-clip-reid-stage-2.
+
+**Result source**: `tmp_14r_recovery_outputs/14r_recovery_summary.json`. All `.pth` artifacts were deleted per disk-hygiene policy because the run failed and the checkpoints have no recovery value.
+
+**Input**: saved Stage 1 prompts uploaded as Kaggle dataset `gumfreddy/14r-clip-reid-stage1-prompts`.
+
+**Recipe deltas vs original 14r Stage 2**: batch `P=8/K=4 -> P=16/K=4` (size **32 -> 64**), epochs **120 -> 60**, LR sqrt-scaled from backbone/head **3.5e-4/3.5e-3 -> 4.95e-4/4.95e-3**, warmup **10ep -> 5ep**, periodic eval at **[20, 40, 50, 55, 60]**, Stage-2-only walltime guard **4.5h**, and `train_log.json` is written before any guard raise.
+
+| Variant | mAP | R1 | R5 | R10 | Verdict |
+|:--|--:|--:|--:|--:|:--|
+| concat_patch_flip_aqe3_rerank_k1_80_k2_15_lambda_0_2 | **80.55%** | **93.68%** | 95.53% | 96.54% | FAIL |
+
+**Verdict**: **FAIL**. Best concat AQE row reached only **80.55% mAP / 93.68% R1**, versus the 09v v17 ViT-B/16 CLIP baseline at **89.97% mAP / 98.33% R1**. This is a **-9.4pp mAP regression**, far below both WIN and MARGINAL gates.
+
+**Conclusion**: Stage-2-only CLIP-ReID recovery from saved Stage 1 prompts did **not** recover the baseline. The likely failure mode is that prompts-only initialization is insufficient; Stage 2 needs the full Stage1->Stage2 coupled trajectory, including backbone co-training dynamics, not just final prompt vectors. A single-kernel T4 walltime budget of about **9h** is insufficient for the full CLIP-ReID Stage1+Stage2 chain on VeRi-776 at ViT-B/16 under this recipe.
+
+**Verdict bands**: WIN >=91.54% mAP AND >=98.33% R1; MARGINAL >=90.5% mAP AND >=98.0% R1; FAIL otherwise.
+
+---
+
+### 2.25 2026-05-11 14t CLIP-SENet × TransReID Score-Level Fusion (VeRi-776, WIN)
+
+VeRi-776 fusion follow-up after the single-model chase failed. This run tests whether the two strongest documented VeRi-776 experts in the repo, CLIP-SENet v6 and TransReID 09v v17, provide complementary rankings under simple fusion.
+
+**Parents**: CLIP-SENet v6 (canonical 320², P=8/K=8; post-rerank **mAP=0.9154 / R1=0.9732**) + TransReID 09v v17 (base **mAP=0.8997 / R1=0.9833**).
+
+**Dataset**: VeRi-776 query/gallery single-cam evaluation.
+
+**Strategy**: swept both score-level fusion and feature concat. Score rows combine CLIP-SENet and TransReID distance/ranking scores; concat rows blend normalized feature spaces with `alpha_trans` / `alpha_clip`.
+
+**Kernel**: `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid`, COMPLETE on yahiaakhalafallah. URL: https://www.kaggle.com/code/yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid.
+
+**Runtime**: ≈ **49.5 min** on T4.
+
+**Result source**: `tmp_14t_outputs/14t_summary.json`.
+
+| Variant | Config | mAP | R1 | Verdict |
+|:--|:--|--:|--:|:--|
+| **Best score-fusion** | `w_clipsenet=0.7, w_transreid=0.3`, `transreid_768`, AQE k=3 + rerank (k1=80, k2=15, λ=0.2) | **0.93304** | **0.98451** | **de-facto WIN** |
+| Best concat | `alpha_trans=0.3, alpha_clip=0.7`, `transreid_768`, AQE k=3 + rerank (k1=80, k2=15, λ=0.2) | 0.93188 | 0.98271 | spec MARGINAL |
+
+**Delta vs parents**: best score-fusion is **+3.33pp mAP / +0.12pp R1** vs 09v v17 base and **+1.76pp mAP / +1.13pp R1** vs CLIP-SENet v6 post-rerank alone.
+
+**Plateau**: top score-fusion rows form a flat band with `w_clipsenet ∈ [0.6, 0.8]`. The best row uses the `transreid_768` global-token stream; transreid_768 clearly beat transreid_1536 for the final best configuration.
+
+**Verdict**: strict spec = **MARGINAL** because the best concat row missed the R1≥0.9833 bar by **0.06pp**. De-facto = **WIN** because the best score-fusion row clears both mAP and R1 bars. This is the first experiment to reach the historical-claim **0.9845 R1** number as a true Rank-1 metric on this checkpoint family; the same value had previously only appeared as R5-via-AQE.
+
+**Recommendation**: **Option B — Accept and freeze.** 14t is a paper-quality VeRi-776 fusion result, but it should **not** be auto-ported to CityFlow: 13d/13f/13h already showed CLIP-SENet × CityFlow fusion is negative because the VeRi-776 → CityFlowV2 domain gap dominates.
+
+---
+
+### 2.26 2026-05-12 14u CityFlow VeRi-Fusion Port (FAIL)
+
+Final closure of the CityFlow VeRi-fusion family. Tests whether the 14t WIN mechanism — CLIP-SENet × TransReID-09v score fusion plus AQE k=3 + k-reciprocal rerank applied to the *fused* similarity matrix — ports to CityFlowV2 as a 4th score-fusion stream on top of the 14e B1 anchor (CLIP TransReID primary + DINOv2 tertiary, `aqe_k=2, w_t=0.525, thr=0.48, fic_reg=0.5`).
+
+**Grid**: 19 configs, CPU-only. U0 = drift gate at `w_14t=0.00`. U1–U18 = sweep over `w_14t ∈ {0.05, 0.10, 0.15, 0.20, 0.25, 0.30}` × `thr ∈ {0.46, 0.48, 0.50}`.
+
+**Result table (key rows)**:
+
+| Label | `w_14t` | `thr` | MTMC IDF1 | id_switches | Verdict |
+|:-----:|:-------:|:-----:|:---------:|:-----------:|:--------|
+| **U0 (drift)** | **0.00** | **0.48** | **0.77936** | **154** | drift gate passed |
+| U2 | 0.05 | 0.48 | 0.77950 | 154 | neutral |
+| U3 | 0.05 | 0.50 | 0.77829 | 154 | regression |
+| **U5 / U6 / U9 (best tie)** | **0.10 / 0.10 / 0.15** | **0.48 / 0.50 / 0.50** | **0.77995** | **160** | below MARGINAL bar |
+| U7 | 0.15 | 0.46 | 0.77809 | 207 | regression |
+| U8 | 0.15 | 0.48 | 0.77809 | 207 | regression |
+
+**Verdict**: FAIL. Best 0.77995 = +0.00059 IDF1 vs U0, below the 14u spec MARGINAL bar of 0.7800. id_switches went UP (154→160) at the best point — fusion adds conflation, not signal. Optimum sits at the lower boundary of the sweep, exactly mirroring the 13d `w_cs=0.10` row in the prior CLIP-SENet × CityFlow fusion FAIL.
+
+**Mechanistic interpretation**: 14u was the last untested fusion mechanism — applying AQE + k-reciprocal rerank to the *fused* similarity (the mechanism that drove the 14t VeRi WIN, +3.33pp mAP). It still cannot transfer the VeRi-776 lift to CityFlow cross-camera matching. Closes the 5th and final CityFlow VeRi-fusion branch (13d / 13f / 13g / 13h / 14u all FAIL or MARGINAL). The 0.77936 plateau is now confirmed across SIX independent axes: Stage-4 tuning, tertiary view expansion, tracklet aggregation, track-quality filter, 4-way score fusion, and VeRi-fusion-port.
+
+**Next experiment**: none cheap or medium-cost remains. Remaining viable paths to >0.7900 require (a) AIC22-style 5-model GPU ensemble, (b) GNN edge classifier, or (c) zone-based ST + per-camera distance bias.
+
+**Kernel**: `yahiaakhalafallah/14u-cityflow-veri-fusion-port`, COMPLETE. URL: https://www.kaggle.com/code/yahiaakhalafallah/14u-cityflow-veri-fusion-port.
+
+**Files**: results `tmp_14u_outputs/14u_summary.json`.
 
 ---
 
@@ -457,6 +899,9 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 | 09l v3 | COMPLETE | gumfreddy | resumed from the **09l v2 EMA** checkpoint to **300 total epochs**; **mAP=78.61%**, **R1=90.43%**, **mAP_rr=81.09%**, **R1_rr=90.98%**; strong secondary model only **1.53pp** behind **09b v2 (80.14% mAP)** and now ready for ensemble deployment |
 | 09o v1 | COMPLETE | gumfreddy | **mAP=48.17%**, **R1=65.90%**, **R5=77.17%**, **R10=82.83%** after **120 epochs** with **AdamW** and **CE+Triplet+Center**; weaker than both the primary ViT baseline and the fine-tuned **R50-IBN** secondary, so EVA02 is a dead end for ensemble use under the current recipe |
 | 09q | Exp B COMPLETE; v5 PENDING | gumfreddy | **Exp B (CLIP init)**: mAP=76.52% after 120 epochs — no improvement over 80.14%. **Exp A (resume 80.14%)**: never ran — checkpoint path bug fixed; **09q v5 pending**. |
+| 14r primary | ABORTED | MRKDaGods | CLIP-ReID 2-stage VeRi-776 run aborted by walltime guard after Stage 1 completed 120ep in **5.66h** and Stage 2 completed epoch 1. Prompts saved and finite; methodology not evaluated yet. Kernel `mrkdagods/14r-clip-reid-veri-776-train`; quota cost about **9h**. |
+| 14r probe | FAIL | gumfreddy | DINOv2 ViT-B/14 standalone VeRi-776 probe using the 09v-style recipe. Best post-rerank **89.27% mAP / 98.15% R1**, below WIN/MARGINAL mAP; confirms SSL alone underperforms CLIP pretraining. Kernel `gumfreddy/14r-probe-dinov2-veri-776-train`. |
+| 14r recovery | RUNNING | gumfreddy | Stage-2-only CLIP-ReID resume from saved prompts dataset `gumfreddy/14r-clip-reid-stage1-prompts`; batch **32 -> 64**, epochs **120 -> 60**, sqrt-scaled LR **4.95e-4/4.95e-3**, eval at **[20, 40, 50, 55, 60]**. Kernel `gumfreddy/14r-recovery-clip-reid-stage-2`; ETA about **3.5-4.2h**. |
 
 ---
 
@@ -702,7 +1147,7 @@ The **09j v2** result closes out the ResNeXt101-IBN-a path for this codebase. Ev
 
 - **Skipped (12 pairs)**: `baseline_floor`, `sec_010`, `w2_005_w3_005`, `w2_005_w3_010`, `w2_005_w3_015`, `w2_005_w3_020`, `w2_005_w3_025`, `w2_005_w3_030`, `w2_010_w3_010`, `w2_010_w3_015`, `w2_010_w3_020`, `w2_010_w3_025`
 - **Best**: `w_tertiary=0.60`, `MTMC IDF1=0.7703`, `IDF1=0.7916`, `MOTA=0.6725`, `HOTA=0.5749`
-- **Conclusion**: +0.40pp local gain; this is the **current verified best result** on available weights. It still remains **-1.37pp** below the historical **0.784** v80 peak, which depended on a now-unavailable OSNet checkpoint.
+- **Conclusion**: +0.40pp local gain; this became the previous deployed best on available weights, later superseded by the 14e TTA + AQE k=2 headline at **0.77936**. It still remained below the historical **0.784** v80 peak, which depended on a now-unavailable OSNet checkpoint.
 - **Reference**: DINOv2 ReID training in kernel 09s v1 (`mAP=86.79%`, `R1=96.15%`, epoch `115/120`)
 
 ## 2026-04-25 Session: OSNet Secondary Repro Investigation

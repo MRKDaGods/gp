@@ -1,7 +1,7 @@
 ---
 name: 'MTMC Coder'
 description: 'Implementation agent for MTMC Tracker. Writes code, edits pipeline stages, modifies configs, updates notebooks, runs tests. Use for: implementing planned changes across the 7-stage pipeline, editing Kaggle notebooks, running experiments, fixing bugs, refactoring code, autonomous optimization, experiment loops, autoresearch execution.'
-model: GPT-5.4 (copilot)
+model: GPT-5.5 (copilot)
 tools: [search, read, edit, execute, web, todo, agent]
 ---
 
