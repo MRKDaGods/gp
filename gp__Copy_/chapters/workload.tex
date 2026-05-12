@@ -1,0 +1,42 @@
+\chapter{Workload}
+
+This chapter describes how the project workload was structured, scheduled, and distributed among the four team members. The distribution follows the modular system design and the staged processing pipeline, ensuring balanced responsibility and parallel development where possible.
+
+\section{Overview}
+
+The project workload was divided across four members, each responsible for a set of related system components. The distribution was based on functional modularity rather than strict isolation, allowing integration points between stages while maintaining clear ownership of each subsystem.
+
+Development progressed in stages, starting from data ingestion and per-camera processing, followed by feature extraction and indexing, and concluding with multi-camera association, evaluation, and visualization. Several stages were developed in parallel once stable intermediate outputs became available.
+
+\section{Task Distribution}
+
+The responsibilities of each team member are summarized below.
+
+\subsection*{Member 1 – Data Ingestion and Pre-Processing}
+
+Member 1 was primarily responsible for Stage 0 of the pipeline. This included handling raw CCTV video streams, implementing decoding and frame extraction, and performing preprocessing operations such as resizing, normalization, denoising, and timestamp synchronization. Additionally, this member ensured format unification and compatibility with downstream detection and tracking modules.
+
+\subsection*{Member 2 – Per-Camera Detection and Tracking}
+
+Member 2 focused on Stage 1, implementing per-camera analytics. Responsibilities included configuring and integrating the YOLO-based object detector, implementing single-camera tracking using Deep-OCSORT, and incorporating an adaptive Kalman filter for motion prediction. This member ensured stable generation of per-camera tracklets with consistent identities and motion states.
+
+\subsection*{Member 3 – Feature Extraction, Refinement, and Indexing}
+
+Member 3 was responsible for Stage 2 and Stage 3 of the system. Tasks included generating tracklet crops, extracting deep re-identification embeddings, computing color histogram features, and performing feature refinement through fusion and dimensionality reduction techniques. This member also designed and implemented the indexing and storage components, including FAISS-based similarity search and metadata management.
+
+\subsection*{Member 1,4 – Multi-Camera Association, Evaluation, and Visualization}
+
+Member 4 handled Stage 4 through Stage 6. Responsibilities included constructing similarity graphs across cameras, performing graph-based optimization to generate global identities, and reconstructing multi-camera trajectories. This member also led system evaluation using standard tracking metrics (MOTA, IDF1, HOTA), conducted ablation analyses, and developed visualization tools and final system outputs.
+
+\section{Timeline}
+
+The project followed a staged timeline aligned with the system architecture.
+
+\begin{itemize}
+    \item \textbf{Initial Phase:} Member 1 and Member 2 worked in parallel on data preprocessing and per-camera detection and tracking to establish reliable intermediate outputs.
+    \item \textbf{Intermediate Phase:} Member 3 developed feature extraction and indexing modules once stable tracklets became available, while Member 2 refined tracking performance.
+    \item \textbf{Integration Phase:} Member 4 integrated multi-camera association and evaluation modules using the outputs of previous stages.
+    \item \textbf{Final Phase:} All members contributed to system integration, testing, visualization, and preparation of experimental results and documentation.
+\end{itemize}
+
+This workload distribution enabled parallel development, reduced integration risks, and ensured that each system component was developed, validated, and documented in a structured manner.

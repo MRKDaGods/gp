@@ -1,0 +1,102 @@
+[
+  {
+    "track_id": 10,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 10,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 11,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 11,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 12,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 12,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 13,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 13,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 14,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 14,
+    "camera_id": "c002",
+    "class_id": 2
+  },
+  {
+    "track_id": 20,
+    "camera_id": "c003",
+    "class_id": 2
+  },
+  {
+    "track_id": 20,
+    "camera_id": "c003",
+    "class_id": 2
+  },
+  {
+    "track_id": 21,
+    "camera_id": "c003",
+    "class_id": 2
+  },
+  {
+    "track_id": 21,
+    "camera_id": "c003",
+    "class_id": 2
+  },
+  {
+    "track_id": 22,
+    "camera_id": "c003",
+    "class_id": 2
+  },
+  {
+    "track_id": 22,
+    "camera_id": "c003",
+    "class_id": 2
+  },
+  {
+    "track_id": 23,
+    "camera_id": "c003",
+    "class_id": 2
+  },
+  {
+    "track_id": 23,
+    "camera_id": "c003",
+    "class_id": 2
+  },
+  {
+    "track_id": 24,
+    "camera_id": "c003",
+    "class_id": 2
+  },
+  {
+    "track_id": 24,
+    "camera_id": "c003",
+    "class_id": 2
+  }
+]

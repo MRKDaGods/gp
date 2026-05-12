@@ -1,0 +1,35 @@
+\chapter{Conclusions and Future Work}
+
+This chapter summarises the key outcomes of the project, the challenges encountered during development, the experience gained, and directions for future improvement.
+
+\section{Faced Challenges}
+
+\textbf{GPU memory constraints.} The GTX~1050~Ti (4~GB VRAM) used for local inference cannot load large Vision Transformer variants at full batch sizes. Training was offloaded to Kaggle P100~GPUs, and inference was run with reduced batch sizes and FP16 precision. Larger models that might improve Re-ID accuracy remain inaccessible for local deployment.
+
+\textbf{Single-camera identity fragmentation.} Vehicles stationary at traffic lights are frequently split into multiple short tracklets by the tracker. Resolving this required a 450-frame (45-second) track buffer and a dedicated within-camera intra-merge post-processing step with careful temporal and spatial thresholds.
+
+\textbf{Dataset ingestion and format alignment.} CityFlowV2 uses a nested directory structure, inconsistent naming conventions across scenes, and 1-based MOT frame IDs that must be distinguished from the pipeline's internal 0-based frame IDs. Correct handling of this boundary was a recurring source of subtle bugs.
+
+\textbf{Association hyperparameter saturation.} Over [PLACEHOLDER] Stage~4 configuration variants were evaluated on the CityFlowV2 benchmark. The experiment log confirmed that the remaining performance gap versus SOTA is attributable to feature quality, not association logic: no further tuning of thresholds, weights, or algorithms yielded measurable IDF1 improvements.
+
+\section{Gained Experience}
+
+The team gained substantial experience in: fine-tuning Vision Transformer models at scale using cloud GPU infrastructure; deploying FAISS vector databases for similarity-based retrieval; designing config-driven, modular pipeline architectures using OmegaConf; full-stack development combining a Python FastAPI backend with a TypeScript Next.js frontend; and quantitative evaluation using the TrackEval benchmark harness against internationally recognised metrics.
+
+\section{Conclusions}
+
+The system achieves [OUR-IDF1]\% IDF1 on the CityFlowV2 benchmark, placing it approximately [GAP]~percentage points below the published SOTA of 84.37\% (AIC22 2nd place). The analysis of [PLACEHOLDER]+ ablation experiments establishes that this gap is driven by the use of single-frame Re-ID embeddings rather than temporally aggregated ones, and not by the association algorithm, which has been exhaustively optimised.
+
+A complete end-to-end system was delivered: a seven-stage offline tracking pipeline, a FastAPI REST backend, and a Next.js web application providing a structured seven-step operator workflow from video upload to trajectory export. All components are integrated, tested, and reproducible via a single configuration file.
+
+\section{Future Work}
+
+\textbf{Temporal Re-ID (VID-Trans-ReID).} Replacing the single-frame TransReID embeddings with a video-based model that aggregates features across all frames of a tracklet is the highest-priority improvement. Published results show 1--2\% Rank-1 gains on video Re-ID benchmarks.
+
+\textbf{Zone-based spatio-temporal model.} Defining per-camera entry and exit zones with learned transition time distributions between zone pairs (as used by AIC22 top teams) would provide stronger cross-camera constraints and reduce false associations.
+
+\textbf{Camera Link Model (CLM).} Self-supervised learning of camera topology from high-confidence tracklet matches would eliminate the need for manual camera adjacency annotation when deploying to new environments.
+
+\textbf{ReID model ensemble.} Averaging embeddings from two or more complementary backbone architectures has been shown to improve cross-camera matching accuracy without additional training data.
+
+\textbf{Real-time streaming mode.} The current offline batch architecture could be extended with an RTSP ingestion layer and progressive stage execution to support near-real-time operation for live surveillance deployments.

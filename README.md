@@ -7,15 +7,17 @@ Multi-camera tracking system for vehicles and humans on a city-wide scale. Proce
 ```
 Stage 0: Ingestion       → Frame extraction, preprocessing, format unification
 Stage 1: Tracking        → YOLO26 detection + BoxMOT per-camera tracking
-Stage 2: Features        → ReID embeddings (OSNet/ResNet50-IBN) + HSV histograms + PCA
+Stage 2: Features        → ReID embeddings (TransReID/OSNet) + HSV histograms + PCA
 Stage 3: Indexing        → FAISS vector index + SQLite metadata store
 Stage 4: Association     → Cross-camera matching via similarity graph + connected components
 Stage 5: Evaluation      → HOTA, IDF1, MOTA metrics via TrackEval
 Stage 6: Visualization   → Annotated videos, BEV maps, timeline views
-Apps:    Dashboard        → Streamlit web UI, NL query, 3D simulation
+Apps:    Dashboard       → Next.js web UI, NL query, 3D simulation
 ```
 
 ## Quick Start
+
+### Backend (Python Pipeline)
 
 ```bash
 # Install
@@ -33,9 +35,51 @@ python scripts/run_stage.py --config configs/default.yaml --stage 1
 # Run smoke test (tiny data, fast)
 python scripts/run_pipeline.py --config configs/default.yaml --smoke-test
 
-# Launch web dashboard
+# Launch legacy Streamlit dashboard
 streamlit run src/apps/web_dashboard.py
 ```
+
+### Frontend (Next.js Dashboard)
+
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
+```
+
+The frontend will be available at `http://localhost:3000`.
+
+## Frontend Features
+
+Modern Next.js dashboard with UniFi-style dark theme:
+
+1. **Splash Screen** → Animated logo → Main dashboard
+2. **Stage 0: Upload** → Drag-drop upload, video gallery, preview
+3. **Stage 1: Detection** → YOLO bounding boxes (red), auto-run on upload
+4. **Stage 2: Selection** → Click boxes to select (green), multi-select mode
+5. **Stage 3: Inference** → Location filters (Egypt hierarchy), DateTime picker
+6. **Stage 4: Timeline** → Clipchamp-style tracklet editor, split-screen video
+7. **Stage 5: Refinement** → Select reference frames, re-search, variable speed
+8. **Stage 6: Output** → Summarized video, grid view (1x1 to 5x5), statistics
+
+### Frontend Tech Stack
+
+- Next.js 14 + TypeScript + Tailwind CSS
+- shadcn/ui components
+- Zustand (state management)
+- TanStack Query (data fetching)
+- Video.js + Leaflet (future maps)
 
 ## Project Structure
 
@@ -43,12 +87,30 @@ streamlit run src/apps/web_dashboard.py
 configs/          YAML configuration files
 src/core/         Shared data models, config loader, utilities
 src/stage0-6/     Pipeline stages (each with pipeline.py entry point)
-src/apps/         Applications (dashboard, NL query, 3D sim)
+src/apps/         Applications (Streamlit dashboard, NL query, 3D sim)
+frontend/         Next.js web dashboard (NEW)
 scripts/          CLI entry points
 notebooks/kaggle/ Kaggle training notebooks (ReID models)
 tests/            pytest test suite
 docs/             Documentation for team and supervisor
 ```
+
+## Future Steps
+
+1. **Local Demo Finalization**: Fully contain the app with local videos (Scene 2 subset for testing), local models, and self-hosted inference to ensure complete end-to-end functionality.
+2. **Full Dataset Processing**: Once verified with the Scene 2 subset, scale inference to support the full uncompressed dataset.
+3. **Cloud Deployment (Production)**: Decouple the monolithic app into a frontend client and a heavy backend server. The backend (inference engine and database) will run on a virtual machine or cloud infrastructure, while the UI will serve as a lightweight frontend connected via API.
+
+## Future: Map-Based Features
+
+When GPS/coordinate data is acquired:
+
+- **2D Interactive Map**: Vehicle paths visualization on Leaflet map
+- **Heatmap**: Vehicle density and common routes
+- **Spatiotemporal Constraints**:
+  - Max speed slider (0-200 km/h) to filter impossible matches
+  - Search radius slider for maximum travel distance
+  - Time window configuration
 
 ## Training (Kaggle)
 

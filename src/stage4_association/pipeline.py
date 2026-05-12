@@ -119,6 +119,7 @@ def run_stage4(
     features: List[TrackletFeatures],
     tracklets_by_camera: Dict[str, List[Tracklet]],
     output_dir: str | Path,
+    query_cameras: Optional[Set[str]] = None,
 ) -> List[GlobalTrajectory]:
     """Run cross-camera association.
 
@@ -129,6 +130,7 @@ def run_stage4(
         features: TrackletFeatures from Stage 2.
         tracklets_by_camera: Tracklets from Stage 1.
         output_dir: Directory for stage4 outputs.
+        query_cameras: If provided, filter final trajectories to only those involving these cameras.
 
     Returns:
         List of GlobalTrajectory objects.
@@ -234,10 +236,41 @@ def run_stage4(
             f"Falling back to primary/secondary fusion only (tert_weight=0.0)."
         )
 
-    if sec_weight + tert_weight > 1.0 + 1e-8:
+    quat_cfg = stage_cfg.get("quaternary_embeddings", {})
+    quat_path = quat_cfg.get("path", "")
+    quat_embeddings: Optional[np.ndarray] = None
+    quat_weight = 0.0
+    if quat_path and float(quat_cfg.get("weight", 0.0)) > 0 and Path(quat_path).exists():
+        quat_raw = np.load(quat_path).astype(np.float32)
+        if quat_raw.shape[0] == n:
+            quat_weight = float(quat_cfg.get("weight", 0.0))
+            quat_norms = np.linalg.norm(quat_raw, axis=1, keepdims=True)
+            quat_embeddings = quat_raw / np.maximum(quat_norms, 1e-8)
+            logger.info(
+                f"Quaternary embeddings loaded: {quat_embeddings.shape[1]}D, "
+                f"weight={quat_weight:.2f} (score-level fusion)"
+            )
+            if fic_cfg.get("enabled", False):
+                quat_embeddings = per_camera_whiten(
+                    quat_embeddings,
+                    camera_ids,
+                    regularisation=float(fic_cfg.get("regularisation", 3.0)),
+                    min_samples=int(fic_cfg.get("min_samples", 5)),
+                )
+                logger.info("Applied FIC whitening to quaternary embeddings")
+        else:
+            logger.warning(f"Quaternary embeddings shape mismatch: {quat_raw.shape[0]} vs {n}")
+    elif quat_path and float(quat_cfg.get("weight", 0.0)) > 0:
+        logger.warning(
+            f"Quaternary embeddings file not found: {quat_path}. "
+            f"Falling back to primary/secondary/tertiary fusion only (quat_weight=0.0)."
+        )
+
+    if sec_weight + tert_weight + quat_weight > 1.0 + 1e-8:
         raise ValueError(
             "stage4 association ensemble weights invalid: "
-            f"secondary({sec_weight:.3f}) + tertiary({tert_weight:.3f}) must be <= 1.0"
+            f"secondary({sec_weight:.3f}) + tertiary({tert_weight:.3f}) "
+            f"+ quaternary({quat_weight:.3f}) must be <= 1.0"
         )
 
     # Step 0: Per-camera feature whitening (FIC) — AIC21 1st-place technique.
@@ -444,12 +477,17 @@ def run_stage4(
     else:
         appearance_sim = {(i, j): sim for i, j, sim in candidate_pairs}
 
-    # Step 3b: Score-level fusion with secondary/tertiary embeddings
-    if (sec_embeddings is not None and sec_weight > 0) or (tert_embeddings is not None and tert_weight > 0):
-        primary_weight = 1.0 - sec_weight - tert_weight
+    # Step 3b: Score-level fusion with secondary/tertiary/quaternary embeddings
+    if (
+        (sec_embeddings is not None and sec_weight > 0)
+        or (tert_embeddings is not None and tert_weight > 0)
+        or (quat_embeddings is not None and quat_weight > 0)
+    ):
+        primary_weight = 1.0 - sec_weight - tert_weight - quat_weight
         logger.info(
             "Blending ensemble appearance sim "
-            f"(w_pri={primary_weight:.2f}, w_sec={sec_weight:.2f}, w_tert={tert_weight:.2f})..."
+            f"(w_pri={primary_weight:.2f}, w_sec={sec_weight:.2f}, "
+            f"w_tert={tert_weight:.2f}, w_quat={quat_weight:.2f})..."
         )
         blended = 0
         for (i, j), pri_sim in list(appearance_sim.items()):
@@ -458,6 +496,8 @@ def run_stage4(
                 sim += sec_weight * float(np.dot(sec_embeddings[i], sec_embeddings[j]))
             if tert_embeddings is not None and tert_weight > 0:
                 sim += tert_weight * float(np.dot(tert_embeddings[i], tert_embeddings[j]))
+            if quat_embeddings is not None and quat_weight > 0:
+                sim += quat_weight * float(np.dot(quat_embeddings[i], quat_embeddings[j]))
             appearance_sim[(i, j)] = sim
             blended += 1
         logger.info(f"Blended {blended} pairs with ensemble embeddings")
@@ -981,6 +1021,22 @@ def run_stage4(
             min_velocity_ratio=float(aflink_cfg.get("min_velocity_ratio", 0.5)),
             velocity_window=int(aflink_cfg.get("velocity_window", 5)),
         )
+
+    # If we are in query mode, filter the results
+    if query_cameras:
+        original_count = len(trajectories)
+        filtered_trajectories = []
+        for traj in trajectories:
+            # Get unique cameras involved in this trajectory
+            traj_cameras = set([t.camera_id for t in traj.tracklets])
+            
+            is_query_involved = any(cam in query_cameras for cam in traj_cameras)
+            # Ensure it linked to the wider gallery, otherwise it's just the local tracklet
+            is_global_match = len(traj_cameras - query_cameras) > 0
+            if is_query_involved and is_global_match:
+                filtered_trajectories.append(traj)
+        trajectories = filtered_trajectories
+        logger.info(f"Filtered to query matches: kept {len(trajectories)} trajectories out of {original_count}")
 
     # Log confidence distribution for diagnostics
     confidences = [t.confidence for t in trajectories if t.num_cameras > 1]
@@ -2192,3 +2248,6 @@ def _resolve_same_camera_conflicts(
         logger.info("Conflict resolution: no same-camera conflicts found")
 
     return refined
+
+
+run_stage = run_stage4

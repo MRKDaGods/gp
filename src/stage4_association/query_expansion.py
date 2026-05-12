@@ -98,14 +98,12 @@ def average_query_expansion_batched(
 ) -> np.ndarray:
     """Vectorised variant of AQE — faster for large N.
 
-    Uses advanced indexing to avoid the per-row Python loop.
-    Requires that *indices* has no negative (invalid) entries in
-    the first *k* columns; caller should ensure this or use the
-    loop-based :func:`average_query_expansion` instead.
+    Semantics match :func:`average_query_expansion` (same weighting, same
+    handling of invalid indices and of rows with no valid neighbours).
 
     Args:
         embeddings: (N, D) L2-normalised embedding matrix.
-        indices: (N, K) neighbour indices, first *k* columns used.
+        indices: (N, K) neighbour indices, first *k* columns used (after k_use).
         k: Neighbours per query.
         alpha: Original-query weight.
 
@@ -113,36 +111,35 @@ def average_query_expansion_batched(
         (N, D) L2-normalised expanded embedding matrix.
     """
     n, d = embeddings.shape
-    # Request k+1 columns to account for self-match removal
-    k_use = min(k + 1, indices.shape[1])
-    if k_use <= 0 or n == 0:
+    k_available = indices.shape[1] if indices.ndim == 2 else 0
+
+    if k <= 0 or n == 0:
         return embeddings.copy()
 
-    nn_idx = indices[:, :k_use]  # (N, k+1)
+    k_use = min(k, k_available)
+    if k_use <= 0:
+        logger.warning("QE (batched): no valid neighbour indices available, returning original")
+        return embeddings.copy()
 
-    # Mask self-matches (query is always its own top-1 neighbor in FAISS)
-    self_mask = nn_idx == np.arange(n).reshape(-1, 1)
-    valid_mask = (nn_idx >= 0) & (nn_idx < n) & ~self_mask
-    safe_idx = np.where(valid_mask, nn_idx, 0)  # (N, k)
-
-    # Gather neighbour embeddings: (N, k, D)
+    nn_idx = indices[:, :k_use]
+    valid_mask = (nn_idx >= 0) & (nn_idx < n)
+    safe_idx = np.where(valid_mask, nn_idx, 0)
     nn_feats = embeddings[safe_idx]
-
-    # Zero out invalid neighbours
     nn_feats[~valid_mask] = 0.0
 
-    # Count valid neighbours per query
-    valid_counts = valid_mask.sum(axis=1, keepdims=True).astype(np.float32)  # (N, 1)
-    valid_counts = np.maximum(valid_counts, 1e-8)
+    valid_counts = valid_mask.sum(axis=1, keepdims=True).astype(np.float32)
+    has_nn = valid_counts.squeeze(axis=1) >= 1.0
 
-    # Weighted sum: alpha * query + sum(valid neighbours)
-    nn_sum = nn_feats.sum(axis=1)  # (N, D)
-    expanded = (alpha * embeddings + nn_sum) / (alpha + valid_counts)
+    nn_sum = nn_feats.sum(axis=1)
+    numer = alpha * embeddings + nn_sum
+    denom = alpha + valid_counts
+    expanded = np.empty_like(embeddings)
+    expanded[has_nn] = (numer / denom)[has_nn]
+    expanded[~has_nn] = embeddings[~has_nn]
 
-    # L2 normalise
-    norms = np.linalg.norm(expanded, axis=1, keepdims=True)
+    norms = np.linalg.norm(expanded[has_nn], axis=1, keepdims=True)
     norms = np.maximum(norms, 1e-8)
-    expanded /= norms
+    expanded[has_nn] /= norms
 
-    logger.info(f"Query Expansion (batched): k={k}, alpha={alpha}, N={n}")
+    logger.info(f"Query Expansion (batched): k={k_use}, alpha={alpha}, N={n}")
     return expanded

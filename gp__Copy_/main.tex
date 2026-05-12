@@ -1,0 +1,56 @@
+\documentclass[12pt]{book}
+
+% Basic packages (you can add more later if needed)
+\usepackage[a4paper, left=1in, right=1in, top=1in, bottom=1in]{geometry}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{tocloft}
+
+\onehalfspacing  % similar to 1.5 spacing in Word
+
+\makeatletter
+\renewcommand{\bibname}{References}
+\makeatother
+
+
+\begin{document}
+
+% ---------- Front matter ----------
+\frontmatter
+
+\input{chapters/cover}          % Title page
+\input{chapters/abstract}       % Abstract (EN + AR)
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+% (Optional) lists
+\input{chapters/abbreviations}  % List of abbreviations
+\input{chapters/contacts}       % Contacts
+
+% ---------- Main matter ----------
+\mainmatter
+
+\input{chapters/ch1_introduction}
+\input{chapters/ch2_market_feasibility}
+\input{chapters/ch3_literature}
+\input{chapters/ch4_system_design}
+\input{chapters/ch5_testing}
+\input{chapters/ch6_conclusions}
+
+% ---------- Workload ----------
+\input{chapters/workload}
+
+% ---------- Appendices ----------
+\appendix
+\input{chapters/appendix_a}
+\input{chapters/appendix_b}
+\input{chapters/appendix_c}
+\input{chapters/appendix_d}
+
+% ---------- References ----------
+\input{chapters/references}
+
+\end{document}

@@ -1,0 +1,55 @@
+[
+  {
+    "global_id": 100,
+    "tracklets": [
+      {
+        "camera_id": "c002",
+        "track_id": 10,
+        "class_id": 2,
+        "start_frame": 0,
+        "end_frame": 30
+      },
+      {
+        "camera_id": "c002",
+        "track_id": 11,
+        "class_id": 2,
+        "start_frame": 0,
+        "end_frame": 30
+      }
+    ],
+    "timeline": []
+  },
+  {
+    "global_id": 101,
+    "tracklets": [
+      {
+        "camera_id": "c002",
+        "track_id": 12,
+        "class_id": 2,
+        "start_frame": 30,
+        "end_frame": 60
+      },
+      {
+        "camera_id": "c002",
+        "track_id": 13,
+        "class_id": 2,
+        "start_frame": 30,
+        "end_frame": 60
+      }
+    ],
+    "timeline": []
+  },
+  {
+    "global_id": 102,
+    "tracklets": [
+      {
+        "camera_id": "c002",
+        "track_id": 14,
+        "class_id": 2,
+        "start_frame": 60,
+        "end_frame": 90
+      }
+    ],
+    "timeline": []
+  }
+]

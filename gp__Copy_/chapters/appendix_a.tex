@@ -1,0 +1,56 @@
+\chapter{Development Platforms and Tools}
+
+\section{Hardware Platforms}
+
+\begin{table}[htbp]
+\centering
+\caption{Hardware platforms used during development and evaluation.}
+\label{tab:hardware}
+\begin{tabular}{lll}
+\hline
+\textbf{Platform} & \textbf{Specification} & \textbf{Role} \\ \hline
+Kaggle Cloud (P100)  & NVIDIA Tesla P100, 16~GB HBM2, 2$\times$CPU cores & TransReID model training \\
+Local workstation    & NVIDIA GTX~1050~Ti, 4~GB GDDR5; Intel Core~i7 & Pipeline inference, frontend dev \\
+Operating system     & Windows~11                                       & Development environment \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Software Tools}
+
+\begin{table}[htbp]
+\centering
+\caption{Software libraries and tools used in the system.}
+\label{tab:software}
+\begin{tabular}{lll}
+\hline
+\textbf{Component} & \textbf{Library / Tool} & \textbf{Version} \\ \hline
+\multicolumn{3}{l}{\textit{Core AI / ML}} \\
+Language            & Python                  & 3.10              \\
+Deep learning       & PyTorch + CUDA          & 2.4.1 + cu124     \\
+Detection           & Ultralytics (YOLO26m)   & $\geq$8.1         \\
+Tracking            & BoxMOT (Deep-OC-SORT)   & $\geq$10.0        \\
+ReID backbone       & timm (TransReID ViT-B/16 CLIP) & $\geq$0.9   \\
+Secondary ReID      & torchreid (OSNet-x0.25) & ---               \\
+Vector index        & FAISS-CPU               & $\geq$1.7         \\
+Graph clustering    & NetworkX                & $\geq$3.1         \\
+Evaluation          & TrackEval               & ---               \\
+\multicolumn{3}{l}{\textit{Pipeline Infrastructure}} \\
+Configuration       & OmegaConf               & $\geq$2.3         \\
+Metadata store      & SQLite3                 & built-in          \\
+Logging             & Loguru                  & ---               \\
+Testing             & pytest                  & ---               \\
+\multicolumn{3}{l}{\textit{Backend}} \\
+API framework       & FastAPI                 & ---               \\
+ASGI server         & Uvicorn                 & ---               \\
+\multicolumn{3}{l}{\textit{Frontend}} \\
+Framework           & Next.js                 & 14.2.5            \\
+Language            & TypeScript              & 5.5               \\
+Styling             & Tailwind CSS            & 3.4               \\
+UI components       & shadcn/ui (Radix UI)    & ---               \\
+State management    & Zustand                 & 4.5               \\
+Data fetching       & TanStack Query          & 5.51              \\
+Video playback      & Video.js                & 8.12              \\
+Maps                & Leaflet / react-leaflet & 1.9               \\
+Drag and drop       & dnd-kit                 & 6.1               \\ \hline
+\end{tabular}
+\end{table}

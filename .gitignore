@@ -2,6 +2,7 @@
 data/
 models/
 outputs/
+preprocessed_datasets/
 
 # Accidentally-downloaded artifacts from kaggle kernels output
 checkpoint.tar.gz
@@ -93,6 +94,8 @@ yolo26m.pt
 *.zip
 *.xlsx
 run_metadata.json
+*.avi
+*.mp4
 explorer_output.txt
 planner_output.txt
 tmp_09d_*.json
@@ -103,3 +106,7 @@ tmp_09v2_output/
 
 .pytest_cache/
 tmp_*/
+
+# Local dataset and upload directories
+/dataset
+/uploads

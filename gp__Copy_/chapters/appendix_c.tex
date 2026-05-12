@@ -1,0 +1,134 @@
+\chapter{User Guide}
+
+This appendix provides a step-by-step guide for operating the multi-camera tracking system through the web application. The application is accessed at \texttt{http://localhost:3000} once the backend (\texttt{http://localhost:8000}) and frontend servers are running.
+
+\section*{Step 1 — Upload}
+
+\textbf{What you see:} The Upload screen with a drag-and-drop zone and a video gallery below it.
+
+\textbf{What to do:} Drag one or more camera video files (MP4, AVI) onto the upload zone, or click ``Browse Files'' to use the file picker.
+
+\textbf{System response:} Each file is uploaded and appears as a thumbnail card in the gallery. The system automatically starts frame extraction and detection in the background. A progress indicator is shown on each card.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Step~1 --- Upload screen screenshot}\vspace{2.5cm}}}
+% TODO: insert screenshot — Step 1 Upload screen
+\caption{Step~1: Video upload and gallery.}
+\label{fig:ui1}
+\end{figure}
+
+\section*{Step 2 — Detection}
+
+\textbf{What you see:} A video player with bounding boxes rendered over detected vehicles.
+
+\textbf{What to do:} Use the timeline scrubber or playback controls to review detections. Verify that vehicles are correctly bounded.
+
+\textbf{System response:} Bounding boxes update in real time as you scrub through frames. A detection count badge shows the number of objects per frame.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Step~2 --- Detection view with bounding boxes screenshot}\vspace{2.5cm}}}
+% TODO: insert screenshot — Step 2 Detection view with bounding boxes
+\caption{Step~2: YOLO26m detection bounding boxes overlaid on video.}
+\label{fig:ui2}
+\end{figure}
+
+\section*{Step 3 — Selection}
+
+\textbf{What you see:} The same video player with detections; a selection panel on the right listing chosen targets.
+
+\textbf{What to do:} Click any bounding box on the video to select it as a target of interest. The box turns green. Click again to deselect. Use ``Multi-select'' mode to designate several targets simultaneously.
+
+\textbf{System response:} Each selected target is listed with its tracklet ID and class label in the selection panel.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Step~3 --- Target selection screenshot}\vspace{2.5cm}}}
+% TODO: insert screenshot — Step 3 with green selected bounding box and side panel
+\caption{Step~3: Target selection.}
+\label{fig:ui3}
+\end{figure}
+
+\section*{Step 4 — Inference}
+
+\textbf{What you see:} A metadata form with location fields and a datetime picker, plus a ``Run Inference'' button.
+
+\textbf{What to do:} Optionally fill in the geographic context (country → governorate → district → intersection) and the observation datetime range. Click ``Run Inference''.
+
+\textbf{System response:} The system executes Stages~2--4 of the pipeline (feature extraction, indexing, cross-camera association). A progress bar tracks execution. On completion, global trajectory results are loaded.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Step~4 --- Inference form and progress bar screenshot}\vspace{2.5cm}}}
+% TODO: insert screenshot — Step 4 inference form and progress bar
+\caption{Step~4: Location metadata entry and inference trigger.}
+\label{fig:ui4}
+\end{figure}
+
+\section*{Step 5 — Timeline}
+
+\textbf{What you see:} A Clipchamp-style multi-track timeline. Each row is a camera; each coloured segment is a tracklet. A split-screen video player shows the footage for the selected segment.
+
+\textbf{What to do:} Click any timeline segment to jump the video player to that camera and time range. Drag segment boundaries to trim. Drag segments across tracks to reassign tracklets to a different global identity.
+
+\textbf{System response:} Video player updates to show the selected camera segment. Edited assignments are saved to the backend.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Step~5 --- Timeline editor screenshot}\vspace{2.5cm}}}
+% TODO: insert screenshot — Step 5 timeline editor with multi-camera tracks and video player
+\caption{Step~5: Cross-camera trajectory timeline editor.}
+\label{fig:ui5}
+\end{figure}
+
+\section*{Step 6 — Refinement}
+
+\textbf{What you see:} A reference frame selector showing key crops from the trajectory, a playback speed slider, and a ``Re-search'' button.
+
+\textbf{What to do:} Click one or more reference frame thumbnails to use them as new query embeddings. Adjust the playback speed slider (0.25$\times$--2$\times$) for frame-by-frame inspection. Click ``Re-search'' to trigger a refined similarity search.
+
+\textbf{System response:} The system re-runs Stage~4 using the selected frames as query embeddings and updates the timeline with improved results.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Step~6 --- Refinement panel screenshot}\vspace{2.5cm}}}
+% TODO: insert screenshot — Step 6 refinement panel with frame thumbnails and speed slider
+\caption{Step~6: Refinement with reference frames.}
+\label{fig:ui6}
+\end{figure}
+
+\section*{Step 7 — Output}
+
+\textbf{What you see:} An export panel with format options, a grid-layout selector, and a statistics summary card.
+
+\textbf{What to do:} Choose an export format (summarised video, MOT CSV, or JSON). Select the camera grid size (1$\times$1 to 5$\times$5) for the video export. Click ``Export''.
+
+\textbf{System response:} The system generates and downloads the file. The statistics card shows total identities found, cameras covered, and track duration.
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Step~7 --- Export and statistics screenshot}\vspace{2.5cm}}}
+% TODO: insert screenshot — Step 7 export panel and statistics summary
+\caption{Step~7: Results export and statistics.}
+\label{fig:ui7}
+\end{figure}
+
+\section*{CLI Quick Reference}
+
+The pipeline can also be run directly from the command line:
+
+\begin{verbatim}
+# Run full 7-stage pipeline
+python scripts/run_pipeline.py --config configs/default.yaml
+
+# Run a single stage (e.g., Stage 1)
+python scripts/run_pipeline.py --config configs/default.yaml --stages 1
+
+# Smoke test (10 frames per camera, fast validation)
+python scripts/run_pipeline.py --config configs/default.yaml --smoke-test
+
+# Override a config parameter at runtime
+python scripts/run_pipeline.py --config configs/default.yaml \
+    --override stage4.association.graph.similarity_threshold=0.53
+\end{verbatim}

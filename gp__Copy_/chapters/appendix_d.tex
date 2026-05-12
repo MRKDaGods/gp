@@ -1,0 +1,149 @@
+\chapter{Code Documentation}
+
+\section{Repository Structure}
+
+\begin{verbatim}
+gp/
+├── configs/
+│   ├── default.yaml          # Master config (OmegaConf)
+│   └── datasets/             # Dataset-specific config overrides
+├── src/
+│   ├── core/                 # Shared data models, config loader, IO utils
+│   ├── stage0_ingestion/     # Frame extraction, preprocessing
+│   ├── stage1_tracking/      # YOLO26m detection + Deep-OC-SORT
+│   ├── stage2_features/      # TransReID ReID + HSV + PCA whitening
+│   ├── stage3_indexing/      # FAISS IndexFlatIP + SQLite
+│   ├── stage4_association/   # Similarity graph + conflict_free_cc
+│   ├── stage5_evaluation/    # TrackEval HOTA/IDF1/MOTA
+│   └── stage6_visualization/ # Annotated video, BEV, timeline export
+├── backend/
+│   ├── app.py                # FastAPI application factory + routers
+│   ├── config.py             # Path and server config
+│   ├── routers/              # 15 router modules
+│   └── services/             # Business logic (pipeline, video, search)
+├── frontend/
+│   ├── src/
+│   │   ├── app/              # Next.js App Router pages
+│   │   ├── components/       # React UI components (shadcn/ui based)
+│   │   └── store/            # Zustand state stores
+│   ├── package.json
+│   └── tailwind.config.ts
+├── scripts/
+│   ├── run_pipeline.py       # Full or partial pipeline CLI entry point
+│   ├── run_stage.py          # Single-stage CLI entry point
+│   └── download_models.py    # Download YOLO26m + BoxMOT weights
+├── tests/                    # pytest test suite (per-stage)
+└── notebooks/kaggle/         # Kaggle training notebooks (10a/10b/10c)
+\end{verbatim}
+
+\begin{figure}[htbp]
+\centering
+\framebox[0.85\textwidth]{\parbox{0.83\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Module dependency diagram (src/ stage packages and application layer)}\vspace{2.5cm}}}
+% TODO: insert figure — module dependency diagram showing data flow between src/ packages
+\caption{Module dependency diagram for the seven pipeline stages and application layer.}
+\label{fig:modules}
+\end{figure}
+
+\section{Key Data Contracts}
+
+\subsection{FrameInfo}
+
+Produced by Stage~0; consumed by Stage~1.
+
+\begin{verbatim}
+{
+  "frame_id":    0,             // 0-based integer
+  "camera_id":   "S02_c009",
+  "timestamp":   10.0,          // seconds from video start
+  "frame_path":  "data/outputs/.../stage0/S02_c009/frame_000000.jpg",
+  "width":       1920,
+  "height":      1080
+}
+\end{verbatim}
+
+\subsection{Tracklet}
+
+Produced by Stage~1; consumed by Stages~2--4.
+
+\begin{verbatim}
+{
+  "track_id":   1,
+  "camera_id":  "S02_c009",
+  "class_id":   2,
+  "class_name": "car",
+  "frames": [
+    {
+      "frame_id":   100,
+      "timestamp":  10.0,
+      "bbox":       [x1, y1, x2, y2],
+      "confidence": 0.92
+    }
+  ]
+}
+\end{verbatim}
+
+\subsection{GlobalTrajectory}
+
+Produced by Stage~4; consumed by Stages~5--6 and the frontend.
+
+\begin{verbatim}
+{
+  "global_id":   42,
+  "class_name":  "car",
+  "evidence": [
+    {
+      "camera_id": "S02_c009",
+      "track_id":  1,
+      "start_frame": 100,
+      "end_frame":   250,
+      "similarity":  0.87
+    }
+  ]
+}
+\end{verbatim}
+
+\section{Configuration System}
+
+All pipeline parameters are managed through OmegaConf YAML. The hierarchical config structure is:
+
+\begin{verbatim}
+configs/default.yaml           # Base config for all stages
+configs/datasets/cityflowv2.yaml  # Dataset-specific overrides merged on top
+CLI --override flags           # Applied last (highest priority)
+\end{verbatim}
+
+Config access follows the stage hierarchy:
+
+\begin{verbatim}
+cfg.stage1.tracker.algorithm                       # "deepocsort"
+cfg.stage2.reid.pca_n_components                   # 384
+cfg.stage4.association.graph.similarity_threshold  # 0.53
+cfg.stage4.association.fic.regularisation          # 0.1
+\end{verbatim}
+
+\section{Backend API Reference}
+
+Base URL: \texttt{http://localhost:8000}
+
+\begin{table}[htbp]
+\centering
+\caption{Key backend API endpoints.}
+\label{tab:api}
+\begin{tabular}{lll}
+\hline
+\textbf{Router} & \textbf{Method + Path} & \textbf{Description} \\ \hline
+health      & GET /health                     & Liveness probe \\
+videos      & POST /videos/upload             & Upload a camera video \\
+videos      & GET /videos                     & List all uploaded videos \\
+frames      & GET /frames/\{camera\}/\{id\}   & Serve a single frame JPEG \\
+detections  & GET /detections/\{camera\}/\{frame\} & Bounding boxes for a frame \\
+tracklets   & GET /tracklets/\{camera\}       & All tracklets for a camera \\
+pipeline    & POST /pipeline/run              & Trigger pipeline stages \\
+pipeline    & GET /pipeline/status/\{run\_id\} & Poll pipeline progress \\
+timeline    & GET /timeline/\{run\_id\}       & Timeline JSON for frontend \\
+search      & POST /search/query              & Similarity search by embedding \\
+results     & GET /results/\{run\_id\}        & Global trajectory results \\
+export      & POST /export/video              & Generate annotated video export \\
+export      & POST /export/csv                & Export MOT-format CSV \\ \hline
+\end{tabular}
+\end{table}

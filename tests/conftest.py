@@ -141,3 +141,34 @@ def tmp_output_dir(tmp_path) -> Path:
     d = tmp_path / "test_output"
     d.mkdir()
     return d
+
+
+# ---------------------------------------------------------------------------
+# Timeline / Phase-3 fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def fixture_timeline_dir() -> Path:
+    """Absolute path to the pre-generated timeline fixture data."""
+    return Path(__file__).parent / "fixtures" / "timeline"
+
+
+@pytest.fixture
+def probe_artifact(fixture_timeline_dir):
+    """EmbeddingArtifact loaded from the probe fixture directory."""
+    from backend.models.embedding import EmbeddingArtifact
+    return EmbeddingArtifact.load(fixture_timeline_dir / "probe", "probe_run")
+
+
+@pytest.fixture
+def gallery_artifact(fixture_timeline_dir):
+    """EmbeddingArtifact loaded from the gallery fixture directory."""
+    from backend.models.embedding import EmbeddingArtifact
+    return EmbeddingArtifact.load(fixture_timeline_dir / "gallery", "gallery_run")
+
+
+@pytest.fixture
+def sample_trajectories(fixture_timeline_dir) -> List[Dict]:
+    """3 synthetic global trajectories referencing gallery tracks."""
+    import json
+    return json.loads((fixture_timeline_dir / "global_trajectories.json").read_text())

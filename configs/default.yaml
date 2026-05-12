@@ -22,30 +22,36 @@ stage0:
 
 stage1:
   detector:
-    model: "yolo26m.pt"
+    model: "models/detection/yolo26m.pt"
     confidence_threshold: 0.25
     iou_threshold: 0.65        # raised for dense vehicle overlap at intersections
     classes: [2, 5, 7]         # COCO: car=2, bus=5, truck=7 (vehicles only)
-    device: "cuda:0"
+    device: "cuda"
     half: true
     img_size: 1280             # high-res traffic camera footage
     agnostic_nms: true         # prevents bus/truck from suppressing overlapping cars
   tracker:
-    algorithm: "botsort"  # botsort | deepocsort | strongsort | bytetrack | ocsort
+    algorithm: "deepocsort"  # botsort | deepocsort | strongsort | bytetrack | ocsort
     reid_weights: "models/tracker/osnet_x0_25_msmt17.pt"
-    device: "cuda:0"
-    half: true
-    track_high_thresh: 0.25    # MUST match confidence_threshold per BotSort docs
-    track_low_thresh: 0.05     # accept very weak dets for lost track recovery
-    new_track_thresh: 0.25     # MUST match confidence_threshold per BotSort docs
-    track_buffer: 450          # death timer: keeps stopped vehicles alive during red lights (20-60s)
-    max_age: 450               # must be >= track_buffer for BaseTracker buffer sizing
-    max_obs: 460               # must be > max_age + 5 per BaseTracker docs
-    min_hits: 2                # require 3 consecutive detections to confirm track
-    match_thresh: 0.85
-    appearance_thresh: 0.5
-    proximity_thresh: 0.5
-    cmc_method: "sof"          # sparse optical flow CMC for mostly-static cameras
+    device: "0"
+    half: false               # Kaggle Stage 1b uses half=False for DeepOCSort stability
+    # --- DeepOCSort-specific params (from Kaggle Stage 1b notebook) ---
+    per_class: true            # track each class independently
+    max_age: 30                # death timer frames
+    min_hits: 3                # require 3 consecutive detections to confirm track
+    iou_threshold: 0.3         # IoU matching threshold
+    cmc_off: true              # disable CMC (not needed for mostly-static cameras)
+    Q_xy_scaling: 0.01         # Kalman process noise for position
+    Q_s_scaling: 0.0001        # Kalman process noise for scale
+    # --- BoT-SORT params (kept for reference, unused with deepocsort) ---
+    # track_high_thresh: 0.25
+    # track_low_thresh: 0.05
+    # new_track_thresh: 0.25
+    # track_buffer: 450
+    # match_thresh: 0.85
+    # appearance_thresh: 0.5
+    # proximity_thresh: 0.5
+    # cmc_method: "sof"
   min_tracklet_length: 3  # min_hits=3 already ensures 3 consecutive detections
   min_tracklet_area: 800  # vehicles are larger than persons
   # --- NEW: bbox interpolation for detection gaps ---
@@ -101,7 +107,7 @@ stage2:
       num_cameras: 0
       concat_patch: false
     batch_size: 64
-    device: "cuda:0"
+    device: "cuda"
     half: true
     # --- NEW: flip augmentation at inference ---
     flip_augment: true
@@ -134,9 +140,9 @@ stage2:
   crop:
     min_area: 500
     padding_ratio: 0.1
-    samples_per_tracklet: 16
+    samples_per_tracklet: 32  # v37: increased from 16 for better quality
     min_quality: 0.05       # composite quality threshold [0, 1]
-    laplacian_min_var: 30.0   # Laplacian-variance blur filter (0 = disabled)
+    laplacian_min_var: 15.0   # v37: lowered from 30.0 (accept slightly blurrier crops)
     foreground_masking:
       enabled: false
       model_name: "facebook/sam2.1-hiera-tiny"
@@ -163,6 +169,9 @@ stage3:
     db_path: null  # auto-set to output_dir/stage3/metadata.db
 
 stage4:
+  global_gallery:
+    enabled: false
+    run_id: "dataset_precompute_s01"
   association:
     solver: "cc"  # public solver toggle: cc keeps graph.algorithm, network_flow uses Hungarian matching
     top_k: 100
@@ -171,6 +180,9 @@ stage4:
       path: ""       # path to secondary .npy file; empty = disabled
       weight: 0.3    # blending weight for secondary model (0.3 = 30% secondary, 70% primary)
     tertiary_embeddings:
+      path: ""
+      weight: 0.0
+    quaternary_embeddings:
       path: ""
       weight: 0.0
     multi_query:
@@ -366,3 +378,4 @@ apps:
   simulation_3d:
     enabled: true
     backend: "plotly"  # plotly | pydeck
+
