@@ -1,0 +1,21 @@
+{
+  "id": "yahiaakhalafallah/14c-tta-stage2",
+  "title": "14c TTA Stage2",
+  "code_file": "14c_tta_stage2.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaP100",
+  "dataset_sources": [
+    "yahiaakhalafallah/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/mtmc-10a-stages-0-2",
+    "yahiaakhalafallah/09s-dinov2-large-cityflowv2"
+  ]
+}

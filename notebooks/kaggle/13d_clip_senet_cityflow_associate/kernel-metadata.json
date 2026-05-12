@@ -1,0 +1,19 @@
+{
+  "id": "yahiaakhalafallah/13d-clip-senet-cityflow-associate",
+  "title": "13d CLIP-SENet CityFlow Associate",
+  "code_file": "13d_clip_senet_cityflow_associate.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "kernel_sources": [
+    "yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing",
+    "yahiaakhalafallah/13c-clip-senet-cityflowv2-features"
+  ],
+  "competition_sources": []
+}

@@ -1,0 +1,20 @@
+{
+  "id": "yahiaakhalafallah/14d-tta-fusion-sweep",
+  "title": "14d TTA Fusion Sweep",
+  "code_file": "14d_tta_fusion_sweep.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "yahiaakhalafallah/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/14c-tta-stage2",
+    "yahiaakhalafallah/mtmc-10a-stages-0-2"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "yahiaakhalafallah/14g-dinov2-4view-tta-stage2",
+  "title": "14g DINOv2 4-View TTA Stage2",
+  "code_file": "14g_dinov2_4view_tta.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaP100",
+  "dataset_sources": [
+    "yahiaakhalafallah/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/mtmc-10a-stages-0-2",
+    "yahiaakhalafallah/09s-dinov2-large-cityflowv2",
+    "yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing"
+  ]
+}

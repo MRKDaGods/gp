@@ -1,0 +1,15 @@
+{
+  "id": "yahiaakhalafallah/13-clip-senet-train-v7",
+  "title": "13 clip senet train v7",
+  "code_file": "13_clip_senet_train_v7.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

@@ -1,0 +1,17 @@
+{
+  "id": "gumfreddy/14m-osnet-ibn-cityflowv2-train",
+  "title": "14m OSNet-IBN CityFlowV2 Train",
+  "code_file": "14m_osnet_ibn_train.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "competition_sources": [],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4",
+  "description": "v3 memory defense: single-GPU OSNet-IBN training, batch 64, eval batch 8, per-epoch gc cleanup."
+}
