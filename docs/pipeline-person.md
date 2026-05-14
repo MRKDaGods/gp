@@ -55,6 +55,21 @@ ID switches: 5
 
 The commonly cited `distance_gate=20.0`, `q_std=8.0`, `r_std=8.0` values are only the 12b baseline values; they are not the selected best.
 
+## Reproduction Checklist
+
+Local files required for a local config smoke or CPU-only review:
+
+- [../configs/datasets/wildtrack.yaml](../configs/datasets/wildtrack.yaml) with Kalman `max_age=2`, `min_hits=2`, `distance_gate=25.0`, `q_std=5.0`, and `r_std=10.0`.
+- `models/person_detection/MultiviewDetector.pth` only if detector inference is run locally; canonical reproduction keeps MVDeTr training/inference on Kaggle.
+- `models/reid/person_transreid_vit_base_market1501.pth` if person ReID merge experiments are rerun; available from the mtmc-weights datasets.
+- Downloaded 12b JSON evidence (`tracking_sweep_best.json`, `evaluation_summary.json`, and `reid_merge_sweep_best.json`) if reproducing the documentation trail without rerunning Kaggle.
+
+Kaggle artifacts required for full reproduction:
+
+- WILDTRACK dataset mount `aryashah2k/large-scale-multicamera-detection-dataset`.
+- `gumfreddy/12a-wildtrack-mvdetr-training` for MVDeTr ResNet18 training/export. Treat MODA=91.3% as the verified final loaded-model result and MODA=92.1% as an epoch-line claim.
+- `gumfreddy/12b-wildtrack-mvdetr-tracking-reid` for the verified Kalman tracker result: IDF1=0.9467084639498433 with the parameters listed above.
+
 ## Push / Monitor Commands
 
 ```powershell

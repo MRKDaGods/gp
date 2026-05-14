@@ -28,7 +28,7 @@
 
 #### Tertiary ReID - DINOv2 ViT-L/14
 
-- Local file: models/reid/dinov2_large_cityflowv2.pth (NOT ON LOCAL DISK)
+- Local file: models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth (NOT ON LOCAL DISK)
 - Deployed Kaggle file: vehicle_transreid_dinov2_large_cityflowv2_final.pth
 - Hosted: DATASET UNRESOLVED. Visible datasets across gumfreddy, mrkdagods, ali369, and yahiaakhalafallah only expose the mtmc-weights datasets, and none contains the DINOv2 tertiary checkpoint. The deployed path is a Kaggle notebook output source: /kaggle/input/09s-dinov2-large-cityflowv2/vehicle_transreid_dinov2_large_cityflowv2_final.pth.
 - Source training: yahiaakhalafallah/09s-dinov2-large-cityflowv2 -> Kaggle notebook output source -> Stage 2 tertiary file. The local notebook defines vehicle_transreid_dinov2_large_cityflowv2_best.pth, vehicle_transreid_dinov2_large_cityflowv2_final.pth, and vehicle_transreid_dinov2_large_cityflowv2_summary.json.
@@ -80,108 +80,132 @@
 - Does NOT improve CityFlow MTMC: 14u Option C port failed at 0.77995 vs 14e B1's 0.77936 baseline.
 - This is a single-camera workflow on VeRi-776 only.
 
-## Section 3 - TODO - see next subagent commit
+## Section 3 - Approach catalog, integration map, and reproduction recipes
 
-- Approach catalog (every TransReID/CLIP-SENet/DINOv2/ResNet variant)
-- Dead-end summary
-- System integration map (yaml -> backend -> frontend)
-- Reproduction recipes (link to pipeline-vehicle.md, pipeline-person.md)# Models & Checkpoints - Canonical Reference
+### Section 3.1 - Approach catalog: Vehicle ReID
 
-> Last verified: 2026-05-15. Verification used Kaggle metadata, Kaggle kernel logs / small JSON outputs, and local notebook source only. No checkpoint downloads or local pipeline stages were run.
+#### TransReID variants
 
-## Kaggle Inventory
+| Variant | Trained on | Best verified mAP / R1 | Source kernel | Deployed? | Notes |
+|---|---|---:|---|---|---|
+| ViT-B/16 CLIP 256px | CityFlowV2 | 0.8153 / UNVERIFIED | `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` | Yes - primary 14e B1 | AugOverhaul+EMA fine-tune; supersedes the older 80.14% documentation claim. R1 was not retained in the verified metadata. |
+| ViT-B/16 CLIP 256px | VeRi-776 | 0.8997 / 0.9833 | `mrkdagods` 09v v17 | Yes - via 14t fusion | Checkpoint `vehicle_transreid_vit_base_veri776.pth`; one of the two 14t VeRi-776 experts. |
+| ViT-B/16 CLIP 384px | CityFlowV2 | 0.8014 / 0.9227 documented; primary artifact UNVERIFIED | `mrkdagods/09b-vehicle-reid-384px-vit-training-v2` | No - DEAD END | MTMC v43/v44 fell to 0.7585/0.7562, about -2.8pp; 384px features captured viewpoint-specific texture that harmed cross-camera association. |
+| ViT-L/14 CLIP | VeRi-776 | 0.8090 / 0.9690 base; 0.8795 / 0.9732 post-rerank | `mrkdagods/14p3-veri-vit-l-14-clip-clean-train` | No - probe only | Larger CLIP TransReID did not beat 09v. The earlier 14p mAP=1.0 signal was treated as overfitting/buggy and not a valid model claim. |
 
-### Datasets With Checkpoint-Like Files
+#### CLIP-SENet variants
 
-| Slug | Verified files |
-| --- | --- |
-| `yahiaakhalafallah/mtmc-weights` | `detection/yolo26m.pt` 44,255,705 bytes; `reid/transreid_cityflowv2_best.pth` 346,518,635; `reid/person_transreid_vit_base_market1501.pth` 347,713,209; `reid/vehicle_osnet_veri776.pth` 30,159,023; `reid/vehicle_transreid_vit_base_veri776.pth` 346,889,637; PCA files and metadata. Does not include the DINOv2 tertiary checkpoint. |
-| `gumfreddy/mtmc-weights` | `detection/yolo26m.pt` 44,255,705 bytes; `reid/transreid_cityflowv2_best.pth` 346,518,635; `reid/resnet101ibn_cityflowv2_384px_best.pth` 171,701,980; `reid/person_transreid_vit_base_market1501.pth` 345,390,449; PCA files and metadata. Does not include the DINOv2 tertiary checkpoint. |
-| `mrkdagods/mtmc-weights` | `detection/yolo26m.pt` 44,255,705 bytes; `reid/transreid_cityflowv2_best.pth` 346,518,635; `reid/resnet101ibn_cityflowv2_384px_best.pth` 171,701,980; `reid/transreid_cityflowv2_256px_dmt_best.pth` 347,199,765; `reid/transreid_cityflowv2_384px_best.pth` 345,353,127; `reid/person_transreid_vit_base_market1501.pth` 345,390,449. No `vehicle_osnet_veri776.pth`. |
-| `gumfreddy/09p-r50-ibn-cityflowv2-extended-checkpoint` | `fastreid_r50_ibn_cityflowv2_extended_final.pth` 99,857,872 bytes. |
+| Variant | Trained on | Best verified metric | Source kernel | Deployed? | Notes |
+|---|---|---:|---|---|---|
+| CLIP-SENet v6 320px, P=8, K=8 | VeRi-776 | 0.8234 mAP base; 0.9154 mAP post-rerank | `yahiaakhalafallah/13-clip-senet-train` | Yes - via 14t fusion | Canonical CLIP-SENet checkpoint for VeRi-776 score fusion. |
+| CLIP-SENet v7 256px, P=16 | VeRi-776 | 0.8136 mAP / 0.9571 R1 | `yahiaakhalafallah/13-clip-senet-train` v7 and `yahiaakhalafallah/13e-v7-clip-senet-eval` | No - DEAD END | Smaller crops lost fine vehicle texture; post-rerank also regressed versus v6. |
+| CLIP-SENet fine-tune | CityFlowV2, 12 epochs | standalone MTMC IDF1=0.7099 | `yahiaakhalafallah/13f-clip-senet-cityflow-finetune` plus `yahiaakhalafallah/13h-clip-senet-ft-fusion` | No - DEAD END | Fusion sweep peaked at 0.7691, still -0.12pp below the 10c v15 production baseline. |
 
-### Kernel Outputs Used As Sources
+#### DINOv2 variants
 
-| Slug | Verified output evidence |
-| --- | --- |
-| `yahiaakhalafallah/14c-tta-stage2` | `14c_summary.json` downloaded: Stage 2 TTA feature build, MTMC IDF1 0.770846, primary 4-view TTA and DINOv2 2-view TTA. |
-| `yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep` | `14e_summary.json` downloaded: B1 is MTMC IDF1 0.7793596227569698 at `w_tertiary=0.525`, `similarity_threshold=0.48`, `aqe_k=2`, `fic_regularisation=0.5`. |
-| `gumfreddy/12a-wildtrack-mvdetr-training` | Kernel log downloaded. It confirms `MultiviewDetector.pth` export and final loaded-model test line `moda: 91.3%`; it also contains an epoch-20 line `moda: 92.1%`. No `ground_plane_eval_summary.json` was produced by this notebook run because repo conversion failed. |
-| `gumfreddy/12b-wildtrack-mvdetr-tracking-reid` | `evaluation_summary.json`, `tracking_sweep_best.json`, and `reid_merge_sweep_best.json` downloaded. Best ground-plane IDF1 is 0.9467084639498433 with Kalman params below. |
-| `yahiaakhalafallah/09s-dinov2-large-cityflowv2` | Kernel output metadata pages confirm many output crop files; exact summary JSON was not reachable via the first paged output results. Notebook source confirms checkpoint filenames, but the 86.79% metric remains unverified from primary output in this pass. |
+| Variant | Trained on | Best verified metric | Source kernel | Deployed? | Notes |
+|---|---|---:|---|---|---|
+| ViT-L/14 | CityFlowV2 | UNVERIFIED; documented claim 0.8679 mAP / 0.9615 R1 | `yahiaakhalafallah/09s-dinov2-large-cityflowv2` | Yes - tertiary 14e B1 | Upstream filename is `vehicle_transreid_dinov2_large_cityflowv2_final.pth`. The config path is fixed on PR #4 to match that filename. |
+| ViT-B/14 | VeRi-776 | 0.8927 mAP / 0.9815 R1 post-rerank | `gumfreddy/14r-probe-dinov2-veri-776-train` | No - probe only | Standalone DINOv2 SSL pretraining underperformed the VeRi-776 CLIP-based experts. |
 
-The ali_369 token listed no owned datasets. Switching via `KAGGLE_API_TOKEN` worked for Yahia, Gumfreddy, and MRKDaGods.
+#### ResNet variants
 
-## Vehicle Pipeline (CityFlowV2 -> MTMC IDF1 = 0.77936)
+| Variant | Trained on | Best verified metric | Source kernel | Deployed? | Notes |
+|---|---|---:|---|---|---|
+| ResNet101-IBN-a 384px | CityFlowV2 | UNVERIFIED; documented claim 0.5277 mAP | `ali369/09d-vehicle-reid-resnet101-ibn-a-training` or `mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training` | No - disabled (`w_secondary=0.0`) | Too weak for ensemble use; later accessible logs only verified a 0.5061 loaded previous best. |
+| ResNet101-IBN-a | VeRi-776 | 0.6252 mAP documented | `ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain` | No - reference only | VeRi pretraining succeeded, but CityFlowV2 fine-tune regressed to 0.427 mAP. |
+| FastReID R50-IBN-a | CityFlowV2 | 0.6364 mAP / 0.7869 R1 documented for 09n; 09p exact metric UNVERIFIED | `gumfreddy/09p-fastreid-r50-extended-cityflowv2` | Warning - 14k quaternary only | 14k K7 reached 0.78079 MTMC IDF1, a marginal +0.0014 over 14e B1, not promoted. |
 
-### Detector: YOLO26m
+#### Other approaches tried
 
-- Local: `models/detection/yolo26m.pt`, 44,255,705 bytes on disk.
-- Kaggle: present in `yahiaakhalafallah/mtmc-weights`, `gumfreddy/mtmc-weights`, and `mrkdagods/mtmc-weights` as `detection/yolo26m.pt` with the same size.
-- Provenance: standard Ultralytics YOLO26m COCO checkpoint, no project fine-tuning found.
-- Used by: Stage 1 vehicle detection in [configs/datasets/cityflowv2.yaml](../configs/datasets/cityflowv2.yaml).
+- DMT camera-aware training (09g): 43.8% mAP and about -1.4pp MTMC IDF1, too weak.
+- ResNeXt101-IBN-a ArcFace (09j): 36.88% mAP; partial/mismatched pretrained weights left large backbone regions effectively random.
+- ArcFace on ResNet101-IBN-a (09i): 50.80% mAP; warm-starting CE geometry into angular-margin loss overfit and missed the 52.77% baseline.
+- Circle loss plus triplet on ResNet: 16-30% mAP; conflicting gradients and unstable metric-learning recipe.
+- SGD for ResNet101-IBN-a: 30.27% mAP; AdamW was essential for these small-data vehicle runs.
 
-### Primary ReID: TransReID ViT-B/16 CLIP 256px
+### Section 3.2 - Approach catalog: Person
 
-- Local: `models/reid/transreid_cityflowv2_best.pth`, 346,518,635 bytes on disk.
-- Kaggle: `gumfreddy/mtmc-weights/reid/transreid_cityflowv2_best.pth` and matching files in `yahiaakhalafallah/mtmc-weights` and `mrkdagods/mtmc-weights`.
-- Used at: Stage 2 primary ReID; in 14e B1 the effective Stage 4 primary score weight is 0.475.
-- Claimed metric: mAP 80.14%, R1 92.27% in [docs/experiment-log.md](experiment-log.md) and [docs/findings.md](findings.md).
-- Primary-source status: UNVERIFIED for this pass. The requested notebook, [notebooks/kaggle/09_vehicle_reid_cityflowv2/09_vehicle_reid_cityflowv2.ipynb](../notebooks/kaggle/09_vehicle_reid_cityflowv2/09_vehicle_reid_cityflowv2.ipynb), is not the 80.14% source in its current kernel output. Its downloaded `vehicle_reid_cityflowv2_metadata.json` says `v4_circleloss_ablation` with `best_mAP=0.1844796256388448`.
-- Reconciled conclusion: the deployed file exists and is used by the pipeline, but the 80.14% / 92.27% claim must be treated as a documented historical claim until the actual 09b v2 primary output is found.
+- Detector: MVDeTr ResNet18 from `gumfreddy/12a-wildtrack-mvdetr-training`. The epoch-20 log line claims MODA=92.1%, but the final loaded-model line for the exported run verifies MODA=91.3%, MODP=81.8%, precision=94.7%, recall=96.6%.
+- Tracker: BoT-SORT-style Kalman ground-plane tracker. The selected 12b operating point is `max_age=2`, `min_hits=2`, `distance_gate=25.0`, `q_std=5.0`, `r_std=10.0`, plus `interpolation_max_gap=1`, giving verified IDF1=0.9467084639498433.
+- Dead-end alternatives: global optimal assignment trailed Kalman by about -3.5pp IDF1; the naive tracker was worse; extended Kalman sweeps across 59+ configs stayed within about +/-0.0004 IDF1 of the same ceiling.
 
-### Tertiary ReID: DINOv2 ViT-L/14
+### Section 3.3 - Vehicle MTMC fusion family
 
-- Local: `models/reid/dinov2_large_cityflowv2.pth` is missing locally.
-- Kaggle: expected as kernel output `yahiaakhalafallah/09s-dinov2-large-cityflowv2/vehicle_transreid_dinov2_large_cityflowv2_final.pth`.
-- Trained by: [notebooks/kaggle/09s_dinov2_large/09s_dinov2_large_cityflowv2.ipynb](../notebooks/kaggle/09s_dinov2_large/09s_dinov2_large_cityflowv2.ipynb), Cell 5 (`242772ef`) defines `vehicle_transreid_dinov2_large_cityflowv2_best.pth`, `vehicle_transreid_dinov2_large_cityflowv2_final.pth`, and the summary path; Cell 9 (`97c55d77`) saves the best state; Cell 11 (`d838dc3f`) exports the final state.
-- Claimed metric: mAP 86.79%, R1 96.15%, best epoch 115/120.
-- Primary-source status: UNVERIFIED for this pass. The metric is recorded in [docs/experiment-log.md](experiment-log.md), but the Kaggle output API did not expose the summary JSON before many crop-image pages, and no metric line was present in the downloaded log.
-- Used at: Stage 2 tertiary stream and Stage 4 `tertiary_embeddings.weight=0.525` in [configs/datasets/cityflowv2.yaml](../configs/datasets/cityflowv2.yaml).
+| Config | MTMC IDF1 | Source | Status |
+|---|---:|---|---|
+| 10c v15 production (CLIP+DINOv2, AQE k=3, w_t=0.60, sim_thr=0.55) | 0.7703 | 10c v15 | Previous baseline |
+| 14e B1 (TTA + AQE k=2, w_t=0.525, sim_thr=0.48, fic_reg=0.5) | 0.77936 | `14e_summary.json` from `yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep` | Current best |
+| 14k v1 K7 (+R50-IBN quaternary) | 0.78079 | `outputs/14k_extended/14k_extended_summary.json` | MARGINAL, NOT promoted |
+| 14u Option C (VeRi-fusion port) | 0.77995 | `tmp_14u_outputs/14u_summary.json` | FAIL - does not transfer |
 
-### Secondary ReID: ResNet101-IBN-a CityFlowV2 (Disabled)
+### Section 3.4 - Dead-end summary
 
-- Local: `models/reid/resnet101ibn_cityflowv2_384px_best.pth`, 171,701,980 bytes on disk.
-- Kaggle: present in `gumfreddy/mtmc-weights` and `mrkdagods/mtmc-weights` as `reid/resnet101ibn_cityflowv2_384px_best.pth`.
-- Used at: disabled `stage2.reid.vehicle2` reference stream in [configs/datasets/cityflowv2.yaml](../configs/datasets/cityflowv2.yaml).
-- Claimed best metric: mAP 52.77% from historical `09d v18 ali369`.
-- Primary-source status: PARTIALLY VERIFIED / DISCREPANT. The current accessible Gumfreddy 09d kernel log is an extended fine-tune that loads this checkpoint and reports `Previous best mAP: 0.5061`, then finishes `Best mAP: 0.5061` without saving new weights. [docs/experiment-log.md](experiment-log.md) records 52.77% for `09d v18 ali369`, but that exact primary output was not accessible from the current tokens.
+- Reranking: always hurt CityFlowV2 MTMC because k-reciprocal sets include false positives with the current features.
+- Feature concatenation: mixed uncalibrated feature spaces and lost the calibrated score-fusion behavior.
+- Hierarchical clustering: centroid averaging erased discriminative per-tracklet signal.
+- CSLS and CID_BIAS: penalized genuine vehicle-type hubs and distorted FIC-calibrated similarities.
+- AFLink: lost -3.8pp to -13.2pp MTMC IDF1 in clean retests; motion consistency is unreliable across non-overlapping CityFlowV2 cameras.
+- 384px ViT: lost about -2.8pp MTMC IDF1 because high-resolution features overfit viewpoint-specific texture.
+- Network flow solver: lost -0.24pp MTMC IDF1 and increased conflation rather than reducing it.
+- Weak secondary fusion: ResNet101-IBN-a, CLIP-SENet CityFlow fine-tune, and VeRi-fusion ports added correlated or weak signal; the best CLIP-SENet fine-tune fusion still sat -0.12pp below production.
+- Robust pooling and track-quality filtering: neutral on IDF1 despite lower ID switches, confirming the current plateau is feature-quality limited rather than aggregation-limited.
 
-### Promoted 14e B1 Association Result
+### Section 3.5 - System integration map
 
-- Feature source: `yahiaakhalafallah/14c-tta-stage2`, verified by downloaded `14c_summary.json`.
-- Association/eval source: `yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep`, verified by downloaded `14e_summary.json`.
-- Verified best: B1 `mtmc_idf1=0.7793596227569698`, `trackeval_idf1=0.7946139234279311`, `id_switches=154`.
-- Exact B1 params: `w_primary=0.475`, `w_tertiary=0.525`, `similarity_threshold=0.48`, `aqe_k=2`, `fic_regularisation=0.5`.
+```text
++-------------+                 +---------------------+
+| Frontend    | POST /api/...    | Backend (FastAPI)   |
+| Next.js     |----------------->| /api/pipeline/run   |
+| ATHAR UI    |                  | ?dataset=cityflow   |
++-------------+                  |        |            |
+                                 |        v            |
+                                 | pipeline_service    |
+                                 | builds CLI:         |
+                                 | python scripts/     |
+                                 |  run_pipeline.py    |
+                                 |  --config <yaml>    |
+                                 +--------+------------+
+                                          |
+                                          v
+                         +------------------------------+
+                         | cityflowv2.yaml (vehicle)    |
+                         | stage1: yolo26m + BoT-SORT   |
+                         | stage2: TransReID + DINOv2   |
+                         | stage4: AQE k=2, w_t=0.525   |
+                         +------------------------------+
+                                          |
+                                          | OR
+                                          v
+                         +------------------------------+
+                         | wildtrack.yaml (person)      |
+                         | MVDeTr ResNet18              |
+                         | Kalman max_age=2, gate=25    |
+                         +------------------------------+
+```
 
-## Person Pipeline (WILDTRACK -> Ground-Plane IDF1 = 0.947)
+Pipeline contracts:
 
-### Detector: MVDeTr ResNet18
+- Vehicle: `dataset=cityflowv2` maps to `--config configs/datasets/cityflowv2.yaml`.
+- Person: `dataset=wildtrack` maps to `--config configs/datasets/wildtrack.yaml`.
+- Default/manual smoke: use `--config configs/default.yaml` unless a dataset-specific config is required.
 
-- Local: `models/person_detection/MultiviewDetector.pth` is not on disk.
-- Kaggle: kernel output `gumfreddy/12a-wildtrack-mvdetr-training` exports `/kaggle/working/MultiviewDetector.pth`; the output listing could not be cleanly listed by this Kaggle CLI version, but the downloaded kernel log confirms the export.
-- Trained by: [notebooks/kaggle/12a_wildtrack_mvdetr/12a_wildtrack_mvdetr.ipynb](../notebooks/kaggle/12a_wildtrack_mvdetr/12a_wildtrack_mvdetr.ipynb), Cell 6 (`#VSC-698ce737`) runs MVDeTr training for 25 epochs, Cell 7 (`#VSC-46fae1e7`) resolves `MultiviewDetector.pth`, and Cell 8 (`#VSC-731816ad`) copies it to `/kaggle/working/MultiviewDetector.pth`.
-- Verified metric nuance: the log contains `moda: 92.1%, modp: 81.7%, prec: 95.7%, recall: 96.4%` at epoch 20, but the final `Test loaded model...` line reports `moda: 91.3%, modp: 81.8%, prec: 94.7%, recall: 96.6%` for the exported run. Treat 92.1% as an epoch-line claim, not as verified exported-checkpoint performance.
+Checkpoint locality:
 
-### Tracker: Kalman Ground-Plane Tracker (No Model File)
+- Local vehicle runs need `models/detection/yolo26m.pt`, `models/reid/transreid_cityflowv2_best.pth`, and `models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth`; Stage 0-2 should still run on Kaggle for performance.
+- Local person runs need `models/person_detection/MultiviewDetector.pth` only if doing detector inference locally, which is not recommended; the canonical run consumes the Kaggle 12a output from the 12b kernel.
+- Kaggle reproduction needs the CityFlowV2 or WILDTRACK datasets mounted, plus the relevant mtmc-weights dataset or upstream checkpoint-output kernels listed above.
 
-- Trained by / evaluated in: [notebooks/kaggle/12b_wildtrack_tracking_reid/12b_wildtrack_tracking_reid.ipynb](../notebooks/kaggle/12b_wildtrack_tracking_reid/12b_wildtrack_tracking_reid.ipynb).
-- Source cells: Cell 5 (`12b-deps-config`) defines the baseline Kalman values; Cell 11 (`VSC-12b-kalman-sweep`) runs the sweep and writes `tracking_sweep_best.json`; Cell 13 (`12b-evaluate`) writes `evaluation_summary.json`.
-- Verified best from downloaded `tracking_sweep_best.json` and `evaluation_summary.json`:
-  - `max_age=2`
-  - `min_hits=2`
-  - `distance_gate=25.0`
-  - `max_euclidean_cm=200.0`
-  - `q_std=5.0`
-  - `r_std=10.0`
-  - `interpolation_enabled=true`
-  - `interpolation_max_gap=1`
-  - `detection_conf_threshold=0.25`
-- Verified metrics: `idf1=0.9467084639498433`, `moda=0.9002100840336135`, `precision=0.9480249480249481`, `recall=0.957983193277311`, `id_switches=5`.
-- Reconciled discrepancy: `distance_gate=20.0`, `q_std=8.0`, `r_std=8.0` are only the 12b baseline values; they are not the selected best. The person branch config already uses the verified best `25.0 / 5.0 / 10.0`, so no config fix is needed.
+### Section 3.6 - Reproduction recipes
 
-## Unresolved Unknowns
+- Vehicle Stage 0-6: see [docs/pipeline-vehicle.md](pipeline-vehicle.md).
+- Person 12a-12b chain: see [docs/pipeline-person.md](pipeline-person.md).
+- 14t VeRi-776 single-cam workflow: mount CLIP-SENet v6 from `yahiaakhalafallah/13-clip-senet-train` and TransReID 09v v17 `vehicle_transreid_vit_base_veri776.pth`; run `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` with `w_clipsenet=0.7`, `w_transreid=0.3`, AQE k=3, and rerank k1=80/k2=15/lambda=0.2. Verified result is mAP=0.93304 and R1=0.98451.
 
-- The exact primary-source notebook/log for the deployed 80.14% / 92.27% `transreid_cityflowv2_best.pth` was not located. The current `09_vehicle_reid_cityflowv2` kernel output contradicts that claim.
-- The 09s DINOv2 metric JSON was not reachable through the paged Kaggle output API within this pass, so 86.79% / 96.15% remains documented but not primary-source verified here.
-- The exact `09d v18 ali369` primary output for 52.77% mAP was not available from the current tokens; only the hosted checkpoint file and later Gumfreddy extended-run log were verified.
+### Section 3.7 - Provenance gaps
+
+- `vehicle_transreid_dinov2_large_cityflowv2_final.pth` source dataset remains unresolved; only the producing kernel `yahiaakhalafallah/09s-dinov2-large-cityflowv2` is known.
+- `transreid_cityflowv2_best.pth` R1 is UNVERIFIED in retained primary logs. The best retained primary-source metric is mAP=0.8153 from AugOverhaul+EMA metadata.
+- Several `09d-*` and `09p-*` extended-training claims are not present in retained primary log fragments; keep them documented claims unless the exact output JSON/log is recovered.
+- The inventory spans four Kaggle accounts; some kernels may be archived/private and absent from the visible 154-kernel inventory.
+- `copilot-instructions.md` still contains older vehicle mAP wording in places; this pass intentionally leaves agent instructions unchanged and records the corrected number here.

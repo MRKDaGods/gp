@@ -8,6 +8,7 @@
 - Weights dataset: `yahiaakhalafallah/mtmc-weights` or `gumfreddy/mtmc-weights` for YOLO26m and primary TransReID.
 - DINOv2 tertiary checkpoint: kernel output from `yahiaakhalafallah/09s-dinov2-large-cityflowv2`, expected filename `vehicle_transreid_dinov2_large_cityflowv2_final.pth`.
 - Baseline Stage 0/1 source: kernel output from `yahiaakhalafallah/mtmc-10a-stages-0-2`.
+- Primary TransReID evidence: AugOverhaul+EMA kernel `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` verifies mAP=0.8152743047017524; R1 is not present in the retained metadata.
 
 ## Canonical Kaggle Chain
 
@@ -29,6 +30,23 @@ stage4.association.fic.regularisation: 0.5
 B1 result: `mtmc_idf1=0.7793596227569698`, `trackeval_idf1=0.7946139234279311`, `id_switches=154`.
 
 The same settings are encoded in [configs/datasets/cityflowv2.yaml](../configs/datasets/cityflowv2.yaml).
+
+## Reproduction Checklist
+
+Local files required for a local CPU-only Stage 3-6 or config smoke:
+
+- [../configs/datasets/cityflowv2.yaml](../configs/datasets/cityflowv2.yaml) with the 14e B1 Stage 4 settings.
+- `models/detection/yolo26m.pt`, sourced from `yahiaakhalafallah/mtmc-weights`, `gumfreddy/mtmc-weights`, or `mrkdagods/mtmc-weights`.
+- `models/reid/transreid_cityflowv2_best.pth`, sourced from the mtmc-weights datasets; primary-source metric mAP=0.8152743047017524 from `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema`.
+- `models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth`, sourced from `yahiaakhalafallah/09s-dinov2-large-cityflowv2` kernel output.
+- Stage outputs from the Kaggle chain (`10a` baseline tracklets/features, `14c` TTA Stage 2 outputs, and `14e` Stage 4-5 outputs) if reproducing metrics without rerunning GPU stages.
+
+Kaggle artifacts required for full reproduction:
+
+- CityFlowV2 dataset mount `thanhnguyenle/data-aicity-2023-track-2`.
+- `yahiaakhalafallah/mtmc-10a-stages-0-2` for baseline Stage 0/1 outputs.
+- `yahiaakhalafallah/14c-tta-stage2` for TTA feature extraction.
+- `yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep` for the verified 0.7793596227569698 MTMC IDF1 result.
 
 ## Push / Monitor Commands
 
