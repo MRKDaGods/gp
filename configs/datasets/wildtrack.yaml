@@ -143,6 +143,25 @@ stage4:
       threshold: 0.50
       max_rounds: 3
 
+stage_wildtrack_mvdetr:
+  detections_path: "data/outputs/wildtrack_mvdetr/test.txt"
+  calibration_dir: "data/raw/wildtrack/calibrations"
+  fps: 2.0
+  image_size: [1920, 1080]
+  tracker: "kalman"
+  # 12b v1/v2/v3 tuned Kalman operating point: IDF1=0.947, IDSW=5.
+  kalman:
+    max_age: 2
+    min_hits: 2
+    distance_gate: 25.0
+    max_euclidean_cm: 200.0
+    q_std: 5.0
+    r_std: 10.0
+  # Fallback only for tracker=hungarian/naive.
+  max_match_distance_cm: 100.0
+  max_missed_frames: 3
+  min_track_length: 3
+
 stage5:
   ground_truth_dir: "data/raw/wildtrack/manifests/ground_truth"
   iou_threshold: 0.5

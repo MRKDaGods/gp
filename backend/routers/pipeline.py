@@ -38,6 +38,7 @@ async def run_stage(
         camera_id = payload.cameraId or config.get("cameraId")
         smoke_test = bool(payload.smokeTest or config.get("smokeTest", False))
         use_cpu = bool(payload.useCpu or config.get("useCpu", False))
+        dataset = payload.dataset or config.get("dataset") or config.get("datasetName") or None
 
         if stage == 1 and not video_id:
             raise HTTPException(status_code=400, detail="videoId is required for stage 1")
@@ -65,6 +66,7 @@ async def run_stage(
             "cameraId": resolved_camera_id,
             "smokeTest": smoke_test,
             "useCpu": use_cpu,
+            "dataset": dataset,
         }
 
         _write_run_context(
@@ -75,6 +77,7 @@ async def run_stage(
                 "videoId": video_id,
                 "cameraId": resolved_camera_id,
                 "datasetName": dataset_name,
+                "dataset": dataset,
             },
         )
 
@@ -92,6 +95,7 @@ async def run_stage(
                 "useCpu": use_cpu,
                 "reidModelPath": reid_model_path,
                 "tracker": tracker,
+                "dataset": dataset,
             },
         )
         return {"success": True, "data": state.active_runs[run_id]}
@@ -104,9 +108,13 @@ async def run_stage(
 @router.post("/api/pipeline/run")
 async def run_full_pipeline(
     background_tasks: BackgroundTasks,
+    request: Optional[PipelineRunRequest] = Body(default=None),
     state: AppState = Depends(get_app_state),
 ):
     """Run full pipeline"""
+    payload = request or PipelineRunRequest()
+    config = payload.config or {}
+    dataset = payload.dataset or config.get("dataset") or config.get("datasetName") or None
     run_id = _resolve_run_id(None)
     state.active_runs[run_id] = {
         "id": run_id,
@@ -119,9 +127,21 @@ async def run_full_pipeline(
             for i in range(7)
         ],
         "startedAt": datetime.now().isoformat(),
+        "dataset": dataset,
     }
-    _write_run_context(run_id, {"source": "pipeline-run-full"})
-    background_tasks.add_task(execute_full_pipeline, run_id, {})
+    _write_run_context(run_id, {"source": "pipeline-run-full", "dataset": dataset})
+    background_tasks.add_task(
+        execute_full_pipeline,
+        run_id,
+        {
+            "videoId": payload.videoId or config.get("videoId"),
+            "cameraId": payload.cameraId or config.get("cameraId"),
+            "smokeTest": bool(payload.smokeTest or config.get("smokeTest", False)),
+            "useCpu": bool(payload.useCpu or config.get("useCpu", False)),
+            "dataset": dataset,
+            "reidModelPath": config.get("reid_model_path") or None,
+        },
+    )
     return {"success": True, "data": state.active_runs[run_id]}
 
 
