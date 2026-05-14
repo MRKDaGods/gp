@@ -125,7 +125,7 @@ stage2:
       enabled: true
       save_separate: true
       model_name: "transreid"
-      weights_path: "models/reid/dinov2_large_cityflowv2.pth"
+      weights_path: "models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth"
       embedding_dim: 1024
       input_size: [252, 252]
       vit_model: "vit_large_patch14_dinov2.lvd142m"
