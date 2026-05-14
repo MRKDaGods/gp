@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -177,6 +177,65 @@ def save_hsv_features(hsv: np.ndarray, output_dir: str | Path) -> None:
 def load_hsv_features(input_dir: str | Path) -> np.ndarray:
     """Load HSV histogram matrix."""
     return np.load(Path(input_dir) / "hsv_features.npy")
+
+
+def save_multi_query_embeddings(
+    mq_embeddings: List[np.ndarray],
+    output_dir: str | Path,
+) -> None:
+    """Save dense multi-query embeddings as a compressed NPZ artifact.
+
+    Args:
+        mq_embeddings: List of (K, D) arrays, one per tracklet.
+        output_dir: Directory to write the artifact to.
+    """
+    if not mq_embeddings:
+        return
+
+    first_shape = mq_embeddings[0].shape
+    if len(first_shape) != 2:
+        raise ValueError("Multi-query embeddings must have shape (K, D)")
+
+    for idx, mq in enumerate(mq_embeddings):
+        if mq.shape != first_shape:
+            raise ValueError(
+                "Inconsistent multi-query embedding shape at index "
+                f"{idx}: expected {first_shape}, got {mq.shape}"
+            )
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stacked = np.stack(mq_embeddings, axis=0).astype(np.float32)
+    np.savez_compressed(output_dir / "multi_query_embeddings.npz", embeddings=stacked)
+
+
+def load_multi_query_embeddings(
+    input_dir: str | Path,
+    n: int,
+) -> List[Optional[np.ndarray]]:
+    """Load dense multi-query embeddings.
+
+    Returns a list of length ``n``. Missing files yield ``[None] * n``.
+    """
+    path = Path(input_dir) / "multi_query_embeddings.npz"
+    if not path.exists():
+        return [None] * n
+
+    with np.load(path) as data:
+        if "embeddings" not in data:
+            return [None] * n
+        embeddings = data["embeddings"].astype(np.float32)
+
+    if embeddings.ndim != 3:
+        raise ValueError(
+            f"Expected multi-query embeddings with shape (N, K, D), got {embeddings.shape}"
+        )
+
+    result: List[Optional[np.ndarray]] = [None] * n
+    count = min(n, embeddings.shape[0])
+    for idx in range(count):
+        result[idx] = embeddings[idx]
+    return result
 
 
 # ---------------------------------------------------------------------------

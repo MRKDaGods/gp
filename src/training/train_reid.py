@@ -105,11 +105,12 @@ def build_cosine_scheduler(
     warmup_epochs: int = 10,
     total_epochs: int = 80,
     eta_min: float = 1e-6,
+    start_factor: float = 0.01,
 ) -> torch.optim.lr_scheduler._LRScheduler:
     """Build cosine annealing scheduler with linear warmup."""
     warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
         optimizer,
-        start_factor=0.01,
+        start_factor=start_factor,
         end_factor=1.0,
         total_iters=warmup_epochs,
     )

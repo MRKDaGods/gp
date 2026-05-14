@@ -13,6 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from unittest.mock import MagicMock
 
 timm = pytest.importorskip("timm", reason="timm required for TransReID tests")
 
@@ -196,7 +197,7 @@ class TestReIDModelTransReIDRouting:
         """TransReID model names are correctly identified."""
         from src.stage2_features.reid_model import ReIDModel
 
-        for name in ["transreid", "vit_small", "vit_base", "transreid_vit"]:
+        for name in ["transreid", "vit_small", "vit_base", "transreid_vit", "eva02_vit"]:
             assert name in ReIDModel._TRANSREID_NAMES
 
     def test_non_transreid_names(self):
@@ -221,6 +222,28 @@ class TestReIDModelTransReIDRouting:
         assert _CLIP_STD[0] == pytest.approx(0.26862954)
         assert _IMAGENET_STD[0] == pytest.approx(0.229)
 
+    def test_eva02_clip_normalization_auto_detect(self, monkeypatch):
+        """EVA02 CLIP backbones auto-enable CLIP normalization."""
+        from src.stage2_features.reid_model import ReIDModel
+
+        fake_model = MagicMock()
+        fake_model.eval.return_value = fake_model
+        fake_model.to.return_value = fake_model
+        monkeypatch.setattr(ReIDModel, "_build_model", lambda self, model_name, weights_path: fake_model)
+
+        model = ReIDModel(
+            model_name="eva02_vit",
+            weights_path=None,
+            embedding_dim=768,
+            input_size=(256, 256),
+            device="cpu",
+            half=False,
+            vit_model="eva02_base_patch16_clip_224.merged2b",
+            clip_normalization=None,
+        )
+
+        assert model.clip_normalization is True
+
     def test_default_input_size_override(self):
         """TransReID automatically uses 224x224 when default (256, 128) is set."""
         from src.stage2_features.reid_model import ReIDModel
@@ -228,3 +251,101 @@ class TestReIDModelTransReIDRouting:
         # Can't actually instantiate without GPU/weights, so test the logic
         model_cls = ReIDModel
         assert "transreid" in model_cls._TRANSREID_NAMES
+
+    def test_eva02_vit_model_fallback(self, monkeypatch):
+        """EVA02 merged2b model names fall back to the base timm backbone when unavailable."""
+        import timm
+
+        from src.stage2_features import transreid_model
+        from src.stage2_features.reid_model import ReIDModel
+
+        captured = {}
+
+        def fake_build_transreid(**kwargs):
+            captured.update(kwargs)
+            return "eva02-sentinel"
+
+        model = ReIDModel.__new__(ReIDModel)
+        model.num_cameras = 0
+        model.embedding_dim = 768
+        model.vit_model = "eva02_base_patch16_clip_224.merged2b"
+        model.input_size = (256, 256)
+
+        monkeypatch.setattr(transreid_model, "build_transreid", fake_build_transreid)
+        monkeypatch.setattr(timm, "is_model", lambda name: False if name == model.vit_model else True)
+
+        built = ReIDModel._build_transreid(model, weights_path="weights.pth")
+
+        assert built == "eva02-sentinel"
+        assert captured["vit_model"] == "eva02_base_patch16_clip_224"
+        assert captured["weights_path"] == "weights.pth"
+
+    def test_fastreid_name_routes_to_builder(self):
+        """fast-reid SBS(R50-IBN) is routed to the dedicated builder."""
+        from src.stage2_features.reid_model import ReIDModel
+
+        model = ReIDModel.__new__(ReIDModel)
+        model.is_transreid = False
+
+        calls = {}
+
+        def fake_builder(weights_path):
+            calls["weights_path"] = weights_path
+            return "sentinel"
+
+        model._build_fastreid_sbs_r50_ibn = fake_builder
+        built = ReIDModel._build_model(model, "fastreid_sbs_r50_ibn", "weights.pth")
+
+        assert built == "sentinel"
+        assert calls["weights_path"] == "weights.pth"
+
+    def test_fastreid_state_dict_remap(self):
+        """fast-reid checkpoint keys are remapped to the local model layout."""
+        from src.stage2_features.reid_model import ReIDModel
+
+        state_dict = {
+            "pixel_mean": torch.zeros(3, 1, 1),
+            "backbone.conv1.weight": torch.randn(64, 3, 7, 7),
+            "backbone.layer1.0.bn1.IN.weight": torch.randn(32),
+            "backbone.NL_2.0.g.0.weight": torch.randn(1),
+            "heads.pool_layer.p": torch.tensor([3.0]),
+            "heads.bnneck.num_batches_tracked": torch.tensor(0),
+            "heads.bottleneck.0.weight": torch.randn(2048),
+            "heads.bottleneck.0.running_mean": torch.randn(2048),
+            "heads.classifier.weight": torch.randn(575, 2048),
+        }
+
+        remapped = ReIDModel._remap_fastreid_sbs_r50_ibn_state_dict(state_dict)
+
+        assert "backbone.conv1.weight" in remapped
+        assert "backbone.layer1.0.bn1.IN.weight" in remapped
+        assert "pool.p" in remapped
+        assert "bottleneck.weight" in remapped
+        assert "bottleneck.running_mean" in remapped
+        assert "bottleneck.num_batches_tracked" in remapped
+        assert "pixel_mean" not in remapped
+        assert "heads.classifier.weight" not in remapped
+        assert not any(key.startswith("backbone.NL_") for key in remapped)
+
+
+class TestResNet50IBNModel:
+    """Tests for the ResNet50-IBN fast-reid-compatible inference model."""
+
+    def test_resnet50_ibn_global_eval_feature_shape(self):
+        """Global eval mode returns 2048D pre-BNNeck features."""
+        pytest.importorskip("torchvision", reason="torchvision required for ResNet50-IBN tests")
+
+        from src.training.model import ReIDModelResNet50IBN
+
+        model = ReIDModelResNet50IBN(
+            num_classes=1,
+            pretrained=False,
+            eval_feature="global",
+        )
+        model.eval()
+
+        x = torch.randn(1, 3, 64, 64)
+        with torch.no_grad():
+            out = model(x)
+
+        assert out.shape == (1, 2048)

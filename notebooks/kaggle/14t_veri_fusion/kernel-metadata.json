@@ -1,0 +1,21 @@
+{
+  "id": "yahiaakhalafallah/14t-veri-fusion-clipsenet-transreid",
+  "title": "14t VeRi Fusion CLIP-SENet x TransReID",
+  "code_file": "14t_veri_fusion.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights",
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/13-clip-senet-train"
+  ],
+  "model_sources": []
+}

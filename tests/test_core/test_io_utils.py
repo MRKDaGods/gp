@@ -17,11 +17,13 @@ from src.core.io_utils import (
     load_evaluation_result,
     load_frame_manifest,
     load_global_trajectories,
+    load_multi_query_embeddings,
     load_tracklets,
     save_embeddings,
     save_evaluation_result,
     save_frame_manifest,
     save_global_trajectories,
+    save_multi_query_embeddings,
     save_tracklets,
 )
 
@@ -89,6 +91,22 @@ def test_global_trajectories_roundtrip(tmp_path):
     assert len(loaded) == 1
     assert loaded[0].global_id == 0
     assert len(loaded[0].tracklets) == 2
+
+
+def test_multi_query_embeddings_roundtrip(tmp_path):
+    mq_embeddings = [
+        np.random.randn(4, 32).astype(np.float32),
+        np.random.randn(4, 32).astype(np.float32),
+        np.random.randn(4, 32).astype(np.float32),
+    ]
+
+    save_multi_query_embeddings(mq_embeddings, tmp_path)
+    loaded = load_multi_query_embeddings(tmp_path, n=3)
+
+    assert len(loaded) == 3
+    for expected, actual in zip(mq_embeddings, loaded):
+        assert actual is not None
+        np.testing.assert_array_almost_equal(actual, expected)
 
 
 def test_evaluation_result_roundtrip(tmp_path):

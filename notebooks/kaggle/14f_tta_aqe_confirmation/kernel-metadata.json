@@ -1,0 +1,20 @@
+{
+  "id": "yahiaakhalafallah/14f-tta-aqe-confirmation-sweep",
+  "title": "14f TTA AQE Confirmation Sweep",
+  "code_file": "14f_tta_aqe_confirmation.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "yahiaakhalafallah/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/14c-tta-stage2",
+    "yahiaakhalafallah/mtmc-10a-stages-0-2"
+  ]
+}

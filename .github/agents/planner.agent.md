@@ -1,7 +1,7 @@
 ---
 name: 'MTMC Planner'
 description: 'Strategic planning and architecture for MTMC Tracker. Designs experiment configs, analyzes results, decides strategy, reviews architecture decisions. Use for: planning breakthrough strategies, analyzing ablation results, designing experiment matrices, reviewing pipeline architecture, decomposing complex multi-stage changes.'
-model: Claude Opus 4.6 (copilot)
+model: Claude Opus 4.7 (copilot)
 tools: [search, read, web, agent]
 # Note: Opus 4.6 — deep reasoning for strategy, architecture, experiment design
 ---

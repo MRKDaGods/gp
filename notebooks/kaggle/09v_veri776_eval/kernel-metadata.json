@@ -1,0 +1,19 @@
+{
+  "id": "yahiaakhalafallah/09v-veri-776-eval-transreid-rerank",
+  "title": "09v VeRi 776 Eval TransReID Rerank",
+  "code_file": "09v-veri776-eval.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset",
+    "mrkdagods/mtmc-weights"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

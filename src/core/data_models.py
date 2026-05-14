@@ -106,6 +106,7 @@ class TrackletFeatures:
     embedding: np.ndarray       # shape: (embed_dim,) — PCA-whitened, L2-normed
     hsv_histogram: np.ndarray   # shape: (h_bins + s_bins + v_bins,) — L2-normed
     raw_embedding: Optional[np.ndarray] = None  # before PCA, for debugging
+    multi_query_embeddings: Optional[np.ndarray] = None  # shape: (K, D) if enabled
 
 
 # ---------------------------------------------------------------------------

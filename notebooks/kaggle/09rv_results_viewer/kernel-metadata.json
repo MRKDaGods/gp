@@ -1,0 +1,18 @@
+{
+  "id": "yahiaakhalafallah/09rv-results-viewer",
+  "title": "09rv Results Viewer",
+  "code_file": "09rv_results_viewer.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/09r-vit-large-cityflowv2",
+    "yahiaakhalafallah/09s-dinov2-large-cityflowv2"
+  ],
+  "model_sources": []
+}

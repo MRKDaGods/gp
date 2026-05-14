@@ -1,0 +1,22 @@
+{
+  "id": "yahiaakhalafallah/14h-robust-tracklet-pooling",
+  "title": "14h Robust Tracklet Pooling",
+  "code_file": "14h_robust_pooling.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaP100",
+  "dataset_sources": [
+    "yahiaakhalafallah/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/mtmc-10a-stages-0-2",
+    "yahiaakhalafallah/09s-dinov2-large-cityflowv2",
+    "yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing"
+  ]
+}

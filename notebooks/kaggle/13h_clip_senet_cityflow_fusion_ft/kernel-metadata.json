@@ -1,0 +1,20 @@
+{
+  "id": "yahiaakhalafallah/13h-clip-senet-cityflow-fusion-ft",
+  "title": "13h CLIP-SENet CityFlow fusion (FT)",
+  "code_file": "13h_clip_senet_cityflow_fusion_ft.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "kernel_sources": [
+    "yahiaakhalafallah/mtmc-10a-stages-0-2",
+    "yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing",
+    "yahiaakhalafallah/13f-clip-senet-cityflow-finetune"
+  ],
+  "competition_sources": []
+}

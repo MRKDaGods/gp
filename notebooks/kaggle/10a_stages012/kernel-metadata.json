@@ -1,6 +1,6 @@
 {
-  "id": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
-  "title": "MTMC 10a - Stages 0-2 (Tracking + ReID Features)",
+  "id": "yahiaakhalafallah/mtmc-10a-stages-0-2",
+  "title": "mtmc-10a-stages-0-2",
   "code_file": "mtmc-10a-stages-0-2-tracking-reid-features.ipynb",
   "language": "python",
   "kernel_type": "notebook",
@@ -10,9 +10,12 @@
   "enable_internet": true,
   "machine_shape": "NvidiaTeslaT4",
   "dataset_sources": [
-    "mrkdagods/mtmc-weights",
-    "thanhnguyenle/data-aicity-2023-track-2"
+    "gumfreddy/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2",
+    "yahiaakhalafallah/mtmc-10a-checkpoints"
   ],
   "competition_sources": [],
-  "kernel_sources": []
+  "kernel_sources": [
+    "yahiaakhalafallah/09s-dinov2-large-cityflowv2"
+  ]
 }

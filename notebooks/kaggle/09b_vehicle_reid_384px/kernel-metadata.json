@@ -1,6 +1,6 @@
 {
-  "id": "mrkdagods/09b-vehicle-reid-384px-vit-training",
-  "title": "09b Vehicle ReID 384px ViT Training v2",
+  "id": "ali369/09b-vehicle-reid-256px-vit-training-dmt-v3",
+  "title": "09b Vehicle ReID 256px ViT Training + DMT v3",
   "code_file": "09b_vehicle_reid_384px.ipynb",
   "language": "python",
   "kernel_type": "notebook",

@@ -1,0 +1,17 @@
+{
+  "id": "mrkdagods/09h-resnext101-ibn-a-dmt-cityflowv2",
+  "title": "09h ResNeXt101-IBN-a DMT CityFlowV2",
+  "code_file": "09h_resnext101ibn_dmt.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "enable_internet": true,
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "kernel_sources": [],
+  "competition_sources": []
+}

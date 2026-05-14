@@ -349,6 +349,7 @@ def evaluate_wildtrack_ground_plane(
     conf_threshold: float = 0.25,
     match_threshold_cm: float = 50.0,
     nms_radius_cm: float = 50.0,
+    frame_range: Optional[Tuple[int, int]] = None,
 ) -> EvaluationResult:
     """Full WILDTRACK ground-plane evaluation pipeline.
 
@@ -361,6 +362,8 @@ def evaluate_wildtrack_ground_plane(
         conf_threshold: Min detection confidence for predictions.
         match_threshold_cm: L2 distance threshold for GT-pred matching.
         nms_radius_cm: DBSCAN radius for merging overlapping ground-plane predictions.
+        frame_range: Optional inclusive frame range (min_frame, max_frame) to
+            evaluate against. When omitted, evaluates all GT frames.
 
     Returns:
         EvaluationResult with ground-plane metrics.
@@ -378,6 +381,10 @@ def evaluate_wildtrack_ground_plane(
 
     # Load GT
     gt = load_gt_ground_positions(annotations_dir)
+    if frame_range is not None:
+        fmin, fmax = frame_range
+        gt = {fid: pos for fid, pos in gt.items() if fmin <= fid <= fmax}
+        logger.info(f"Filtered GT to frame range [{fmin}, {fmax}]: {len(gt)} frames")
     logger.info(
         f"GT: {len(gt)} frames, "
         f"avg {np.mean([len(v) for v in gt.values()]):.1f} people/frame"

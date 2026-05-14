@@ -105,13 +105,18 @@ class TransReID(nn.Module):
 
     def forward(self, x: torch.Tensor, cam_ids: torch.Tensor | None = None):
         B = x.shape[0]
+        rot_pos_embed = None
 
         # 1. Patch embedding
         x = self.vit.patch_embed(x)
 
         # 2. CLS token + positional embedding + pos_drop (use timm's method)
         if hasattr(self.vit, "_pos_embed"):
-            x = self.vit._pos_embed(x)
+            result = self.vit._pos_embed(x)
+            if isinstance(result, tuple):
+                x, rot_pos_embed = result
+            else:
+                x = result
         else:
             cls_tok = self.vit.cls_token.expand(B, -1, -1)
             x = torch.cat([cls_tok, x], dim=1) + self.vit.pos_embed
@@ -134,7 +139,10 @@ class TransReID(nn.Module):
 
         # 6. Transformer blocks + final norm
         for blk in self.vit.blocks:
-            x = blk(x)
+            if rot_pos_embed is not None:
+                x = blk(x, rope=rot_pos_embed)
+            else:
+                x = blk(x)
         x = self.vit.norm(x)
 
         # CLS token → global feature
@@ -209,11 +217,31 @@ def build_transreid(
             state_dict = state_dict["state_dict"]
         elif "model" in state_dict:
             state_dict = state_dict["model"]
+        elif "model_state_dict" in state_dict:
+            state_dict = state_dict["model_state_dict"]
 
         # Strip module. prefix (from DataParallel)
         state_dict = {
             k.replace("module.", "", 1): v for k, v in state_dict.items()
         }
+
+        # Remap 09p-style TransReIDViT keys to pipeline TransReID keys.
+        remap_prefixes = {
+            "bottleneck.": "bn.",
+            "classifier.": "cls_head.",
+        }
+        remapped = {}
+        for key, value in state_dict.items():
+            new_key = key
+            for old_prefix, new_prefix in remap_prefixes.items():
+                if key.startswith(old_prefix):
+                    new_key = new_prefix + key[len(old_prefix):]
+                    break
+            if new_key == "sie.camera_embed.weight":
+                new_key = "sie_embed"
+                value = value.unsqueeze(1)
+            remapped[new_key] = value
+        state_dict = remapped
 
         # ------------------------------------------------------------------
         # Handle shape mismatches between checkpoint and model:

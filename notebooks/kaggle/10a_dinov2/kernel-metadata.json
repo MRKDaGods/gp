@@ -1,0 +1,22 @@
+{
+ "id": "yahiaakhalafallah/mtmc-10a-dinov2",
+ "title": "mtmc-10a-dinov2",
+ "code_file": "10a-dinov2-stages-0-2-tracking-reid-features.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_tpu": false,
+ "enable_internet": true,
+ "machine_shape": "NvidiaTeslaT4",
+ "dataset_sources": [
+  "gumfreddy/mtmc-weights",
+  "thanhnguyenle/data-aicity-2023-track-2",
+  "gumfreddy/09p-r50-ibn-cityflowv2-extended-checkpoint",
+  "yahiaakhalafallah/mtmc-10a-checkpoints"
+ ],
+ "competition_sources": [],
+ "kernel_sources": [
+  "yahiaakhalafallah/09s-dinov2-large-cityflowv2"
+ ]
+}

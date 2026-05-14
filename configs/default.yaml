@@ -71,9 +71,9 @@ stage2:
       weights_path: "models/reid/person_transreid_vit_base_market1501.pth"
       embedding_dim: 768
       input_size: [256, 128]  # [H, W] — matches NB07 training
-      vit_model: "vit_base_patch16_clip_224.openai"
-      num_cameras: 20
-      clip_normalization: true
+      vit_model: "vit_base_patch16_224"
+      num_cameras: 6    # Market-1501 pretrained person weights were trained with 6 cameras
+      clip_normalization: false
     vehicle:
       model_name: "transreid"
       weights_path: "models/reid/transreid_cityflowv2_best.pth"
@@ -89,11 +89,23 @@ stage2:
     vehicle2:
       enabled: false  # disabled by default; enabled per-dataset for ensemble runs
       save_separate: true  # Save to embeddings_secondary.npy for stage4 fusion (preferred)
-      model_name: "resnet101_ibn_a"
-      weights_path: "models/reid/resnet101ibn_cityflowv2_384px_best.pth"
+      model_name: "fastreid_sbs_r50_ibn"
+      weights_path: "models/reid/fastreid_sbs_r50_ibn_veri.pth"
       embedding_dim: 2048
-      input_size: [384, 384]
+      input_size: [256, 256]
       clip_normalization: false
+      sie_camera_map: {}
+    vehicle3:
+      enabled: false
+      save_separate: true
+      model_name: "eva02_vit"
+      weights_path: "models/reid/eva02_vit_cityflowv2.pth"
+      embedding_dim: 768
+      input_size: [256, 256]
+      vit_model: "eva02_base_patch16_clip_224.merged2b"
+      clip_normalization: true
+      num_cameras: 0
+      concat_patch: false
     batch_size: 64
     device: "cuda"
     half: true
@@ -108,6 +120,10 @@ stage2:
     # Each entry is [H, W]. Empty list = disabled (use only input_size).
     # For TransReID vehicle (256x256): try [[224, 224], [288, 288]] for ±1 patch row/col.
     multiscale_sizes: []  # disabled by default; enable on Kaggle P100
+    # --- Center-crop scale TTA: crop/pad center region before preprocessing ---
+    center_crop_scales: []
+    # --- Per-view L2 normalization before TTA averaging ---
+    normalize_views: false
   hsv:
     h_bins: 32         # increased from 16 for better colour discrimination
     s_bins: 16         # increased from 8
@@ -118,12 +134,20 @@ stage2:
     n_components: 384  # v30: 768 → 280 PCA whitening (optimal dim, IDF1=0.795)
     pca_model_path: "models/reid/pca_transform.pkl"
     secondary_pca_model_path: "models/reid/pca_transform_secondary.pkl"
+    tertiary_pca_model_path: "models/reid/pca_transform_tertiary.pkl"
+  multi_query:
+    k: 0  # 0 = disabled; when >0 keep top-K crop embeddings per tracklet
   crop:
     min_area: 500
     padding_ratio: 0.1
     samples_per_tracklet: 32  # v37: increased from 16 for better quality
     min_quality: 0.05       # composite quality threshold [0, 1]
     laplacian_min_var: 15.0   # v37: lowered from 30.0 (accept slightly blurrier crops)
+    foreground_masking:
+      enabled: false
+      model_name: "facebook/sam2.1-hiera-tiny"
+      min_crop_size: 48
+      fill_value: "mean"
   # --- NEW: camera-aware batch normalisation ---
   camera_bn:
     enabled: true
@@ -149,11 +173,22 @@ stage4:
     enabled: false
     run_id: "dataset_precompute_s01"
   association:
+    solver: "cc"  # public solver toggle: cc keeps graph.algorithm, network_flow uses Hungarian matching
     top_k: 100
     # --- Secondary embedding fusion (e.g., OSNet + TransReID ensemble) ---
     secondary_embeddings:
       path: ""       # path to secondary .npy file; empty = disabled
       weight: 0.3    # blending weight for secondary model (0.3 = 30% secondary, 70% primary)
+    tertiary_embeddings:
+      path: ""
+      weight: 0.0
+    quaternary_embeddings:
+      path: ""
+      weight: 0.0
+    multi_query:
+      enabled: false
+      weight: 0.5
+      dir: ""       # empty = auto-detect sibling stage2 output
     # --- FIC: per-camera feature whitening (AIC21 1st-place technique) ---
     fic:
       enabled: true
@@ -217,7 +252,8 @@ stage4:
                    S02_c007: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
     graph:
       similarity_threshold: 0.60  # v30: optimal for 280D PCA whitened embeddings
-      algorithm: "conflict_free_cc"  # v28: conflict-aware greedy matching prevents false transitive chains
+      algorithm: "conflict_free_cc"  # used when stage4.association.solver=cc
+      merge_verify_threshold: null  # network_flow: null => reuse similarity_threshold
       louvain_resolution: 1.0  # balanced: 1.5 over-fragments, 0.8 under-segments
       bridge_prune_margin: 0.0  # v27: no bridge pruning yields best MTMC (+1.4pp)
       max_component_size: 12    # v25: tighter cap to prevent runaway merges
@@ -257,6 +293,13 @@ stage4:
       threshold: 0.50    # v30: optimal for 280D PCA
       max_rounds: 2
       orphan_match_threshold: 0.40  # v30: raised for 280D PCA
+    aflink:
+        enabled: false  # disabled by default: harmful on CityFlowV2 (-3.95pp MTMC IDF1)
+        max_time_gap_frames: 150
+        max_spatial_gap_px: 200.0
+        min_direction_cos: 0.7
+        min_velocity_ratio: 0.5
+        velocity_window: 5
     # --- Temporal overlap bonus for overlapping-FOV cameras ---
     # When tracklets co-exist in time across cameras with overlapping FOV,
     # this is a strong positive signal (same vehicle visible simultaneously).
@@ -264,6 +307,10 @@ stage4:
       enabled: true
       bonus: 0.05            # additive bonus to combined score, scaled by temporal overlap ratio
       max_mean_time: 5.0     # only apply to camera pairs with mean transit time < this (seconds)
+    # --- Per-camera-pair similarity normalization (distribution-based) ---
+    camera_pair_norm:
+      enabled: false
+      min_pairs: 10  # minimum pair count per camera combination to normalize
     # --- Hierarchical centroid-based expansion (AIC21/22 SOTA) ---
     # Multi-pass matching using cluster centroids for more robust merging.
     # Replaces gallery_expansion when enabled.

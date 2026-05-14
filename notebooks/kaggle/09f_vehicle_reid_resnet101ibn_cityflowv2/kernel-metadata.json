@@ -1,0 +1,22 @@
+{
+  "id": "ali369/09f-resnet101ibn-cityflowv2",
+  "title": "09f ResNet101IBN CityFlowV2",
+  "code_file": "09f_vehicle_reid_resnet101ibn_cityflowv2.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "keywords": [],
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2",
+    "mrkdagods/mtmc-weights"
+  ],
+  "kernel_sources": [
+    "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain"
+  ],
+  "competition_sources": [],
+  "model_sources": []
+}

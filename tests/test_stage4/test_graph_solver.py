@@ -145,3 +145,60 @@ def test_max_component_size_large_cluster():
     clusters = solver.solve(similarities, num_nodes=5)
     for c in clusters:
         assert len(c) <= 3, f"Cluster {c} exceeds max_component_size=3"
+
+
+def test_network_flow_blocks_transitive_chain_without_verified_camera_pair():
+    solver = GraphSolver(
+        similarity_threshold=0.5,
+        algorithm="network_flow",
+        merge_verify_threshold=0.5,
+    )
+    similarities = {
+        (0, 1): 0.92,
+        (1, 2): 0.90,
+        (0, 2): 0.41,
+    }
+    camera_ids = ["cam_a", "cam_b", "cam_c"]
+    start_times = [0.0, 5.0, 10.0]
+    end_times = [1.0, 6.0, 11.0]
+
+    clusters = solver.solve(
+        similarities,
+        num_nodes=3,
+        camera_ids=camera_ids,
+        start_times=start_times,
+        end_times=end_times,
+    )
+
+    multi = [c for c in clusters if len(c) > 1]
+    assert len(multi) == 1
+    assert multi[0] == {0, 1}
+    assert {2} in clusters
+
+
+def test_network_flow_merges_triangle_when_all_camera_pairs_are_verified():
+    solver = GraphSolver(
+        similarity_threshold=0.5,
+        algorithm="network_flow",
+        merge_verify_threshold=0.5,
+    )
+    similarities = {
+        (0, 1): 0.92,
+        (1, 2): 0.90,
+        (0, 2): 0.88,
+    }
+    camera_ids = ["cam_a", "cam_b", "cam_c"]
+    start_times = [0.0, 5.0, 10.0]
+    end_times = [1.0, 6.0, 11.0]
+
+    clusters = solver.solve(
+        similarities,
+        num_nodes=3,
+        camera_ids=camera_ids,
+        start_times=start_times,
+        end_times=end_times,
+    )
+
+    multi = [c for c in clusters if len(c) > 1]
+    assert len(multi) == 1
+    assert multi[0] == {0, 1, 2}

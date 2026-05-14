@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -86,17 +88,14 @@ class TrackerWrapper:
         # Import and create the tracker
         tracker_cls = self._get_tracker_class(algorithm)
 
-        from pathlib import Path as _Path
-        import inspect as _inspect
-
         kwargs = {"device": device, "half": half}
         # Always provide reid_weights as Path (required in newer boxmot)
         _reid = reid_weights or "models/tracker/osnet_x0_25_msmt17.pt"
-        kwargs["reid_weights"] = _Path(_reid)
+        kwargs["reid_weights"] = Path(_reid)
 
         # Pass BoxMOT-specific config params — filter to only those accepted by this tracker version
         if tracker_config:
-            valid_params = set(_inspect.signature(tracker_cls.__init__).parameters.keys()) - {"self"}
+            valid_params = set(inspect.signature(tracker_cls.__init__).parameters.keys()) - {"self"}
             for key in ["track_high_thresh", "track_low_thresh", "new_track_thresh",
                         "track_buffer", "match_thresh", "proximity_thresh",
                         "appearance_thresh", "fuse_first_associate",
@@ -109,23 +108,45 @@ class TrackerWrapper:
                 if key in tracker_config and key in valid_params:
                     kwargs[key] = tracker_config[key]
 
+        sig = inspect.signature(tracker_cls.__init__)
+        valid_params = set(sig.parameters.keys()) - {"self"}
+        accepts_var_kwargs = any(
+            param.kind == inspect.Parameter.VAR_KEYWORD
+            for param in sig.parameters.values()
+        )
+        if not accepts_var_kwargs:
+            filtered = {key: value for key, value in kwargs.items() if key in valid_params}
+            dropped = set(kwargs.keys()) - set(filtered.keys())
+            if dropped:
+                logger.warning(f"Dropped unsupported tracker params: {dropped}")
+            kwargs = filtered
+
         self.tracker = tracker_cls(**kwargs)
         logger.info(f"Tracker initialized: {algorithm}, device={device}")
 
     @staticmethod
     def _get_tracker_class(algorithm: str):
         """Dynamically import the tracker class from boxmot."""
-        from boxmot import BotSort, DeepOcSort, StrongSort, ByteTrack, OcSort, HybridSort
+        import boxmot
 
-        mapping = {
-            "botsort": BotSort,
-            "deepocsort": DeepOcSort,
-            "strongsort": StrongSort,
-            "bytetrack": ByteTrack,
-            "ocsort": OcSort,
-            "hybridsort": HybridSort,
+        candidates = {
+            "botsort": ("BotSort", "BoTSORT", "BOTSORT"),
+            "deepocsort": ("DeepOcSort", "DeepOCSort", "DEEPOCSORT"),
+            "strongsort": ("StrongSort", "StrongSORT", "STRONGSORT"),
+            "bytetrack": ("ByteTrack", "BYTETrack", "BYTETRACK"),
+            "ocsort": ("OcSort", "OCSort", "OCSORT"),
+            "hybridsort": ("HybridSort", "HybridSORT", "HYBRIDSORT"),
         }
-        return mapping[algorithm]
+
+        for class_name in candidates[algorithm]:
+            tracker_cls = getattr(boxmot, class_name, None)
+            if tracker_cls is not None:
+                return tracker_cls
+
+        raise ImportError(
+            f"boxmot does not expose a supported class for '{algorithm}'. "
+            f"Tried: {candidates[algorithm]}"
+        )
 
     def update(
         self, detections: list[Detection] | np.ndarray, frame: np.ndarray

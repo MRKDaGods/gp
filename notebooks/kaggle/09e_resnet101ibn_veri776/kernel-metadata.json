@@ -1,0 +1,18 @@
+{
+  "id": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+  "title": "09e ResNet101-IBN-a VeRi-776 Pretraining",
+  "code_file": "09e-resnet101ibn-veri776-pretraining.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

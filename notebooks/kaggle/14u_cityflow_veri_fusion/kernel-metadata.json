@@ -1,0 +1,22 @@
+{
+  "id": "yahiaakhalafallah/14u-cityflow-veri-fusion-port",
+  "title": "14u CityFlow VeRi Fusion Port",
+  "code_file": "14u_cityflow_veri_fusion.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/13-clip-senet-train",
+    "yahiaakhalafallah/14h-robust-tracklet-pooling"
+  ],
+  "model_sources": []
+}

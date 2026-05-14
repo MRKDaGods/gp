@@ -1,0 +1,17 @@
+{
+  "id": "yahiaakhalafallah/13f-clip-senet-cityflow-finetune",
+  "title": "13f CLIP-SENet CityFlow finetune",
+  "code_file": "13f_clip_senet_cityflow_finetune.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "kernel_sources": [
+    "yahiaakhalafallah/13-clip-senet-train"
+  ],
+  "competition_sources": []
+}

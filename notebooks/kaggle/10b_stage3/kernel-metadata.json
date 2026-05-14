@@ -1,16 +1,16 @@
 {
-  "id": "ali369/mtmc-10b-stage-3-faiss-indexing",
+  "id": "yahiaakhalafallah/mtmc-10b-stage-3-faiss-indexing",
   "title": "MTMC 10b - Stage 3 (FAISS Indexing)",
   "code_file": "mtmc-10b-stage-3-faiss-indexing.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
-  "enable_gpu": true,
+  "enable_gpu": false,
   "enable_tpu": false,
   "enable_internet": true,
   "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": [
-    "ali369/mtmc-10a-stages-0-2-tracking-reid-features"
+    "yahiaakhalafallah/mtmc-10a-stages-0-2"
   ]
 }

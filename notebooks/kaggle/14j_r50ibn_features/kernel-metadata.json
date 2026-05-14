@@ -1,0 +1,22 @@
+{
+  "id": "yahiaakhalafallah/14j-r50-ibn-features",
+  "title": "14j R50-IBN Features",
+  "code_file": "14j_r50ibn_features.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaP100",
+  "dataset_sources": [
+    "gumfreddy/09p-r50-ibn-cityflowv2-extended-checkpoint",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/14h-robust-tracklet-pooling",
+    "yahiaakhalafallah/mtmc-10a-stages-0-2"
+  ],
+  "model_sources": []
+}

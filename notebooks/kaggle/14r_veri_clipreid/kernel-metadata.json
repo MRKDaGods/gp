@@ -1,0 +1,17 @@
+{
+  "id": "MRKDaGods/14r-clip-reid-veri-train",
+  "title": "14r CLIP-ReID VeRi-776 Train",
+  "code_file": "14r_veri_clipreid.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

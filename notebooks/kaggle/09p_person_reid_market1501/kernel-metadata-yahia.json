@@ -1,0 +1,19 @@
+{
+  "id": "yahiaakhalafallah/09p-person-reid-transreid-market-1501",
+  "title": "09p Person ReID TransReID Market-1501",
+  "code_file": "09p-person-reid-market1501.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [],
+  "dataset_sources": [
+    "mrkdagods/mtmc-weights",
+    "pengcw1/market-1501"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}

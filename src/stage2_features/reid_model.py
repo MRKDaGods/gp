@@ -37,7 +37,7 @@ class ReIDModel:
     """
 
     # Model names routed to TransReID instead of torchreid
-    _TRANSREID_NAMES = {"transreid", "vit_small", "vit_base", "transreid_vit"}
+    _TRANSREID_NAMES = {"transreid", "vit_small", "vit_base", "transreid_vit", "eva02_vit"}
 
     def __init__(
         self,
@@ -50,6 +50,8 @@ class ReIDModel:
         flip_augment: bool = True,
         color_augment: bool = False,
         multiscale_sizes: Optional[List[Tuple[int, int]]] = None,
+        center_crop_scales: Optional[List[float]] = None,
+        normalize_views: bool = False,
         num_cameras: int = 0,
         vit_model: str = "vit_base_patch16_clip_224.openai",
         clip_normalization: Optional[bool] = None,
@@ -64,6 +66,8 @@ class ReIDModel:
         self.flip_augment = flip_augment
         self.color_augment = color_augment
         self.multiscale_sizes = multiscale_sizes or []  # additional (H,W) sizes for TTA
+        self.center_crop_scales = center_crop_scales or []
+        self.normalize_views = normalize_views
         self.num_cameras = num_cameras
         self.vit_model = vit_model
 
@@ -101,7 +105,9 @@ class ReIDModel:
             f"ReID model loaded: {model_name}, dim={embedding_dim}, "
             f"input={self.input_size}, norm={norm_tag}, interp={interp_tag}, "
             f"device={device}"
+            + (f", center_crop_scales={self.center_crop_scales}" if self.center_crop_scales else "")
             + (f", multiscale={self.multiscale_sizes}" if self.multiscale_sizes else "")
+            + (", normalize_views=true" if self.normalize_views else "")
         )
 
     def _build_model(self, model_name: str, weights_path: Optional[str]):
@@ -111,9 +117,133 @@ class ReIDModel:
         """
         if self.is_transreid:
             return self._build_transreid(weights_path)
+        if model_name.lower() in {"fastreid_sbs_r50_ibn", "fastreid_r50_ibn"}:
+            return self._build_fastreid_sbs_r50_ibn(weights_path)
         if model_name.lower() == "resnet101_ibn_a":
             return self._build_resnet101_ibn(weights_path)
+        if model_name.lower() == "resnext101_ibn_a":
+            return self._build_resnext101_ibn(weights_path)
         return self._build_torchreid(model_name, weights_path)
+
+    @staticmethod
+    def _unwrap_checkpoint_state_dict(checkpoint: object) -> dict:
+        """Unwrap common checkpoint containers to a raw state dict."""
+        if isinstance(checkpoint, dict):
+            if "state_dict" in checkpoint:
+                return checkpoint["state_dict"]
+            if "model" in checkpoint:
+                return checkpoint["model"]
+            return checkpoint
+        raise TypeError(f"Unsupported checkpoint type: {type(checkpoint)!r}")
+
+    @staticmethod
+    def _remap_fastreid_sbs_r50_ibn_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Remap fast-reid SBS(R50-IBN) keys to our inference model."""
+        remapped_state_dict: dict[str, torch.Tensor] = {}
+        skip_prefixes = (
+            "pixel_mean",
+            "pixel_std",
+            "heads.classifier",
+        )
+
+        for key, value in state_dict.items():
+            key = key.replace("module.", "", 1)
+
+            if key.startswith(skip_prefixes):
+                continue
+            if key.startswith("backbone.NL_"):
+                continue
+
+            if key == "heads.pool_layer.p":
+                remapped_state_dict["pool.p"] = value
+                continue
+
+            if key.startswith("heads.bottleneck."):
+                suffix = key[len("heads.bottleneck.") :]
+                if suffix.startswith("0."):
+                    suffix = suffix[2:]
+                remapped_state_dict[f"bottleneck.{suffix}"] = value
+                continue
+
+            if key == "heads.bnneck.num_batches_tracked":
+                remapped_state_dict["bottleneck.num_batches_tracked"] = value
+                continue
+
+            if key.startswith("backbone."):
+                remapped_state_dict[key] = value
+
+        return remapped_state_dict
+
+    @staticmethod
+    def _prepare_native_fastreid_sbs_r50_ibn_state_dict(
+        state_dict: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        """Normalize native R50-IBN checkpoints before loading for inference."""
+        prepared_state_dict: dict[str, torch.Tensor] = {}
+
+        for key, value in state_dict.items():
+            key = key.replace("module.", "", 1)
+
+            if key.startswith("classifier"):
+                continue
+
+            if key.startswith("bn_neck."):
+                key = f"bottleneck.{key[len('bn_neck.'):]}"
+
+            prepared_state_dict[key] = value
+
+        return prepared_state_dict
+
+    def _build_fastreid_sbs_r50_ibn(self, weights_path: Optional[str]):
+        """Build fast-reid SBS(R50-IBN-a) and return 2048D pre-BNNeck features."""
+        from src.training.model import ReIDModelResNet50IBN
+
+        model = ReIDModelResNet50IBN(
+            num_classes=1,
+            last_stride=1,
+            pretrained=False,
+            gem_p=3.0,
+            eval_feature="global",
+        )
+
+        if weights_path is not None:
+            try:
+                checkpoint = torch.load(weights_path, map_location="cpu", weights_only=False)
+                state_dict = self._unwrap_checkpoint_state_dict(checkpoint)
+                state_dict_keys = {key.replace("module.", "", 1) for key in state_dict}
+                has_native_keys = any(
+                    key in state_dict_keys
+                    for key in ("bn_neck.weight", "bottleneck.weight", "pool.p")
+                )
+                needs_remap = not has_native_keys and (
+                    "heads.pool_layer.p" in state_dict_keys
+                    or any(key.startswith("heads.bottleneck.") for key in state_dict_keys)
+                )
+
+                if needs_remap:
+                    state_dict = self._remap_fastreid_sbs_r50_ibn_state_dict(state_dict)
+                else:
+                    state_dict = self._prepare_native_fastreid_sbs_r50_ibn_state_dict(state_dict)
+
+                missing, unexpected = model.load_state_dict(state_dict, strict=False)
+
+                critical_missing = [
+                    key for key in missing
+                    if not key.startswith("classifier")
+                ]
+                if critical_missing:
+                    logger.warning(
+                        f"fast-reid SBS R50-IBN missing critical keys: {critical_missing}"
+                    )
+                if unexpected:
+                    logger.debug(f"fast-reid SBS R50-IBN unexpected keys: {unexpected}")
+
+                logger.info(f"Loaded fast-reid SBS R50-IBN weights from {weights_path}")
+            except Exception as e:
+                logger.warning(f"Could not load fast-reid SBS R50-IBN weights from {weights_path}: {e}")
+                logger.warning("Using randomly initialized fast-reid SBS R50-IBN weights")
+
+        return model
 
     def _build_resnet101_ibn(self, weights_path: Optional[str]):
         """Build ResNet101-IBN-a model for inference."""
@@ -173,15 +303,85 @@ class ReIDModel:
 
         return model
 
+    def _build_resnext101_ibn(self, weights_path: Optional[str]):
+        """Build ResNeXt101-IBN-a model for inference."""
+        from src.training.model import ReIDModelResNeXt101IBN
+
+        model = ReIDModelResNeXt101IBN(
+            num_classes=1,
+            last_stride=1,
+            pretrained=False,
+            gem_p=3.0,
+        )
+
+        if weights_path is not None:
+            try:
+                state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
+                if "state_dict" in state_dict:
+                    state_dict = state_dict["state_dict"]
+                elif "model" in state_dict:
+                    state_dict = state_dict["model"]
+
+                remapped_state_dict = {}
+                backbone_roots = (
+                    "conv1",
+                    "bn1",
+                    "layer1",
+                    "layer2",
+                    "layer3",
+                    "layer4",
+                )
+                for key, value in state_dict.items():
+                    key = key.replace("module.", "", 1)
+                    key = key.replace(".in_norm.", ".IN.").replace(".bn_norm.", ".BN.")
+
+                    if key.startswith("classifier"):
+                        continue
+
+                    if key.startswith(backbone_roots):
+                        key = f"backbone.{key}"
+
+                    remapped_state_dict[key] = value
+
+                state_dict = remapped_state_dict
+                missing, unexpected = model.load_state_dict(state_dict, strict=False)
+
+                critical_missing = [k for k in missing if not k.startswith("classifier")]
+                if critical_missing:
+                    logger.warning(
+                        f"ResNeXt101-IBN missing critical keys: {critical_missing}"
+                    )
+                if unexpected:
+                    logger.debug(f"ResNeXt101-IBN unexpected keys: {unexpected}")
+
+                logger.info(f"Loaded ResNeXt101-IBN-a weights from {weights_path}")
+            except Exception as e:
+                logger.warning(f"Could not load ResNeXt101-IBN-a weights from {weights_path}: {e}")
+                logger.warning("Using randomly initialized ResNeXt101-IBN-a weights")
+
+        return model
+
     def _build_transreid(self, weights_path: Optional[str]):
         """Build TransReID ViT model."""
         from src.stage2_features.transreid_model import build_transreid
+
+        vit_model = self.vit_model
+
+        if "eva02" in vit_model.lower() and "." in vit_model:
+            import timm
+
+            if not timm.is_model(vit_model):
+                fallback = vit_model.rsplit(".", 1)[0]
+                logger.warning(
+                    f"timm model {vit_model!r} not available, falling back to {fallback!r}"
+                )
+                vit_model = fallback
 
         model = build_transreid(
             num_classes=1,
             num_cameras=self.num_cameras,
             embed_dim=self.embedding_dim,
-            vit_model=self.vit_model,
+            vit_model=vit_model,
             pretrained=weights_path is None,
             weights_path=weights_path,
             img_size=self.input_size,  # (H, W) — sets correct patch grid
@@ -255,6 +455,59 @@ class ReIDModel:
             return torch.full((batch_size,), cam_id, dtype=torch.long, device=self.device)
         return None
 
+    def _forward_crops(
+        self,
+        crops: List[np.ndarray],
+        cam_tensor: Optional[torch.Tensor],
+    ) -> np.ndarray:
+        """Run a crop batch through the model and return float32 numpy features."""
+        batch_tensor = self._preprocess(crops).to(self.device)
+        if self.half:
+            batch_tensor = batch_tensor.half()
+        if cam_tensor is not None:
+            features = self.model(batch_tensor, cam_ids=cam_tensor)
+        else:
+            features = self.model(batch_tensor)
+        if isinstance(features, (tuple, list)):
+            features = features[0]
+        return features.float().cpu().numpy()
+
+    @staticmethod
+    def _l2_normalize_rows(features: np.ndarray) -> np.ndarray:
+        """L2-normalize each feature row independently."""
+        norms = np.linalg.norm(features, axis=1, keepdims=True)
+        return features / np.maximum(norms, 1e-8)
+
+    def _center_crop_at_scale(self, crops: List[np.ndarray], scale: float) -> List[np.ndarray]:
+        """Apply center-crop (<1.0) or reflect-pad (>1.0) at a given scale."""
+        if scale <= 0:
+            raise ValueError(f"center_crop scale must be positive, got {scale}")
+
+        result: List[np.ndarray] = []
+        for crop in crops:
+            h, w = crop.shape[:2]
+            if scale < 1.0:
+                new_h = max(1, min(h, int(round(h * scale))))
+                new_w = max(1, min(w, int(round(w * scale))))
+                y_start = (h - new_h) // 2
+                x_start = (w - new_w) // 2
+                transformed = crop[y_start:y_start + new_h, x_start:x_start + new_w]
+            elif scale > 1.0:
+                pad_h = max(0, int(round(h * (scale - 1.0) / 2.0)))
+                pad_w = max(0, int(round(w * (scale - 1.0) / 2.0)))
+                transformed = cv2.copyMakeBorder(
+                    crop,
+                    pad_h,
+                    pad_h,
+                    pad_w,
+                    pad_w,
+                    borderType=cv2.BORDER_REFLECT_101,
+                )
+            else:
+                transformed = crop
+            result.append(transformed)
+        return result
+
     @torch.no_grad()
     def _extract_batch(self, batch_crops: List[np.ndarray], cam_id: Optional[int] = None) -> np.ndarray:
         """Extract embeddings for a single batch with optional augmentation.
@@ -266,33 +519,12 @@ class ReIDModel:
         Returns:
             (N, D) float32 numpy array.
         """
-        batch_tensor = self._preprocess(batch_crops).to(self.device)
-        if self.half:
-            batch_tensor = batch_tensor.half()
         cam_tensor = self._make_cam_tensor(len(batch_crops), cam_id)
-        if cam_tensor is not None:
-            features = self.model(batch_tensor, cam_ids=cam_tensor)
-        else:
-            features = self.model(batch_tensor)
-        if isinstance(features, (tuple, list)):
-            features = features[0]
-        features = features.float().cpu().numpy()
-
-        n_views = 1
+        views = [self._forward_crops(batch_crops, cam_tensor)]
 
         if self.flip_augment:
             flipped_crops = [cv2.flip(c, 1) for c in batch_crops]
-            flip_tensor = self._preprocess(flipped_crops).to(self.device)
-            if self.half:
-                flip_tensor = flip_tensor.half()
-            if cam_tensor is not None:
-                flip_features = self.model(flip_tensor, cam_ids=cam_tensor)
-            else:
-                flip_features = self.model(flip_tensor)
-            if isinstance(flip_features, (tuple, list)):
-                flip_features = flip_features[0]
-            features = features + flip_features.float().cpu().numpy()
-            n_views += 1
+            views.append(self._forward_crops(flipped_crops, cam_tensor))
 
         if self.color_augment:
             for alpha, beta in [(1.2, 15), (0.8, -10)]:
@@ -300,17 +532,15 @@ class ReIDModel:
                     cv2.convertScaleAbs(c, alpha=alpha, beta=beta)
                     for c in batch_crops
                 ]
-                aug_tensor = self._preprocess(aug_crops).to(self.device)
-                if self.half:
-                    aug_tensor = aug_tensor.half()
-                if cam_tensor is not None:
-                    aug_features = self.model(aug_tensor, cam_ids=cam_tensor)
-                else:
-                    aug_features = self.model(aug_tensor)
-                if isinstance(aug_features, (tuple, list)):
-                    aug_features = aug_features[0]
-                features = features + aug_features.float().cpu().numpy()
-                n_views += 1
+                views.append(self._forward_crops(aug_crops, cam_tensor))
+
+        for scale in self.center_crop_scales:
+            scaled_crops = self._center_crop_at_scale(batch_crops, float(scale))
+            views.append(self._forward_crops(scaled_crops, cam_tensor))
+
+            if self.flip_augment:
+                scaled_flipped_crops = [cv2.flip(c, 1) for c in scaled_crops]
+                views.append(self._forward_crops(scaled_flipped_crops, cam_tensor))
 
         # Multi-scale TTA: resize crops to intermediate size, then back to
         # model input size.  This lets the model see "zoomed" content without
@@ -329,34 +559,17 @@ class ReIDModel:
                     )
                     for c in batch_crops
                 ]
-                ms_tensor = self._preprocess(ms_crops).to(self.device)
-                if self.half:
-                    ms_tensor = ms_tensor.half()
-                if cam_tensor is not None:
-                    ms_features = self.model(ms_tensor, cam_ids=cam_tensor)
-                else:
-                    ms_features = self.model(ms_tensor)
-                if isinstance(ms_features, (tuple, list)):
-                    ms_features = ms_features[0]
-                features = features + ms_features.float().cpu().numpy()
-                n_views += 1
+                views.append(self._forward_crops(ms_crops, cam_tensor))
 
                 # Flip TTA on multi-scale views for additional viewpoint diversity
                 if self.flip_augment:
                     ms_flipped = [cv2.flip(c, 1) for c in ms_crops]
-                    ms_flip_tensor = self._preprocess(ms_flipped).to(self.device)
-                    if self.half:
-                        ms_flip_tensor = ms_flip_tensor.half()
-                    if cam_tensor is not None:
-                        ms_flip_feat = self.model(ms_flip_tensor, cam_ids=cam_tensor)
-                    else:
-                        ms_flip_feat = self.model(ms_flip_tensor)
-                    if isinstance(ms_flip_feat, (tuple, list)):
-                        ms_flip_feat = ms_flip_feat[0]
-                    features = features + ms_flip_feat.float().cpu().numpy()
-                    n_views += 1
+                    views.append(self._forward_crops(ms_flipped, cam_tensor))
 
-        return features / n_views
+        if self.normalize_views and len(views) > 1:
+            views = [self._l2_normalize_rows(view) for view in views]
+
+        return np.sum(np.stack(views, axis=0), axis=0) / len(views)
 
     @torch.no_grad()
     def extract_features(self, crops: List[np.ndarray], batch_size: int = 64, cam_id: Optional[int] = None) -> np.ndarray:
@@ -469,6 +682,45 @@ class ReIDModel:
         crops = [sc.image for sc in scored_crops]
         qualities = [sc.quality for sc in scored_crops]
         return self.get_tracklet_embedding(crops, quality_scores=qualities, cam_id=cam_id, quality_temperature=quality_temperature)
+
+    def get_tracklet_multi_query_embeddings(
+        self,
+        scored_crops: List["QualityScoredCrop"],
+        k: int = 5,
+        cam_id: Optional[int] = None,
+        quality_temperature: float = 3.0,
+    ) -> Optional[np.ndarray]:
+        """Extract top-K representative crop embeddings for a tracklet.
+
+        Selection is quality-based: the highest-quality crops are retained.
+        If the tracklet has fewer than K crops, the remaining rows are padded
+        with the tracklet's pooled embedding so Stage 4 can load a dense
+        ``(N, K, D)`` tensor without special-casing variable-length tracks.
+        """
+        if not scored_crops or k <= 0:
+            return None
+
+        crops = [sc.image for sc in scored_crops]
+        qualities = np.array([sc.quality for sc in scored_crops], dtype=np.float32)
+        embeddings = self.extract_features(crops, cam_id=cam_id)
+        if embeddings.shape[0] == 0:
+            return None
+
+        top_count = min(k, embeddings.shape[0])
+        top_indices = np.argsort(-qualities)[:top_count]
+        selected = embeddings[top_indices].astype(np.float32)
+
+        if selected.shape[0] < k:
+            if qualities.shape[0] == embeddings.shape[0]:
+                weights = np.exp(qualities * quality_temperature)
+                weights = weights / max(weights.sum(), 1e-8)
+                pooled = (embeddings * weights[:, np.newaxis]).sum(axis=0, keepdims=True)
+            else:
+                pooled = embeddings.mean(axis=0, keepdims=True)
+            pad = np.repeat(pooled.astype(np.float32), k - selected.shape[0], axis=0)
+            selected = np.concatenate([selected, pad], axis=0)
+
+        return selected.astype(np.float32)
 
     # ------------------------------------------------------------------
     # Camera-specific Test-Time Adaptation (CamTTA)

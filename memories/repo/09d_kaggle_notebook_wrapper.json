@@ -1,0 +1,10 @@
+{
+  "subject": "09d Kaggle notebook structure",
+  "fact": "The saved 09d Kaggle notebook at notebooks/kaggle/09d_vehicle_reid_resnet101ibn/09d_vehicle_reid_resnet101ibn.ipynb is a wrapper notebook: cell 2 embeds the full train_09d.py script inside script_content, and cell 4 runs that script. Future fixes should edit the embedded script via JSON rather than assuming a multi-cell training notebook on disk.",
+  "citations": [
+    "notebooks/kaggle/09d_vehicle_reid_resnet101ibn/09d_vehicle_reid_resnet101ibn.ipynb",
+    "docs/subagent-specs/extended-training-09d-12a.md"
+  ],
+  "reason": "This notebook has both wrapper and expanded-source variants in the repository. Knowing that the pushed 09d notebook is a wrapper prevents editing the wrong file format and losing changes.",
+  "category": "project-structure"
+}

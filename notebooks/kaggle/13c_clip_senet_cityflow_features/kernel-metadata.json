@@ -1,0 +1,19 @@
+{
+  "id": "yahiaakhalafallah/13c-clip-senet-cityflow-features",
+  "title": "13c CLIP-SENet CityFlowV2 Features",
+  "code_file": "13c_clip_senet_cityflow_features.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2",
+    "yahiaakhalafallah/mtmc-10a-checkpoints"
+  ],
+  "kernel_sources": [
+    "yahiaakhalafallah/13-clip-senet-train",
+    "yahiaakhalafallah/mtmc-10a-stages-0-2"
+  ],
+  "competition_sources": []
+}

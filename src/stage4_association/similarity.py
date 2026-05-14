@@ -167,11 +167,22 @@ def compute_combined_similarity(
     to_enabled = to_cfg.get("enabled", False)
     to_bonus = float(to_cfg.get("bonus", 0.05))
     to_max_mean_time = float(to_cfg.get("max_mean_time", 5.0))
+    to_min_ratio = float(to_cfg.get("min_ratio", 0.0))
     to_count = 0
 
     combined: Dict[Tuple[int, int], float] = {}
 
     for (i, j), app_sim in appearance_sim.items():
+        is_cross_camera = camera_ids[i] != camera_ids[j]
+        t_overlap = 0.0
+        if is_cross_camera and (to_enabled or to_min_ratio > 0):
+            t_overlap = compute_temporal_overlap_ratio(
+                start_times[i], end_times[i],
+                start_times[j], end_times[j],
+            )
+            if to_min_ratio > 0 and t_overlap < to_min_ratio:
+                continue
+
         # Spatio-temporal validation.
         # Use minimum temporal gap: max(0, later_start - earlier_end).
         # This correctly handles both overlapping cameras (gap=0) and
@@ -213,19 +224,18 @@ def compute_combined_similarity(
         # Temporal overlap bonus: for overlapping-FOV cameras, temporal
         # co-existence is a strong positive signal — the same vehicle is
         # visible in both cameras simultaneously.
-        if to_enabled:
-            t_overlap = compute_temporal_overlap_ratio(
-                start_times[i], end_times[i],
-                start_times[j], end_times[j],
-            )
+        if to_enabled and is_cross_camera:
             if t_overlap > 0:
-                # Check if this camera pair has overlapping FOV
                 pair_prior = st_validator._get_pair_prior(cam_a, cam_b)
+                apply_bonus = False
                 if pair_prior is not None:
                     mean_t = pair_prior.get("mean_time", float("inf"))
-                    if mean_t <= to_max_mean_time:
-                        score += to_bonus * t_overlap
-                        to_count += 1
+                    apply_bonus = mean_t <= to_max_mean_time
+                elif st_validator.min_time_gap == 0:
+                    apply_bonus = True
+                if apply_bonus:
+                    score += to_bonus * t_overlap
+                    to_count += 1
 
         # Length weighting: shorter tracklets have less reliable embeddings
         # Uses the minimum length (weakest link) with hyperbolic saturation.

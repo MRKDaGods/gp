@@ -1,0 +1,16 @@
+{
+  "id": "yahiaakhalafallah/mtmc-10b-dinov2-stage-3-faiss-indexing",
+  "title": "MTMC 10b DINOv2 - Stage 3 (FAISS Indexing)",
+  "code_file": "10b-dinov2-stage-3-faiss-indexing.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/mtmc-10a-dinov2"
+  ]
+}

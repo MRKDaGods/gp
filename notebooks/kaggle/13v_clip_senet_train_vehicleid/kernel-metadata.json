@@ -1,0 +1,15 @@
+{
+  "id": "yahiaakhalafallah/13v-clip-senet-train-vehicleid",
+  "title": "13v clip senet train vehicleid",
+  "code_file": "13v_clip_senet_train_vehicleid.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "maphat/vehicleid"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

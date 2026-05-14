@@ -14,16 +14,56 @@ from typing import Dict, List, Optional
 import cv2
 import numpy as np
 from loguru import logger
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from src.core.constants import PERSON_CLASSES, VEHICLE_CLASSES
 from src.core.data_models import Tracklet, TrackletFeatures
-from src.core.io_utils import save_embeddings, save_hsv_features
+from src.core.io_utils import save_embeddings, save_hsv_features, save_multi_query_embeddings
 from src.stage2_features.crop_extractor import CropExtractor
 from src.stage2_features.embeddings import camera_aware_batch_normalize, l2_normalize
+from src.stage2_features.foreground_masker import ForegroundMasker
 from src.stage2_features.hsv_extractor import HSVExtractor
 from src.stage2_features.pca_whitening import PCAWhitener
 from src.stage2_features.reid_model import ReIDModel
+
+
+def _flatten_multi_query_embeddings(
+    features: List[TrackletFeatures],
+) -> tuple[Optional[np.ndarray], List[int], List[str]]:
+    """Flatten per-tracklet multi-query arrays into a single matrix."""
+    flattened: List[np.ndarray] = []
+    sizes: List[int] = []
+    camera_ids: List[str] = []
+
+    for feat in features:
+        mq = feat.multi_query_embeddings
+        if mq is None:
+            continue
+        flattened.append(mq)
+        sizes.append(mq.shape[0])
+        camera_ids.extend([feat.camera_id] * mq.shape[0])
+
+    if not flattened:
+        return None, [], []
+
+    return np.concatenate(flattened, axis=0), sizes, camera_ids
+
+
+def _restore_multi_query_embeddings(
+    features: List[TrackletFeatures],
+    mq_flat: np.ndarray,
+    sizes: List[int],
+) -> None:
+    """Restore flattened multi-query rows back onto each tracklet feature."""
+    offset = 0
+    size_idx = 0
+    for feat in features:
+        if feat.multi_query_embeddings is None:
+            continue
+        size = sizes[size_idx]
+        feat.multi_query_embeddings = mq_flat[offset:offset + size]
+        offset += size
+        size_idx += 1
 
 
 def _load_frames_for_camera(
@@ -103,6 +143,16 @@ def run_stage2(
         laplacian_min_var=stage_cfg.crop.get("laplacian_min_var", 0.0),
     )
 
+    foreground_masker: Optional[ForegroundMasker] = None
+    foreground_mask_cfg = stage_cfg.crop.get("foreground_masking", {})
+    if foreground_mask_cfg.get("enabled", False):
+        foreground_masker = ForegroundMasker(
+            model_name=foreground_mask_cfg.get("model_name", "facebook/sam2.1-hiera-tiny"),
+            min_crop_size=foreground_mask_cfg.get("min_crop_size", 48),
+            fill_value=foreground_mask_cfg.get("fill_value", "mean"),
+            device=stage_cfg.reid.device,
+        )
+
     hsv_extractor = HSVExtractor(
         h_bins=stage_cfg.hsv.h_bins,
         s_bins=stage_cfg.hsv.s_bins,
@@ -114,23 +164,37 @@ def run_stage2(
     color_augment = stage_cfg.reid.get("color_augment", False)
     multiscale_raw = stage_cfg.reid.get("multiscale_sizes", [])
     multiscale_sizes = [tuple(s) for s in multiscale_raw] if multiscale_raw else []
+    center_crop_raw = stage_cfg.reid.get("center_crop_scales", [])
+    center_crop_scales = [float(scale) for scale in center_crop_raw] if center_crop_raw else []
+    normalize_views = bool(stage_cfg.reid.get("normalize_views", False))
     quality_temperature = float(stage_cfg.reid.get("quality_temperature", 3.0))
+    multi_query_k = int(stage_cfg.get("multi_query", {}).get("k", 0))
+    target_classes = OmegaConf.select(cfg, "dataset.target_classes", default=None)
+    if target_classes is None:
+        target_classes = OmegaConf.select(cfg, "stage0.target_classes", default=None)
+    has_person_classes = target_classes is None or any(
+        class_id in PERSON_CLASSES for class_id in target_classes
+    )
 
     # --- Load ReID models (person and vehicle) ---
-    person_reid = ReIDModel(
-        model_name=stage_cfg.reid.person.model_name,
-        weights_path=stage_cfg.reid.person.weights_path,
-        embedding_dim=stage_cfg.reid.person.embedding_dim,
-        input_size=tuple(stage_cfg.reid.person.input_size),
-        device=stage_cfg.reid.device,
-        half=stage_cfg.reid.half,
-        flip_augment=flip_augment,
-        color_augment=color_augment,
-        multiscale_sizes=multiscale_sizes,
-        num_cameras=stage_cfg.reid.person.get("num_cameras", 0),
-        vit_model=stage_cfg.reid.person.get("vit_model", "vit_base_patch16_clip_224.openai"),
-        clip_normalization=stage_cfg.reid.person.get("clip_normalization", None),
-    )
+    person_reid: Optional[ReIDModel] = None
+    if has_person_classes:
+        person_reid = ReIDModel(
+            model_name=stage_cfg.reid.person.model_name,
+            weights_path=stage_cfg.reid.person.weights_path,
+            embedding_dim=stage_cfg.reid.person.embedding_dim,
+            input_size=tuple(stage_cfg.reid.person.input_size),
+            device=stage_cfg.reid.device,
+            half=stage_cfg.reid.half,
+            flip_augment=flip_augment,
+            color_augment=color_augment,
+            multiscale_sizes=multiscale_sizes,
+            center_crop_scales=center_crop_scales,
+            normalize_views=normalize_views,
+            num_cameras=stage_cfg.reid.person.get("num_cameras", 0),
+            vit_model=stage_cfg.reid.person.get("vit_model", "vit_base_patch16_clip_224.openai"),
+            clip_normalization=stage_cfg.reid.person.get("clip_normalization", None),
+        )
 
     _vehicle_weights = stage_cfg.reid.vehicle.weights_path
     _vehicle_fallback = stage_cfg.reid.vehicle.get("weights_fallback")
@@ -150,6 +214,8 @@ def run_stage2(
         flip_augment=flip_augment,
         color_augment=color_augment,
         multiscale_sizes=multiscale_sizes,
+        center_crop_scales=center_crop_scales,
+        normalize_views=normalize_views,
         num_cameras=stage_cfg.reid.vehicle.get("num_cameras", 0),
         vit_model=stage_cfg.reid.vehicle.get("vit_model", "vit_base_patch16_clip_224.openai"),
         clip_normalization=stage_cfg.reid.vehicle.get("clip_normalization", None),
@@ -173,8 +239,13 @@ def run_stage2(
                 half=stage_cfg.reid.half,
                 flip_augment=flip_augment,
                 color_augment=color_augment,
+                multiscale_sizes=multiscale_sizes,
+                center_crop_scales=center_crop_scales,
+                normalize_views=normalize_views,
                 num_cameras=vehicle2_cfg.get("num_cameras", 0),
+                vit_model=vehicle2_cfg.get("vit_model", "vit_base_patch16_clip_224.openai"),
                 clip_normalization=vehicle2_cfg.get("clip_normalization", False),
+                concat_patch=vehicle2_cfg.get("concat_patch", False),
             )
             logger.info(
                 f"Ensemble ReID enabled: primary={stage_cfg.reid.vehicle.model_name} "
@@ -184,6 +255,37 @@ def run_stage2(
             logger.warning(
                 f"Ensemble vehicle2 weights not found: {weights_path2}. "
                 "Falling back to single-model."
+            )
+
+    vehicle_reid3: Optional[ReIDModel] = None
+    vehicle3_cfg = stage_cfg.reid.get("vehicle3", {})
+    if vehicle3_cfg.get("enabled", False):
+        weights_path3 = vehicle3_cfg.get("weights_path")
+        if weights_path3 and Path(weights_path3).exists():
+            vehicle_reid3 = ReIDModel(
+                model_name=vehicle3_cfg.get("model_name", "resnext101_ibn_a"),
+                weights_path=weights_path3,
+                embedding_dim=vehicle3_cfg.get("embedding_dim", 2048),
+                input_size=tuple(vehicle3_cfg.get("input_size", [384, 384])),
+                device=stage_cfg.reid.device,
+                half=stage_cfg.reid.half,
+                flip_augment=flip_augment,
+                color_augment=color_augment,
+                multiscale_sizes=multiscale_sizes,
+                center_crop_scales=center_crop_scales,
+                normalize_views=normalize_views,
+                num_cameras=vehicle3_cfg.get("num_cameras", 0),
+                vit_model=vehicle3_cfg.get("vit_model", "vit_base_patch16_clip_224.openai"),
+                clip_normalization=vehicle3_cfg.get("clip_normalization", False),
+                concat_patch=vehicle3_cfg.get("concat_patch", False),
+            )
+            logger.info(
+                f"Tertiary ensemble ReID enabled: {vehicle3_cfg.get('model_name', 'resnext101_ibn_a')}"
+            )
+        else:
+            logger.warning(
+                f"Ensemble vehicle3 weights not found: {weights_path3}. "
+                "Falling back to up-to-2-model extraction."
             )
 
     # --- Resolve stage0 output directory for fast disk-based frame loading ---
@@ -206,9 +308,11 @@ def run_stage2(
     all_features: List[TrackletFeatures] = []
     all_raw_embeddings: List[np.ndarray] = []
     all_secondary_embeddings: List[Optional[np.ndarray]] = []
+    all_tertiary_embeddings: List[Optional[np.ndarray]] = []
     all_camera_ids: List[str] = []
     index_map: List[dict] = []
     vehicle2_separate = vehicle2_cfg.get("save_separate", False) and vehicle_reid2 is not None
+    vehicle3_separate = vehicle3_cfg.get("save_separate", True) and vehicle_reid3 is not None
 
     # --- SIE camera ID mapping for TransReID models ---
     sie_camera_map: Dict[str, int] = stage_cfg.reid.vehicle.get("sie_camera_map", {}) or {}
@@ -255,6 +359,8 @@ def run_stage2(
             scored_crops_per_tracklet = []
             for tracklet in tracklets:
                 sc = crop_extractor.extract_crops_from_frames(tracklet, cam_frame_images)
+                if foreground_masker is not None and tracklet.class_id in VEHICLE_CLASSES:
+                    foreground_masker.mask_crops(sc)
                 scored_crops_per_tracklet.append(sc)
                 all_cam_crops_for_tta.extend([c.image for c in sc])
 
@@ -290,14 +396,23 @@ def run_stage2(
                 dropped_no_crops += 1
                 continue
 
+            if (
+                foreground_masker is not None
+                and preloaded_scored_crops is None
+                and tracklet.class_id in VEHICLE_CLASSES
+            ):
+                foreground_masker.mask_crops(scored_crops)
+
             # Select ReID model based on class
             if tracklet.class_id in PERSON_CLASSES:
                 reid = person_reid
                 reid2 = None
+                reid3 = None
                 sie_cam_id = None  # Person model doesn't use SIE camera map
             else:
                 reid = vehicle_reid
                 reid2 = vehicle_reid2
+                reid3 = vehicle_reid3
                 sie_cam_id = sie_camera_map.get(camera_id)
 
             # 2 & 3. Flip-augmented extraction + quality-weighted attention pooling
@@ -305,6 +420,15 @@ def run_stage2(
             if raw_embedding is None:
                 dropped_no_embedding += 1
                 continue
+
+            mq_embeddings = None
+            if multi_query_k > 0:
+                mq_embeddings = reid.get_tracklet_multi_query_embeddings(
+                    scored_crops,
+                    k=multi_query_k,
+                    cam_id=sie_cam_id,
+                    quality_temperature=quality_temperature,
+                )
 
             # Ensemble: extract from second model
             raw_embedding2 = None
@@ -322,6 +446,16 @@ def run_stage2(
                         e2 = raw_embedding2 / max(norm2, 1e-8)
                         raw_embedding = np.concatenate([e1, e2], axis=0)
 
+            raw_embedding3 = None
+            if reid3 is not None:
+                raw_embedding3 = reid3.get_tracklet_embedding_from_scored_crops(scored_crops, cam_id=sie_cam_id, quality_temperature=quality_temperature)
+                if raw_embedding3 is not None and not vehicle3_separate:
+                    norm_current = np.linalg.norm(raw_embedding)
+                    norm3 = np.linalg.norm(raw_embedding3)
+                    current_embedding = raw_embedding / max(norm_current, 1e-8)
+                    e3 = raw_embedding3 / max(norm3, 1e-8)
+                    raw_embedding = np.concatenate([current_embedding, e3], axis=0)
+
             # 4. Spatial HSV histogram with quality weighting
             hsv_hist = hsv_extractor.extract_tracklet_histogram_from_scored_crops(
                 scored_crops
@@ -331,6 +465,8 @@ def run_stage2(
             all_camera_ids.append(camera_id)
             if vehicle2_separate:
                 all_secondary_embeddings.append(raw_embedding2)
+            if vehicle3_separate:
+                all_tertiary_embeddings.append(raw_embedding3)
             index_map.append({
                 "track_id": tracklet.track_id,
                 "camera_id": camera_id,
@@ -345,6 +481,7 @@ def run_stage2(
                     embedding=raw_embedding,  # will be replaced after post-processing
                     hsv_histogram=hsv_hist,
                     raw_embedding=raw_embedding.copy(),
+                    multi_query_embeddings=mq_embeddings,
                 )
             )
 
@@ -381,6 +518,11 @@ def run_stage2(
         logger.info("Applying camera-aware batch normalisation")
         raw_matrix = camera_aware_batch_normalize(raw_matrix, all_camera_ids)
 
+        mq_flat, mq_sizes, mq_camera_ids = _flatten_multi_query_embeddings(all_features)
+        if mq_flat is not None:
+            mq_flat = camera_aware_batch_normalize(mq_flat, mq_camera_ids)
+            _restore_multi_query_embeddings(all_features, mq_flat, mq_sizes)
+
     # 5b. Power normalization (before PCA to compress outlier magnitudes)
     pn_alpha = stage_cfg.get("power_norm", {}).get("alpha", 0.0)
     if pn_alpha > 0:
@@ -389,10 +531,18 @@ def run_stage2(
         norms = np.linalg.norm(raw_matrix, axis=1, keepdims=True)
         raw_matrix = raw_matrix / np.maximum(norms, 1e-8)
 
+        mq_flat, mq_sizes, _ = _flatten_multi_query_embeddings(all_features)
+        if mq_flat is not None:
+            mq_flat = np.sign(mq_flat) * np.abs(mq_flat) ** pn_alpha
+            mq_norms = np.linalg.norm(mq_flat, axis=1, keepdims=True)
+            mq_flat = mq_flat / np.maximum(mq_norms, 1e-8)
+            _restore_multi_query_embeddings(all_features, mq_flat, mq_sizes)
+
     # 6. PCA whitening
     if stage_cfg.pca.enabled:
         n_samples, n_features = raw_matrix.shape
         n_components = stage_cfg.pca.n_components
+        pca_applied = False
         # Hard minimum: n_samples must exceed n_components to form a valid covariance.
         # Use n_components itself (the mathematical minimum), no extra factor.
         min_samples_for_pca = max(50, n_components)
@@ -421,6 +571,7 @@ def run_stage2(
                 logger.info(f"Fitted and saved PCA model to {pca_path}")
 
             embeddings = whitener.transform(raw_matrix)
+            pca_applied = True
         elif Path(pca_path).exists():
             # Too few samples to fit PCA, but a pre-trained model exists.
             # Apply transform-only so probe embeddings match gallery dimensionality.
@@ -432,6 +583,7 @@ def run_stage2(
                 f"({n_features}D -> {whitener.n_components}D)"
             )
             embeddings = whitener.transform(raw_matrix)
+            pca_applied = True
         else:
             logger.warning(
                 f"Skipping PCA: need at least {min_samples_for_pca} samples "
@@ -440,6 +592,12 @@ def run_stage2(
                 f"Using camera-BN'd embeddings directly."
             )
             embeddings = raw_matrix
+
+        if pca_applied:
+            mq_flat, mq_sizes, _ = _flatten_multi_query_embeddings(all_features)
+            if mq_flat is not None:
+                mq_flat = whitener.transform(mq_flat)
+                _restore_multi_query_embeddings(all_features, mq_flat, mq_sizes)
     else:
         embeddings = raw_matrix
 
@@ -497,17 +655,86 @@ def run_stage2(
                         f"for reliable {sec_components}D PCA, but only have {n_sec}."
                     )
 
+    tert_matrix: Optional[np.ndarray] = None
+    if vehicle3_separate and all_tertiary_embeddings:
+        tert_valid = [embedding for embedding in all_tertiary_embeddings if embedding is not None]
+        if tert_valid:
+            tert_matrix = np.stack(tert_valid, axis=0)
+            logger.info(f"Tertiary embedding matrix: {tert_matrix.shape}")
+
+            if stage_cfg.get("camera_bn", {}).get("enabled", True):
+                tert_camera_ids = [
+                    all_camera_ids[i]
+                    for i, embedding in enumerate(all_tertiary_embeddings)
+                    if embedding is not None
+                ]
+                logger.info("Applying camera-aware batch normalisation to tertiary embeddings")
+                tert_matrix = camera_aware_batch_normalize(tert_matrix, tert_camera_ids)
+
+            if stage_cfg.pca.enabled:
+                n_tert, d_tert = tert_matrix.shape
+                tert_components = min(int(stage_cfg.pca.n_components), d_tert)
+                tert_min_samples = max(50, tert_components)
+                tert_pca_path = stage_cfg.pca.get(
+                    "tertiary_pca_model_path",
+                    "models/reid/pca_transform_tertiary.pkl",
+                )
+
+                if n_tert >= tert_min_samples:
+                    tert_whitener = PCAWhitener(n_components=tert_components)
+                    if Path(tert_pca_path).exists():
+                        tert_whitener.load(tert_pca_path)
+                        if tert_whitener.n_components != tert_components:
+                            logger.warning(
+                                f"Tertiary PCA model has {tert_whitener.n_components} components "
+                                f"but config requests {tert_components}. Refitting."
+                            )
+                            tert_whitener = PCAWhitener(n_components=tert_components)
+                            tert_whitener.fit(tert_matrix)
+                            tert_whitener.save(tert_pca_path)
+                            logger.info(f"Refitted and saved tertiary PCA model to {tert_pca_path}")
+                        else:
+                            logger.info(f"Loaded tertiary PCA model from {tert_pca_path}")
+                    else:
+                        tert_whitener.fit(tert_matrix)
+                        tert_whitener.save(tert_pca_path)
+                        logger.info(f"Fitted and saved tertiary PCA model to {tert_pca_path}")
+
+                    tert_matrix = tert_whitener.transform(tert_matrix)
+                    logger.info(f"Tertiary PCA: {d_tert}D -> {tert_components}D")
+                else:
+                    logger.warning(
+                        f"Skipping tertiary PCA: need at least {tert_min_samples} samples "
+                        f"for reliable {tert_components}D PCA, but only have {n_tert}."
+                    )
+
     # 7. L2 normalisation
     embeddings = l2_normalize(embeddings)
+
+    mq_flat, mq_sizes, _ = _flatten_multi_query_embeddings(all_features)
+    if mq_flat is not None:
+        mq_flat = l2_normalize(mq_flat)
+        _restore_multi_query_embeddings(all_features, mq_flat, mq_sizes)
 
     # Update features with refined embeddings
     for i, feat in enumerate(all_features):
         feat.embedding = embeddings[i]
+        if multi_query_k > 0 and feat.multi_query_embeddings is None:
+            feat.multi_query_embeddings = np.repeat(
+                embeddings[i][np.newaxis, :],
+                multi_query_k,
+                axis=0,
+            ).astype(np.float32)
 
     # Save outputs
     hsv_matrix = np.stack([f.hsv_histogram for f in all_features], axis=0)
     save_embeddings(embeddings, index_map, output_dir)
     save_hsv_features(hsv_matrix, output_dir)
+    if multi_query_k > 0:
+        save_multi_query_embeddings(
+            [f.multi_query_embeddings for f in all_features if f.multi_query_embeddings is not None],
+            output_dir,
+        )
 
     # Save secondary model embeddings separately (for stage4 fusion)
     if vehicle2_separate and sec_matrix is not None:
@@ -521,12 +748,29 @@ def run_stage2(
             f"Secondary embeddings incomplete: {valid_secondary}/{len(all_secondary_embeddings)}"
         )
 
+    if vehicle3_separate and tert_matrix is not None:
+        tert_matrix = l2_normalize(tert_matrix)
+        tert_path = output_dir / "embeddings_tertiary.npy"
+        np.save(tert_path, tert_matrix.astype(np.float32))
+        logger.info(f"Tertiary embeddings saved: {tert_matrix.shape} -> {tert_path}")
+    elif vehicle3_separate and all_tertiary_embeddings:
+        valid_tertiary = sum(embedding is not None for embedding in all_tertiary_embeddings)
+        logger.warning(
+            f"Tertiary embeddings incomplete: {valid_tertiary}/{len(all_tertiary_embeddings)}"
+        )
+
+    mq_log = f"multi_query_k={multi_query_k}, " if multi_query_k > 0 else ""
     logger.info(
         f"Stage 2 complete: {len(all_features)} tracklet features, "
         f"embedding dim={embeddings.shape[1]}, "
         f"HSV dim={hsv_matrix.shape[1]}, "
         f"flip_aug={'on' if flip_augment else 'off'}, "
-        f"camera_bn={'on' if stage_cfg.get('camera_bn', {}).get('enabled', True) else 'off'}"
+        f"{mq_log}"
+        f"camera_bn={'on' if stage_cfg.get('camera_bn', {}).get('enabled', True) else 'off'}, "
+        f"foreground_masking={'on' if foreground_masker is not None else 'off'}"
     )
 
     return all_features
+
+
+run_stage = run_stage2

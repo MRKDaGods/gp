@@ -1,0 +1,16 @@
+{
+  "id": "yahiaakhalafallah/13e-v7-clip-senet-eval",
+  "title": "13e v7 CLIP-SENet eval",
+  "code_file": "13e_v7_clip_senet_eval.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset",
+    "yahiaakhalafallah/clip-senet-veri776-v7"
+  ],
+  "kernel_sources": [],
+  "competition_sources": []
+}
