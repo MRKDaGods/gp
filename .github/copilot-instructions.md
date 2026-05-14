@@ -115,10 +115,12 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **Gap to SOTA**: 0.6pp — tracker-limited (Kalman), NOT detector-limited
 - **Status**: FULLY CONVERGED — tracker-limited and exhaustively tested; Kalman, global optimal, and naive trackers all failed to beat 0.947
 
-### Integration Status
-- 14e B1 CityFlow values are NOT yet in `configs/datasets/cityflowv2.yaml` — pending `feat/integrate-vehicle-mtmc`
-- Person pipeline (`src/stage_wildtrack_mvdetr/pipeline.py`) is NOT yet wired into `scripts/run_pipeline.py --stages` — pending `feat/integrate-person-mtmc`
-- Backend `pipeline_service.py` hard-codes `configs/default.yaml` — no dataset switching yet
+### Integration Status (this branch: feat/integrate-person-mtmc)
+- ✅ Person pipeline routed via `scripts/run_pipeline.py` (`--config configs/datasets/wildtrack.yaml`)
+- ✅ 12b best Kalman params promoted to `configs/datasets/wildtrack.yaml`
+- ✅ Backend dataset switcher (`pipeline_service.py` + `routers/pipeline.py`)
+- ✅ Backend `models/{requests,embedding}.py` + `repositories/__init__.py` scaffolding (fills master gap)
+- ⏳ Vehicle 14e B1 production config → see `feat/integrate-vehicle-mtmc`
 
 ## Experiment History
 - **Full experiment log**: See `docs/experiment-log.md` for 225+ tracked experiments
