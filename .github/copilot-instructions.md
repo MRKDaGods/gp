@@ -40,8 +40,12 @@ Multi-camera multi-target tracking system (vehicles/humans) on CityFlowV2 (AI Ci
 
 ## Architecture
 
+Post-merge application stack: `backend/` (FastAPI) and `frontend/` (Next.js ATHAR) now live alongside the offline `src/` pipeline.
+
 ```
 configs/          YAML configuration (OmegaConf)
+backend/          FastAPI service layer and API routers
+frontend/         Next.js ATHAR dashboard and workflow UI
 src/core/         Shared data models, config loader, utilities
 src/stage0/       Frame extraction, preprocessing
 src/stage1/       YOLO26m detection + BoxMOT tracking (BoT-SORT)
@@ -84,6 +88,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 ### Data Flow Between Stages
 - Stages communicate through files in `data/outputs/`
 - Each stage reads predecessor's output, writes its own
+- Backend services read run-scoped artifacts under `data/outputs/<run_id>/...`
 - Tracklets: list of dicts with `camera_id`, `track_id`, `frames`, `boxes`, `embeddings`
 
 ## Current Performance State
@@ -109,6 +114,11 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **SOTA target**: IDF1≈0.953
 - **Gap to SOTA**: 0.6pp — tracker-limited (Kalman), NOT detector-limited
 - **Status**: FULLY CONVERGED — tracker-limited and exhaustively tested; Kalman, global optimal, and naive trackers all failed to beat 0.947
+
+### Integration Status
+- 14e B1 CityFlow values are NOT yet in `configs/datasets/cityflowv2.yaml` — pending `feat/integrate-vehicle-mtmc`
+- Person pipeline (`src/stage_wildtrack_mvdetr/pipeline.py`) is NOT yet wired into `scripts/run_pipeline.py --stages` — pending `feat/integrate-person-mtmc`
+- Backend `pipeline_service.py` hard-codes `configs/default.yaml` — no dataset switching yet
 
 ## Experiment History
 - **Full experiment log**: See `docs/experiment-log.md` for 225+ tracked experiments
@@ -162,6 +172,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 
 ## Kaggle Workflow
 - Pipeline chain: 10a (stages 0-2, GPU) → 10b (stage 3, CPU) → 10c (stages 4-5, CPU)
+- Backend/frontend integration is local orchestration only; GPU-heavy stages still run on Kaggle
 - Push: `kaggle kernels push -p notebooks/kaggle/10X_stagesNN/`
 - Logs: `python scripts/kaggle_logs.py <kernel_slug> --tail N`
 - Auth tokens in `~/.kaggle/`: abdo (gumfreddy), mrk (mrkdagods), ali369 (lolo)
