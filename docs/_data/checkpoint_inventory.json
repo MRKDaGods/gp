@@ -1531,7 +1531,40 @@
     "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-13T21:56:04.587000",
-    "metric_claims": [],
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ],
     "deployed_to": [
       "models/reid/transreid_cityflowv2_best.pth",
       "gumfreddy/mtmc-weights",
@@ -1545,7 +1578,24 @@
     "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-14T03:36:54.547000",
-    "metric_claims": [],
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.1844796256388448,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.1844796256388448,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.2526842563161843,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_mAP_rr\": 0.2526842563161843,"
+      }
+    ],
     "deployed_to": [
       "models/reid/transreid_cityflowv2_best.pth",
       "gumfreddy/mtmc-weights",
@@ -1559,7 +1609,32 @@
     "source_kernel": "mrkdagods/09-vehicle-reid-cityflowv2",
     "kernel_account": "mrkdagods",
     "kernel_finished_at": "2026-03-13T03:08:50.547000",
-    "metric_claims": [],
+    "metric_claims": [
+      {
+        "metric": "best_mAP_qe",
+        "value": 0.7845927794834711,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 42,
+        "excerpt": "\"best_mAP_qe\": 0.7845927794834711,"
+      },
+      {
+        "metric": "best_mAP",
+        "value": 0.7680828181288571,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 43,
+        "excerpt": "\"best_mAP\": 0.7680828181288571,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.7951371600680412,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP_rr\": 0.7951371600680412,"
+      }
+    ],
     "deployed_to": [
       "models/reid/transreid_cityflowv2_best.pth",
       "gumfreddy/mtmc-weights",
@@ -1601,7 +1676,40 @@
     "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-13T21:56:04.587000",
-    "metric_claims": []
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
   },
   {
     "checkpoint_filename": "transreid_cityflowv2_extended_A_best.pth",
@@ -1649,7 +1757,40 @@
     "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-13T21:56:04.587000",
-    "metric_claims": []
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
   },
   {
     "checkpoint_filename": "transreid_cityflowv2_last.pth",
@@ -1657,7 +1798,24 @@
     "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-14T03:36:54.547000",
-    "metric_claims": []
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.1844796256388448,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.1844796256388448,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.2526842563161843,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_mAP_rr\": 0.2526842563161843,"
+      }
+    ]
   },
   {
     "checkpoint_filename": "transreid_cityflowv2_last.pth",
@@ -1673,7 +1831,40 @@
     "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-13T21:56:04.587000",
-    "metric_claims": []
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
   },
   {
     "checkpoint_filename": "transreid_cityflowv2_last_expA_resume.pth",
@@ -1891,7 +2082,40 @@
     "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-13T21:56:04.587000",
-    "metric_claims": []
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
   },
   {
     "checkpoint_filename": "vehicle_transreid_vit_base_cityflowv2.pth",
@@ -1899,7 +2123,24 @@
     "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-14T03:36:54.547000",
-    "metric_claims": []
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.1844796256388448,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.1844796256388448,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.2526842563161843,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_mAP_rr\": 0.2526842563161843,"
+      }
+    ]
   },
   {
     "checkpoint_filename": "vehicle_transreid_vit_base_cityflowv2.pth",
@@ -1915,7 +2156,32 @@
     "source_kernel": "mrkdagods/09-vehicle-reid-cityflowv2",
     "kernel_account": "mrkdagods",
     "kernel_finished_at": "2026-03-13T03:08:50.547000",
-    "metric_claims": []
+    "metric_claims": [
+      {
+        "metric": "best_mAP_qe",
+        "value": 0.7845927794834711,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 42,
+        "excerpt": "\"best_mAP_qe\": 0.7845927794834711,"
+      },
+      {
+        "metric": "best_mAP",
+        "value": 0.7680828181288571,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 43,
+        "excerpt": "\"best_mAP\": 0.7680828181288571,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.7951371600680412,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP_rr\": 0.7951371600680412,"
+      }
+    ]
   },
   {
     "checkpoint_filename": "vehicle_transreid_vit_base_cityflowv2.pth",
@@ -1931,7 +2197,40 @@
     "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-13T21:56:04.587000",
-    "metric_claims": []
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
   },
   {
     "checkpoint_filename": "vehicle_transreid_vit_base_veri776.pth",

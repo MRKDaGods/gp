@@ -1,5 +1,92 @@
 # Models & Checkpoints - Canonical Reference
 
+> Last verified: 2026-05-15
+> Source data: docs/_data/kernel_inventory.json, docs/_data/checkpoint_inventory.json
+
+## Section 1 - Active deployed models
+
+### Vehicle pipeline (CityFlowV2, target MTMC IDF1=0.77936)
+
+#### Detector - YOLO26m
+
+- Architecture: YOLO26m
+- Local: models/detection/yolo26m.pt (44,255,705 bytes; 44.3 MB decimal)
+- Provenance: pretrained COCO, no project fine-tuning found
+- Hosted: yahiaakhalafallah/mtmc-weights, gumfreddy/mtmc-weights, mrkdagods/mtmc-weights (identical 44,255,705 bytes)
+- Used by: src/stage1_tracking/pipeline.py
+
+#### Primary ReID - TransReID ViT-B/16 CLIP 256px
+
+- Local file: models/reid/transreid_cityflowv2_best.pth (346,518,635 bytes; 346.5 MB decimal)
+- Hosted: yahiaakhalafallah/mtmc-weights, gumfreddy/mtmc-weights, mrkdagods/mtmc-weights as reid/transreid_cityflowv2_best.pth
+- Source training kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema, selected by highest verified candidate raw mAP among the three 09-* candidates
+- Verified metric: mAP=0.8152743047017524, R1=UNVERIFIED (cite: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema/exported_models/vehicle_reid_cityflowv2_metadata.json:44)
+- Additional parsed claims: best_ema_mAP=0.8144469802052257, best_mAP_rr=0.8279662735373268, best_ema_mAP_rr=0.8355198487541973 (same metadata lines 45-47)
+- Embedding dim: 768D
+- Used at: Stage 2 primary feature, w_primary=0.475 in 14e B1
+- Yaml: configs/datasets/cityflowv2.yaml lines 95-105
+
+#### Tertiary ReID - DINOv2 ViT-L/14
+
+- Local file: models/reid/dinov2_large_cityflowv2.pth (NOT ON LOCAL DISK)
+- Deployed Kaggle file: vehicle_transreid_dinov2_large_cityflowv2_final.pth
+- Hosted: DATASET UNRESOLVED. Visible datasets across gumfreddy, mrkdagods, ali369, and yahiaakhalafallah only expose the mtmc-weights datasets, and none contains the DINOv2 tertiary checkpoint. The deployed path is a Kaggle notebook output source: /kaggle/input/09s-dinov2-large-cityflowv2/vehicle_transreid_dinov2_large_cityflowv2_final.pth.
+- Source training: yahiaakhalafallah/09s-dinov2-large-cityflowv2 -> Kaggle notebook output source -> Stage 2 tertiary file. The local notebook defines vehicle_transreid_dinov2_large_cityflowv2_best.pth, vehicle_transreid_dinov2_large_cityflowv2_final.pth, and vehicle_transreid_dinov2_large_cityflowv2_summary.json.
+- Verified metric: UNVERIFIED. The kernel log was accessible but contained no mAP/R1 lines; the output API paged through crop images before the summary JSON and did not expose it in this pass.
+- Embedding dim: 1024D
+- Used at: Stage 2 tertiary, w_tertiary=0.525 in 14e B1
+- Yaml: configs/datasets/cityflowv2.yaml lines 120-130
+- Download: kaggle kernels output yahiaakhalafallah/09s-dinov2-large-cityflowv2 --file-pattern '^vehicle_transreid_dinov2_large_cityflowv2_final\.pth$' -p models/reid/
+
+#### Secondary ReID (DISABLED) - ResNet101-IBN-a CityFlowV2
+
+- Local: models/reid/resnet101ibn_cityflowv2_384px_best.pth (171,701,980 bytes)
+- Hosted: gumfreddy/mtmc-weights and mrkdagods/mtmc-weights as reid/resnet101ibn_cityflowv2_384px_best.pth
+- Source: historical 09d v18 ali369 record; exact primary output was not visible in this inventory pass
+- Verified metric: UNVERIFIED for the exact hosted checkpoint. Current accessible follow-up logs report a loaded previous best mAP=0.5061, while docs/findings.md records the historical 52.77% claim.
+- Status: DISABLED in 14e B1 (too weak; w_secondary=0.0)
+
+### Vehicle MTMC fusion configs (deployed states)
+
+| Config tag | MTMC IDF1 | Stage 4 knobs | Source kernel |
+|---|---:|---|---|
+| 10c v15 (previous baseline) | 0.7703 | aqe_k=3, w_t=0.60, sim_thr=0.55 | 10c v15 |
+| 14e B1 (current best) | 0.77936 | aqe_k=2, w_t=0.525, sim_thr=0.48, fic_reg=0.5 | yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep (verified from 14e_summary.json) |
+
+### Person pipeline (WILDTRACK, target ground-plane IDF1=0.947)
+
+#### Detector - MVDeTr ResNet18
+
+- Local: NOT ON DISK (kernel output only)
+- Hosted: gumfreddy/12a-wildtrack-mvdetr-training (kernel output)
+- Source: 12a kernel
+- Verified metric: exported loaded-model log line reports MODA=0.913, MODP=0.818, precision=0.947, recall=0.966; epoch-20 line reports MODA=0.921 but is not the final exported-checkpoint line
+- Output filename: MultiviewDetector.pth
+- Download: kaggle kernels output gumfreddy/12a-wildtrack-mvdetr-training -p models/person_detection/
+
+#### Tracker - BoT-SORT Kalman (no model file)
+
+- Best params (verified from 12b tracking_sweep_best.json): max_age=2, min_hits=2, distance_gate=25.0, q_std=5.0, r_std=10.0, interpolation_max_gap=1
+- Verified IDF1: 0.9467 (ground-plane)
+- Yaml: configs/datasets/wildtrack.yaml
+
+## Section 2 - Active fusion approaches
+
+### 14t - VeRi-776 single-cam SOTA (CLIP-SENet x TransReID score fusion)
+
+- mAP=0.93304, R1=0.98451 (verified in docs/experiment-log.md from 14t_summary.json)
+- Source kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
+- Recipe: CLIP-SENet v6 + TransReID 09v v17, score fusion 0.7/0.3, AQE k=3 + rerank (k1=80, k2=15, lambda=0.2)
+- Does NOT improve CityFlow MTMC: 14u Option C port failed at 0.77995 vs 14e B1's 0.77936 baseline.
+- This is a single-camera workflow on VeRi-776 only.
+
+## Section 3 - TODO - see next subagent commit
+
+- Approach catalog (every TransReID/CLIP-SENet/DINOv2/ResNet variant)
+- Dead-end summary
+- System integration map (yaml -> backend -> frontend)
+- Reproduction recipes (link to pipeline-vehicle.md, pipeline-person.md)# Models & Checkpoints - Canonical Reference
+
 > Last verified: 2026-05-15. Verification used Kaggle metadata, Kaggle kernel logs / small JSON outputs, and local notebook source only. No checkpoint downloads or local pipeline stages were run.
 
 ## Kaggle Inventory
