@@ -95,7 +95,7 @@ stage2:
   reid:
     vehicle:
       model_name: "transreid"
-      weights_path: "models/reid/transreid_cityflowv2_384px_best.pth"
+      weights_path: "models/reid/transreid_cityflowv2_best.pth"
       weights_fallback: "models/reid/transreid_cityflowv2_best.pth"
       embedding_dim: 768
       input_size: [256, 256]
