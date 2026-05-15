@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -344,13 +345,31 @@ def main():
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--img_size", type=int, nargs=2, default=[224, 224], help="H W")
     parser.add_argument("--max_crops", type=int, default=10, help="Max crops per ID per camera")
+    parser.add_argument(
+        "--output-json",
+        type=Path,
+        default=None,
+        help="Optional path to write final ReID metrics as JSON with mAP, R1, R5, and R10.",
+    )
     # QE & re-ranking
     parser.add_argument("--qe_k", type=int, default=0, help="Average Query Expansion k (0=off)")
-    parser.add_argument("--rerank", action="store_true", default=True)
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        default=True,
+        help="Enable k-reciprocal re-ranking (default: enabled).",
+    )
+    parser.add_argument(
+        "--no-rerank",
+        action="store_true",
+        help="Skip k-reciprocal re-ranking and report cosine metrics only.",
+    )
     parser.add_argument("--k1", type=int, default=20)
     parser.add_argument("--k2", type=int, default=6)
     parser.add_argument("--lambda_value", type=float, default=0.3)
     args = parser.parse_args()
+    if args.no_rerank:
+        args.rerank = False
 
     logger.info(f"Device: {args.device}")
     logger.info(f"Weights: {args.weights}")
@@ -442,6 +461,12 @@ def main():
     logger.info(f"  Rank-1: {cmc[0]*100:.2f}%")
     logger.info(f"  Rank-5: {cmc[4]*100:.2f}%")
     logger.info(f"  Rank-10:{cmc[9]*100:.2f}%")
+    output_metrics = {
+        "mAP": float(mAP),
+        "R1": float(cmc[0]),
+        "R5": float(cmc[4]),
+        "R10": float(cmc[9]),
+    }
 
     # ── 7. Re-ranking ────────────────────────────────────────────────
     if args.rerank:
@@ -463,6 +488,19 @@ def main():
         logger.info(f"  Rank-1: {cmc_rr[0]*100:.2f}%")
         logger.info(f"  Rank-5: {cmc_rr[4]*100:.2f}%")
         logger.info(f"  Rank-10:{cmc_rr[9]*100:.2f}%")
+        output_metrics = {
+            "mAP": float(mAP_rr),
+            "R1": float(cmc_rr[0]),
+            "R5": float(cmc_rr[4]),
+            "R10": float(cmc_rr[9]),
+        }
+
+    if args.output_json is not None:
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        with args.output_json.open("w", encoding="utf-8") as f:
+            json.dump(output_metrics, f, indent=2)
+            f.write("\n")
+        logger.info(f"Wrote metrics JSON to {args.output_json}")
 
     logger.info(f"\n{'='*50}")
     logger.info("Done!")
