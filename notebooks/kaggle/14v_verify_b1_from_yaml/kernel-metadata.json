@@ -1,0 +1,20 @@
+{
+  "id": "yahiaakhalafallah/14v-verify-b1-from-yaml",
+  "title": "14v Verify B1 From YAML",
+  "code_file": "14v_verify_b1_from_yaml.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "yahiaakhalafallah/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/14c-tta-stage2",
+    "yahiaakhalafallah/mtmc-10a-stages-0-2"
+  ]
+}
