@@ -1,0 +1,23 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install lightweight test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . --no-deps
+          python -m pip install pytest fastapi httpx omegaconf jsonschema numpy pydantic click rich python-multipart
+      - name: Run backend and core smoke tests
+        run: pytest tests/test_backend/ tests/test_core/ --no-header -q
