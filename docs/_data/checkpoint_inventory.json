@@ -1085,7 +1085,24 @@
     "source_kernel": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
     "kernel_account": "gumfreddy",
     "kernel_finished_at": "2026-04-20T17:52:00.050000",
-    "metric_claims": []
+    "metric_claims": [
+      {
+        "metric": "final_eval_mAP",
+        "value": 0.7508469677279063,
+        "source_slug": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+        "source_artifact": "09p_fastreid_r50_extended/final_metrics.json",
+        "line": 15,
+        "excerpt": "\"mAP\": 0.7508469677279063,"
+      },
+      {
+        "metric": "final_eval_rank1",
+        "value": 0.8619748950004578,
+        "source_slug": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+        "source_artifact": "09p_fastreid_r50_extended/final_metrics.json",
+        "line": 16,
+        "excerpt": "\"rank1\": 0.8619748950004578,"
+      }
+    ]
   },
   {
     "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_final.pth",
@@ -1539,6 +1556,14 @@
         "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
         "line": 44,
         "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_R1",
+        "value": 0.9241,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "09-vehicle-reid-cityflowv2-augoverhaul-ema.log",
+        "line": 1292,
+        "excerpt": "Best R1: 92.41%"
       },
       {
         "metric": "best_ema_mAP",

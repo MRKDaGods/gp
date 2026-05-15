@@ -20,7 +20,7 @@
 - Local file: models/reid/transreid_cityflowv2_best.pth (346,518,635 bytes; 346.5 MB decimal)
 - Hosted: yahiaakhalafallah/mtmc-weights, gumfreddy/mtmc-weights, mrkdagods/mtmc-weights as reid/transreid_cityflowv2_best.pth
 - Source training kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema, selected by highest verified candidate raw mAP among the three 09-* candidates
-- Verified metric: mAP=0.8152743047017524, R1=UNVERIFIED (cite: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema/exported_models/vehicle_reid_cityflowv2_metadata.json:44)
+- Verified metric: mAP=0.8152743047017524, R1=0.9241 (cite: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema/exported_models/vehicle_reid_cityflowv2_metadata.json:44 and 09-vehicle-reid-cityflowv2-augoverhaul-ema.log:1292)
 - Additional parsed claims: best_ema_mAP=0.8144469802052257, best_mAP_rr=0.8279662735373268, best_ema_mAP_rr=0.8355198487541973 (same metadata lines 45-47)
 - Embedding dim: 768D
 - Used at: Stage 2 primary feature, w_primary=0.475 in 14e B1
@@ -88,7 +88,7 @@
 
 | Variant | Trained on | Best verified mAP / R1 | Source kernel | Deployed? | Notes |
 |---|---|---:|---|---|---|
-| ViT-B/16 CLIP 256px | CityFlowV2 | 0.8153 / UNVERIFIED | `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` | Yes - primary 14e B1 | AugOverhaul+EMA fine-tune; supersedes the older 80.14% documentation claim. R1 was not retained in the verified metadata. |
+| ViT-B/16 CLIP 256px | CityFlowV2 | 0.8153 / 0.9241 | `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` | Yes - primary 14e B1 | AugOverhaul+EMA fine-tune; supersedes the older 80.14% / 92.27% documentation claim. R1 is verified from the retained kernel log, not the metadata JSON. |
 | ViT-B/16 CLIP 256px | VeRi-776 | 0.8997 / 0.9833 | `mrkdagods` 09v v17 | Yes - via 14t fusion | Checkpoint `vehicle_transreid_vit_base_veri776.pth`; one of the two 14t VeRi-776 experts. |
 | ViT-B/16 CLIP 384px | CityFlowV2 | 0.8014 / 0.9227 documented; primary artifact UNVERIFIED | `mrkdagods/09b-vehicle-reid-384px-vit-training-v2` | No - DEAD END | MTMC v43/v44 fell to 0.7585/0.7562, about -2.8pp; 384px features captured viewpoint-specific texture that harmed cross-camera association. |
 | ViT-L/14 CLIP | VeRi-776 | 0.8090 / 0.9690 base; 0.8795 / 0.9732 post-rerank | `mrkdagods/14p3-veri-vit-l-14-clip-clean-train` | No - probe only | Larger CLIP TransReID did not beat 09v. The earlier 14p mAP=1.0 signal was treated as overfitting/buggy and not a valid model claim. |
@@ -114,7 +114,7 @@
 |---|---|---:|---|---|---|
 | ResNet101-IBN-a 384px | CityFlowV2 | UNVERIFIED; documented claim 0.5277 mAP | `ali369/09d-vehicle-reid-resnet101-ibn-a-training` or `mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training` | No - disabled (`w_secondary=0.0`) | Too weak for ensemble use; later accessible logs only verified a 0.5061 loaded previous best. |
 | ResNet101-IBN-a | VeRi-776 | 0.6252 mAP documented | `ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain` | No - reference only | VeRi pretraining succeeded, but CityFlowV2 fine-tune regressed to 0.427 mAP. |
-| FastReID R50-IBN-a | CityFlowV2 | 0.6364 mAP / 0.7869 R1 documented for 09n; 09p exact metric UNVERIFIED | `gumfreddy/09p-fastreid-r50-extended-cityflowv2` | Warning - 14k quaternary only | 14k K7 reached 0.78079 MTMC IDF1, a marginal +0.0014 over 14e B1, not promoted. |
+| FastReID R50-IBN-a | CityFlowV2 | 0.7508 mAP / 0.8620 R1 for 09p final | `gumfreddy/09p-fastreid-r50-extended-cityflowv2` | Warning - 14k quaternary only | Verified from `09p_fastreid_r50_extended/final_metrics.json`; 14k K7 reached 0.78079 MTMC IDF1, a marginal +0.0014 over 14e B1, not promoted. |
 
 #### Other approaches tried
 
@@ -205,7 +205,6 @@ Checkpoint locality:
 ### Section 3.7 - Provenance gaps
 
 - `vehicle_transreid_dinov2_large_cityflowv2_final.pth` source dataset remains unresolved; only the producing kernel `yahiaakhalafallah/09s-dinov2-large-cityflowv2` is known.
-- `transreid_cityflowv2_best.pth` R1 is UNVERIFIED in retained primary logs. The best retained primary-source metric is mAP=0.8153 from AugOverhaul+EMA metadata.
-- Several `09d-*` and `09p-*` extended-training claims are not present in retained primary log fragments; keep them documented claims unless the exact output JSON/log is recovered.
+- Several `09d-*` extended-training claims are not present in retained primary log fragments; keep them documented claims unless the exact output JSON/log is recovered.
 - The inventory spans four Kaggle accounts; some kernels may be archived/private and absent from the visible 154-kernel inventory.
 - `copilot-instructions.md` still contains older vehicle mAP wording in places; this pass intentionally leaves agent instructions unchanged and records the corrected number here.
