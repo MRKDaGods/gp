@@ -22,6 +22,47 @@ def _make_embeddings(n=10, d=64, seed=42):
     return emb, indices
 
 
+def _average_query_expansion_loop_reference(
+    embeddings: np.ndarray,
+    indices: np.ndarray,
+    k: int = 5,
+    alpha: float = 1.0,
+) -> np.ndarray:
+    """Loop reference for the batched AQE self-excluding semantics."""
+    n, _ = embeddings.shape
+    k_available = indices.shape[1] if indices.ndim == 2 else 0
+
+    if k <= 0 or n == 0:
+        return embeddings.copy()
+
+    k_use = min(k + 1, k_available)
+    if k_use <= 0:
+        return embeddings.copy()
+
+    expanded = np.empty_like(embeddings)
+
+    for i in range(n):
+        nn_idx = indices[i, :k_use]
+        valid_mask = (nn_idx >= 0) & (nn_idx < n) & (nn_idx != i)
+        valid_mask &= np.cumsum(valid_mask) <= k
+        valid = nn_idx[valid_mask]
+
+        if len(valid) == 0:
+            expanded[i] = embeddings[i]
+            continue
+
+        total_weight = alpha + len(valid)
+        expanded[i] = (
+            alpha * embeddings[i] + embeddings[valid].sum(axis=0)
+        ) / total_weight
+
+        norm = np.linalg.norm(expanded[i])
+        if norm > 0:
+            expanded[i] /= norm
+
+    return expanded
+
+
 # ── Basic smoke tests ───────────────────────────────────────────────────────
 
 class TestAverageQueryExpansion:
@@ -131,7 +172,9 @@ class TestAverageQueryExpansionBatched:
     def test_matches_loop_variant(self):
         """Batched and loop variants should produce the same result."""
         emb, indices = _make_embeddings(n=30, d=32)
-        result_loop = average_query_expansion(emb, indices, k=5, alpha=1.0)
+        result_loop = _average_query_expansion_loop_reference(
+            emb, indices, k=5, alpha=1.0
+        )
         result_batch = average_query_expansion_batched(emb, indices, k=5, alpha=1.0)
         np.testing.assert_allclose(result_loop, result_batch, atol=1e-5)
 
