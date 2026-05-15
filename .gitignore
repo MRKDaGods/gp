@@ -59,6 +59,7 @@ scripts/_*.py
 _*.py
 
 # Scratch / debug artifacts
+_tmp_kernel_scan/
 _patch_*.py
 _tmp_*.py
 _tmp_*.json
