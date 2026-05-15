@@ -117,18 +117,18 @@ def resolve_pipeline_model(
         )
 
     effective_dataset = model.dataset
-    expected_task = DATASET_TASK_BY_NAME.get(effective_dataset)
-    if expected_task is not None and model.task_type != expected_task:
-        raise PipelineModelValidationError(
-            f"Model '{model.id}' has task_type '{model.task_type}', which is not compatible "
-            f"with dataset '{effective_dataset}' ({expected_task})."
-        )
-
     if not model.runnable_locally:
         kernel_hint = model.notebook_or_kernel_ref or "no Kaggle kernel reference recorded"
         raise PipelineModelValidationError(
             f"Model '{model.id}' is not runnable through the local pipeline API. "
             f"Run or reproduce it on Kaggle via: {kernel_hint}"
+        )
+
+    expected_task = DATASET_TASK_BY_NAME.get(effective_dataset)
+    if expected_task is not None and model.task_type != expected_task:
+        raise PipelineModelValidationError(
+            f"Model '{model.id}' has task_type '{model.task_type}', which is not compatible "
+            f"with dataset '{effective_dataset}' ({expected_task})."
         )
 
     if not model.pipeline_config:

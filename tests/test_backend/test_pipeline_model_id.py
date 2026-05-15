@@ -126,8 +126,8 @@ def test_pipeline_run_rejects_task_type_mismatch(client: TestClient) -> None:
 
     assert response.status_code == 422
     detail = response.json()["detail"]
-    assert "task_type 'detector_only'" in detail
-    assert "not compatible" in detail
+    assert "not runnable" in detail
+    assert "gumfreddy/12a-wildtrack-mvdetr-training" in detail
 
 
 def test_pipeline_run_stage_with_vehicle_model_id_resolves_cityflow_overrides(
@@ -205,5 +205,5 @@ def test_pipeline_run_stage_rejects_task_type_mismatch(client: TestClient) -> No
 
     assert response.status_code == 422
     detail = response.json()["detail"]
-    assert "task_type 'detector_only'" in detail
-    assert "not compatible" in detail
+    assert "not runnable" in detail
+    assert "gumfreddy/12a-wildtrack-mvdetr-training" in detail
