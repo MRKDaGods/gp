@@ -7,6 +7,7 @@ import sys
 import threading
 import traceback as _traceback
 import zipfile
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -24,6 +25,7 @@ from backend.config import (
     UPLOAD_DIR,
     VIDEO_EXTENSIONS,
 )
+from backend.services.model_registry import get_model
 from backend.services.tracklet_service import _persist_probe_link
 from backend.services.video_service import (
     _detect_camera_for_video,
@@ -38,6 +40,27 @@ DATASET_CONFIG_BY_NAME = {
     "wildtrack": "configs/datasets/wildtrack.yaml",
 }
 
+DATASET_TASK_BY_NAME = {
+    "cityflowv2": "mtmc_vehicle",
+    "wildtrack": "mtmc_person",
+    "veri776": "single_cam_reid",
+}
+
+
+@dataclass(frozen=True)
+class PipelineModelResolution:
+    model_id: Optional[str]
+    resolved_config: str
+    applied_overrides: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    dataset: Optional[str] = None
+
+
+class PipelineModelValidationError(ValueError):
+    def __init__(self, message: str, status_code: int = 422) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 def resolve_pipeline_config_path(dataset: Optional[str] = None) -> str:
     """Resolve backend dataset selector to the run_pipeline --config path."""
@@ -48,6 +71,78 @@ def resolve_pipeline_config_path(dataset: Optional[str] = None) -> str:
         allowed = ", ".join(sorted(DATASET_CONFIG_BY_NAME))
         raise ValueError(f"Unsupported dataset '{dataset}'. Expected one of: {allowed}")
     return DATASET_CONFIG_BY_NAME[selector]
+
+
+def _normalise_dataset(dataset: Optional[str]) -> Optional[str]:
+    value = (dataset or "").strip().lower()
+    return value or None
+
+
+def _lookup_registry_model(model_id: str):
+    model = get_model(model_id)
+    if model is not None:
+        return model
+    alternate_id = model_id.replace("-", "_")
+    if alternate_id != model_id:
+        return get_model(alternate_id)
+    return None
+
+
+def resolve_pipeline_model(
+    model_id: Optional[str] = None,
+    dataset: Optional[str] = None,
+) -> PipelineModelResolution:
+    """Resolve an optional registry model selection into pipeline run settings."""
+    requested_dataset = _normalise_dataset(dataset)
+
+    if not model_id:
+        return PipelineModelResolution(
+            model_id=None,
+            resolved_config=resolve_pipeline_config_path(requested_dataset),
+            applied_overrides=[],
+            warnings=[],
+            dataset=requested_dataset,
+        )
+
+    model_key = model_id.strip()
+    model = _lookup_registry_model(model_key)
+    if model is None:
+        raise ValueError(f"Unknown model_id '{model_id}'")
+
+    warnings: List[str] = []
+    if requested_dataset and requested_dataset != model.dataset:
+        warnings.append(
+            f"model_id '{model.id}' overrides requested dataset '{requested_dataset}' "
+            f"with registry dataset '{model.dataset}'"
+        )
+
+    effective_dataset = model.dataset
+    expected_task = DATASET_TASK_BY_NAME.get(effective_dataset)
+    if expected_task is not None and model.task_type != expected_task:
+        raise PipelineModelValidationError(
+            f"Model '{model.id}' has task_type '{model.task_type}', which is not compatible "
+            f"with dataset '{effective_dataset}' ({expected_task})."
+        )
+
+    if not model.runnable_locally:
+        kernel_hint = model.notebook_or_kernel_ref or "no Kaggle kernel reference recorded"
+        raise PipelineModelValidationError(
+            f"Model '{model.id}' is not runnable through the local pipeline API. "
+            f"Run or reproduce it on Kaggle via: {kernel_hint}"
+        )
+
+    if not model.pipeline_config:
+        raise PipelineModelValidationError(
+            f"Model '{model.id}' does not define a pipeline_config for MTMC pipeline runs."
+        )
+
+    return PipelineModelResolution(
+        model_id=model.id,
+        resolved_config=model.pipeline_config,
+        applied_overrides=list(model.model_overrides),
+        warnings=warnings,
+        dataset=effective_dataset,
+    )
 
 
 def _allocate_numeric_run_id() -> str:
@@ -168,10 +263,12 @@ def _build_pipeline_cmd(
     reid_model_path: Optional[str] = None,
     tracker: Optional[str] = None,
     dataset: Optional[str] = None,
+    pipeline_config: Optional[str] = None,
+    model_overrides: Optional[List[str]] = None,
 ) -> list:
     """Build the subprocess command for run_pipeline.py."""
     effective_use_cpu = use_cpu or not _cuda_available_for_pipeline()
-    config_path = resolve_pipeline_config_path(dataset)
+    config_path = pipeline_config or resolve_pipeline_config_path(dataset)
     cmd = [
         _PIPELINE_PYTHON,
         "scripts/run_pipeline.py",
@@ -188,6 +285,8 @@ def _build_pipeline_cmd(
         "--override",
         "stage4.global_gallery.enabled=true",
     ]
+    for override in model_overrides or []:
+        cmd.extend(["--override", override])
     if camera_id:
         cmd.extend(["--override", f"stage0.cameras=[{camera_id}]"])
     if smoke_test:
@@ -339,6 +438,8 @@ async def _run_pipeline_stages(
     reid_model_path: Optional[str] = None,
     tracker: Optional[str] = None,
     dataset: Optional[str] = None,
+    pipeline_config: Optional[str] = None,
+    model_overrides: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Run one or more pipeline stages via subprocess with streaming progress."""
     video_meta = app_state.uploaded_videos[video_id]
@@ -360,6 +461,8 @@ async def _run_pipeline_stages(
         reid_model_path=reid_model_path,
         tracker=tracker,
         dataset=dataset,
+        pipeline_config=pipeline_config,
+        model_overrides=model_overrides,
     )
 
     return await _run_pipeline_streaming(run_id, cmd, stage_nums)
@@ -455,6 +558,8 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
         reid_model_path = config.get("reidModelPath")
         tracker = str(config.get("tracker") or "deepocsort")
         dataset = config.get("dataset")
+        pipeline_config = config.get("resolvedConfig")
+        model_overrides = list(config.get("appliedOverrides") or [])
 
         if not video_id or video_id not in app_state.uploaded_videos:
             raise RuntimeError(f"Stage {stage} requires a valid videoId")
@@ -477,6 +582,8 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 smoke_test=smoke_test,
                 tracker=tracker,
                 dataset=dataset,
+                pipeline_config=pipeline_config,
+                model_overrides=model_overrides,
             )
 
             app_state.video_to_latest_run[video_id] = run_id
@@ -510,6 +617,8 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 smoke_test=smoke_test,
                 reid_model_path=reid_model_path,
                 dataset=dataset,
+                pipeline_config=pipeline_config,
+                model_overrides=model_overrides,
             )
 
             app_state.active_runs[run_id]["status"] = "completed"
@@ -531,6 +640,8 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 use_cpu=use_cpu,
                 smoke_test=smoke_test,
                 dataset=dataset,
+                pipeline_config=pipeline_config,
+                model_overrides=model_overrides,
             )
 
             app_state.active_runs[run_id]["status"] = "completed"
@@ -552,6 +663,8 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
             use_cpu=use_cpu,
             smoke_test=smoke_test,
             dataset=dataset,
+            pipeline_config=pipeline_config,
+            model_overrides=model_overrides,
         )
 
         app_state.active_runs[run_id]["status"] = "completed"
@@ -582,6 +695,8 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
         use_cpu = bool(config.get("useCpu", False))
         reid_model_path = config.get("reidModelPath")
         dataset = config.get("dataset")
+        pipeline_config = config.get("resolvedConfig")
+        model_overrides = list(config.get("appliedOverrides") or [])
 
         if not video_id or video_id not in app_state.uploaded_videos:
             raise RuntimeError("Full pipeline requires a valid videoId")
@@ -603,6 +718,8 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
             smoke_test=smoke_test,
             reid_model_path=reid_model_path,
             dataset=dataset,
+            pipeline_config=pipeline_config,
+            model_overrides=model_overrides,
         )
 
         app_state.video_to_latest_run[video_id] = run_id

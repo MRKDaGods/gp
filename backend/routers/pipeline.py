@@ -8,15 +8,25 @@ from backend.config import OUTPUT_DIR
 from backend.dependencies import get_app_state
 from backend.models.requests import PipelineRunRequest
 from backend.services.pipeline_service import (
+    PipelineModelValidationError,
     _resolve_run_id,
     _write_run_context,
     execute_full_pipeline,
     execute_stage,
+    resolve_pipeline_model,
 )
 from backend.services.video_service import _detect_camera_for_video
 from backend.state import AppState
 
 router = APIRouter()
+
+
+def _payload_model_id(payload: PipelineRunRequest, config: Dict[str, Any]) -> Optional[str]:
+    return payload.model_id or config.get("model_id") or config.get("modelId")
+
+
+def _payload_dataset(payload: PipelineRunRequest, config: Dict[str, Any]) -> Optional[str]:
+    return payload.dataset or config.get("dataset") or config.get("datasetName")
 
 
 @router.post("/api/pipeline/run-stage/{stage}")
@@ -38,7 +48,10 @@ async def run_stage(
         camera_id = payload.cameraId or config.get("cameraId")
         smoke_test = bool(payload.smokeTest or config.get("smokeTest", False))
         use_cpu = bool(payload.useCpu or config.get("useCpu", False))
-        dataset = payload.dataset or config.get("dataset") or config.get("datasetName") or None
+        resolution = resolve_pipeline_model(
+            model_id=_payload_model_id(payload, config),
+            dataset=_payload_dataset(payload, config),
+        )
 
         if stage == 1 and not video_id:
             raise HTTPException(status_code=400, detail="videoId is required for stage 1")
@@ -66,7 +79,11 @@ async def run_stage(
             "cameraId": resolved_camera_id,
             "smokeTest": smoke_test,
             "useCpu": use_cpu,
-            "dataset": dataset,
+            "dataset": resolution.dataset,
+            "model_id": resolution.model_id,
+            "resolved_config": resolution.resolved_config,
+            "applied_overrides": resolution.applied_overrides,
+            "warnings": resolution.warnings,
         }
 
         _write_run_context(
@@ -77,7 +94,11 @@ async def run_stage(
                 "videoId": video_id,
                 "cameraId": resolved_camera_id,
                 "datasetName": dataset_name,
-                "dataset": dataset,
+                "dataset": resolution.dataset,
+                "model_id": resolution.model_id,
+                "resolved_config": resolution.resolved_config,
+                "applied_overrides": resolution.applied_overrides,
+                "warnings": resolution.warnings,
             },
         )
 
@@ -95,10 +116,16 @@ async def run_stage(
                 "useCpu": use_cpu,
                 "reidModelPath": reid_model_path,
                 "tracker": tracker,
-                "dataset": dataset,
+                "dataset": resolution.dataset,
+                "resolvedConfig": resolution.resolved_config,
+                "appliedOverrides": resolution.applied_overrides,
             },
         )
         return {"success": True, "data": state.active_runs[run_id]}
+    except PipelineModelValidationError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -112,10 +139,24 @@ async def run_full_pipeline(
     state: AppState = Depends(get_app_state),
 ):
     """Run full pipeline"""
-    payload = request or PipelineRunRequest()
-    config = payload.config or {}
-    dataset = payload.dataset or config.get("dataset") or config.get("datasetName") or None
-    run_id = _resolve_run_id(None)
+    try:
+        payload = request or PipelineRunRequest()
+        config = payload.config or {}
+        resolution = resolve_pipeline_model(
+            model_id=_payload_model_id(payload, config),
+            dataset=_payload_dataset(payload, config),
+        )
+    except PipelineModelValidationError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    run_id = _resolve_run_id(payload.runId or config.get("runId"))
+    video_id = payload.videoId or config.get("videoId")
+    camera_id = payload.cameraId or config.get("cameraId")
+    smoke_test = bool(payload.smokeTest or config.get("smokeTest", False))
+    use_cpu = bool(payload.useCpu or config.get("useCpu", False))
+
     state.active_runs[run_id] = {
         "id": run_id,
         "runId": run_id,
@@ -127,18 +168,38 @@ async def run_full_pipeline(
             for i in range(7)
         ],
         "startedAt": datetime.now().isoformat(),
-        "dataset": dataset,
+        "videoId": video_id,
+        "cameraId": camera_id,
+        "smokeTest": smoke_test,
+        "useCpu": use_cpu,
+        "dataset": resolution.dataset,
+        "model_id": resolution.model_id,
+        "resolved_config": resolution.resolved_config,
+        "applied_overrides": resolution.applied_overrides,
+        "warnings": resolution.warnings,
     }
-    _write_run_context(run_id, {"source": "pipeline-run-full", "dataset": dataset})
+    _write_run_context(
+        run_id,
+        {
+            "source": "pipeline-run-full",
+            "dataset": resolution.dataset,
+            "model_id": resolution.model_id,
+            "resolved_config": resolution.resolved_config,
+            "applied_overrides": resolution.applied_overrides,
+            "warnings": resolution.warnings,
+        },
+    )
     background_tasks.add_task(
         execute_full_pipeline,
         run_id,
         {
-            "videoId": payload.videoId or config.get("videoId"),
-            "cameraId": payload.cameraId or config.get("cameraId"),
-            "smokeTest": bool(payload.smokeTest or config.get("smokeTest", False)),
-            "useCpu": bool(payload.useCpu or config.get("useCpu", False)),
-            "dataset": dataset,
+            "videoId": video_id,
+            "cameraId": camera_id,
+            "smokeTest": smoke_test,
+            "useCpu": use_cpu,
+            "dataset": resolution.dataset,
+            "resolvedConfig": resolution.resolved_config,
+            "appliedOverrides": resolution.applied_overrides,
             "reidModelPath": config.get("reid_model_path") or None,
         },
     )

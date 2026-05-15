@@ -63,7 +63,7 @@ models:
       data_dependencies:
         - cityflowv2
     status: production
-    runnable_locally: false
+    runnable_locally: true
     notebook_or_kernel_ref: yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep
     provenance:
       created_at: '2026-05-15'
@@ -197,7 +197,7 @@ models:
       data_dependencies:
         - wildtrack
     status: production
-    runnable_locally: false
+    runnable_locally: true
     notebook_or_kernel_ref: gumfreddy/12b-wildtrack-tracking-reid
     provenance:
       created_at: '2026-05-15'
