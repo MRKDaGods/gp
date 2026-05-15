@@ -4,17 +4,16 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   MapPin,
   Calendar,
-  Clock,
   Database,
   Cpu,
   ArrowRight,
-  ChevronDown,
   Loader2,
   CheckCircle2,
   XCircle,
   FolderOpen,
   Camera,
   Video,
+  Info,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -23,7 +22,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { ModelPicker } from "@/components/ModelPicker";
+import type { ModelEntry } from "@/services/models";
 import {
   Select,
   SelectContent,
@@ -46,32 +46,25 @@ import {
 import { getPipelineStatus, runStage, getDatasets, type DatasetFolder } from "@/lib/api";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 
-const REID_MODELS = [
-  {
-    id: "transreid_cityflowv2_best",
-    label: "TransReID — CityFlowV2 Fine-tuned (Best)",
-    path: "models/reid/transreid_cityflowv2_best.pth",
-    badge: "Recommended",
-  },
-  {
-    id: "vehicle_transreid_vit_base_veri776",
-    label: "TransReID — VeRi-776",
-    path: "models/reid/vehicle_transreid_vit_base_veri776.pth",
-    badge: null,
-  },
-  {
-    id: "vehicle_osnet_veri776",
-    label: "OSNet — VeRi-776 (Lightweight)",
-    path: "models/reid/vehicle_osnet_veri776.pth",
-    badge: "Fast",
-  },
-  {
-    id: "vehicle_resnet50ibn_veri776",
-    label: "ResNet-50-IBN — VeRi-776",
-    path: "models/reid/vehicle_resnet50ibn_veri776.pth",
-    badge: null,
-  },
-];
+interface RunModelMetadata {
+  modelId: string | null;
+  resolvedConfig: string | null;
+  appliedOverrides: string[];
+  warnings: string[];
+}
+
+function extractRunModelMetadata(data: any, selectedModel: ModelEntry | null): RunModelMetadata {
+  return {
+    modelId: data?.model_id ?? data?.modelId ?? selectedModel?.id ?? null,
+    resolvedConfig: data?.resolved_config ?? data?.resolvedConfig ?? selectedModel?.pipeline_config ?? null,
+    appliedOverrides: Array.isArray(data?.applied_overrides)
+      ? data.applied_overrides
+      : Array.isArray(data?.appliedOverrides)
+        ? data.appliedOverrides
+        : selectedModel?.model_overrides ?? [],
+    warnings: Array.isArray(data?.warnings) ? data.warnings : [],
+  };
+}
 
 // Egypt location hierarchy data
 const locationData = {
@@ -117,7 +110,7 @@ const locationData = {
 };
 
 export function InferenceStage() {
-  const { selectedTrackIds, detections } = useDetectionStore();
+  const { selectedTrackIds } = useDetectionStore();
   const { setCurrentStage, locationFilter, setLocationFilter, dateTimeRange, setDateTimeRange } =
     useSessionStore();
   const {
@@ -130,11 +123,13 @@ export function InferenceStage() {
     updateStageProgress,
     stages,
   } = usePipelineStore();
-  const { currentVideo, videos, setCurrentVideo } = useVideoStore();
+  const { currentVideo, setCurrentVideo } = useVideoStore();
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processStep, setProcessStep] = useState(0);
-  const [selectedModel, setSelectedModel] = useState("transreid_cityflowv2_best");
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [selectedRegistryModel, setSelectedRegistryModel] = useState<ModelEntry | null>(null);
+  const [runModelMetadata, setRunModelMetadata] = useState<RunModelMetadata | null>(null);
   const progressSectionRef = useRef<HTMLDivElement>(null);
 
   // Dataset folder selector
@@ -163,7 +158,7 @@ export function InferenceStage() {
     void fetchDatasets();
   }, [fetchDatasets]);
 
-  const inferenceContextSig = `${selectedDataset}:${selectedModel}`;
+  const inferenceContextSig = `${selectedDataset}:${selectedModelId ?? "legacy"}`;
   const skipInferContextFlushRef = useRef(true);
   useEffect(() => {
     if (skipInferContextFlushRef.current) {
@@ -185,12 +180,10 @@ export function InferenceStage() {
   }, [isProcessing]);
 
   const selectedCount = selectedTrackIds.size;
-  const selectedDetections = detections.filter(
-    (d) => d.trackId != null && selectedTrackIds.has(d.trackId)
-  );
 
   const stage2Progress = stages.find((s) => s.stage === 2);
   const stage3Progress = stages.find((s) => s.stage === 3);
+  const effectiveDatasetLabel = selectedRegistryModel?.dataset ?? selectedDataset;
 
   // Get available cities based on selected governorate
   const availableCities = locationFilter.governorate
@@ -207,13 +200,6 @@ export function InferenceStage() {
     const candidate = `${currentVideo.name} ${currentVideo.path}`;
     const match = candidate.match(/S\d{2}_c\d{3}/i);
     return (match?.[0] ?? "S02_c008").toUpperCase();
-  };
-
-  const inferCameraIdFromVideo = (video?: { name?: string; path?: string } | null, fallback = "S02_c008") => {
-    if (!video) return fallback;
-    const candidate = `${video.name ?? ""} ${video.path ?? ""}`;
-    const match = candidate.match(/S\d{2}_c\d{3}/i);
-    return (match?.[0] ?? fallback).toUpperCase();
   };
 
   const pollStageStatus = async (activeRunId: string, stage: 2 | 3) => {
@@ -244,8 +230,11 @@ export function InferenceStage() {
   };
 
   const handleRunInference = async () => {
-    const useDataset = selectedDataset && selectedDataset !== "__uploaded__";
+    const useDataset = !selectedRegistryModel && selectedDataset && selectedDataset !== "__uploaded__";
     const selectedDs = useDataset ? datasets.find((d) => d.name === selectedDataset) : null;
+    const modelRequest = selectedModelId ? { model_id: selectedModelId } : {};
+    const effectiveDataset = selectedRegistryModel?.dataset ?? (useDataset ? selectedDataset : undefined);
+    setRunModelMetadata(null);
 
     if (
       useDataset &&
@@ -296,15 +285,19 @@ export function InferenceStage() {
       setProcessStep(1);
       updateStageProgress(2, { status: "running", progress: 0, message: "Extracting feature vectors from selected tracklet..." });
 
-      const modelPath = REID_MODELS.find((m) => m.id === selectedModel)?.path
-        ?? "models/reid/transreid_cityflowv2_best.pth";
-
       const stage2Response = await runStage(2, {
         runId: probeRunId,
         videoId: probeVideo.id,
         cameraId,
-        config: { reid_model_path: modelPath },
+        dataset: effectiveDataset,
+        ...modelRequest,
+        config: {
+          dataset: effectiveDataset,
+          datasetName: useDataset ? selectedDataset : undefined,
+          ...modelRequest,
+        },
       });
+      setRunModelMetadata(extractRunModelMetadata(stage2Response.data as any, selectedRegistryModel));
       const stage2RunId = (stage2Response.data as any)?.runId ?? probeRunId;
       if (stage2RunId) {
         setRunId(stage2RunId);
@@ -318,7 +311,15 @@ export function InferenceStage() {
         runId: stage2RunId ?? probeRunId,
         videoId: probeVideo.id,
         cameraId,
+        dataset: effectiveDataset,
+        ...modelRequest,
+        config: {
+          dataset: effectiveDataset,
+          datasetName: useDataset ? selectedDataset : undefined,
+          ...modelRequest,
+        },
       });
+      setRunModelMetadata(extractRunModelMetadata(stage3Response.data as any, selectedRegistryModel));
       const stage3RunId = (stage3Response.data as any)?.runId ?? stage2RunId;
       if (stage3RunId) {
         setRunId(stage3RunId);
@@ -394,6 +395,20 @@ export function InferenceStage() {
         </div>
       )}
 
+      {runModelMetadata?.warnings.length ? (
+        <div className="flex shrink-0 items-start gap-3 overflow-x-auto border-b border-yellow-600/30 bg-yellow-600/10 px-4 py-3 sm:px-6">
+          <Info className="mt-0.5 h-5 w-5 shrink-0 text-yellow-700" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-yellow-800">Model registry warning</p>
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {runModelMetadata.warnings.map((warning) => (
+                <li key={warning} className="break-words">{warning}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+
       {/* Main content */}
       <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
         <div className="max-w-4xl mx-auto space-y-6">
@@ -408,76 +423,84 @@ export function InferenceStage() {
             <CardContent>
               <div className="space-y-3">
                 <Label>Run inference on</Label>
-                {/* Dataset cards - much more visible than dropdown */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {/* Uploaded video card */}
-                  <div
-                    className={cn(
-                      "rounded-lg border-2 p-4 cursor-pointer transition-all hover:shadow-md",
-                      selectedDataset === "__uploaded__"
-                        ? "border-primary bg-primary/5 shadow-md"
-                        : "border-muted hover:border-primary/50"
-                    )}
-                    onClick={() => setSelectedDataset("__uploaded__")}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Video className="h-5 w-5 text-primary" />
-                      <span className="font-medium text-sm">Uploaded Video</span>
+                {selectedRegistryModel ? (
+                  <div className="rounded-lg border bg-muted/50 p-3">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Badge variant="secondary" className="uppercase">
+                        {effectiveDatasetLabel}
+                      </Badge>
+                      <span className="text-muted-foreground">
+                        Dataset is derived from the selected registry model.
+                      </span>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {currentVideo?.name ?? "No video uploaded"}
-                    </p>
                   </div>
-
-                  {/* Loading state */}
-                  {datasetsLoading && (
-                    <div className="rounded-lg border-2 border-dashed border-muted p-4 flex items-center justify-center">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      <span className="text-sm text-muted-foreground">Loading datasets...</span>
-                    </div>
-                  )}
-
-                  {/* Dataset folder cards */}
-                  {datasets.map((ds) => (
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <div
-                      key={ds.name}
                       className={cn(
                         "rounded-lg border-2 p-4 cursor-pointer transition-all hover:shadow-md",
-                        selectedDataset === ds.name
+                        selectedDataset === "__uploaded__"
                           ? "border-primary bg-primary/5 shadow-md"
                           : "border-muted hover:border-primary/50"
                       )}
-                      onClick={() => setSelectedDataset(ds.name)}
+                      onClick={() => setSelectedDataset("__uploaded__")}
                     >
                       <div className="flex items-center gap-2 mb-2">
-                        <FolderOpen className="h-5 w-5 text-amber-500" />
-                        <span className="font-medium text-sm">{ds.name}</span>
+                        <Video className="h-5 w-5 text-primary" />
+                        <span className="font-medium text-sm">Uploaded Video</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {currentVideo?.name ?? "No video uploaded"}
+                      </p>
+                    </div>
+
+                    {datasetsLoading && (
+                      <div className="rounded-lg border-2 border-dashed border-muted p-4 flex items-center justify-center">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span className="text-sm text-muted-foreground">Loading datasets...</span>
+                      </div>
+                    )}
+
+                    {datasets.map((ds) => (
+                      <div
+                        key={ds.name}
+                        className={cn(
+                          "rounded-lg border-2 p-4 cursor-pointer transition-all hover:shadow-md",
+                          selectedDataset === ds.name
+                            ? "border-primary bg-primary/5 shadow-md"
+                            : "border-muted hover:border-primary/50"
+                        )}
+                        onClick={() => setSelectedDataset(ds.name)}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <FolderOpen className="h-5 w-5 text-amber-500" />
+                          <span className="font-medium text-sm">{ds.name}</span>
+                          {ds.alreadyProcessed && (
+                            <CheckCircle2 className="h-4 w-4 text-green-500 ml-auto" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {ds.cameraCount} cameras, {ds.videosFound} videos
+                        </p>
                         {ds.alreadyProcessed && (
-                          <CheckCircle2 className="h-4 w-4 text-green-500 ml-auto" />
+                          <Badge variant="outline" className="mt-2 text-[10px] text-green-600 border-green-600">
+                            Pre-processed
+                          </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {ds.cameraCount} cameras, {ds.videosFound} videos
-                      </p>
-                      {ds.alreadyProcessed && (
-                        <Badge variant="outline" className="mt-2 text-[10px] text-green-600 border-green-600">
-                          Pre-processed
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
+                    ))}
 
-                  {/* Empty state */}
-                  {!datasetsLoading && datasets.length === 0 && (
-                    <div className="rounded-lg border-2 border-dashed border-muted p-4 text-center col-span-2">
-                      <p className="text-sm text-muted-foreground">No dataset folders found in dataset/</p>
-                      <Button variant="ghost" size="sm" className="mt-1" onClick={() => void fetchDatasets()}>
-                        Retry
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                {selectedDataset && selectedDataset !== "__uploaded__" && (
+                    {!datasetsLoading && datasets.length === 0 && (
+                      <div className="rounded-lg border-2 border-dashed border-muted p-4 text-center col-span-2">
+                        <p className="text-sm text-muted-foreground">No dataset folders found in dataset/</p>
+                        <Button variant="ghost" size="sm" className="mt-1" onClick={() => void fetchDatasets()}>
+                          Retry
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!selectedRegistryModel && selectedDataset && selectedDataset !== "__uploaded__" && (
                   <div className="rounded-lg border p-3 bg-muted/50">
                     {(() => {
                       const ds = datasets.find((d) => d.name === selectedDataset);
@@ -613,37 +636,47 @@ export function InferenceStage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Cpu className="h-5 w-5" />
-                ReID Model
+                Model Registry
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <Label>Vehicle Re-Identification Model</Label>
-                <Select value={selectedModel} onValueChange={setSelectedModel}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REID_MODELS.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        <span className="flex items-center gap-2">
-                          {m.label}
-                          {m.badge && (
-                            <span className="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                              {m.badge}
-                            </span>
-                          )}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Selected: <code className="font-mono">{REID_MODELS.find(m => m.id === selectedModel)?.path}</code>
-                </p>
-              </div>
+              <ModelPicker
+                selectedId={selectedModelId}
+                onSelect={setSelectedModelId}
+                onModelChange={setSelectedRegistryModel}
+              />
             </CardContent>
           </Card>
+
+          {(selectedRegistryModel || runModelMetadata) && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                  Effective Config
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <div className="text-muted-foreground">Model</div>
+                    <div className="font-mono">{runModelMetadata?.modelId ?? selectedRegistryModel?.id ?? "legacy"}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Pipeline YAML</div>
+                    <div className="font-mono">{runModelMetadata?.resolvedConfig ?? selectedRegistryModel?.pipeline_config ?? "configs/default.yaml"}</div>
+                  </div>
+                </div>
+                <details className="rounded-lg border bg-muted/40 p-3">
+                  <summary className="cursor-pointer text-sm font-medium">Applied overrides</summary>
+                  <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded bg-background p-3 font-mono text-[11px]">
+                    {(runModelMetadata?.appliedOverrides ?? selectedRegistryModel?.model_overrides ?? []).length > 0
+                      ? (runModelMetadata?.appliedOverrides ?? selectedRegistryModel?.model_overrides ?? []).join("\n")
+                      : "No registry overrides applied."}
+                  </pre>
+                </details>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Active Pipeline Parameters (read-only, notebook-aligned) */}
           <Card>
