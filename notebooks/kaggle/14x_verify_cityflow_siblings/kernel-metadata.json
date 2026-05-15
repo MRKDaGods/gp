@@ -15,7 +15,7 @@
   "competition_sources": [],
   "kernel_sources": [
     "yahiaakhalafallah/14c-tta-stage2",
-    "yahiaakhalafallah/14g-dinov2-4view-tta-stage2",
+    "yahiaakhalafallah/14g-dinov2-4-view-tta-stage2",
     "yahiaakhalafallah/14h-robust-tracklet-pooling",
     "yahiaakhalafallah/14i-track-quality-prefilter",
     "yahiaakhalafallah/14j-r50-ibn-features",
