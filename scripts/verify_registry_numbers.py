@@ -418,10 +418,16 @@ def run_verification(
     registry_path: Path = DEFAULT_REGISTRY_PATH,
     report_path: Path = DEFAULT_REPORT_PATH,
     *,
+    entry_id: str | None = None,
     with_kaggle: bool = False,
     kaggle_manifest_path: Path = DEFAULT_KAGGLE_MANIFEST_PATH,
 ) -> tuple[int, list[dict[str, Any]]]:
     registry = load_registry(registry_path)
+    if entry_id:
+        models = [model for model in registry.get("models", []) if model.get("id") == entry_id]
+        if not models:
+            raise ValueError(f"Unknown registry entry id: {entry_id}")
+        registry = {**registry, "models": models}
     kaggle_manifest = load_kaggle_manifest(kaggle_manifest_path) if with_kaggle else {"kernels": []}
     results = [
         verify_metric(model, metric, with_kaggle=with_kaggle, kaggle_manifest=kaggle_manifest)
@@ -436,6 +442,7 @@ def run_verification(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify model registry metric values against sources.")
     parser.add_argument("registry", nargs="?", default=str(DEFAULT_REGISTRY_PATH))
+    parser.add_argument("--entry-id", help="Verify a single configs/model_registry.yaml entry by id.")
     parser.add_argument("--report", default=str(DEFAULT_REPORT_PATH))
     parser.add_argument("--with-kaggle", action="store_true", help="Cross-check kernel_summary sources against the Kaggle manifest.")
     parser.add_argument("--kaggle-manifest", default=str(DEFAULT_KAGGLE_MANIFEST_PATH))
@@ -444,6 +451,7 @@ def main() -> int:
     exit_code, _ = run_verification(
         Path(args.registry),
         Path(args.report),
+        entry_id=args.entry_id,
         with_kaggle=args.with_kaggle,
         kaggle_manifest_path=Path(args.kaggle_manifest),
     )
