@@ -163,9 +163,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/models.md
+          path: docs/paper-draft.md
           kernel: gumfreddy/12b-wildtrack-tracking-reid
-          line_ref: L130
+          line_ref: L198
         note: Rounded headline; findings record the converged 0.9467 cluster.
       - name: moda_groundplane
         value: 0.903
@@ -216,27 +216,27 @@ models:
         verified: false
         source:
           kind: docs
-          path: docs/paper-draft.md
+          path: docs/models.md
           kernel: gumfreddy/12a-wildtrack-mvdetr-training
-          line_ref: L198
+          line_ref: L129
         note: Epoch-20 detector quality claim, not the final exported-checkpoint line.
       - name: precision
         value: 0.947
         verified: true
         source:
           kind: docs
-          path: docs/paper-draft.md
+          path: docs/models.md
           kernel: gumfreddy/12a-wildtrack-mvdetr-training
-          line_ref: L198
+          line_ref: L129
         note: Reported for the MVDeTr detector reference.
       - name: recall
         value: 0.966
         verified: true
         source:
           kind: docs
-          path: docs/paper-draft.md
+          path: docs/models.md
           kernel: gumfreddy/12a-wildtrack-mvdetr-training
-          line_ref: L198
+          line_ref: L129
         note: Reported for the MVDeTr detector reference.
     pipeline_config: null
     model_overrides: []
@@ -397,9 +397,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/models.md
+          path: docs/findings.md
           kernel: yahiaakhalafallah/13-clip-senet-train
-          line_ref: L100
+          line_ref: L340
         note: Post-rerank Rank-1 used in 14t comparison.
     pipeline_config: null
     model_overrides: []
@@ -438,9 +438,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/models.md
+          path: docs/findings.md
           kernel: null
-          line_ref: L147
+          line_ref: L997
         note: Catastrophic penalty; penalizes genuine vehicle-type hubs.
     pipeline_config: null
     model_overrides: []
@@ -472,9 +472,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/models.md
+          path: docs/findings.md
           kernel: null
-          line_ref: L148
+          line_ref: L1044
         note: Tight controlled retest penalty; broader gaps degrade further to -13.20pp.
     pipeline_config: null
     model_overrides: []
@@ -494,4 +494,5 @@ models:
     tombstone:
       reason: AFLink false merges dominate because cross-camera motion consistency is unreliable in non-overlapping CityFlowV2 cameras.
       superseded_by_id: vehicle_mtmc_14e_b1
+
 
