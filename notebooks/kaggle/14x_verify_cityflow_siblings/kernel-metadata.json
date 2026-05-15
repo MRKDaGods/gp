@@ -1,0 +1,25 @@
+{
+  "id": "yahiaakhalafallah/14x-verify-cityflow-siblings",
+  "title": "14x Verify CityFlow Siblings",
+  "code_file": "14x_verify_cityflow_siblings.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "yahiaakhalafallah/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/14c-tta-stage2",
+    "yahiaakhalafallah/14g-dinov2-4-view-tta-stage2",
+    "yahiaakhalafallah/14h-robust-tracklet-pooling",
+    "yahiaakhalafallah/14i-track-quality-prefilter",
+    "yahiaakhalafallah/14j-r50-ibn-features",
+    "yahiaakhalafallah/mtmc-10a-stages-0-2"
+  ],
+  "model_sources": []
+}
