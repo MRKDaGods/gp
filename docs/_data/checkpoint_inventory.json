@@ -1,0 +1,2404 @@
+[
+  {
+    "checkpoint_filename": "best_model.pth",
+    "size_bytes": 974,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "bot_resnet50_ibn_veri_best.pth",
+    "size_bytes": 938,
+    "source_kernel": "ali369/08-vehicle-reid-sota",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-05T02:35:57.937000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch109.pth",
+    "size_bytes": 1001,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch119.pth",
+    "size_bytes": 1001,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch19.pth",
+    "size_bytes": 998,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch29.pth",
+    "size_bytes": 998,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch39.pth",
+    "size_bytes": 998,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch49.pth",
+    "size_bytes": 998,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch59.pth",
+    "size_bytes": 998,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch69.pth",
+    "size_bytes": 998,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch79.pth",
+    "size_bytes": 998,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch89.pth",
+    "size_bytes": 998,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch9.pth",
+    "size_bytes": 995,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "checkpoint_epoch99.pth",
+    "size_bytes": 998,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e010.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e010.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e020.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e020.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e030.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e030.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e04.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e04.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e040.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e040.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e050.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e050.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e060.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e060.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e070.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e070.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e080.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e080.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e09.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e09.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e09.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e090.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e090.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e100.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e100.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e104.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e104.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e109.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e109.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e109.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e110.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e110.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e114.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e114.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e119.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e119.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e119.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e120.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e120.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e124.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e124.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e129.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e129.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e130.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e130.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e134.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e134.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e139.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e139.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e14.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e14.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e140.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e140.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e144.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e144.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e149.pth",
+    "size_bytes": 898,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e149.pth",
+    "size_bytes": 898,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e150.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e150.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e160.pth",
+    "size_bytes": 913,
+    "source_kernel": "gumfreddy/09i-resnet101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T08:37:26.040000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e160.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/09j-resnext101-ibn-arcface-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:04:32.653000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e19.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e19.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e19.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e24.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e24.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e29.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e29.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e29.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e34.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e34.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e39.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e39.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e39.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e44.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e44.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e49.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e49.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e49.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e54.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e54.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e59.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e59.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e59.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e64.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e64.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e69.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e69.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e69.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e74.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e74.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e79.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e79.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e79.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e84.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e84.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e89.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e89.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e89.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e94.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e94.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e99.pth",
+    "size_bytes": 895,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e99.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "ckpt_e99.pth",
+    "size_bytes": 895,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "clip_reid_vit_b16_veri776_stage2_best_mAP.pth",
+    "size_bytes": 948,
+    "source_kernel": "gumfreddy/14r-recovery-clip-reid-stage-2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-10T21:45:47.757000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "clip_reid_vit_b16_veri776_stage2_best_R1.pth",
+    "size_bytes": 945,
+    "source_kernel": "gumfreddy/14r-recovery-clip-reid-stage-2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-10T21:45:47.757000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "clip_reid_vit_b16_veri776_stage2_last.pth",
+    "size_bytes": 936,
+    "source_kernel": "gumfreddy/14r-recovery-clip-reid-stage-2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-10T21:45:47.757000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "clip_rn50x4_cityflowv2.pth",
+    "size_bytes": 945,
+    "source_kernel": "gumfreddy/09m-clip-rn50x4-vehicle-reid-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-18T22:58:22.487000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "clip_rn50x4_cityflowv2_best_ema.pth",
+    "size_bytes": 986,
+    "source_kernel": "gumfreddy/09m-clip-rn50x4-vehicle-reid-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-18T22:58:22.487000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "clip_rn50x4_cityflowv2_last_ema.pth",
+    "size_bytes": 986,
+    "source_kernel": "gumfreddy/09m-clip-rn50x4-vehicle-reid-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-18T22:58:22.487000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "dinov2_vit_b14_veri776_best_mAP.pth",
+    "size_bytes": 940,
+    "source_kernel": "gumfreddy/14r-probe-dinov2-veri-776-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-10T05:18:03.480000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "dinov2_vit_b14_veri776_best_R1.pth",
+    "size_bytes": 937,
+    "source_kernel": "gumfreddy/14r-probe-dinov2-veri-776-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-10T05:18:03.480000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "dinov2_vit_b14_veri776_last.pth",
+    "size_bytes": 928,
+    "source_kernel": "gumfreddy/14r-probe-dinov2-veri-776-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-10T05:18:03.480000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_epoch_050.pth",
+    "size_bytes": 957,
+    "source_kernel": "gumfreddy/09n-fastreid-r50-finetune-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-19T18:22:03.233000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_epoch_100.pth",
+    "size_bytes": 957,
+    "source_kernel": "gumfreddy/09n-fastreid-r50-finetune-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-19T18:22:03.233000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_epoch_150.pth",
+    "size_bytes": 957,
+    "source_kernel": "gumfreddy/09n-fastreid-r50-finetune-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-19T18:22:03.233000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_epoch_200.pth",
+    "size_bytes": 957,
+    "source_kernel": "gumfreddy/09n-fastreid-r50-finetune-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-19T18:22:03.233000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_extended_epoch_050.pth",
+    "size_bytes": 984,
+    "source_kernel": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-20T17:52:00.050000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_extended_epoch_100.pth",
+    "size_bytes": 984,
+    "source_kernel": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-20T17:52:00.050000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_extended_epoch_150.pth",
+    "size_bytes": 984,
+    "source_kernel": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-20T17:52:00.050000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_extended_epoch_200.pth",
+    "size_bytes": 984,
+    "source_kernel": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-20T17:52:00.050000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_extended_final.pth",
+    "size_bytes": 972,
+    "source_kernel": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-20T17:52:00.050000",
+    "metric_claims": [
+      {
+        "metric": "final_eval_mAP",
+        "value": 0.7508469677279063,
+        "source_slug": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+        "source_artifact": "09p_fastreid_r50_extended/final_metrics.json",
+        "line": 15,
+        "excerpt": "\"mAP\": 0.7508469677279063,"
+      },
+      {
+        "metric": "final_eval_rank1",
+        "value": 0.8619748950004578,
+        "source_slug": "gumfreddy/09p-fastreid-r50-extended-cityflowv2",
+        "source_artifact": "09p_fastreid_r50_extended/final_metrics.json",
+        "line": 16,
+        "excerpt": "\"rank1\": 0.8619748950004578,"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "fastreid_r50_ibn_cityflowv2_final.pth",
+    "size_bytes": 945,
+    "source_kernel": "gumfreddy/09n-fastreid-r50-finetune-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-19T18:22:03.233000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "MultiviewDetector.pth",
+    "size_bytes": 1166,
+    "source_kernel": "ali369/12a-wildtrack-mvdetr-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T23:18:32.507000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/person/mvdetr_resnet18_wildtrack.pth",
+      "gumfreddy/12a-wildtrack-mvdetr-training"
+    ]
+  },
+  {
+    "checkpoint_filename": "MultiviewDetector.pth",
+    "size_bytes": 875,
+    "source_kernel": "ali369/12a-wildtrack-mvdetr-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T23:18:32.507000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/person/mvdetr_resnet18_wildtrack.pth",
+      "gumfreddy/12a-wildtrack-mvdetr-training"
+    ]
+  },
+  {
+    "checkpoint_filename": "MultiviewDetector.pth",
+    "size_bytes": 1188,
+    "source_kernel": "ali369/12a-wildtrack-mvdetr-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T23:18:32.507000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/person/mvdetr_resnet18_wildtrack.pth",
+      "gumfreddy/12a-wildtrack-mvdetr-training"
+    ]
+  },
+  {
+    "checkpoint_filename": "MultiviewDetector.pth",
+    "size_bytes": 1166,
+    "source_kernel": "gumfreddy/12a-wildtrack-mvdetr-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-01T10:58:34.763000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/person/mvdetr_resnet18_wildtrack.pth",
+      "gumfreddy/12a-wildtrack-mvdetr-training"
+    ]
+  },
+  {
+    "checkpoint_filename": "MultiviewDetector.pth",
+    "size_bytes": 875,
+    "source_kernel": "gumfreddy/12a-wildtrack-mvdetr-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-01T10:58:34.763000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/person/mvdetr_resnet18_wildtrack.pth",
+      "gumfreddy/12a-wildtrack-mvdetr-training"
+    ]
+  },
+  {
+    "checkpoint_filename": "MultiviewDetector.pth",
+    "size_bytes": 1188,
+    "source_kernel": "gumfreddy/12a-wildtrack-mvdetr-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-01T10:58:34.763000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/person/mvdetr_resnet18_wildtrack.pth",
+      "gumfreddy/12a-wildtrack-mvdetr-training"
+    ]
+  },
+  {
+    "checkpoint_filename": "osnet_ibn_cityflowv2_v1_best_joint.pth",
+    "size_bytes": 926,
+    "source_kernel": "gumfreddy/14m-osnet-ibn-cityflowv2-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T11:41:58.080000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "osnet_ibn_cityflowv2_v1_best_map.pth",
+    "size_bytes": 920,
+    "source_kernel": "gumfreddy/14m-osnet-ibn-cityflowv2-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T11:41:58.080000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "osnet_ibn_cityflowv2_v1_epoch_030.pth",
+    "size_bytes": 923,
+    "source_kernel": "gumfreddy/14m-osnet-ibn-cityflowv2-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T11:41:58.080000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "osnet_ibn_cityflowv2_v1_epoch_060.pth",
+    "size_bytes": 923,
+    "source_kernel": "gumfreddy/14m-osnet-ibn-cityflowv2-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T11:41:58.080000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "osnet_ibn_cityflowv2_v1_epoch_090.pth",
+    "size_bytes": 923,
+    "source_kernel": "gumfreddy/14m-osnet-ibn-cityflowv2-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T11:41:58.080000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "osnet_ibn_cityflowv2_v1_epoch_120.pth",
+    "size_bytes": 923,
+    "source_kernel": "gumfreddy/14m-osnet-ibn-cityflowv2-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T11:41:58.080000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "osnet_ibn_cityflowv2_v1_final.pth",
+    "size_bytes": 911,
+    "source_kernel": "gumfreddy/14m-osnet-ibn-cityflowv2-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T11:41:58.080000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "osnet_x0_25_msmt17.pt",
+    "size_bytes": 932,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "osnet_x0_25_msmt17.pt",
+    "size_bytes": 932,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "osnet_x0_25_msmt17.pt",
+    "size_bytes": 932,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_osnet_market1501.pth",
+    "size_bytes": 945,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_osnet_x1_0_market1501.pth",
+    "size_bytes": 940,
+    "source_kernel": "mrkdagods/02-person-reid-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-02-28T19:39:57.637000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_resnet50_ibn_a_market1501.pth",
+    "size_bytes": 953,
+    "source_kernel": "mrkdagods/02-person-reid-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-02-28T19:39:57.637000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_resnet50ibn_market1501.pth",
+    "size_bytes": 964,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_resnet50ibn_market1501.pth",
+    "size_bytes": 964,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_resnet50ibn_market1501.pth",
+    "size_bytes": 964,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_transreid_market1501_best.pth",
+    "size_bytes": 943,
+    "source_kernel": "mrkdagods/09p-person-reid-transreid-market-1501",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T11:41:04.263000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_transreid_market1501_best.pth",
+    "size_bytes": 943,
+    "source_kernel": "yahiaakhalafallah/09p-person-reid-transreid-market-1501",
+    "kernel_account": "yahiaakhalafallah",
+    "kernel_finished_at": "2026-03-27T11:59:25.687000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_transreid_vit_base_market1501.pth",
+    "size_bytes": 985,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_transreid_vit_base_market1501.pth",
+    "size_bytes": 985,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_transreid_vit_base_market1501.pth",
+    "size_bytes": 985,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "person_transreid_vit_base_market1501.pth",
+    "size_bytes": 965,
+    "source_kernel": "yahiaakhalafallah/07-person-reid-sota",
+    "kernel_account": "yahiaakhalafallah",
+    "kernel_finished_at": "2026-03-08T08:43:20.537000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "reid_veri776_resnet101_ibn_a_best.pth",
+    "size_bytes": 1042,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101_ibn_a.pth",
+    "size_bytes": 891,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101_ibn_a.pth",
+    "size_bytes": 891,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101_ibn_a.pth",
+    "size_bytes": 891,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101ibn_cityflowv2_384px_best.pth",
+    "size_bytes": 948,
+    "source_kernel": "ali369/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-27T00:22:44.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101ibn_cityflowv2_384px_best.pth",
+    "size_bytes": 978,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101ibn_cityflowv2_384px_best.pth",
+    "size_bytes": 948,
+    "source_kernel": "mrkdagods/09d-vehicle-reid-resnet101-ibn-a-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T00:22:26.347000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101ibn_cityflowv2_384px_best.pth",
+    "size_bytes": 978,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101ibn_veri776_best.pth",
+    "size_bytes": 942,
+    "source_kernel": "ali369/09e-vehicle-reid-resnet101-ibn-a-veri-776-pretrain",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-29T00:15:48.340000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101ibn_veri776_best.pth",
+    "size_bytes": 951,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101ibn_veri776_best.pth",
+    "size_bytes": 945,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101ibn_veri776_best.pth",
+    "size_bytes": 921,
+    "source_kernel": "mrkdagods/09e-resnet101-ibn-a-veri-776-pretraining",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-27T08:28:18.107000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "resnet101ibn_veri776_best.pth",
+    "size_bytes": 951,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "stage1_best.pth",
+    "size_bytes": 926,
+    "source_kernel": "gumfreddy/09g-vehicle-reid-resnet101ibn-dmt",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-01T21:12:04.197000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_256px_dmt_best.pth",
+    "size_bytes": 984,
+    "source_kernel": "ali369/09b-vehicle-reid-256px-vit-training-dmt-v3",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T04:54:58.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_256px_dmt_best.pth",
+    "size_bytes": 1000,
+    "source_kernel": "ali369/09b-vehicle-reid-256px-vit-training-dmt-v3",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T04:54:58.603000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_256px_dmt_best.pth",
+    "size_bytes": 982,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_384px_best.pth",
+    "size_bytes": 970,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_384px_best.pth",
+    "size_bytes": 972,
+    "source_kernel": "mrkdagods/09b-vehicle-reid-384px-vit-training-v2",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-24T17:29:11.950000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_384px_best.pth",
+    "size_bytes": 988,
+    "source_kernel": "mrkdagods/09b-vehicle-reid-384px-vit-training-v2",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-24T17:29:11.950000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_384px_best.pth",
+    "size_bytes": 970,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_best.pth",
+    "size_bytes": 952,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/reid/transreid_cityflowv2_best.pth",
+      "gumfreddy/mtmc-weights",
+      "yahiaakhalafallah/mtmc-weights",
+      "mrkdagods/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_best.pth",
+    "size_bytes": 970,
+    "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-13T21:56:04.587000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_R1",
+        "value": 0.9241,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "09-vehicle-reid-cityflowv2-augoverhaul-ema.log",
+        "line": 1292,
+        "excerpt": "Best R1: 92.41%"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ],
+    "deployed_to": [
+      "models/reid/transreid_cityflowv2_best.pth",
+      "gumfreddy/mtmc-weights",
+      "yahiaakhalafallah/mtmc-weights",
+      "mrkdagods/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_best.pth",
+    "size_bytes": 970,
+    "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-14T03:36:54.547000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.1844796256388448,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.1844796256388448,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.2526842563161843,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_mAP_rr\": 0.2526842563161843,"
+      }
+    ],
+    "deployed_to": [
+      "models/reid/transreid_cityflowv2_best.pth",
+      "gumfreddy/mtmc-weights",
+      "yahiaakhalafallah/mtmc-weights",
+      "mrkdagods/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_best.pth",
+    "size_bytes": 948,
+    "source_kernel": "mrkdagods/09-vehicle-reid-cityflowv2",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-13T03:08:50.547000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP_qe",
+        "value": 0.7845927794834711,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 42,
+        "excerpt": "\"best_mAP_qe\": 0.7845927794834711,"
+      },
+      {
+        "metric": "best_mAP",
+        "value": 0.7680828181288571,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 43,
+        "excerpt": "\"best_mAP\": 0.7680828181288571,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.7951371600680412,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP_rr\": 0.7951371600680412,"
+      }
+    ],
+    "deployed_to": [
+      "models/reid/transreid_cityflowv2_best.pth",
+      "gumfreddy/mtmc-weights",
+      "yahiaakhalafallah/mtmc-weights",
+      "mrkdagods/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_best.pth",
+    "size_bytes": 952,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/reid/transreid_cityflowv2_best.pth",
+      "gumfreddy/mtmc-weights",
+      "yahiaakhalafallah/mtmc-weights",
+      "mrkdagods/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_best.pth",
+    "size_bytes": 952,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/reid/transreid_cityflowv2_best.pth",
+      "gumfreddy/mtmc-weights",
+      "yahiaakhalafallah/mtmc-weights",
+      "mrkdagods/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_best_ema.pth",
+    "size_bytes": 982,
+    "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-13T21:56:04.587000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_extended_A_best.pth",
+    "size_bytes": 999,
+    "source_kernel": "mrkdagods/09q-transreid-cityflow-v10",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-04-23T22:34:47.300000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_extended_B_best.pth",
+    "size_bytes": 999,
+    "source_kernel": "mrkdagods/09q-transreid-cityflow-v10",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-04-23T22:34:47.300000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_kd_best.pth",
+    "size_bytes": 963,
+    "source_kernel": "yahiaakhalafallah/09c-vehicle-reid-kd-vit-l-teacher",
+    "kernel_account": "yahiaakhalafallah",
+    "kernel_finished_at": "2026-03-20T11:57:45.677000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_laion2b_best_ema.pth",
+    "size_bytes": 1006,
+    "source_kernel": "gumfreddy/09l-transreid-laion-2b-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-18T09:30:44.610000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_laion2b_last_ema.pth",
+    "size_bytes": 1006,
+    "source_kernel": "gumfreddy/09l-transreid-laion-2b-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-18T09:30:44.610000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_last.pth",
+    "size_bytes": 970,
+    "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-13T21:56:04.587000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_last.pth",
+    "size_bytes": 970,
+    "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-14T03:36:54.547000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.1844796256388448,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.1844796256388448,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.2526842563161843,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_mAP_rr\": 0.2526842563161843,"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_last.pth",
+    "size_bytes": 966,
+    "source_kernel": "mrkdagods/09q-transreid-cityflow-v10",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-04-23T22:34:47.300000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_last_ema.pth",
+    "size_bytes": 982,
+    "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-13T21:56:04.587000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_cityflowv2_last_expA_resume.pth",
+    "size_bytes": 1002,
+    "source_kernel": "mrkdagods/09q-transreid-cityflow-v10",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-04-23T22:34:47.300000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_person_best.pth",
+    "size_bytes": 918,
+    "source_kernel": "yahiaakhalafallah/07-person-reid-sota",
+    "kernel_account": "yahiaakhalafallah",
+    "kernel_finished_at": "2026-03-08T08:43:20.537000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_veri_best.pth",
+    "size_bytes": 918,
+    "source_kernel": "ali369/08-vehicle-reid-sota",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-05T02:35:57.937000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_veri_best.pth",
+    "size_bytes": 934,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_veri_best.pth",
+    "size_bytes": 918,
+    "source_kernel": "yahiaakhalafallah/08-vehicle-reid-sota",
+    "kernel_account": "yahiaakhalafallah",
+    "kernel_finished_at": "2026-03-08T05:20:46.180000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_veri_best.pth",
+    "size_bytes": 940,
+    "source_kernel": "yahiaakhalafallah/08b-vehicle-reid-triplet",
+    "kernel_account": "yahiaakhalafallah",
+    "kernel_finished_at": "2026-03-07T07:43:39.563000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_vit_b16_clip_veri776_256_best_mAP.pth",
+    "size_bytes": 976,
+    "source_kernel": "mrkdagods/14q-veri-vit-b-16-clip-256-transreid-train",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-05-10T01:38:16.633000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_vit_b16_clip_veri776_256_best_R1.pth",
+    "size_bytes": 973,
+    "source_kernel": "mrkdagods/14q-veri-vit-b-16-clip-256-transreid-train",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-05-10T01:38:16.633000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_vit_b16_clip_veri776_256_last.pth",
+    "size_bytes": 964,
+    "source_kernel": "mrkdagods/14q-veri-vit-b-16-clip-256-transreid-train",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-05-10T01:38:16.633000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_vit_l14_clip_veri776_best_mAP.pth",
+    "size_bytes": 964,
+    "source_kernel": "gumfreddy/14p-veri-vit-l-14-clip-transreid-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T18:38:09.533000",
+    "metric_claims": [
+      {
+        "name": "mAP",
+        "value": 1.0,
+        "source": "gumfreddy/14p-veri-vit-l-14-clip-transreid-train/14p-veri-vit-l-14-clip-transreid-train.log:line 181"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_vit_l14_clip_veri776_best_mAP.pth",
+    "size_bytes": 964,
+    "source_kernel": "mrkdagods/14p3-veri-vit-l-14-clip-clean-train",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-05-09T02:24:59.057000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_vit_l14_clip_veri776_best_R1.pth",
+    "size_bytes": 961,
+    "source_kernel": "gumfreddy/14p-veri-vit-l-14-clip-transreid-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T18:38:09.533000",
+    "metric_claims": [
+      {
+        "name": "mAP",
+        "value": 1.0,
+        "source": "gumfreddy/14p-veri-vit-l-14-clip-transreid-train/14p-veri-vit-l-14-clip-transreid-train.log:line 181"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_vit_l14_clip_veri776_best_R1.pth",
+    "size_bytes": 961,
+    "source_kernel": "mrkdagods/14p3-veri-vit-l-14-clip-clean-train",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-05-09T02:24:59.057000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "transreid_vit_l14_clip_veri776_last.pth",
+    "size_bytes": 952,
+    "source_kernel": "gumfreddy/14p-veri-vit-l-14-clip-transreid-train",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-05-08T18:38:09.533000",
+    "metric_claims": [
+      {
+        "name": "mAP",
+        "value": 1.0,
+        "source": "gumfreddy/14p-veri-vit-l-14-clip-transreid-train/14p-veri-vit-l-14-clip-transreid-train.log:line 181"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "transreid_vit_l14_clip_veri776_last.pth",
+    "size_bytes": 952,
+    "source_kernel": "mrkdagods/14p3-veri-vit-l-14-clip-clean-train",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-05-09T02:24:59.057000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_bot_full_veri776.pth",
+    "size_bytes": 928,
+    "source_kernel": "ali369/08-vehicle-reid-sota",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-05T02:35:57.937000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_osnet_veri776.pth",
+    "size_bytes": 939,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_osnet_x1_0_veri776.pth",
+    "size_bytes": 934,
+    "source_kernel": "mrkdagods/03-vehicle-reid-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-01T04:44:24",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_resnet50_ibn_a_veri776.pth",
+    "size_bytes": 947,
+    "source_kernel": "mrkdagods/03-vehicle-reid-training",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-01T04:44:24",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_resnet50ibn_veri776.pth",
+    "size_bytes": 958,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_resnet50ibn_veri776_bot.pth",
+    "size_bytes": 949,
+    "source_kernel": "ali369/08-vehicle-reid-sota",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-05T02:35:57.937000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_09q_expA_extended.pth",
+    "size_bytes": 962,
+    "source_kernel": "mrkdagods/09q-transreid-cityflow-v10",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-04-23T22:34:47.300000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_09q_expA_resume.pth",
+    "size_bytes": 956,
+    "source_kernel": "mrkdagods/09q-transreid-cityflow-v10",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-04-23T22:34:47.300000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_09q_expB_scratch.pth",
+    "size_bytes": 959,
+    "source_kernel": "mrkdagods/09q-transreid-cityflow-v10",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-04-23T22:34:47.300000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_cityflowv2.pth",
+    "size_bytes": 990,
+    "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-13T21:56:04.587000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_cityflowv2.pth",
+    "size_bytes": 990,
+    "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-14T03:36:54.547000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.1844796256388448,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.1844796256388448,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.2526842563161843,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-circleloss-ablation",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_mAP_rr\": 0.2526842563161843,"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_cityflowv2.pth",
+    "size_bytes": 990,
+    "source_kernel": "gumfreddy/09l-transreid-laion-2b-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-18T09:30:44.610000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_cityflowv2.pth",
+    "size_bytes": 968,
+    "source_kernel": "mrkdagods/09-vehicle-reid-cityflowv2",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-13T03:08:50.547000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP_qe",
+        "value": 0.7845927794834711,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 42,
+        "excerpt": "\"best_mAP_qe\": 0.7845927794834711,"
+      },
+      {
+        "metric": "best_mAP",
+        "value": 0.7680828181288571,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 43,
+        "excerpt": "\"best_mAP\": 0.7680828181288571,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.7951371600680412,
+        "source_slug": "mrkdagods/09-vehicle-reid-cityflowv2",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP_rr\": 0.7951371600680412,"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_cityflowv2.pth",
+    "size_bytes": 968,
+    "source_kernel": "mrkdagods/09q-transreid-cityflow-v10",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-04-23T22:34:47.300000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_cityflowv2_ema.pth",
+    "size_bytes": 1002,
+    "source_kernel": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-13T21:56:04.587000",
+    "metric_claims": [
+      {
+        "metric": "best_mAP",
+        "value": 0.8152743047017524,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 44,
+        "excerpt": "\"best_mAP\": 0.8152743047017524,"
+      },
+      {
+        "metric": "best_ema_mAP",
+        "value": 0.8144469802052257,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 45,
+        "excerpt": "\"best_ema_mAP\": 0.8144469802052257,"
+      },
+      {
+        "metric": "best_mAP_rr",
+        "value": 0.8279662735373268,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 46,
+        "excerpt": "\"best_mAP_rr\": 0.8279662735373268,"
+      },
+      {
+        "metric": "best_ema_mAP_rr",
+        "value": 0.8355198487541973,
+        "source_slug": "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema",
+        "source_artifact": "exported_models/vehicle_reid_cityflowv2_metadata.json",
+        "line": 47,
+        "excerpt": "\"best_ema_mAP_rr\": 0.8355198487541973,"
+      }
+    ]
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_veri776.pth",
+    "size_bytes": 959,
+    "source_kernel": "ali369/08-vehicle-reid-sota",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-05T02:35:57.937000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/reid/vehicle_transreid_vit_base_veri776.pth",
+      "yahiaakhalafallah/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_veri776.pth",
+    "size_bytes": 979,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/reid/vehicle_transreid_vit_base_veri776.pth",
+      "yahiaakhalafallah/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_veri776.pth",
+    "size_bytes": 979,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/reid/vehicle_transreid_vit_base_veri776.pth",
+      "yahiaakhalafallah/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_veri776.pth",
+    "size_bytes": 979,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/reid/vehicle_transreid_vit_base_veri776.pth",
+      "yahiaakhalafallah/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_veri776.pth",
+    "size_bytes": 959,
+    "source_kernel": "yahiaakhalafallah/08-vehicle-reid-sota",
+    "kernel_account": "yahiaakhalafallah",
+    "kernel_finished_at": "2026-03-08T05:20:46.180000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/reid/vehicle_transreid_vit_base_veri776.pth",
+      "yahiaakhalafallah/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "vehicle_transreid_vit_base_veri776.pth",
+    "size_bytes": 981,
+    "source_kernel": "yahiaakhalafallah/08b-vehicle-reid-triplet",
+    "kernel_account": "yahiaakhalafallah",
+    "kernel_finished_at": "2026-03-07T07:43:39.563000",
+    "metric_claims": [],
+    "deployed_to": [
+      "models/reid/vehicle_transreid_vit_base_veri776.pth",
+      "yahiaakhalafallah/mtmc-weights"
+    ]
+  },
+  {
+    "checkpoint_filename": "veri_sbs_R50-ibn.pth",
+    "size_bytes": 946,
+    "source_kernel": "gumfreddy/09n-fastreid-r50-finetune-cityflowv2",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-19T18:22:03.233000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vit_small_transreid_cityflowv2_best.pth",
+    "size_bytes": 951,
+    "source_kernel": "gumfreddy/09k-vit-small-transreid-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:19:42.710000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "vit_small_transreid_cityflowv2_last.pth",
+    "size_bytes": 951,
+    "source_kernel": "gumfreddy/09k-vit-small-transreid-training",
+    "kernel_account": "gumfreddy",
+    "kernel_finished_at": "2026-04-17T10:19:42.710000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "yolo26m.pt",
+    "size_bytes": 903,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "yolo26m.pt",
+    "size_bytes": 869,
+    "source_kernel": "ali369/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "ali369",
+    "kernel_finished_at": "2026-03-30T18:02:22.033000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "yolo26m.pt",
+    "size_bytes": 903,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "yolo26m.pt",
+    "size_bytes": 869,
+    "source_kernel": "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-19T10:09:26.357000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "yolo26m.pt",
+    "size_bytes": 903,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": []
+  },
+  {
+    "checkpoint_filename": "yolo26m.pt",
+    "size_bytes": 869,
+    "source_kernel": "mrkdagods/mtmc-11a-wildtrack-stages-0-2-tracking-reid",
+    "kernel_account": "mrkdagods",
+    "kernel_finished_at": "2026-03-28T16:41:33.200000",
+    "metric_claims": []
+  }
+]

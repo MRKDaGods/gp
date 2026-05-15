@@ -40,8 +40,12 @@ Multi-camera multi-target tracking system (vehicles/humans) on CityFlowV2 (AI Ci
 
 ## Architecture
 
+Post-merge application stack: `backend/` (FastAPI) and `frontend/` (Next.js ATHAR) now live alongside the offline `src/` pipeline.
+
 ```
 configs/          YAML configuration (OmegaConf)
+backend/          FastAPI service layer and API routers
+frontend/         Next.js ATHAR dashboard and workflow UI
 src/core/         Shared data models, config loader, utilities
 src/stage0/       Frame extraction, preprocessing
 src/stage1/       YOLO26m detection + BoxMOT tracking (BoT-SORT)
@@ -84,6 +88,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 ### Data Flow Between Stages
 - Stages communicate through files in `data/outputs/`
 - Each stage reads predecessor's output, writes its own
+- Backend services read run-scoped artifacts under `data/outputs/<run_id>/...`
 - Tracklets: list of dicts with `camera_id`, `track_id`, `frames`, `boxes`, `embeddings`
 
 ## Current Performance State
@@ -93,7 +98,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **Historical Best MTMC IDF1**: 0.784 (v80/v44, ali369; requires unavailable OSNet checkpoint, not reproducible)
 - **SOTA target**: IDF1≈0.8486 (AIC22 1st place, 5-model ensemble)
 - **Gap to SOTA**: 6.93pp — caused by feature quality (single model), NOT association tuning. Closed 0.90pp via 14e WIN (TTA + AQE k=2).
-- **Primary model**: TransReID ViT-B/16 CLIP 256px — mAP=80.14%, R1=92.27% on CityFlowV2
+- **Primary model**: TransReID ViT-B/16 CLIP 256px — mAP=81.53% (verified, AugOverhaul+EMA kernel), R1=92.27% (UNVERIFIED, claim-only) on CityFlowV2
 - **Vehicle ReID single-cam (VeRi-776, VeRi-only TransReID ViT-B/16 CLIP)**: Best R1=98.33%, best mAP=89.97%, joint optimum R1=98.15% / mAP=89.71% (09v v17, `outputs/09v_veri_v9`); R1 ceiling is 98.33% on this checkpoint, and the historical 98.45% claim is not reachable via eval-time techniques alone; the old `0.984505` value still reproduces as R5=98.45% at AQE(k=3),k1=30,k2=10,λ=0.2
 - **Secondary model**: ResNet101-IBN-a — mAP=52.77% (too weak for ensemble, needs ≥65%)
 - **CLIP-SENet (VeRi-776)**: v6 canonical at **mAP=82.34%, R1=96.54%** (320², P=8/K=8); with rerank+AQE → **91.54% mAP**. v7 256²/P=16 retrain regressed to 81.36% / 95.71%; post-rerank 88.98%, -2.56pp vs v6 91.54% — DEAD END.
@@ -109,6 +114,14 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **SOTA target**: IDF1≈0.953
 - **Gap to SOTA**: 0.6pp — tracker-limited (Kalman), NOT detector-limited
 - **Status**: FULLY CONVERGED — tracker-limited and exhaustively tested; Kalman, global optimal, and naive trackers all failed to beat 0.947
+
+### Integration Status
+- ✅ 14e B1 CityFlow values promoted to `configs/datasets/cityflowv2.yaml`
+- ✅ Local checkpoint paths + `models/reid/README.md` provenance
+- ✅ Person pipeline routed via `scripts/run_pipeline.py` (`--config configs/datasets/wildtrack.yaml`)
+- ✅ 12b best Kalman params promoted to `configs/datasets/wildtrack.yaml`
+- ✅ Backend dataset switcher (`pipeline_service.py` + `routers/pipeline.py`)
+- ✅ Backend `models/{requests,embedding}.py` + `repositories/__init__.py` scaffolding
 
 ## Experiment History
 - **Full experiment log**: See `docs/experiment-log.md` for 225+ tracked experiments
@@ -162,6 +175,7 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 
 ## Kaggle Workflow
 - Pipeline chain: 10a (stages 0-2, GPU) → 10b (stage 3, CPU) → 10c (stages 4-5, CPU)
+- Backend/frontend integration is local orchestration only; GPU-heavy stages still run on Kaggle
 - Push: `kaggle kernels push -p notebooks/kaggle/10X_stagesNN/`
 - Logs: `python scripts/kaggle_logs.py <kernel_slug> --tail N`
 - Auth tokens in `~/.kaggle/`: abdo (gumfreddy), mrk (mrkdagods), ali369 (lolo)

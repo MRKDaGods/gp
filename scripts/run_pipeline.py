@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 import click
+from omegaconf import OmegaConf
 from rich.console import Console
 from rich.panel import Panel
 
@@ -31,20 +32,36 @@ console = Console()
 @click.option("--dataset-config", "-d", type=click.Path(exists=True), default=None, help="Dataset config")
 @click.option("--stages", "-s", default="0,1,2,3,4,5,6", help="Comma-separated stage numbers to run")
 @click.option("--smoke-test", is_flag=True, default=False, help="Run on tiny data subset")
+@click.option("--dry-run", is_flag=True, default=False, help="Print resolved plan without running stages")
 @click.option("--override", "-o", multiple=True, help="Config overrides in dotlist format")
-def main(config: str, dataset_config: str, stages: str, smoke_test: bool, override: tuple):
+def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_run: bool, override: tuple):
     """Run the MTMC tracking pipeline."""
     # Parse stages
     stage_nums = [int(s.strip()) for s in stages.split(",")]
 
     # Load config
-    cfg = load_config(config, overrides=list(override), dataset_config=dataset_config)
+    cfg = _load_pipeline_config(config, dataset_config, override)
     if apply_cpu_when_no_cuda(cfg):
         console.print(Panel(
             "[yellow]No CUDA device found (or PyTorch has no GPU build). "
             "Stages 1–2 will use CPU — runs are much slower.[/yellow]",
             title="Device",
         ))
+
+    wildtrack_single_shot = _is_wildtrack_cfg(cfg) and bool(set(stage_nums) & {1, 2, 3, 4})
+
+    if dry_run:
+        console.print(Panel(
+            f"[bold]MTMC Tracking Pipeline Dry Run[/bold]\n"
+            f"Config: {config}\n"
+            f"Dataset config: {dataset_config or '(auto/default)'}\n"
+            f"Dataset: {cfg.dataset.get('name', 'unknown')} ({cfg.dataset.get('type', 'unknown')})\n"
+            f"Stages: {stage_nums}\n"
+            f"Route: {'WILDTRACK MVDeTr single-shot for stages 1-4' if wildtrack_single_shot else 'standard stage pipeline'}\n"
+            f"Smoke test: {smoke_test}",
+            title="Pipeline Plan",
+        ))
+        return
 
     # Setup run directory
     run_name = cfg.project.get("run_name") or f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -80,8 +97,40 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
 
         frames = run_stage0(cfg, output_dir=output_base / "stage0", smoke_test=smoke_test)
 
+    if wildtrack_single_shot:
+        console.print("\n[bold cyan]WILDTRACK MVDeTr: Stages 1-4 Single-Shot[/bold cyan]")
+        from src.core.io_utils import save_tracklets_by_camera
+        from src.stage_wildtrack_mvdetr import run_stage_wildtrack_mvdetr
+
+        wild_cfg = cfg.get("stage_wildtrack_mvdetr", {})
+        detections_path = Path(wild_cfg.get("detections_path", ""))
+        if not detections_path.exists():
+            raise FileNotFoundError(
+                f"WILDTRACK MVDeTr detections not found: {detections_path}. "
+                "Set stage_wildtrack_mvdetr.detections_path to a 12a/12b test.txt, CSV, or JSON export."
+            )
+
+        tracklets_by_camera, trajectories = run_stage_wildtrack_mvdetr(
+            detections_path=detections_path,
+            calibration_dir=wild_cfg.get("calibration_dir", "data/raw/wildtrack/calibrations"),
+            output_dir=output_base / "stage4",
+            fps=float(wild_cfg.get("fps", 2.0)),
+            image_size=tuple(wild_cfg.get("image_size", [1920, 1080])),
+            max_match_distance_cm=float(wild_cfg.get("max_match_distance_cm", 75.0)),
+            max_missed_frames=int(wild_cfg.get("max_missed_frames", 5)),
+            min_track_length=int(wild_cfg.get("min_track_length", 2)),
+            tracker=str(wild_cfg.get("tracker", "kalman")),
+            kalman_max_age=int(wild_cfg.get("kalman", {}).get("max_age", 2)),
+            kalman_min_hits=int(wild_cfg.get("kalman", {}).get("min_hits", 2)),
+            kalman_distance_gate=float(wild_cfg.get("kalman", {}).get("distance_gate", 25.0)),
+            kalman_max_euclidean_cm=float(wild_cfg.get("kalman", {}).get("max_euclidean_cm", 200.0)),
+            kalman_q_std=float(wild_cfg.get("kalman", {}).get("q_std", 5.0)),
+            kalman_r_std=float(wild_cfg.get("kalman", {}).get("r_std", 10.0)),
+        )
+        save_tracklets_by_camera(tracklets_by_camera, output_base / "stage1")
+
     # --- Stage 1: Detection & Tracking ---
-    if 1 in stage_nums:
+    if 1 in stage_nums and not wildtrack_single_shot:
         console.print("\n[bold cyan]Stage 1: Per-Camera Detection & Tracking[/bold cyan]")
         from src.stage1_tracking import run_stage1
 
@@ -94,7 +143,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
         )
 
     # --- Stage 2: Feature Extraction ---
-    if 2 in stage_nums:
+    if 2 in stage_nums and not wildtrack_single_shot:
         console.print("\n[bold cyan]Stage 2: Feature Extraction & Refinement[/bold cyan]")
         from src.stage2_features import run_stage2
 
@@ -109,7 +158,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
         )
 
     # --- Stage 3: Indexing ---
-    if 3 in stage_nums:
+    if 3 in stage_nums and not wildtrack_single_shot:
         console.print("\n[bold cyan]Stage 3: Indexing & Storage[/bold cyan]")
         from src.stage3_indexing import run_stage3
 
@@ -144,7 +193,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, overri
             )
 
     # --- Stage 4: Cross-Camera Association ---
-    if 4 in stage_nums:
+    if 4 in stage_nums and not wildtrack_single_shot:
         console.print("\n[bold cyan]Stage 4: Multi-Camera Association[/bold cyan]")
         from src.stage4_association import run_stage4
 
@@ -341,6 +390,23 @@ def _discover_video_paths(cfg) -> dict:
             video_paths[cam_id] = str(vpath)
 
     return video_paths
+
+
+def _load_pipeline_config(config: str, dataset_config: str | None, override: tuple):
+    """Load config, allowing dataset YAMLs to be passed directly as --config."""
+    raw_cfg = OmegaConf.load(config)
+    if dataset_config is None and "project" not in raw_cfg and "dataset" in raw_cfg:
+        return load_config(
+            project_root / "configs" / "default.yaml",
+            overrides=list(override),
+            dataset_config=config,
+        )
+    return load_config(config, overrides=list(override), dataset_config=dataset_config)
+
+
+def _is_wildtrack_cfg(cfg) -> bool:
+    dataset = cfg.get("dataset", {})
+    return dataset.get("name") == "wildtrack" or dataset.get("type") == "mtmc_person"
 
 
 if __name__ == "__main__":

@@ -60,6 +60,10 @@ npm start
 
 The frontend will be available at `http://localhost:3000`.
 
+### App Layer
+
+The local app stack pairs a FastAPI backend in `backend/` with the Next.js ATHAR dashboard in `frontend/`. The backend exposes dataset-aware pipeline orchestration and timeline query APIs, while the frontend provides the staged upload, inference, review, and output workflow. GPU-heavy detection, tracking, and feature extraction still belong on Kaggle for full runs; the app layer is for local orchestration, review, and demos.
+
 ## Frontend Features
 
 Modern Next.js dashboard with UniFi-style dark theme:

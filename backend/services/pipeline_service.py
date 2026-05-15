@@ -33,6 +33,23 @@ from backend.services.video_service import (
 from backend.state import app_state
 
 
+DATASET_CONFIG_BY_NAME = {
+    "cityflowv2": "configs/datasets/cityflowv2.yaml",
+    "wildtrack": "configs/datasets/wildtrack.yaml",
+}
+
+
+def resolve_pipeline_config_path(dataset: Optional[str] = None) -> str:
+    """Resolve backend dataset selector to the run_pipeline --config path."""
+    selector = (dataset or "").strip().lower()
+    if not selector or selector in {"default", "demo"}:
+        return "configs/default.yaml"
+    if selector not in DATASET_CONFIG_BY_NAME:
+        allowed = ", ".join(sorted(DATASET_CONFIG_BY_NAME))
+        raise ValueError(f"Unsupported dataset '{dataset}'. Expected one of: {allowed}")
+    return DATASET_CONFIG_BY_NAME[selector]
+
+
 def _allocate_numeric_run_id() -> str:
     """Allocate the next numeric run id under outputs/ (1, 2, 3, ...)."""
     with app_state.run_id_lock:
@@ -150,14 +167,16 @@ def _build_pipeline_cmd(
     use_cpu: bool = False,
     reid_model_path: Optional[str] = None,
     tracker: Optional[str] = None,
+    dataset: Optional[str] = None,
 ) -> list:
     """Build the subprocess command for run_pipeline.py."""
     effective_use_cpu = use_cpu or not _cuda_available_for_pipeline()
+    config_path = resolve_pipeline_config_path(dataset)
     cmd = [
         _PIPELINE_PYTHON,
         "scripts/run_pipeline.py",
         "--config",
-        "configs/default.yaml",
+        config_path,
         "--stages",
         stages,
         "--override",
@@ -319,6 +338,7 @@ async def _run_pipeline_stages(
     smoke_test: bool = False,
     reid_model_path: Optional[str] = None,
     tracker: Optional[str] = None,
+    dataset: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run one or more pipeline stages via subprocess with streaming progress."""
     video_meta = app_state.uploaded_videos[video_id]
@@ -339,6 +359,7 @@ async def _run_pipeline_stages(
         use_cpu=use_cpu,
         reid_model_path=reid_model_path,
         tracker=tracker,
+        dataset=dataset,
     )
 
     return await _run_pipeline_streaming(run_id, cmd, stage_nums)
@@ -433,6 +454,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
         use_cpu = bool(config.get("useCpu", False))
         reid_model_path = config.get("reidModelPath")
         tracker = str(config.get("tracker") or "deepocsort")
+        dataset = config.get("dataset")
 
         if not video_id or video_id not in app_state.uploaded_videos:
             raise RuntimeError(f"Stage {stage} requires a valid videoId")
@@ -454,6 +476,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 use_cpu=use_cpu,
                 smoke_test=smoke_test,
                 tracker=tracker,
+                dataset=dataset,
             )
 
             app_state.video_to_latest_run[video_id] = run_id
@@ -486,6 +509,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 use_cpu=use_cpu,
                 smoke_test=smoke_test,
                 reid_model_path=reid_model_path,
+                dataset=dataset,
             )
 
             app_state.active_runs[run_id]["status"] = "completed"
@@ -506,6 +530,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
                 camera_id=camera_id,
                 use_cpu=use_cpu,
                 smoke_test=smoke_test,
+                dataset=dataset,
             )
 
             app_state.active_runs[run_id]["status"] = "completed"
@@ -526,6 +551,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
             camera_id=camera_id,
             use_cpu=use_cpu,
             smoke_test=smoke_test,
+            dataset=dataset,
         )
 
         app_state.active_runs[run_id]["status"] = "completed"
@@ -555,6 +581,7 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
         smoke_test = bool(config.get("smokeTest", False))
         use_cpu = bool(config.get("useCpu", False))
         reid_model_path = config.get("reidModelPath")
+        dataset = config.get("dataset")
 
         if not video_id or video_id not in app_state.uploaded_videos:
             raise RuntimeError("Full pipeline requires a valid videoId")
@@ -575,6 +602,7 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
             use_cpu=use_cpu,
             smoke_test=smoke_test,
             reid_model_path=reid_model_path,
+            dataset=dataset,
         )
 
         app_state.video_to_latest_run[video_id] = run_id
