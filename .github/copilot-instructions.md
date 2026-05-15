@@ -116,12 +116,25 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **Status**: FULLY CONVERGED — tracker-limited and exhaustively tested; Kalman, global optimal, and naive trackers all failed to beat 0.947
 
 ### Integration Status
-- ✅ 14e B1 CityFlow values promoted to `configs/datasets/cityflowv2.yaml`
-- ✅ Local checkpoint paths + `models/reid/README.md` provenance
-- ✅ Person pipeline routed via `scripts/run_pipeline.py` (`--config configs/datasets/wildtrack.yaml`)
-- ✅ 12b best Kalman params promoted to `configs/datasets/wildtrack.yaml`
-- ✅ Backend dataset switcher (`pipeline_service.py` + `routers/pipeline.py`)
-- ✅ Backend `models/{requests,embedding}.py` + `repositories/__init__.py` scaffolding
+- ✅ PR #4: 14e B1 CityFlow values promoted to `configs/datasets/cityflowv2.yaml`
+- ✅ PR #5: Person pipeline routing in `scripts/run_pipeline.py`, 12b Kalman params in `configs/datasets/wildtrack.yaml`, and backend dataset switcher support
+- ✅ PR #6: Canonical model/pipeline inventory docs added
+- ✅ PR #7: TransReID mAP corrected from deep-hunt provenance
+- ✅ PR #8: Backend model registry Phase 1 implemented
+- ✅ PR #9: `model_id` wired into pipeline runs for config/model resolution
+- ✅ PR #10: Frontend model registry dropdown and model cards added
+- ✅ PR #11: Registry verification scripts and Kaggle cross-check added
+- ✅ PR #12: Exhaustive reproduction guide and E2E smoke tests added
+- ✅ PR #13: Kaggle slug recovery completed for missing kernel slugs
+- ✅ PR #14: Canonical VeRi-776 reproducibility reference block added
+- ✅ PR #15: 14t slug fix, P=16 typo fix, and 09v/13 empty metric blocks resolved
+- ✅ Local checkpoint paths and `models/reid/README.md` provenance documented
+- ✅ Backend `models/{requests,embedding}.py` + `repositories/__init__.py` scaffolding present
+
+### Remaining Integration TODOs
+- PR #17 is pending merge for registry citation line-number fixes only; it is not a production metric regression.
+- Frontend dataset switching remains incomplete: backend config/model resolution supports CityFlowV2 and WILDTRACK, and the UI displays model dataset metadata, but no clear global dataset selector was found in the frontend audit.
+- Lightweight Python CI is not present yet if `.github/workflows/` is still absent; add backend/core smoke coverage before relying on PR checks as the integration gate.
 
 ## Experiment History
 - **Full experiment log**: See `docs/experiment-log.md` for 225+ tracked experiments
