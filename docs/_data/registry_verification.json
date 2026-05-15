@@ -1,0 +1,326 @@
+{
+  "generated_at": "2026-05-15T10:28:37.994248+00:00",
+  "results": [
+    {
+      "claimed_value": 0.77936,
+      "error": null,
+      "kaggle_artifact_path": "14e_summary.json",
+      "kaggle_json_path": "best.idf1",
+      "kaggle_source_value": 0.7793596227569698,
+      "kaggle_status": "PASS",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "| 14e B1 (TTA + AQE k=2, w_t=0.525, sim_thr=0.48, fic_reg=0.5) | 0.77936 | `14e_summary.json` from `yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep` | Current best |",
+      "matched_line": 138,
+      "matched_text": "0.77936",
+      "metric": "mtmc_idf1",
+      "model_id": "vehicle_mtmc_14e_b1",
+      "source": {
+        "kernel": "yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep",
+        "kind": "docs",
+        "line_ref": "L138",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.77936,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.78079,
+      "error": null,
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "| 14k v1 K7 (+R50-IBN quaternary) | 0.78079 | `outputs/14k_extended/14k_extended_summary.json` | MARGINAL, NOT promoted |",
+      "matched_line": 139,
+      "matched_text": "0.78079",
+      "metric": "mtmc_idf1",
+      "model_id": "vehicle_mtmc_14k_v1_k7",
+      "source": {
+        "kernel": null,
+        "kind": "docs",
+        "line_ref": "L139",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.78079,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.947,
+      "error": null,
+      "kaggle_error": "kernel unavailable: gumfreddy: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'gumfreddy/12b-wildtrack-tracking-reid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.; mrkdagods: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'gumfreddy/12b-wildtrack-tracking-reid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.; ali369: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'gumfreddy/12b-wildtrack-tracking-reid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.; yahiaakhalafallah: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'gumfreddy/12b-wildtrack-tracking-reid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.",
+      "kaggle_status": "UNAVAILABLE",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "To test whether the central thesis extends beyond vehicles, we examine a person-tracking pipeline on WILDTRACK. Using an MVDeTr ResNet18 detector, the system achieves MODA = 0.921, ground-plane MODA = 0.903, and IDF1 = 0.947 with a Kalman tracker. Importantly, detector quality improvements from 90.9% to 92.1% MODA did not move IDF1, which remained at 0.947 across 59+ tracker configurations.",
+      "matched_line": 198,
+      "matched_text": "0.947",
+      "metric": "idf1_groundplane",
+      "model_id": "person_mtmc_12b",
+      "source": {
+        "kernel": "gumfreddy/12b-wildtrack-tracking-reid",
+        "kind": "docs",
+        "line_ref": "L198",
+        "path": "docs/paper-draft.md"
+      },
+      "source_value": 0.947,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.903,
+      "error": null,
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "To test whether the central thesis extends beyond vehicles, we examine a person-tracking pipeline on WILDTRACK. Using an MVDeTr ResNet18 detector, the system achieves MODA = 0.921, ground-plane MODA = 0.903, and IDF1 = 0.947 with a Kalman tracker. Importantly, detector quality improvements from 90.9% to 92.1% MODA did not move IDF1, which remained at 0.947 across 59+ tracker configurations.",
+      "matched_line": 198,
+      "matched_text": "0.903",
+      "metric": "moda_groundplane",
+      "model_id": "person_mtmc_12b",
+      "source": {
+        "kernel": null,
+        "kind": "docs",
+        "line_ref": "L198",
+        "path": "docs/paper-draft.md"
+      },
+      "source_value": 0.903,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.921,
+      "error": null,
+      "kaggle_error": "claimed value not found in Kaggle manifest",
+      "kaggle_status": "INFO",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "- Detector: MVDeTr ResNet18 from `gumfreddy/12a-wildtrack-mvdetr-training`. The epoch-20 log line claims MODA=92.1%, but the final loaded-model line for the exported run verifies MODA=91.3%, MODP=81.8%, precision=94.7%, recall=96.6%.",
+      "matched_line": 129,
+      "matched_text": "92.1%",
+      "metric": "moda",
+      "model_id": "person_detector_12a_mvdetr",
+      "source": {
+        "kernel": "gumfreddy/12a-wildtrack-mvdetr-training",
+        "kind": "docs",
+        "line_ref": "L129",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.9209999999999999,
+      "status": "INFO",
+      "verified": false
+    },
+    {
+      "claimed_value": 0.947,
+      "error": null,
+      "kaggle_error": "claimed value not found in Kaggle manifest",
+      "kaggle_status": "INFO",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "- Detector: MVDeTr ResNet18 from `gumfreddy/12a-wildtrack-mvdetr-training`. The epoch-20 log line claims MODA=92.1%, but the final loaded-model line for the exported run verifies MODA=91.3%, MODP=81.8%, precision=94.7%, recall=96.6%.",
+      "matched_line": 129,
+      "matched_text": "94.7%",
+      "metric": "precision",
+      "model_id": "person_detector_12a_mvdetr",
+      "source": {
+        "kernel": "gumfreddy/12a-wildtrack-mvdetr-training",
+        "kind": "docs",
+        "line_ref": "L129",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.9470000000000001,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.966,
+      "error": null,
+      "kaggle_error": "claimed value not found in Kaggle manifest",
+      "kaggle_status": "INFO",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "- Detector: MVDeTr ResNet18 from `gumfreddy/12a-wildtrack-mvdetr-training`. The epoch-20 log line claims MODA=92.1%, but the final loaded-model line for the exported run verifies MODA=91.3%, MODP=81.8%, precision=94.7%, recall=96.6%.",
+      "matched_line": 129,
+      "matched_text": "96.6%",
+      "metric": "recall",
+      "model_id": "person_detector_12a_mvdetr",
+      "source": {
+        "kernel": "gumfreddy/12a-wildtrack-mvdetr-training",
+        "kind": "docs",
+        "line_ref": "L129",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.966,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.933,
+      "error": null,
+      "kaggle_artifact_path": "14t_summary.json",
+      "kaggle_json_path": "best_overall.metrics.mAP",
+      "kaggle_source_value": 0.9330352694989825,
+      "kaggle_status": "PASS",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "- mAP=0.93304, R1=0.98451 (verified in docs/experiment-log.md from 14t_summary.json)",
+      "matched_line": 77,
+      "matched_text": "0.93304",
+      "metric": "map",
+      "model_id": "veri776_14t_fusion",
+      "source": {
+        "kernel": "yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid",
+        "kind": "docs",
+        "line_ref": "L77",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.93304,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.9845,
+      "error": null,
+      "kaggle_artifact_path": "14t_summary.json",
+      "kaggle_json_path": "best_overall.metrics.R1",
+      "kaggle_source_value": 0.9845053553581238,
+      "kaggle_status": "PASS",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "- mAP=0.93304, R1=0.98451 (verified in docs/experiment-log.md from 14t_summary.json)",
+      "matched_line": 77,
+      "matched_text": "0.98451",
+      "metric": "r1",
+      "model_id": "veri776_14t_fusion",
+      "source": {
+        "kernel": "yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid",
+        "kind": "docs",
+        "line_ref": "L77",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.98451,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.8997,
+      "error": null,
+      "kaggle_error": "kernel unavailable: gumfreddy: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'mrkdagods/09v-veri776-transreid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.; mrkdagods: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'mrkdagods/09v-veri776-transreid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.; ali369: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'mrkdagods/09v-veri776-transreid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.; yahiaakhalafallah: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'mrkdagods/09v-veri776-transreid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.",
+      "kaggle_status": "UNAVAILABLE",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "| ViT-B/16 CLIP 256px | VeRi-776 | 0.8997 / 0.9833 | `mrkdagods` 09v v17 | Yes - via 14t fusion | Checkpoint `vehicle_transreid_vit_base_veri776.pth`; one of the two 14t VeRi-776 experts. |",
+      "matched_line": 92,
+      "matched_text": "0.8997",
+      "metric": "map",
+      "model_id": "veri776_09v_v17_transreid",
+      "source": {
+        "kernel": "mrkdagods/09v-veri776-transreid",
+        "kind": "docs",
+        "line_ref": "L92",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.8997,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.9833,
+      "error": null,
+      "kaggle_error": "kernel unavailable: gumfreddy: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'mrkdagods/09v-veri776-transreid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.; mrkdagods: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'mrkdagods/09v-veri776-transreid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.; ali369: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'mrkdagods/09v-veri776-transreid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.; yahiaakhalafallah: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.0.1), please consider upgrading to the latest version (2.0.2)\nCannot access kernel 'mrkdagods/09v-veri776-transreid' (Permission 'kernels.get' was denied). The most likely cause is a wrong kernel slug. The benchmark_task_slug returned by get_benchmark_leaderboard differs from the actual kernel slug \u00e2\u20ac\u201d use the slug from the notebook URL (kaggle.com/code/owner/KERNEL-SLUG), not from the leaderboard. It can also occur if the notebook is private.",
+      "kaggle_status": "UNAVAILABLE",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "| ViT-B/16 CLIP 256px | VeRi-776 | 0.8997 / 0.9833 | `mrkdagods` 09v v17 | Yes - via 14t fusion | Checkpoint `vehicle_transreid_vit_base_veri776.pth`; one of the two 14t VeRi-776 experts. |",
+      "matched_line": 92,
+      "matched_text": "0.9833",
+      "metric": "r1",
+      "model_id": "veri776_09v_v17_transreid",
+      "source": {
+        "kernel": "mrkdagods/09v-veri776-transreid",
+        "kind": "docs",
+        "line_ref": "L92",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.9833,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.9154,
+      "error": null,
+      "kaggle_error": "claimed value not found in Kaggle manifest",
+      "kaggle_status": "INFO",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "| CLIP-SENet v6 320px, P=8, K=8 | VeRi-776 | 0.8234 mAP base; 0.9154 mAP post-rerank | `yahiaakhalafallah/13-clip-senet-train` | Yes - via 14t fusion | Canonical CLIP-SENet checkpoint for VeRi-776 score fusion. |",
+      "matched_line": 100,
+      "matched_text": "0.9154",
+      "metric": "map_post_rerank",
+      "model_id": "veri776_clipsenet_v6",
+      "source": {
+        "kernel": "yahiaakhalafallah/13-clip-senet-train",
+        "kind": "docs",
+        "line_ref": "L100",
+        "path": "docs/models.md"
+      },
+      "source_value": 0.9154,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": 0.9732,
+      "error": null,
+      "kaggle_error": "claimed value not found in Kaggle manifest",
+      "kaggle_status": "INFO",
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "| CLIP-SENet v6 (post-rerank) | 0.9154 | 0.9732 |",
+      "matched_line": 340,
+      "matched_text": "0.9732",
+      "metric": "r1",
+      "model_id": "veri776_clipsenet_v6",
+      "source": {
+        "kernel": "yahiaakhalafallah/13-clip-senet-train",
+        "kind": "docs",
+        "line_ref": "L340",
+        "path": "docs/findings.md"
+      },
+      "source_value": 0.9732,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": -34.7,
+      "error": null,
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "| CSLS distance | -34.7pp catastrophic | v74 |",
+      "matched_line": 997,
+      "matched_text": "-34.7pp",
+      "metric": "mtmc_idf1_delta_pp",
+      "model_id": "deadend_vehicle_csls",
+      "source": {
+        "kernel": null,
+        "kind": "docs",
+        "line_ref": "L997",
+        "path": "docs/findings.md"
+      },
+      "source_value": -34.7,
+      "status": "PASS",
+      "verified": true
+    },
+    {
+      "claimed_value": -3.82,
+      "error": null,
+      "match_scope": "near_cited_line",
+      "matched_excerpt": "| AFLink motion linking | Confirmed harmful in controlled retest: **-3.82pp** even at `gap=100`, `dir_cos=0.90`; broader gaps degrade to **-5.31pp** (`150/0.85`) and **-13.20pp** (`200/0.70`). Motion consistency across non-overlapping cameras is unreliable and false merges dominate. | 10c v46, 10c v52 |",
+      "matched_line": 1044,
+      "matched_text": "-3.82pp",
+      "metric": "mtmc_idf1_delta_pp",
+      "model_id": "deadend_vehicle_aflink",
+      "source": {
+        "kernel": null,
+        "kind": "docs",
+        "line_ref": "L1044",
+        "path": "docs/findings.md"
+      },
+      "source_value": -3.82,
+      "status": "PASS",
+      "verified": true
+    }
+  ],
+  "summary": {
+    "failed": 0,
+    "info": 1,
+    "passed": 14
+  },
+  "total_entries": 9,
+  "total_metrics": 15,
+  "with_kaggle": true
+}
