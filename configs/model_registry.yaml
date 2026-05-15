@@ -1,0 +1,496 @@
+version: 1
+models:
+  - id: vehicle_mtmc_14e_b1
+    name: Vehicle MTMC 14e B1 production
+    task_type: mtmc_vehicle
+    dataset: cityflowv2
+    description: Current reproducible vehicle MTMC headline on CityFlowV2 using TTA-smoothed TransReID CLIP primary features, DINOv2 tertiary score fusion, AQE k=2, and FIC regularisation.
+    metrics:
+      - name: mtmc_idf1
+        value: 0.77936
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep
+          line_ref: L148
+        note: TTA Stage-2 features plus aqe_k=2, w_tertiary=0.525, similarity_threshold=0.48, fic_regularisation=0.5.
+    pipeline_config: configs/datasets/cityflowv2.yaml
+    model_overrides:
+      - stage4.association.query_expansion.k=2
+      - stage4.association.tertiary_embeddings.weight=0.525
+      - stage4.association.graph.similarity_threshold=0.48
+      - stage4.association.fic.regularisation=0.5
+    checkpoint_refs:
+      - role: detector
+        local_path: models/detection/yolo26m.pt
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: yahiaakhalafallah/mtmc-weights
+            member: yolo26m.pt
+          - kaggle_dataset: gumfreddy/mtmc-weights
+            member: yolo26m.pt
+          - kaggle_dataset: mrkdagods/mtmc-weights
+            member: yolo26m.pt
+        source_training_kernel: null
+        size_bytes: 44255705
+        on_disk: false
+      - role: primary_reid
+        local_path: models/reid/transreid_cityflowv2_best.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: yahiaakhalafallah/mtmc-weights
+            member: reid/transreid_cityflowv2_best.pth
+          - kaggle_dataset: gumfreddy/mtmc-weights
+            member: reid/transreid_cityflowv2_best.pth
+          - kaggle_dataset: mrkdagods/mtmc-weights
+            member: reid/transreid_cityflowv2_best.pth
+        source_training_kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
+        size_bytes: 346518635
+        on_disk: false
+      - role: tertiary_reid
+        local_path: models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: yahiaakhalafallah/09s-dinov2-large-cityflowv2
+            member: vehicle_transreid_dinov2_large_cityflowv2_final.pth
+        source_training_kernel: yahiaakhalafallah/09s-dinov2-large-cityflowv2
+        size_bytes: null
+        on_disk: false
+    requirements:
+      gpu_required: true
+      min_vram_gb: 8
+      data_dependencies:
+        - cityflowv2
+    status: production
+    runnable_locally: false
+    notebook_or_kernel_ref: yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep
+    provenance:
+      created_at: '2026-05-15'
+      created_by_kernel: yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep
+      verified_by: docs/findings.md
+    tombstone: null
+
+  - id: vehicle_mtmc_14k_v1_k7
+    name: Vehicle MTMC 14k v1 K7 R50-IBN research
+    task_type: mtmc_vehicle
+    dataset: cityflowv2
+    description: Marginal research ensemble adding a FastReID R50-IBN quaternary stream to the 14e B1 vehicle MTMC stack. It slightly beats 14e numerically but remains below the promotion bar.
+    metrics:
+      - name: mtmc_idf1
+        value: 0.78079
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: null
+          line_ref: L291
+        note: K7 with w_primary=0.10, w_tertiary=0.45, w_quaternary=0.45, similarity_threshold=0.46.
+    pipeline_config: configs/datasets/cityflowv2.yaml
+    model_overrides:
+      - stage4.association.query_expansion.k=2
+      - stage4.association.tertiary_embeddings.weight=0.45
+      - stage4.association.quaternary_embeddings.weight=0.45
+      - stage4.association.graph.similarity_threshold=0.46
+      - stage4.association.fic.regularisation=0.5
+    checkpoint_refs:
+      - role: detector
+        local_path: models/detection/yolo26m.pt
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: yahiaakhalafallah/mtmc-weights
+            member: yolo26m.pt
+          - kaggle_dataset: gumfreddy/mtmc-weights
+            member: yolo26m.pt
+          - kaggle_dataset: mrkdagods/mtmc-weights
+            member: yolo26m.pt
+        source_training_kernel: null
+        size_bytes: 44255705
+        on_disk: false
+      - role: primary_reid
+        local_path: models/reid/transreid_cityflowv2_best.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: yahiaakhalafallah/mtmc-weights
+            member: reid/transreid_cityflowv2_best.pth
+          - kaggle_dataset: gumfreddy/mtmc-weights
+            member: reid/transreid_cityflowv2_best.pth
+          - kaggle_dataset: mrkdagods/mtmc-weights
+            member: reid/transreid_cityflowv2_best.pth
+        source_training_kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
+        size_bytes: 346518635
+        on_disk: false
+      - role: tertiary_reid
+        local_path: models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: yahiaakhalafallah/09s-dinov2-large-cityflowv2
+            member: vehicle_transreid_dinov2_large_cityflowv2_final.pth
+        source_training_kernel: yahiaakhalafallah/09s-dinov2-large-cityflowv2
+        size_bytes: null
+        on_disk: false
+      - role: quaternary_reid
+        local_path: models/reid/fastreid_r50_ibn_cityflowv2_final.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: gumfreddy/09p-fastreid-r50-extended-cityflowv2
+            member: final_model.pth
+        source_training_kernel: gumfreddy/09p-fastreid-r50-extended-cityflowv2
+        size_bytes: null
+        on_disk: false
+    requirements:
+      gpu_required: true
+      min_vram_gb: 8
+      data_dependencies:
+        - cityflowv2
+    status: research
+    runnable_locally: false
+    notebook_or_kernel_ref: null
+    provenance:
+      created_at: '2026-05-15'
+      created_by_kernel: null
+      verified_by: docs/findings.md
+    tombstone: null
+
+  - id: person_mtmc_12b
+    name: Person MTMC 12b production
+    task_type: mtmc_person
+    dataset: wildtrack
+    description: Production WILDTRACK person MTMC operating point with MVDeTr detections and the converged Kalman tracker configuration.
+    metrics:
+      - name: idf1_groundplane
+        value: 0.947
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: gumfreddy/12b-wildtrack-tracking-reid
+          line_ref: L808
+        note: Rounded headline; findings record the converged 0.9467 cluster.
+      - name: moda_groundplane
+        value: 0.903
+        verified: true
+        source:
+          kind: docs
+          path: docs/paper-draft.md
+          kernel: null
+          line_ref: L198
+        note: Ground-plane MODA reported for the WILDTRACK person pipeline.
+    pipeline_config: configs/datasets/wildtrack.yaml
+    model_overrides:
+      - stage1.tracker.min_hits=2
+      - stage4.association.graph.similarity_threshold=0.55
+      - stage4.association.gallery_expansion.threshold=0.50
+    checkpoint_refs:
+      - role: detector
+        local_path: models/person_detection/MultiviewDetector.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: gumfreddy/12a-wildtrack-mvdetr-training
+            member: MultiviewDetector.pth
+        source_training_kernel: gumfreddy/12a-wildtrack-mvdetr-training
+        size_bytes: null
+        on_disk: false
+    requirements:
+      gpu_required: true
+      min_vram_gb: 8
+      data_dependencies:
+        - wildtrack
+    status: production
+    runnable_locally: false
+    notebook_or_kernel_ref: gumfreddy/12b-wildtrack-tracking-reid
+    provenance:
+      created_at: '2026-05-15'
+      created_by_kernel: gumfreddy/12b-wildtrack-tracking-reid
+      verified_by: docs/findings.md
+    tombstone: null
+
+  - id: person_detector_12a_mvdetr
+    name: Person detector 12a MVDeTr reference
+    task_type: detector_only
+    dataset: wildtrack
+    description: MVDeTr ResNet18 detector-only reference for WILDTRACK. The 0.921 MODA value is retained as an unverified training-epoch claim; the exported checkpoint line in project notes is lower.
+    metrics:
+      - name: moda
+        value: 0.921
+        verified: false
+        source:
+          kind: docs
+          path: docs/paper-draft.md
+          kernel: gumfreddy/12a-wildtrack-mvdetr-training
+          line_ref: L198
+        note: Epoch-20 detector quality claim, not the final exported-checkpoint line.
+      - name: precision
+        value: 0.947
+        verified: true
+        source:
+          kind: docs
+          path: docs/paper-draft.md
+          kernel: gumfreddy/12a-wildtrack-mvdetr-training
+          line_ref: L198
+        note: Reported for the MVDeTr detector reference.
+      - name: recall
+        value: 0.966
+        verified: true
+        source:
+          kind: docs
+          path: docs/paper-draft.md
+          kernel: gumfreddy/12a-wildtrack-mvdetr-training
+          line_ref: L198
+        note: Reported for the MVDeTr detector reference.
+    pipeline_config: null
+    model_overrides: []
+    checkpoint_refs:
+      - role: detector
+        local_path: models/person_detection/MultiviewDetector.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: gumfreddy/12a-wildtrack-mvdetr-training
+            member: MultiviewDetector.pth
+        source_training_kernel: gumfreddy/12a-wildtrack-mvdetr-training
+        size_bytes: null
+        on_disk: false
+    requirements:
+      gpu_required: true
+      min_vram_gb: 8
+      data_dependencies:
+        - wildtrack
+    status: reference
+    runnable_locally: false
+    notebook_or_kernel_ref: gumfreddy/12a-wildtrack-mvdetr-training
+    provenance:
+      created_at: '2026-05-15'
+      created_by_kernel: gumfreddy/12a-wildtrack-mvdetr-training
+      verified_by: docs/paper-draft.md
+    tombstone: null
+
+  - id: veri776_14t_fusion
+    name: VeRi-776 14t CLIP-SENet x TransReID fusion
+    task_type: single_cam_reid
+    dataset: veri776
+    description: Research WIN for single-camera VeRi-776 using CLIP-SENet v6 and TransReID 09v v17 score fusion with AQE and reranking.
+    metrics:
+      - name: map
+        value: 0.9330
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
+          line_ref: L396
+        note: Rounded registry value for the 14t score-fusion high-water mark.
+      - name: r1
+        value: 0.9845
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
+          line_ref: L396
+        note: First real Rank-1 result at this level in the checkpoint family.
+    pipeline_config: null
+    model_overrides: []
+    checkpoint_refs:
+      - role: primary_reid
+        local_path: models/reid/vehicle_transreid_vit_base_veri776.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: mrkdagods/mtmc-weights
+            member: reid/vehicle_transreid_vit_base_veri776.pth
+          - kaggle_dataset: gumfreddy/mtmc-weights
+            member: reid/vehicle_transreid_vit_base_veri776.pth
+        source_training_kernel: mrkdagods/09v-veri776-transreid
+        size_bytes: null
+        on_disk: false
+      - role: secondary_reid
+        local_path: models/reid/clipsenet_v6_veri776_best.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: yahiaakhalafallah/13-clip-senet-train
+            member: best.pth
+        source_training_kernel: yahiaakhalafallah/13-clip-senet-train
+        size_bytes: null
+        on_disk: false
+    requirements:
+      gpu_required: true
+      min_vram_gb: 8
+      data_dependencies:
+        - veri776
+    status: research
+    runnable_locally: false
+    notebook_or_kernel_ref: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
+    provenance:
+      created_at: '2026-05-15'
+      created_by_kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
+      verified_by: docs/findings.md
+    tombstone: null
+
+  - id: veri776_09v_v17_transreid
+    name: VeRi-776 09v v17 TransReID baseline
+    task_type: single_cam_reid
+    dataset: veri776
+    description: Best single-model VeRi-776 TransReID ViT-B/16 CLIP baseline used as one expert in the 14t fusion recipe.
+    metrics:
+      - name: map
+        value: 0.8997
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: mrkdagods/09v-veri776-transreid
+          line_ref: L339
+        note: Best verified mAP for the 09v v17 TransReID checkpoint.
+      - name: r1
+        value: 0.9833
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: mrkdagods/09v-veri776-transreid
+          line_ref: L339
+        note: Best verified Rank-1 ceiling for the 09v v17 TransReID checkpoint.
+    pipeline_config: null
+    model_overrides: []
+    checkpoint_refs:
+      - role: primary_reid
+        local_path: models/reid/vehicle_transreid_vit_base_veri776.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: mrkdagods/mtmc-weights
+            member: reid/vehicle_transreid_vit_base_veri776.pth
+          - kaggle_dataset: gumfreddy/mtmc-weights
+            member: reid/vehicle_transreid_vit_base_veri776.pth
+        source_training_kernel: mrkdagods/09v-veri776-transreid
+        size_bytes: null
+        on_disk: false
+    requirements:
+      gpu_required: true
+      min_vram_gb: 8
+      data_dependencies:
+        - veri776
+    status: production
+    runnable_locally: false
+    notebook_or_kernel_ref: mrkdagods/09v-veri776-transreid
+    provenance:
+      created_at: '2026-05-15'
+      created_by_kernel: mrkdagods/09v-veri776-transreid
+      verified_by: docs/findings.md
+    tombstone: null
+
+  - id: veri776_clipsenet_v6
+    name: VeRi-776 CLIP-SENet v6 expert
+    task_type: single_cam_reid
+    dataset: veri776
+    description: Canonical CLIP-SENet v6 VeRi-776 expert, retained for score fusion and as a documented single-camera ReID reference.
+    metrics:
+      - name: map_post_rerank
+        value: 0.9154
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: yahiaakhalafallah/13-clip-senet-train
+          line_ref: L340
+        note: Post-rerank mAP used in 14t comparison.
+      - name: r1
+        value: 0.9732
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: yahiaakhalafallah/13-clip-senet-train
+          line_ref: L340
+        note: Post-rerank Rank-1 used in 14t comparison.
+    pipeline_config: null
+    model_overrides: []
+    checkpoint_refs:
+      - role: primary_reid
+        local_path: models/reid/clipsenet_v6_veri776_best.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: yahiaakhalafallah/13-clip-senet-train
+            member: best.pth
+        source_training_kernel: yahiaakhalafallah/13-clip-senet-train
+        size_bytes: null
+        on_disk: false
+    requirements:
+      gpu_required: true
+      min_vram_gb: 8
+      data_dependencies:
+        - veri776
+    status: research
+    runnable_locally: false
+    notebook_or_kernel_ref: yahiaakhalafallah/13-clip-senet-train
+    provenance:
+      created_at: '2026-05-15'
+      created_by_kernel: yahiaakhalafallah/13-clip-senet-train
+      verified_by: docs/findings.md
+    tombstone: null
+
+  - id: deadend_vehicle_csls
+    name: Dead end vehicle CSLS association
+    task_type: mtmc_vehicle
+    dataset: cityflowv2
+    description: Tombstone entry documenting CSLS hubness correction as harmful for the CityFlowV2 vehicle MTMC feature space.
+    metrics:
+      - name: mtmc_idf1_delta_pp
+        value: -34.7
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: null
+          line_ref: L997
+        note: Catastrophic penalty; penalizes genuine vehicle-type hubs.
+    pipeline_config: null
+    model_overrides: []
+    checkpoint_refs: []
+    requirements:
+      gpu_required: false
+      min_vram_gb: 0
+      data_dependencies:
+        - cityflowv2
+    status: dead_end
+    runnable_locally: false
+    notebook_or_kernel_ref: null
+    provenance:
+      created_at: '2026-05-15'
+      created_by_kernel: null
+      verified_by: docs/findings.md
+    tombstone:
+      reason: CSLS penalized genuine vehicle-type hubs and caused a -34.7pp MTMC IDF1 regression.
+      superseded_by_id: vehicle_mtmc_14e_b1
+
+  - id: deadend_vehicle_aflink
+    name: Dead end vehicle AFLink motion linking
+    task_type: mtmc_vehicle
+    dataset: cityflowv2
+    description: Tombstone entry documenting AFLink as harmful for non-overlapping CityFlowV2 vehicle cameras when paired with the current appearance features.
+    metrics:
+      - name: mtmc_idf1_delta_pp
+        value: -3.82
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: null
+          line_ref: L1044
+        note: Tight controlled retest penalty; broader gaps degrade further to -13.20pp.
+    pipeline_config: null
+    model_overrides: []
+    checkpoint_refs: []
+    requirements:
+      gpu_required: false
+      min_vram_gb: 0
+      data_dependencies:
+        - cityflowv2
+    status: dead_end
+    runnable_locally: false
+    notebook_or_kernel_ref: null
+    provenance:
+      created_at: '2026-05-15'
+      created_by_kernel: null
+      verified_by: docs/findings.md
+    tombstone:
+      reason: AFLink false merges dominate because cross-camera motion consistency is unreliable in non-overlapping CityFlowV2 cameras.
+      superseded_by_id: vehicle_mtmc_14e_b1
