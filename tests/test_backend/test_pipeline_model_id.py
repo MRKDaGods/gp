@@ -12,14 +12,22 @@ from backend.state import AppState
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch):
     test_state = AppState()
+    stage_calls = []
 
     async def noop_execute_full_pipeline(*args, **kwargs):
         return None
 
+    async def noop_execute_stage(*args, **kwargs):
+        stage_calls.append((args, kwargs))
+        return None
+
     monkeypatch.setattr(pipeline_router, "execute_full_pipeline", noop_execute_full_pipeline)
+    monkeypatch.setattr(pipeline_router, "execute_stage", noop_execute_stage)
     app.dependency_overrides[get_app_state] = lambda: test_state
     try:
-        yield TestClient(app)
+        test_client = TestClient(app)
+        test_client.stage_calls = stage_calls
+        yield test_client
     finally:
         app.dependency_overrides.clear()
 
@@ -114,6 +122,85 @@ def test_pipeline_run_rejects_task_type_mismatch(client: TestClient) -> None:
     response = client.post(
         "/api/pipeline/run",
         json={"runId": "test-task-mismatch", "model_id": "person_detector_12a_mvdetr"},
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "task_type 'detector_only'" in detail
+    assert "not compatible" in detail
+
+
+def test_pipeline_run_stage_with_vehicle_model_id_resolves_cityflow_overrides(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/pipeline/run-stage/4",
+        json={"runId": "test-stage-vehicle-model", "model_id": "vehicle_mtmc_14e_b1"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["model_id"] == "vehicle_mtmc_14e_b1"
+    assert data["dataset"] == "cityflowv2"
+    assert data["resolved_config"] == "configs/datasets/cityflowv2.yaml"
+    assert "stage4.association.query_expansion.k=2" in data["applied_overrides"]
+    assert "stage4.association.graph.similarity_threshold=0.48" in data["applied_overrides"]
+    assert data["warnings"] == []
+
+    assert client.stage_calls
+    args, _ = client.stage_calls[-1]
+    assert args[1] == 4
+    stage_config = args[2]
+    assert stage_config["dataset"] == "cityflowv2"
+    assert stage_config["resolvedConfig"] == "configs/datasets/cityflowv2.yaml"
+    assert "stage4.association.query_expansion.k=2" in stage_config["appliedOverrides"]
+
+
+def test_pipeline_run_stage_dataset_only_keeps_backward_compatible_resolution(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/pipeline/run-stage/4",
+        json={"runId": "test-stage-dataset-only", "dataset": "cityflowv2"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["model_id"] is None
+    assert data["dataset"] == "cityflowv2"
+    assert data["resolved_config"] == "configs/datasets/cityflowv2.yaml"
+    assert data["applied_overrides"] == []
+    assert data["warnings"] == []
+
+
+def test_pipeline_run_stage_unknown_model_id_returns_400(client: TestClient) -> None:
+    response = client.post(
+        "/api/pipeline/run-stage/4",
+        json={"runId": "test-stage-unknown-model", "model_id": "not_a_model"},
+    )
+
+    assert response.status_code == 400
+    assert "Unknown model_id" in response.json()["detail"]
+
+
+def test_pipeline_run_stage_rejects_non_local_model_with_kernel_hint(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/pipeline/run-stage/4",
+        json={"runId": "test-stage-nonlocal-model", "model_id": "veri776_14t_fusion"},
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "not runnable" in detail
+    assert "yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid" in detail
+
+
+def test_pipeline_run_stage_rejects_task_type_mismatch(client: TestClient) -> None:
+    response = client.post(
+        "/api/pipeline/run-stage/4",
+        json={"runId": "test-stage-task-mismatch", "model_id": "person_detector_12a_mvdetr"},
     )
 
     assert response.status_code == 422
