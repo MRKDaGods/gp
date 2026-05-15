@@ -22,6 +22,7 @@ from backend.routers import (
     frames,
     health,
     locations,
+    models,
     pipeline,
     results,
     runs,
@@ -63,6 +64,7 @@ app.include_router(detections.router)
 app.include_router(frames.router)
 app.include_router(runs.router)
 app.include_router(datasets.router)
+app.include_router(models.router)
 app.include_router(pipeline.router)
 app.include_router(search.router)
 app.include_router(timeline.router)

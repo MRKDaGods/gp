@@ -18,6 +18,7 @@ dependencies = [
 
     # Configuration
     "omegaconf>=2.3",
+    "jsonschema>=4.0",
 
     # Computer Vision
     "opencv-python-headless>=4.8",

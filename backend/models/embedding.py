@@ -12,6 +12,8 @@ import numpy as np
 
 @dataclass
 class EmbeddingArtifact:
+    """Stage-2 embedding matrix plus its row-level metadata index."""
+
     run_id: str
     embeddings: np.ndarray
     index: List[Dict[str, Any]]
@@ -30,8 +32,10 @@ class EmbeddingArtifact:
         if not embeddings_path.exists() or not index_path.exists():
             return None
 
-        embeddings = np.load(embeddings_path).astype(np.float32)
+        embeddings = np.load(embeddings_path).astype(np.float32, copy=False)
         index = json.loads(index_path.read_text(encoding="utf-8"))
+        if not isinstance(index, list):
+            return None
         return cls(run_id=run_id, embeddings=embeddings, index=index)
 
     @classmethod

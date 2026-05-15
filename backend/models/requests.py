@@ -22,6 +22,7 @@ class TimelineQueryRequest(BaseModel):
     runId: str
     selectedTrackIds: List[str] = []
     galleryRunId: Optional[str] = None
+    skipExports: bool = False
 
 
 class SearchRequest(BaseModel):

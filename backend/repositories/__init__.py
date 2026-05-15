@@ -1,4 +1,4 @@
-"""Repository implementations for backend services."""
+"""Repository package exports."""
 
 from backend.repositories.dataset_repository import DatasetRepository, InMemoryDatasetRepository
 
