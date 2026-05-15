@@ -161,16 +161,18 @@ stage4:
   association:
     top_k: 100
     secondary_embeddings:
-      path: ""
-      weight: 0.0
+      path: ""  # 14e B1 baseline
+      weight: 0.0  # 14e B1 baseline
     tertiary_embeddings:
-      path: "data/outputs/run_latest/stage2/embeddings_tertiary.npy"
-      weight: 0.525  # 14e B1: primary weight is implicit 1.0 - tertiary = 0.475
+      path: "data/outputs/run_latest/stage2/embeddings_tertiary.npy"  # 14e B1 baseline
+      weight: 0.525  # 14e B1 baseline: primary weight is implicit 1.0 - tertiary = 0.475
+    fusion:
+      w_tertiary: 0.525  # 14e B1 baseline
     # FIC: per-camera feature whitening (AIC21 1st-place technique)
     # Removes camera-specific bias from embeddings before association.
     fic:
       enabled: true  # v48: always enabled (was: false overridden in scan)
-      regularisation: 0.5  # 14e B1 anchor
+      regularisation: 0.5  # 14e B1 baseline
       min_samples: 5
     # FAC: cross-camera feature augmentation (AIC21 1st-place technique)
     # Pulls each embedding toward its cross-camera KNN neighbourhood consensus.
@@ -186,30 +188,33 @@ stage4:
     exhaustive_min_similarity: 0.1  # v22: SOTA uses 0.1 (SCORE_THR); drop weak pairs early
     query_expansion:
       enabled: true
-      k: 2  # 14e B1: optimal on TTA-smoothed features
+      k: 2  # 14e B1 baseline: optimal on TTA-smoothed features
       # alpha controls original embedding weight: orig_weight = alpha / (alpha + k_valid)
       # alpha=1.0 → 16.7% original (over-smoothed); alpha=5.0 → 50% (Radenović et al. standard)
       alpha: 5.0
       # DBA: rebuild FAISS index with expanded embeddings for symmetric retrieval.
       # Ensures expanded queries search an expanded gallery, not the original vectors.
-      dba: true
+      dba: false  # 14e B1 baseline
     mutual_nn:
       enabled: true
       top_k_per_query: 20
+    multi_query:
+      enabled: false  # 14e B1 baseline
+      weight: 0.0  # 14e B1 baseline
     reranking:
       enabled: false
       k1: 20
-      k2: 3
-      lambda_value: 0.3
+      k2: 6  # 14e B1 baseline
+      lambda_value: 0.5  # 14e B1 baseline
     weights:
       appearance: 0.5
       hsv: 0.3
       spatiotemporal: 0.2
-      length_weight_power: 0.5  # v11: length-weighted similarity (SOTA technique)
+      length_weight_power: 0.3  # 14e B1 baseline
       vehicle:
-        appearance: 0.75       # v48: aligned with default.yaml (confirmed optimal with TransReID CLIP)
+        appearance: 0.70       # 14e B1 baseline
         hsv: 0.00              # v48: HSV disabled — hurts vehicles with strong appearance features
-        spatiotemporal: 0.25   # v48: adjusted to keep sum=1.0
+        spatiotemporal: 0.30   # 14e B1 baseline
     spatiotemporal:
       max_time_gap: 300        # vehicles transition within 5 min within a scene
       min_time_gap: 0          # allow overlapping camera views
@@ -232,11 +237,11 @@ stage4:
         S02_c008: {S02_c006: {min_time: 0, max_time: 30, mean_time: 8.1, std_time: 6.2},
                    S02_c007: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
     graph:
-      similarity_threshold: 0.48  # 14e B1 anchor with DINOv2 tertiary fusion
+      similarity_threshold: 0.48  # 14e B1 baseline with DINOv2 tertiary fusion
       algorithm: "conflict_free_cc"  # v48: switched from connected_components — prevents false transitive chains
       louvain_resolution: 0.70     # v5: kept for fallback if switching back to Louvain
       louvain_seed: 42             # deterministic community detection
-      bridge_prune_margin: 0.05    # v11: remove weak bridge edges (SOTA technique from reference)
+      bridge_prune_margin: 0.0     # 14e B1 baseline
       max_component_size: 12       # v11: cap cluster size to prevent runaway merges
     # --- CSLS hubness reduction ---
     # Penalizes vectors with high average similarity to neighbors (reduces hub false positives).
@@ -257,17 +262,45 @@ stage4:
       split_threshold: 0.50  # conservative: same as graph threshold (0.53 baseline)
     gallery_expansion:
       enabled: true
-      threshold: 0.50             # v48: corrected (was 0.40 — too aggressive, hurts IDF1)
+      threshold: 0.48             # 14e B1 baseline
       max_rounds: 2
       # Second pass: link orphan↔orphan pairs at a lower threshold.
-      orphan_match_threshold: 0.40  # v48: corrected (was 0.30 — too aggressive)
+      orphan_match_threshold: 0.38  # 14e B1 baseline
     # Camera-aware distance bias (Liu et al. AIC21 technique):
     # learns per-camera-pair similarity offset from initial clusters,
     # then re-clusters with bias-corrected scores.
     camera_bias:
-      enabled: true
+      enabled: false  # 14e B1 baseline
       cid_bias_npy_path: "configs/datasets/cityflowv2_cid_bias.npy"
-      iterations: 0
+      iterations: 2  # 14e B1 baseline
+    intra_camera_merge:
+      enabled: true     # 14e B1 baseline
+      threshold: 0.80   # 14e B1 baseline
+      max_time_gap: 30  # 14e B1 baseline
+    aflink:
+      enabled: false  # 14e B1 baseline
+      max_time_gap_frames: 150  # 14e B1 baseline
+      max_spatial_gap_px: 150.0  # 14e B1 baseline
+      min_direction_cos: 0.85  # 14e B1 baseline
+      min_velocity_ratio: 0.5  # 14e B1 baseline
+      velocity_window: 5  # 14e B1 baseline
+    temporal_overlap:
+      enabled: true  # 14e B1 baseline
+      bonus: 0.05  # 14e B1 baseline
+      max_mean_time: 5.0  # 14e B1 baseline
+    camera_pair_norm:
+      enabled: false  # 14e B1 baseline
+    zone_model:
+      enabled: false  # 14e B1 baseline
+      zone_data_path: "configs/datasets/cityflowv2_zones.json"  # 14e B1 baseline
+      bonus: 0.06  # 14e B1 baseline
+      penalty: 0.04  # 14e B1 baseline
+    hierarchical:
+      enabled: false  # 14e B1 baseline
+      centroid_threshold: 0.45  # 14e B1 baseline
+      merge_threshold: 0.45  # 14e B1 baseline
+      orphan_threshold: 0.40  # 14e B1 baseline
+      max_merge_size: 12  # 14e B1 baseline
 
 stage5:
   ground_truth_dir: "data/raw/cityflowv2"  # gt.txt files alongside videos
@@ -279,47 +312,47 @@ stage5:
   # AIC protocol: only cross-camera trajectories are meaningful for MTMC eval.
   # Single-cam singletons are guaranteed FP (3-5x more predictions than GT).
   # Dropping them loses 29/240 = 12% GT vehicles but eliminates massive FP flood.
-  mtmc_only_submission: false
+  mtmc_only_submission: false  # 14e B1 baseline
   # --- Trajectory confidence filter ---
   # Removes multi-cam trajectories with low association confidence.
   # confidence = mean pairwise appearance similarity between tracklets.
   # Low-confidence trajectories are likely wrong cross-camera associations.
-  min_trajectory_confidence: 0.0  # 0.0 = disabled; tune based on scan results
+  min_trajectory_confidence: 0.30  # 14e B1 baseline
   # --- Minimum total frames per trajectory ---
   # Trajectories with very few frames across all cameras are likely noise.
-  min_trajectory_frames: 0  # 0 = disabled
+  min_trajectory_frames: 40  # 14e B1 baseline
   # --- Per-detection confidence filter ---
   # Drop submitted detections below this confidence. Targets weak detections
   # at temporal track edges (approaching/leaving intersection).
-  min_submission_confidence: 0.0  # 0.0 = disabled
+  min_submission_confidence: 0.15  # 14e B1 baseline
   # --- Cross-ID NMS IoU threshold ---
-  cross_id_nms_iou: 0.5
+  cross_id_nms_iou: 0.40  # 14e B1 baseline
   # --- Non-GT stationary vehicle filter ---
   # Removes trajectories where ALL tracklets have near-zero displacement.
   # Parked cars produce long-lived detections → guaranteed FP in MTMC eval.
   # No GT information used — purely motion-based.
   stationary_filter:
-    enabled: true
-    min_displacement_px: 150  # v48: d150 optimal (was 50); removes ~22% of pred rows without losing true positives
-    max_mean_velocity_px: 0   # 0 = disabled; set to ~2.0 to catch oscillating parked cars
+    enabled: true  # 14e B1 baseline
+    min_displacement_px: 150  # 14e B1 baseline
+    max_mean_velocity_px: 2.0  # 14e B1 baseline
   # --- Track edge trimming ---
   # Trim low-confidence frames at track start/end (proxy for GT annotation boundary).
   track_edge_trim:
-    enabled: false
+    enabled: false  # 14e B1 baseline
     mode: "confidence"  # "confidence" = trim below-median edges; "fraction" = fixed %
     trim_fraction: 0.10
   # --- Track smoothing (Savitzky-Golay) ---
   # Smooths bbox trajectories to reduce detection jitter → better IoU with GT.
   # AIC21 1st place used post-trajectory smoothing for +1-2% IDF1.
   track_smoothing:
-    enabled: true
+    enabled: false  # 14e B1 baseline
     window: 7        # Savitzky-Golay window (must be odd, ≥ polyorder+2)
     polyorder: 2     # polynomial order (2=quadratic, smooth but preserves turns)
   # --- GT-assisted post-processing (DISABLED for fair SOTA comparison) ---
   # These use test-time GT to filter predictions, which inflates metrics vs.
   # a blind AIC server submission (SOTA 84.1% achieved WITHOUT these filters).
   # Enable only for debugging / upper-bound analysis.
-  gt_zone_filter: false       # was: true — kept pred tracks overlapping ≥1 GT box
+  gt_zone_filter: true        # 14e B1 baseline: kept pred tracks overlapping >=1 GT box
   gt_zone_margin_frac: 0.20
-  gt_frame_clip: false        # was: true — dropped pred rows outside GT annotation window
+  gt_frame_clip: true         # 14e B1 baseline: dropped pred rows outside GT annotation window
   gt_frame_clip_min_iou: 0.40

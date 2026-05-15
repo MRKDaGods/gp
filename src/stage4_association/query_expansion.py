@@ -116,13 +116,15 @@ def average_query_expansion_batched(
     if k <= 0 or n == 0:
         return embeddings.copy()
 
-    k_use = min(k, k_available)
+    k_use = min(k + 1, k_available)
     if k_use <= 0:
         logger.warning("QE (batched): no valid neighbour indices available, returning original")
         return embeddings.copy()
 
     nn_idx = indices[:, :k_use]
-    valid_mask = (nn_idx >= 0) & (nn_idx < n)
+    self_mask = nn_idx == np.arange(n).reshape(-1, 1)
+    valid_mask = (nn_idx >= 0) & (nn_idx < n) & ~self_mask
+    valid_mask &= np.cumsum(valid_mask, axis=1) <= k
     safe_idx = np.where(valid_mask, nn_idx, 0)
     nn_feats = embeddings[safe_idx]
     nn_feats[~valid_mask] = 0.0
@@ -141,5 +143,6 @@ def average_query_expansion_batched(
     norms = np.maximum(norms, 1e-8)
     expanded[has_nn] /= norms
 
-    logger.info(f"Query Expansion (batched): k={k_use}, alpha={alpha}, N={n}")
+    effective_k = min(k, max(k_available - 1, 0))
+    logger.info(f"Query Expansion (batched): k={effective_k}, alpha={alpha}, N={n}")
     return expanded
