@@ -164,7 +164,7 @@ models:
         source:
           kind: docs
           path: docs/paper-draft.md
-          kernel: gumfreddy/12b-wildtrack-tracking-reid
+          kernel: gumfreddy/12b-wildtrack-mvdetr-tracking-reid
           line_ref: L198
         note: Rounded headline; findings record the converged 0.9467 cluster.
       - name: moda_groundplane
@@ -198,10 +198,10 @@ models:
         - wildtrack
     status: production
     runnable_locally: true
-    notebook_or_kernel_ref: gumfreddy/12b-wildtrack-tracking-reid
+    notebook_or_kernel_ref: gumfreddy/12b-wildtrack-mvdetr-tracking-reid
     provenance:
       created_at: '2026-05-15'
-      created_by_kernel: gumfreddy/12b-wildtrack-tracking-reid
+      created_by_kernel: gumfreddy/12b-wildtrack-mvdetr-tracking-reid
       verified_by: docs/models.md
     tombstone: null
 
@@ -299,7 +299,7 @@ models:
             member: reid/vehicle_transreid_vit_base_veri776.pth
           - kaggle_dataset: gumfreddy/mtmc-weights
             member: reid/vehicle_transreid_vit_base_veri776.pth
-        source_training_kernel: mrkdagods/09v-veri776-transreid
+        source_training_kernel: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
         size_bytes: null
         on_disk: false
       - role: secondary_reid
@@ -337,7 +337,7 @@ models:
         source:
           kind: docs
           path: docs/models.md
-          kernel: mrkdagods/09v-veri776-transreid
+          kernel: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
           line_ref: L92
         note: Best verified mAP for the 09v v17 TransReID checkpoint.
       - name: r1
@@ -346,7 +346,7 @@ models:
         source:
           kind: docs
           path: docs/models.md
-          kernel: mrkdagods/09v-veri776-transreid
+          kernel: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
           line_ref: L92
         note: Best verified Rank-1 ceiling for the 09v v17 TransReID checkpoint.
     pipeline_config: null
@@ -360,7 +360,7 @@ models:
             member: reid/vehicle_transreid_vit_base_veri776.pth
           - kaggle_dataset: gumfreddy/mtmc-weights
             member: reid/vehicle_transreid_vit_base_veri776.pth
-        source_training_kernel: mrkdagods/09v-veri776-transreid
+        source_training_kernel: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
         size_bytes: null
         on_disk: false
     requirements:
@@ -370,10 +370,10 @@ models:
         - veri776
     status: production
     runnable_locally: false
-    notebook_or_kernel_ref: mrkdagods/09v-veri776-transreid
+    notebook_or_kernel_ref: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
     provenance:
       created_at: '2026-05-15'
-      created_by_kernel: mrkdagods/09v-veri776-transreid
+      created_by_kernel: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
       verified_by: docs/models.md
     tombstone: null
 
