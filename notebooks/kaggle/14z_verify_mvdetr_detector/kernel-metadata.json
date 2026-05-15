@@ -1,5 +1,5 @@
 {
-  "id": "yahiaakhalafallah/14z-verify-mvdetr-detector",
+  "id": "yahiaakhalafallah/14z-verify-mvdetr-detector-moda",
   "title": "14z Verify MVDeTr Detector MODA",
   "description": "Uses the public gumfreddy/12a-wildtrack-mvdetr-artifact dataset containing the 12a MVDeTr test.txt detector output.",
   "code_file": "14z_verify_mvdetr_detector.ipynb",
