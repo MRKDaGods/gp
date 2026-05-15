@@ -399,7 +399,7 @@ models:
           kind: docs
           path: docs/findings.md
           kernel: yahiaakhalafallah/13-clip-senet-train
-          line_ref: L340
+          line_ref: L346
         note: Post-rerank Rank-1 used in 14t comparison.
     pipeline_config: null
     model_overrides: []
@@ -440,7 +440,7 @@ models:
           kind: docs
           path: docs/findings.md
           kernel: null
-          line_ref: L997
+          line_ref: L1003
         note: Catastrophic penalty; penalizes genuine vehicle-type hubs.
     pipeline_config: null
     model_overrides: []
@@ -474,7 +474,7 @@ models:
           kind: docs
           path: docs/findings.md
           kernel: null
-          line_ref: L1044
+          line_ref: L1050
         note: Tight controlled retest penalty; broader gaps degrade further to -13.20pp.
     pipeline_config: null
     model_overrides: []
