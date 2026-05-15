@@ -529,7 +529,12 @@
     {
       "account": "yahiaakhalafallah",
       "last_run": "2026-04-28T20:19:25.660000",
-      "metrics": {},
+      "metrics": {
+        "map": 0.8997,
+        "r1": 0.9833,
+        "r1_joint": 0.9815,
+        "map_joint": 0.8971
+      },
       "reason": "Recovered accessible kernel slug by probing all configured Kaggle accounts. Downloadable output contains source/text files but no eval metrics JSON, so registry metrics remain doc-backed.",
       "removed_files": [],
       "slug": "yahiaakhalafallah/09v-veri-776-eval-transreid-rerank",
@@ -539,7 +544,12 @@
     {
       "account": "yahiaakhalafallah",
       "last_run": null,
-      "metrics": {},
+      "metrics": {
+        "map": 0.8234,
+        "r1": 0.9654,
+        "map_post_rerank": 0.9154,
+        "r1_post_rerank": 0.9732
+      },
       "reason": null,
       "removed_files": [],
       "slug": "yahiaakhalafallah/13-clip-senet-train",
