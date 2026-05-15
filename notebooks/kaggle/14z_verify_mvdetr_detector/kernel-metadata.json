@@ -1,7 +1,7 @@
 {
-  "id": "yahiaakhalafallah/14z-verify-mvdetr-detector",
+  "id": "yahiaakhalafallah/14z-verify-mvdetr-detector-moda",
   "title": "14z Verify MVDeTr Detector MODA",
-  "description": "Requires private gumfreddy/12a-wildtrack-mvdetr-training output; no public MVDeTr checkpoint or detector output was found in yahiaakhalafallah/mtmc-weights.",
+  "description": "Uses the public resume kernel output containing the regenerated 12a MVDeTr test.txt detector output.",
   "code_file": "14z_verify_mvdetr_detector.ipynb",
   "language": "python",
   "kernel_type": "notebook",
@@ -14,7 +14,7 @@
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "gumfreddy/12a-wildtrack-mvdetr-training"
+    "yahiaakhalafallah/12a-resume-emit-wildtrack-test-txt"
   ],
   "model_sources": []
 }
