@@ -1,7 +1,7 @@
 {
   "id": "yahiaakhalafallah/14z-verify-mvdetr-detector",
   "title": "14z Verify MVDeTr Detector MODA",
-  "description": "Uses the public gumfreddy/12a-wildtrack-mvdetr-artifact dataset containing the 12a MVDeTr test.txt detector output.",
+  "description": "Requires private gumfreddy/12a-wildtrack-mvdetr-training output; no public MVDeTr checkpoint or detector output was found in yahiaakhalafallah/mtmc-weights.",
   "code_file": "14z_verify_mvdetr_detector.ipynb",
   "language": "python",
   "kernel_type": "notebook",
@@ -10,10 +10,11 @@
   "enable_tpu": false,
   "enable_internet": true,
   "dataset_sources": [
-    "aryashah2k/large-scale-multicamera-detection-dataset",
-    "gumfreddy/12a-wildtrack-mvdetr-artifact"
+    "aryashah2k/large-scale-multicamera-detection-dataset"
   ],
   "competition_sources": [],
-  "kernel_sources": [],
+  "kernel_sources": [
+    "gumfreddy/12a-wildtrack-mvdetr-training"
+  ],
   "model_sources": []
 }
