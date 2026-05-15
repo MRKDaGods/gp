@@ -2,6 +2,12 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
+## Canonical VeRi-776 Reproducibility Reference
+
+- **14t fusion WIN**: mAP=0.9330 / R1=0.9845 (`kaggle://yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid`); requires `mrkdagods/mtmc-weights` + `yahiaakhalafallah/13-clip-senet-train` outputs; score fusion `w_clipsenet=0.7`, `w_transreid=0.3`, `transreid_768`, AQE k=3, rerank `k1=80,k2=15,lambda=0.2`.
+- **09v v17 TransReID standalone**: best R1=98.33%, best mAP=89.97%, joint optimum R1=98.15% / mAP=89.71%; canonical artifact `outputs/09v_veri_v9/veri776_eval_results_v9.json`; kernel `kaggle://yahiaakhalafallah/09v-veri-776-eval-transreid-rerank`.
+- **13 v6 CLIP-SENet standalone**: 320x320, P=8/K=8 -> base mAP=82.34% / R1=96.54%; rerank+AQE reference mAP=91.54% / R1=97.32%; kernel `kaggle://yahiaakhalafallah/13-clip-senet-train`.
+
 ## Strategic frame shift (user-clarified, 2026-05-08)
 
 The paper direction is now **VeRi-776 SOTA recreation first, then port to CityFlowV2**. CityFlowV2 MTMC remains the downstream proof, but it is no longer the immediate optimization target. The confirmed 14e B1 / 14f / 14h / 14i / 14j / 14k / 14u plateau at **0.77936 MTMC IDF1** should be treated as a strong checkpoint and transfer baseline, not the final paper target.
