@@ -115,11 +115,13 @@ docs/findings.md  Research findings, dead ends, strategic analysis (KEEP UPDATED
 - **Gap to SOTA**: 0.6pp — tracker-limited (Kalman), NOT detector-limited
 - **Status**: FULLY CONVERGED — tracker-limited and exhaustively tested; Kalman, global optimal, and naive trackers all failed to beat 0.947
 
-### Integration Status (this branch: feat/integrate-vehicle-mtmc)
+### Integration Status
 - ✅ 14e B1 CityFlow values promoted to `configs/datasets/cityflowv2.yaml`
 - ✅ Local checkpoint paths + `models/reid/README.md` provenance
-- ⏳ Person pipeline routing → see `feat/integrate-person-mtmc`
-- ⏳ Backend dataset switcher → see `feat/integrate-person-mtmc`
+- ✅ Person pipeline routed via `scripts/run_pipeline.py` (`--config configs/datasets/wildtrack.yaml`)
+- ✅ 12b best Kalman params promoted to `configs/datasets/wildtrack.yaml`
+- ✅ Backend dataset switcher (`pipeline_service.py` + `routers/pipeline.py`)
+- ✅ Backend `models/{requests,embedding}.py` + `repositories/__init__.py` scaffolding
 
 ## Experiment History
 - **Full experiment log**: See `docs/experiment-log.md` for 225+ tracked experiments
