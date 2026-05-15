@@ -11,9 +11,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep
-          line_ref: L148
+          line_ref: L138
         note: TTA Stage-2 features plus aqe_k=2, w_tertiary=0.525, similarity_threshold=0.48, fic_regularisation=0.5.
     pipeline_config: configs/datasets/cityflowv2.yaml
     model_overrides:
@@ -68,7 +68,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep
-      verified_by: docs/findings.md
+      verified_by: docs/models.md
     tombstone: null
 
   - id: vehicle_mtmc_14k_v1_k7
@@ -82,9 +82,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: null
-          line_ref: L291
+          line_ref: L139
         note: K7 with w_primary=0.10, w_tertiary=0.45, w_quaternary=0.45, similarity_threshold=0.46.
     pipeline_config: configs/datasets/cityflowv2.yaml
     model_overrides:
@@ -149,7 +149,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: null
-      verified_by: docs/findings.md
+      verified_by: docs/models.md
     tombstone: null
 
   - id: person_mtmc_12b
@@ -163,9 +163,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: gumfreddy/12b-wildtrack-tracking-reid
-          line_ref: L808
+          line_ref: L130
         note: Rounded headline; findings record the converged 0.9467 cluster.
       - name: moda_groundplane
         value: 0.903
@@ -202,7 +202,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: gumfreddy/12b-wildtrack-tracking-reid
-      verified_by: docs/findings.md
+      verified_by: docs/models.md
     tombstone: null
 
   - id: person_detector_12a_mvdetr
@@ -275,18 +275,18 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
-          line_ref: L396
+          line_ref: L77
         note: Rounded registry value for the 14t score-fusion high-water mark.
       - name: r1
         value: 0.9845
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
-          line_ref: L396
+          line_ref: L77
         note: First real Rank-1 result at this level in the checkpoint family.
     pipeline_config: null
     model_overrides: []
@@ -322,7 +322,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
-      verified_by: docs/findings.md
+      verified_by: docs/models.md
     tombstone: null
 
   - id: veri776_09v_v17_transreid
@@ -336,18 +336,18 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: mrkdagods/09v-veri776-transreid
-          line_ref: L339
+          line_ref: L92
         note: Best verified mAP for the 09v v17 TransReID checkpoint.
       - name: r1
         value: 0.9833
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: mrkdagods/09v-veri776-transreid
-          line_ref: L339
+          line_ref: L92
         note: Best verified Rank-1 ceiling for the 09v v17 TransReID checkpoint.
     pipeline_config: null
     model_overrides: []
@@ -374,7 +374,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: mrkdagods/09v-veri776-transreid
-      verified_by: docs/findings.md
+      verified_by: docs/models.md
     tombstone: null
 
   - id: veri776_clipsenet_v6
@@ -388,18 +388,18 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: yahiaakhalafallah/13-clip-senet-train
-          line_ref: L340
+          line_ref: L100
         note: Post-rerank mAP used in 14t comparison.
       - name: r1
         value: 0.9732
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: yahiaakhalafallah/13-clip-senet-train
-          line_ref: L340
+          line_ref: L100
         note: Post-rerank Rank-1 used in 14t comparison.
     pipeline_config: null
     model_overrides: []
@@ -424,7 +424,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: yahiaakhalafallah/13-clip-senet-train
-      verified_by: docs/findings.md
+      verified_by: docs/models.md
     tombstone: null
 
   - id: deadend_vehicle_csls
@@ -438,9 +438,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: null
-          line_ref: L997
+          line_ref: L147
         note: Catastrophic penalty; penalizes genuine vehicle-type hubs.
     pipeline_config: null
     model_overrides: []
@@ -456,7 +456,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: null
-      verified_by: docs/findings.md
+      verified_by: docs/models.md
     tombstone:
       reason: CSLS penalized genuine vehicle-type hubs and caused a -34.7pp MTMC IDF1 regression.
       superseded_by_id: vehicle_mtmc_14e_b1
@@ -472,9 +472,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/models.md
           kernel: null
-          line_ref: L1044
+          line_ref: L148
         note: Tight controlled retest penalty; broader gaps degrade further to -13.20pp.
     pipeline_config: null
     model_overrides: []
@@ -490,7 +490,8 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: null
-      verified_by: docs/findings.md
+      verified_by: docs/models.md
     tombstone:
       reason: AFLink false merges dominate because cross-camera motion consistency is unreliable in non-overlapping CityFlowV2 cameras.
       superseded_by_id: vehicle_mtmc_14e_b1
+
