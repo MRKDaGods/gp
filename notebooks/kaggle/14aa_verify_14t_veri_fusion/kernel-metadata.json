@@ -1,0 +1,21 @@
+{
+  "id": "yahiaakhalafallah/14aa-verify-14t-veri-fusion",
+  "title": "14aa Verify 14t VeRi Fusion",
+  "code_file": "14aa_verify_14t_veri_fusion.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset",
+    "mrkdagods/mtmc-weights",
+    "yahiaakhalafallah/mtmc-weights",
+    "gumfreddy/mtmc-weights"
+  ],
+  "kernel_sources": [
+    "yahiaakhalafallah/13-clip-senet-train"
+  ],
+  "model_sources": []
+}
