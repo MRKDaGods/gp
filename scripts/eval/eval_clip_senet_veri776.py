@@ -669,6 +669,10 @@ def parse_split(split_dir: Path):
     return items, len(pid_set)
 
 
+def parse_veri_split(split_dir: Path) -> tuple[list[dict], int]:
+    return parse_split(split_dir)
+
+
 class VeRiEvalDataset(Dataset):
     def __init__(self, items, transform):
         self.items = items
@@ -716,6 +720,57 @@ def build_veri_loaders(veri_root: Path, image_size: tuple[int, int], batch_size:
     query_loader = build_loader(query_items, image_size, batch_size)
     gallery_loader = build_loader(gallery_items, image_size, batch_size)
     return query_loader, gallery_loader, query_items, gallery_items, query_ids, gallery_ids
+
+
+def build_clipsenet_model(checkpoint: Path, device: str) -> nn.Module:
+    checkpoint_path = checkpoint.expanduser().resolve()
+    state_dict, _checkpoint_kind, inferred_num_classes = load_checkpoint(checkpoint_path)
+    model = build_clip_senet(num_classes=inferred_num_classes).to(device)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    if missing_keys or unexpected_keys:
+        raise RuntimeError(
+            "Checkpoint load was not strict; "
+            f"missing_keys={missing_keys}, unexpected_keys={unexpected_keys}"
+        )
+    return model.eval()
+
+
+def build_clip_senet_model(checkpoint: Path, device: str) -> nn.Module:
+    return build_clipsenet_model(checkpoint, device)
+
+
+@torch.no_grad()
+def extract_clipsenet_features(
+    model: nn.Module,
+    items,
+    img_size: tuple[int, int],
+    batch_size: int,
+    device: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
+    loader = build_loader(items, img_size, batch_size)
+    model.eval()
+    features = []
+    pids = []
+    camids = []
+    paths: list[str] = []
+
+    for images, batch_pids, batch_camids, batch_paths in loader:
+        images = images.to(device, non_blocking=True)
+        batch_features = model(images)
+        if isinstance(batch_features, (tuple, list)):
+            batch_features = batch_features[-1]
+        batch_features = F.normalize(batch_features.float(), p=2, dim=1)
+        features.append(batch_features.cpu().numpy())
+        pids.append(batch_pids.numpy())
+        camids.append(batch_camids.numpy())
+        paths.extend(str(path) for path in batch_paths)
+
+    return (
+        np.concatenate(features, axis=0).astype(np.float32, copy=False),
+        np.concatenate(pids, axis=0),
+        np.concatenate(camids, axis=0),
+        paths,
+    )
 
 
 @torch.no_grad()
@@ -958,13 +1013,7 @@ def main() -> None:
     print("CHECKPOINT_KIND:", checkpoint_kind)
     print("NUM_CLASSES:", inferred_num_classes)
 
-    model = build_clip_senet(num_classes=inferred_num_classes).to(args.device)
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    if missing_keys or unexpected_keys:
-        print("Missing keys:", missing_keys)
-        print("Unexpected keys:", unexpected_keys)
-        raise RuntimeError("Checkpoint load was not strict; aborting eval setup")
-    model.eval()
+    model = build_clipsenet_model(checkpoint_path, args.device)
 
     query_loader, gallery_loader, query_items, gallery_items, query_ids, gallery_ids = build_veri_loaders(
         veri_root=veri_root,

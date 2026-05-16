@@ -18,7 +18,7 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -193,6 +193,23 @@ def load_model(weights_path: Path):
     model._concat_patch = False
     model._gem_p = CONCAT_PATCH_GEM_P
     return model.to(DEVICE).eval()
+
+
+def build_09v_model(checkpoint: Path, device: str) -> torch.nn.Module:
+    global DEVICE, PIN_MEMORY, NUM_WORKERS
+    if device == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("device='cuda' requested but torch.cuda.is_available() is False")
+        DEVICE = "cuda:0"
+    else:
+        DEVICE = "cpu"
+        NUM_WORKERS = 0
+    PIN_MEMORY = DEVICE.startswith("cuda")
+    return load_model(checkpoint.expanduser().resolve())
+
+
+def build_transreid_model(checkpoint: Path, device: str) -> torch.nn.Module:
+    return build_09v_model(checkpoint, device)
 
 
 def to_metric_dict(mAP: float, cmc: np.ndarray) -> dict[str, float]:
@@ -425,6 +442,52 @@ def extract_feature_bundle(
         "q_camids": q_camids,
         "g_camids": g_camids,
     }
+
+
+def extract_09v_features_with_metadata(
+    model: torch.nn.Module,
+    items: list[dict[str, Any]],
+    device: str,
+    batch_size: int,
+    *,
+    stream: Literal["global", "concat_patch_flip"],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
+    global DEVICE, PIN_MEMORY, NUM_WORKERS
+    if device == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("device='cuda' requested but torch.cuda.is_available() is False")
+        DEVICE = "cuda:0"
+    else:
+        DEVICE = "cpu"
+        NUM_WORKERS = 0
+    PIN_MEMORY = DEVICE.startswith("cuda")
+
+    mode = "single_flip" if stream == "global" else stream
+    if mode not in {"single_flip", "concat_patch_flip"}:
+        raise ValueError(f"Unknown TransReID stream: {stream}")
+    loader = make_loader(items, batch_size=batch_size)
+    features, pids, camids = extract_features(model, loader, mode, batch_size=batch_size)
+    features = F.normalize(torch.as_tensor(features, dtype=torch.float32), p=2, dim=1).cpu().numpy()
+    paths = [str(item["path"]) for item in items]
+    return features.astype(np.float32, copy=False), pids, camids, paths
+
+
+def extract_09v_features(
+    model: torch.nn.Module,
+    items: list[dict[str, Any]],
+    device: str,
+    batch_size: int,
+    *,
+    stream: Literal["global", "concat_patch_flip"],
+) -> np.ndarray:
+    features, _pids, _camids, _paths = extract_09v_features_with_metadata(
+        model,
+        items,
+        device,
+        batch_size,
+        stream=stream,
+    )
+    return features
 
 
 def evaluate_cosine_features(

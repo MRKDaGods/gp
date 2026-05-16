@@ -268,7 +268,7 @@ models:
     name: VeRi-776 14t CLIP-SENet x TransReID fusion
     task_type: single_cam_reid
     dataset: veri776
-    description: Research WIN for single-camera VeRi-776 using CLIP-SENet v6 and TransReID 09v v17 score fusion with AQE and reranking.
+    description: Research WIN for single-camera VeRi-776 using CLIP-SENet v6 and TransReID 09v v17 score fusion with AQE and reranking; not for CityFlow MTMC, where the 14u port was a documented dead end.
     metrics:
       - name: map
         value: 0.9330
@@ -288,7 +288,7 @@ models:
           kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
           line_ref: L77
         note: First real Rank-1 result at this level in the checkpoint family.
-    pipeline_config: null
+    pipeline_config: configs/models/veri776_14t_fusion.yaml
     model_overrides: []
     checkpoint_refs:
       - role: primary_reid
