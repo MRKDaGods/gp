@@ -153,6 +153,38 @@ export interface FusionReIDResponsePayload {
   latencyMs: number;
 }
 
+export type EvalType = "veri776_transreid" | "veri776_clipsenet" | "cityflow_transreid" | "veri776_14t_fusion";
+
+export interface EvalRunRequestPayload {
+  evalType: EvalType;
+  configOverrides?: Record<string, unknown>;
+}
+
+export interface EvalJobResponsePayload {
+  jobId: string;
+  status: string;
+}
+
+export interface EvalJobStatusPayload {
+  jobId: string;
+  status: "queued" | "running" | "completed" | "failed" | string;
+  createdAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  error?: string | null;
+  progress: Record<string, unknown>;
+}
+
+export interface EvalJobResultPayload {
+  jobId: string;
+  status: string;
+  result: {
+    summary?: Record<string, unknown>;
+    result?: unknown;
+    [key: string]: unknown;
+  } | null;
+}
+
 async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -191,6 +223,21 @@ export async function fusionReid(payload: FusionReIDRequestPayload): Promise<Fus
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function submitEval(payload: EvalRunRequestPayload): Promise<EvalJobResponsePayload> {
+  return fetchApi<EvalJobResponsePayload>('/v1/eval/run', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getEvalStatus(jobId: string): Promise<EvalJobStatusPayload> {
+  return fetchApi<EvalJobStatusPayload>(`/v1/eval/${encodeURIComponent(jobId)}/status`);
+}
+
+export async function getEvalResult(jobId: string): Promise<EvalJobResultPayload> {
+  return fetchApi<EvalJobResultPayload>(`/v1/eval/${encodeURIComponent(jobId)}/result`);
 }
 
 // ============================================================================

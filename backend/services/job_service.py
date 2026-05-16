@@ -1,7 +1,6 @@
 """Small crash-safe in-memory job queue for local backend tasks.
 
-Phase 2a adds the infrastructure only. Eval submission endpoints and concrete
-script runners are intentionally left for Phase 2c.
+Phase 2a added the infrastructure. Phase 2c uses it for local eval runners.
 """
 
 from __future__ import annotations
@@ -123,7 +122,7 @@ class JobService:
             if asyncio.iscoroutine(output):
                 output = await output
             job.result = output if isinstance(output, dict) else {"value": output}
-            job.status = "succeeded"
+            job.status = "completed"
             job.progress = {"stage": "finished"}
         except Exception as exc:  # noqa: BLE001 - persisted error is intentionally sanitized
             job.status = "failed"

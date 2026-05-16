@@ -15,6 +15,7 @@ router = APIRouter()
 @router.get("/api/models", response_model=ModelListResponse)
 def get_models(
     task_type: Optional[str] = Query(default=None),
+    dataset: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     include_dead_ends: bool = Query(default=False),
 ) -> ModelListResponse:
@@ -23,6 +24,7 @@ def get_models(
         success=True,
         data=list_models(
             task_type=task_type,
+            dataset=dataset,
             status=status,
             include_dead_ends=include_dead_ends,
         ),

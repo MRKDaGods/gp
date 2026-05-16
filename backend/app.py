@@ -20,6 +20,7 @@ from backend.routers import (
     datasets,
     detections,
     export,
+    eval,
     frames,
     health,
     locations,
@@ -68,6 +69,7 @@ app.include_router(runs.router)
 app.include_router(datasets.router)
 app.include_router(models.router)
 app.include_router(reid.router)
+app.include_router(eval.router)
 app.include_router(pipeline.router)
 app.include_router(search.router)
 app.include_router(timeline.router)

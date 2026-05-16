@@ -131,6 +131,7 @@ def get_model(model_id: str) -> Optional[ModelEntry]:
 def list_models(
     *,
     task_type: Optional[str] = None,
+    dataset: Optional[str] = None,
     status: Optional[str] = None,
     include_dead_ends: bool = False,
 ) -> List[ModelEntry]:
@@ -140,6 +141,8 @@ def list_models(
         if model.status == "dead_end" and not include_dead_ends:
             continue
         if task_type is not None and model.task_type != task_type:
+            continue
+        if dataset is not None and model.dataset != dataset:
             continue
         if status is not None and model.status != status:
             continue

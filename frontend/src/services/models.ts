@@ -72,6 +72,7 @@ export interface ModelEntry {
 
 export interface ModelFilters {
   task_type?: ModelTaskType;
+  dataset?: DatasetName;
   status?: ModelStatus;
   include_dead_ends?: boolean;
 }
@@ -105,6 +106,7 @@ async function fetchRegistry<T>(endpoint: string): Promise<T> {
 export async function fetchModels(filters: ModelFilters = {}): Promise<ModelEntry[]> {
   const params = new URLSearchParams();
   if (filters.task_type) params.set("task_type", filters.task_type);
+  if (filters.dataset) params.set("dataset", filters.dataset);
   if (filters.status) params.set("status", filters.status);
   if (filters.include_dead_ends) params.set("include_dead_ends", "true");
 

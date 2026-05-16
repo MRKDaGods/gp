@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "@/components/ui/toaster";
+import { DatasetSwitcher } from "@/components/DatasetSwitcher";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -42,6 +43,7 @@ export default function RootLayout({
         className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased h-full min-h-0`}
       >
         <Providers>
+          <DatasetSwitcher />
           {children}
           <Toaster />
         </Providers>
