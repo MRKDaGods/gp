@@ -21,6 +21,12 @@ interface ModelPickerProps {
   selectedId: string | null;
   onSelect: (modelId: string | null) => void;
   onModelChange?: (model: ModelEntry | null) => void;
+  taskType?: ModelTaskType;
+  multiSelect?: boolean;
+  selectedIds?: string[];
+  onMultiSelect?: (modelIds: string[]) => void;
+  allowUnavailableSelection?: boolean;
+  compact?: boolean;
 }
 
 const TASK_LABELS: Record<ModelTaskType, string> = {
@@ -68,7 +74,8 @@ function getKernelHref(ref: string): string {
   return ref;
 }
 
-function getDisabledReason(model: ModelEntry): string | null {
+function getDisabledReason(model: ModelEntry, allowUnavailableSelection = false): string | null {
+  if (allowUnavailableSelection) return null;
   if (!model.runnable_locally) return "This registry entry is Kaggle-only or metadata-only.";
   if (model.missing_checkpoints.length > 0) {
     return `Missing weights: ${model.missing_checkpoints.join(", ")}`;
@@ -77,7 +84,17 @@ function getDisabledReason(model: ModelEntry): string | null {
   return null;
 }
 
-export function ModelPicker({ selectedId, onSelect, onModelChange }: ModelPickerProps) {
+export function ModelPicker({
+  selectedId,
+  onSelect,
+  onModelChange,
+  taskType,
+  multiSelect = false,
+  selectedIds = [],
+  onMultiSelect,
+  allowUnavailableSelection = false,
+  compact = false,
+}: ModelPickerProps) {
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showDeadEnds, setShowDeadEnds] = useState(false);
@@ -89,7 +106,7 @@ export function ModelPicker({ selectedId, onSelect, onModelChange }: ModelPicker
       setIsLoading(true);
       setError(null);
       const status = statusFilter === "all" ? undefined : statusFilter;
-      const entries = await fetchModels({ status, include_dead_ends: showDeadEnds });
+      const entries = await fetchModels({ task_type: taskType, status, include_dead_ends: showDeadEnds });
       setModels(entries);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load model registry");
@@ -97,7 +114,7 @@ export function ModelPicker({ selectedId, onSelect, onModelChange }: ModelPicker
     } finally {
       setIsLoading(false);
     }
-  }, [showDeadEnds, statusFilter]);
+  }, [showDeadEnds, statusFilter, taskType]);
 
   useEffect(() => {
     void loadModels();
@@ -118,6 +135,14 @@ export function ModelPicker({ selectedId, onSelect, onModelChange }: ModelPicker
       models: models.filter((model) => model.task_type === taskType),
     })).filter((group) => group.models.length > 0);
   }, [models]);
+
+  const toggleMulti = useCallback((modelId: string) => {
+    if (!onMultiSelect) return;
+    const next = selectedIds.includes(modelId)
+      ? selectedIds.filter((id) => id !== modelId)
+      : [...selectedIds, modelId];
+    onMultiSelect(next);
+  }, [onMultiSelect, selectedIds]);
 
   return (
     <TooltipProvider>
@@ -147,7 +172,7 @@ export function ModelPicker({ selectedId, onSelect, onModelChange }: ModelPicker
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            {selectedId && (
+            {!multiSelect && selectedId && (
               <Button type="button" variant="ghost" size="sm" onClick={() => onSelect(null)}>
                 Use legacy config
               </Button>
@@ -191,9 +216,9 @@ export function ModelPicker({ selectedId, onSelect, onModelChange }: ModelPicker
             </div>
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {group.models.map((model) => {
-                const isSelected = selectedId === model.id;
-                const disabledReason = getDisabledReason(model);
-                const metrics = model.metrics.slice(0, 2);
+                const isSelected = multiSelect ? selectedIds.includes(model.id) : selectedId === model.id;
+                const disabledReason = getDisabledReason(model, allowUnavailableSelection);
+                const metrics = model.metrics.slice(0, compact ? 1 : 2);
 
                 return (
                   <Card
@@ -204,7 +229,7 @@ export function ModelPicker({ selectedId, onSelect, onModelChange }: ModelPicker
                       model.status === "dead_end" && "opacity-75"
                     )}
                   >
-                    <CardContent className="space-y-4 p-4">
+                    <CardContent className={cn("space-y-4 p-4", compact && "space-y-3 p-3")}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 space-y-1">
                           <p className={cn("font-semibold leading-snug", model.status === "dead_end" && "line-through")}>
@@ -240,7 +265,7 @@ export function ModelPicker({ selectedId, onSelect, onModelChange }: ModelPicker
                         ))}
                       </div>
 
-                      <p className="line-clamp-3 text-sm text-muted-foreground">{model.description}</p>
+                      {!compact && <p className="line-clamp-3 text-sm text-muted-foreground">{model.description}</p>}
 
                       <div className="flex flex-wrap items-center gap-2">
                         {model.requirements.gpu_required && (
@@ -284,9 +309,9 @@ export function ModelPicker({ selectedId, onSelect, onModelChange }: ModelPicker
                             type="button"
                             size="sm"
                             variant={isSelected ? "default" : "outline"}
-                            onClick={() => onSelect(isSelected ? null : model.id)}
+                            onClick={() => multiSelect ? toggleMulti(model.id) : onSelect(isSelected ? null : model.id)}
                           >
-                            {isSelected ? "Selected" : "Select"}
+                            {isSelected ? "Selected" : multiSelect ? "Add" : "Select"}
                           </Button>
                         )}
                       </div>
