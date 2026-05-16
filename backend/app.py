@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import UPLOAD_DIR, OUTPUT_DIR
+from backend.services.job_service import job_service
 from backend.services.pipeline_service import _background_precompute_dataset
 from backend.services.video_service import _scan_startup_videos
 
@@ -24,6 +25,7 @@ from backend.routers import (
     locations,
     models,
     pipeline,
+    reid,
     results,
     runs,
     search,
@@ -65,6 +67,7 @@ app.include_router(frames.router)
 app.include_router(runs.router)
 app.include_router(datasets.router)
 app.include_router(models.router)
+app.include_router(reid.router)
 app.include_router(pipeline.router)
 app.include_router(search.router)
 app.include_router(timeline.router)
@@ -85,4 +88,6 @@ async def _on_startup() -> None:
         asyncio.get_event_loop().set_exception_handler(_win_exc_handler)
 
     _scan_startup_videos()
+    job_service.load_jobs()
+    job_service.start_worker()
     asyncio.create_task(_background_precompute_dataset())
