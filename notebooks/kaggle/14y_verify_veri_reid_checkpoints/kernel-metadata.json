@@ -13,13 +13,11 @@
     "thanhnguyenle/data-aicity-2023-track-2",
     "yahiaakhalafallah/mtmc-weights",
     "gumfreddy/mtmc-weights",
-    "mrkdagods/mtmc-weights",
-    "yahiaakhalafallah/13-clip-senet-train"
+    "mrkdagods/mtmc-weights"
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "yahiaakhalafallah/09v-veri-776-eval-transreid-rerank",
-    "gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema"
+    "yahiaakhalafallah/13-clip-senet-train"
   ],
   "model_sources": []
 }
