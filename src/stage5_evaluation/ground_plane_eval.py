@@ -151,11 +151,18 @@ def _posid_to_ground(pos_id: int) -> Tuple[float, float]:
 
 def load_gt_ground_positions(
     annotations_dir: Path,
+    calibrations: Optional[Dict[str, Dict[str, np.ndarray]]] = None,
+    image_size: Tuple[int, int] = (1920, 1080),
 ) -> Dict[int, List[Tuple[int, float, float]]]:
     """Load GT ground-plane positions per frame.
 
     Returns: {frame_id: [(person_id, gx, gy), ...]}
     """
+    if calibrations is None:
+        logger.warning(
+            "GT will not be filtered to in-camera positions; recall may be under-counted"
+        )
+
     gt: Dict[int, List[Tuple[int, float, float]]] = {}
     json_files = sorted(glob.glob(str(annotations_dir / "*.json")))
 
@@ -166,14 +173,43 @@ def load_gt_ground_positions(
 
         data = json.load(open(jf))
         positions = []
+        seen_person_ids = set()
         for p in data:
             pid = p["personID"]
             pos_id = p["positionID"]
             gx, gy = _posid_to_ground(pos_id)
+            if calibrations is not None and not _is_ground_point_in_any_camera(
+                gx, gy, calibrations, image_size
+            ):
+                continue
+            if pid in seen_person_ids:
+                continue
+            seen_person_ids.add(pid)
             positions.append((pid, gx, gy))
         gt[frame_id] = positions
 
     return gt
+
+
+def _is_ground_point_in_any_camera(
+    gx: float,
+    gy: float,
+    calibrations: Dict[str, Dict[str, np.ndarray]],
+    image_size: Tuple[int, int],
+) -> bool:
+    """Return whether a WILDTRACK ground point projects inside any camera."""
+    width, height = image_size
+    for cal in calibrations.values():
+        rvec, _ = cv2.Rodrigues(cal["R"])
+        for z_cm in (0.0, 175.0):
+            point = np.array([[[gx, gy, z_cm]]], dtype=np.float64)
+            image_points, _ = cv2.projectPoints(
+                point, rvec, cal["tvec"], cal["K"], None
+            )
+            u, v = image_points.reshape(-1, 2)[0]
+            if 0 <= u < width and 0 <= v < height:
+                return True
+    return False
 
 
 # ── Prediction building ───────────────────────────────────────────────────
@@ -330,15 +366,20 @@ def evaluate_ground_plane(
         name="ground_plane",
     )
 
+    num_objects = int(summary["num_objects"].iloc[0])
+    false_positives = int(summary["num_false_positives"].iloc[0])
+    misses = int(summary["num_misses"].iloc[0])
+    moda = 0.0 if num_objects == 0 else 1.0 - (misses + false_positives) / num_objects
+
     return {
-        "moda": float(summary["mota"].iloc[0]),  # In motmetrics, 'mota' IS moda for detection
+        "moda": float(moda),
         "modp": float(summary["motp"].iloc[0]),
         "idf1": float(summary["idf1"].iloc[0]),
         "precision": float(summary["precision"].iloc[0]),
         "recall": float(summary["recall"].iloc[0]),
         "id_switches": int(summary["num_switches"].iloc[0]),
-        "false_positives": int(summary["num_false_positives"].iloc[0]),
-        "misses": int(summary["num_misses"].iloc[0]),
+        "false_positives": false_positives,
+        "misses": misses,
     }
 
 
@@ -380,7 +421,7 @@ def evaluate_wildtrack_ground_plane(
     logger.info(f"Loaded calibrations for {len(cals)} cameras: {sorted(cals.keys())}")
 
     # Load GT
-    gt = load_gt_ground_positions(annotations_dir)
+    gt = load_gt_ground_positions(annotations_dir, calibrations=cals)
     if frame_range is not None:
         fmin, fmax = frame_range
         gt = {fid: pos for fid, pos in gt.items() if fmin <= fid <= fmax}
