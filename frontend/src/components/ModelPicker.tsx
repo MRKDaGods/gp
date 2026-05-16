@@ -12,8 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDatasetStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { fetchModels, type ModelEntry, type ModelStatus, type ModelTaskType } from "@/services/models";
+import { fetchModels, type DatasetName, type ModelEntry, type ModelStatus, type ModelTaskType } from "@/services/models";
 
 type StatusFilter = "all" | "production" | "research";
 
@@ -27,6 +28,7 @@ interface ModelPickerProps {
   onMultiSelect?: (modelIds: string[]) => void;
   allowUnavailableSelection?: boolean;
   compact?: boolean;
+  respectDatasetFilter?: boolean;
 }
 
 const TASK_LABELS: Record<ModelTaskType, string> = {
@@ -94,19 +96,28 @@ export function ModelPicker({
   onMultiSelect,
   allowUnavailableSelection = false,
   compact = false,
+  respectDatasetFilter,
 }: ModelPickerProps) {
+  const selectedDataset = useDatasetStore((state) => state.selectedDataset);
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showDeadEnds, setShowDeadEnds] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const datasetFilter = respectDatasetFilter ?? taskType !== "single_cam_reid";
+
   const loadModels = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
       const status = statusFilter === "all" ? undefined : statusFilter;
-      const entries = await fetchModels({ task_type: taskType, status, include_dead_ends: showDeadEnds });
+      const entries = await fetchModels({
+        task_type: taskType,
+        dataset: datasetFilter ? (selectedDataset as DatasetName) : undefined,
+        status,
+        include_dead_ends: showDeadEnds,
+      });
       setModels(entries);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load model registry");
@@ -114,7 +125,7 @@ export function ModelPicker({
     } finally {
       setIsLoading(false);
     }
-  }, [showDeadEnds, statusFilter, taskType]);
+  }, [datasetFilter, selectedDataset, showDeadEnds, statusFilter, taskType]);
 
   useEffect(() => {
     void loadModels();
