@@ -215,6 +215,13 @@ def run_stage5(
             from src.stage5_evaluation.ground_plane_eval import (
                 evaluate_wildtrack_ground_plane,
             )
+            pred_frames = sorted({
+                frame.frame_id
+                for trajectory in trajectories
+                for tracklet in trajectory.tracklets
+                for frame in tracklet.frames
+            })
+            frame_range = (min(pred_frames), max(pred_frames)) if pred_frames else None
             logger.info("Running WILDTRACK ground-plane evaluation (published protocol)")
             gp_result = evaluate_wildtrack_ground_plane(
                 trajectories=trajectories,
@@ -223,6 +230,7 @@ def run_stage5(
                 conf_threshold=float(gp_eval_cfg.get("conf_threshold", 0.25)),
                 match_threshold_cm=float(gp_eval_cfg.get("match_threshold_cm", 50.0)),
                 nms_radius_cm=float(gp_eval_cfg.get("nms_radius_cm", 50.0)),
+                frame_range=frame_range,
             )
         else:
             logger.warning(
