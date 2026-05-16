@@ -324,7 +324,7 @@ def build_clipsenet_model(checkpoint: Path, device: str) -> torch.nn.Module:
 
     actual_device = _normalise_device(device)
     checkpoint_path = checkpoint.expanduser().resolve()
-    state_dict, _checkpoint_kind, inferred_num_classes = load_checkpoint(checkpoint_path)
+    state_dict, _checkpoint_kind, inferred_num_classes = load_checkpoint(checkpoint_path, map_location=actual_device)
     model = build_clip_senet(num_classes=inferred_num_classes).to(actual_device)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     if missing_keys or unexpected_keys:
@@ -386,6 +386,7 @@ def extract_clipsenet_v6_images(
     return _l2_normalize(np.concatenate(features, axis=0))
 
 
+@torch.no_grad()
 def extract_clipsenet_features(
     model: torch.nn.Module,
     items: list[dict[str, Any]],

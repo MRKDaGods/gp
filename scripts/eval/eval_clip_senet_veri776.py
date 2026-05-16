@@ -9,6 +9,7 @@ logic are lifted from the notebook with CLI/output plumbing around them.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 import logging
 import re
@@ -39,6 +40,115 @@ FILENAME_RE = re.compile(r"^(?P<pid>-?\d+)_c(?P<camid>\d+)")
 RERANK_K1_VALUES = [10, 20, 30, 50]
 RERANK_K2_VALUES = [3, 6, 10, 15]
 RERANK_LAMBDAS = [0.1, 0.2, 0.3, 0.5, 0.7]
+SMOKE_MAX_QUERIES = 50
+SMOKE_MAX_GALLERY = 200
+
+
+@contextmanager
+def _cpu_safe_hub_deserialization():
+    original_hub_loader = torch.hub.load_state_dict_from_url
+    original_model_zoo_loader = None
+    try:
+        import torch.utils.model_zoo as model_zoo
+        original_model_zoo_loader = model_zoo.load_url
+    except Exception:  # noqa: BLE001 - model_zoo is best-effort compatibility
+        model_zoo = None
+
+    def load_state_dict_from_url_cpu(*args, **kwargs):
+        kwargs.setdefault("map_location", "cpu")
+        return original_hub_loader(*args, **kwargs)
+
+    def load_url_cpu(*args, **kwargs):
+        kwargs.setdefault("map_location", "cpu")
+        return original_model_zoo_loader(*args, **kwargs)
+
+    torch.hub.load_state_dict_from_url = load_state_dict_from_url_cpu
+    if model_zoo is not None and original_model_zoo_loader is not None:
+        model_zoo.load_url = load_url_cpu
+    try:
+        yield
+    finally:
+        torch.hub.load_state_dict_from_url = original_hub_loader
+        if model_zoo is not None and original_model_zoo_loader is not None:
+            model_zoo.load_url = original_model_zoo_loader
+
+
+def resolve_subset_limits(smoke: bool, max_queries: int | None, max_gallery: int | None) -> tuple[int | None, int | None]:
+    if smoke:
+        return max_queries or SMOKE_MAX_QUERIES, max_gallery or SMOKE_MAX_GALLERY
+    return max_queries, max_gallery
+
+
+def limit_items(items: list[dict], max_items: int | None, label: str) -> list[dict]:
+    if max_items is None:
+        return items
+    if max_items <= 0:
+        raise ValueError(f"--max-{label} must be positive when provided")
+    return items[:max_items]
+
+
+def item_camid(item: dict) -> int:
+    return int(item.get("camid", item.get("parsed_camid", item.get("sie_index", -1))))
+
+
+def select_valid_eval_subset(
+    query_items: list[dict],
+    gallery_items: list[dict],
+    max_queries: int | None,
+    max_gallery: int | None,
+) -> tuple[list[dict], list[dict]]:
+    if max_queries is None and max_gallery is None:
+        return query_items, gallery_items
+    if max_queries is not None and max_queries <= 0:
+        raise ValueError("--max-queries must be positive when provided")
+    if max_gallery is not None and max_gallery <= 0:
+        raise ValueError("--max-gallery must be positive when provided")
+
+    target_queries = max_queries or len(query_items)
+    target_gallery = max_gallery or len(gallery_items)
+    selected_queries: list[dict] = []
+    selected_pids: set[int] = set()
+    for query in query_items:
+        query_pid = int(query["pid"])
+        if query_pid in selected_pids:
+            continue
+        query_camid = item_camid(query)
+        has_valid_match = any(int(gallery["pid"]) == query_pid and item_camid(gallery) != query_camid for gallery in gallery_items)
+        if has_valid_match:
+            selected_queries.append(query)
+            selected_pids.add(query_pid)
+        if len(selected_queries) >= target_queries:
+            break
+
+    if not selected_queries:
+        selected_queries = limit_items(query_items, max_queries, "queries")
+
+    query_pid_camids = {(int(query["pid"]), item_camid(query)) for query in selected_queries}
+    selected_gallery: list[dict] = []
+    selected_paths: set[str] = set()
+    for query in selected_queries:
+        query_pid = int(query["pid"])
+        query_camid = item_camid(query)
+        for gallery in gallery_items:
+            gallery_path = str(gallery["path"])
+            if gallery_path in selected_paths:
+                continue
+            if int(gallery["pid"]) == query_pid and item_camid(gallery) != query_camid:
+                selected_gallery.append(gallery)
+                selected_paths.add(gallery_path)
+                break
+    for gallery in gallery_items:
+        if len(selected_gallery) >= target_gallery:
+            break
+        gallery_path = str(gallery["path"])
+        if gallery_path in selected_paths:
+            continue
+        if (int(gallery["pid"]), item_camid(gallery)) in query_pid_camids:
+            continue
+        selected_gallery.append(gallery)
+        selected_paths.add(gallery_path)
+
+    return selected_queries, selected_gallery
 
 
 @dataclass(frozen=True)
@@ -191,7 +301,8 @@ class ResNet101IBNBranch(nn.Module):
 
         pretrained_tag = "imagenet" if pretrained else None
         try:
-            raw_model = constructor(pretrained=pretrained_tag)
+            with _cpu_safe_hub_deserialization():
+                raw_model = constructor(pretrained=pretrained_tag)
         except Exception as exc:  # noqa: BLE001 - keep fallback chain moving
             logger.warning(
                 "Appearance branch loader 'pretrainedmodels' failed for '%s': %s",
@@ -213,12 +324,13 @@ class ResNet101IBNBranch(nn.Module):
         self, pretrained: bool
     ) -> tuple[nn.Module, LoadedBackboneInfo] | None:
         try:
-            raw_model = torch.hub.load(
-                "XingangPan/IBN-Net",
-                self._IBN_MODEL,
-                pretrained=pretrained,
-                trust_repo=True,
-            )
+            with _cpu_safe_hub_deserialization():
+                raw_model = torch.hub.load(
+                    "XingangPan/IBN-Net",
+                    self._IBN_MODEL,
+                    pretrained=pretrained,
+                    trust_repo=True,
+                )
         except Exception as exc:  # noqa: BLE001 - keep fallback chain moving
             logger.warning(
                 "Appearance branch loader 'torch.hub' failed for '{}': {}",
@@ -620,15 +732,15 @@ def build_clip_senet(num_classes: int, **kwargs) -> CLIPSENet:
     return CLIPSENet(num_classes=num_classes, **kwargs)
 
 
-def torch_load(path: Path):
+def torch_load(path: Path, map_location: str | torch.device = "cpu"):
     try:
-        return torch.load(path, map_location="cpu", weights_only=False)
+        return torch.load(path, map_location=map_location, weights_only=False)
     except TypeError:
-        return torch.load(path, map_location="cpu")
+        return torch.load(path, map_location=map_location)
 
 
-def load_checkpoint(path: Path):
-    payload = torch_load(path)
+def load_checkpoint(path: Path, map_location: str | torch.device = "cpu"):
+    payload = torch_load(path, map_location=map_location)
     if isinstance(payload, dict) and "model_state" in payload:
         state_dict = payload["model_state"]
         checkpoint_kind = "payload:model_state"
@@ -724,7 +836,7 @@ def build_veri_loaders(veri_root: Path, image_size: tuple[int, int], batch_size:
 
 def build_clipsenet_model(checkpoint: Path, device: str) -> nn.Module:
     checkpoint_path = checkpoint.expanduser().resolve()
-    state_dict, _checkpoint_kind, inferred_num_classes = load_checkpoint(checkpoint_path)
+    state_dict, _checkpoint_kind, inferred_num_classes = load_checkpoint(checkpoint_path, map_location=device)
     model = build_clip_senet(num_classes=inferred_num_classes).to(device)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     if missing_keys or unexpected_keys:
@@ -989,6 +1101,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=64, help="Eval batch size")
     parser.add_argument("--img-size", type=int, nargs=2, metavar=("H", "W"), default=list(IMAGE_SIZE), help="Input image size")
     parser.add_argument("--output-json", type=Path, required=True, help="Path to write metric JSON")
+    parser.add_argument("--smoke", action="store_true", help="Run a fast 50 query x 200 gallery validation subset")
+    parser.add_argument("--max-queries", type=int, default=None, help="Limit query images for fast validation")
+    parser.add_argument("--max-gallery", type=int, default=None, help="Limit gallery images for fast validation")
     rerank_group = parser.add_mutually_exclusive_group()
     rerank_group.add_argument("--rerank", dest="rerank", action="store_true", help="Enable notebook k-reciprocal rerank sweep")
     rerank_group.add_argument("--no-rerank", dest="rerank", action="store_false", help="Disable rerank sweep")
@@ -1015,7 +1130,7 @@ def main() -> None:
     veri_root = args.veri_root.expanduser().resolve()
     output_json = args.output_json.expanduser().resolve()
 
-    state_dict, checkpoint_kind, inferred_num_classes = load_checkpoint(checkpoint_path)
+    state_dict, checkpoint_kind, inferred_num_classes = load_checkpoint(checkpoint_path, map_location=args.device)
     print("DEVICE:", args.device)
     print("CHECKPOINT_PATH:", checkpoint_path)
     print("CHECKPOINT_KIND:", checkpoint_kind)
@@ -1028,9 +1143,15 @@ def main() -> None:
         image_size=image_size,
         batch_size=args.batch_size,
     )
+    max_queries, max_gallery = resolve_subset_limits(args.smoke, args.max_queries, args.max_gallery)
+    query_items, gallery_items = select_valid_eval_subset(query_items, gallery_items, max_queries, max_gallery)
+    if not query_items or not gallery_items:
+        raise RuntimeError(f"VeRi subset is empty: query={len(query_items)} gallery={len(gallery_items)}")
     print("VERI_ROOT:", veri_root)
     print(f"Query:   {len(query_items):,} images, {query_ids} IDs")
     print(f"Gallery: {len(gallery_items):,} images, {gallery_ids} IDs")
+    if args.smoke or max_queries is not None or max_gallery is not None:
+        print(f"SMOKE/SUBSET: max_queries={max_queries}, max_gallery={max_gallery}")
 
     qf, q_pids, q_camids, _q_paths = extract_clipsenet_features(
         model,
@@ -1054,6 +1175,14 @@ def main() -> None:
     base_distmat = compute_distance_matrix(qf, gf, metric="cosine")
     base_mAP, base_cmc = eval_market1501(base_distmat, q_pids, g_pids, q_camids, g_camids)
     output = to_metric_dict(base_mAP, base_cmc)
+    output["metadata"] = {
+        "smoke": bool(args.smoke),
+        "max_queries": max_queries,
+        "max_gallery": max_gallery,
+        "query_count": int(len(query_items)),
+        "gallery_count": int(len(gallery_items)),
+        "not_for_accuracy_reporting": bool(args.smoke or max_queries is not None or max_gallery is not None),
+    }
     print_metrics("Base cosine", output)
 
     if args.rerank:

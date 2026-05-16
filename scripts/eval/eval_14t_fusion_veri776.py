@@ -30,6 +30,7 @@ from eval_clip_senet_veri776 import (  # noqa: E402
     build_clipsenet_model,
     extract_clipsenet_features,
     parse_veri_split as parse_clipsenet_split,
+    select_valid_eval_subset as select_clipsenet_eval_subset,
 )
 from src.training.evaluate_reid import eval_market1501  # noqa: E402
 
@@ -37,6 +38,22 @@ from src.training.evaluate_reid import eval_market1501  # noqa: E402
 RERANK_CANONICAL = {"k1": 80, "k2": 15, "lambda_value": 0.2}
 AQE_K = 3
 WEIGHTS = [round(i / 10, 1) for i in range(11)]
+SMOKE_MAX_QUERIES = 50
+SMOKE_MAX_GALLERY = 200
+
+
+def resolve_subset_limits(smoke: bool, max_queries: int | None, max_gallery: int | None) -> tuple[int | None, int | None]:
+    if smoke:
+        return max_queries or SMOKE_MAX_QUERIES, max_gallery or SMOKE_MAX_GALLERY
+    return max_queries, max_gallery
+
+
+def limit_items(items: list[dict], max_items: int | None, label: str) -> list[dict]:
+    if max_items is None:
+        return items
+    if max_items <= 0:
+        raise ValueError(f"--max-{label} must be positive when provided")
+    return items[:max_items]
 
 
 def l2_normalize(features: np.ndarray, eps: float = 1e-12) -> np.ndarray:
@@ -252,6 +269,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-drift-parents", action="store_true")
     parser.add_argument("--weights-sweep", action="store_true")
     parser.add_argument("--concat-sweep", action="store_true")
+    parser.add_argument("--smoke", action="store_true", help="Run a fast 50 query x 200 gallery validation subset")
+    parser.add_argument("--max-queries", type=int, default=None, help="Limit query images for fast validation")
+    parser.add_argument("--max-gallery", type=int, default=None, help="Limit gallery images for fast validation")
     return parser.parse_args()
 
 
@@ -275,11 +295,21 @@ def main() -> None:
     g_cs_items, _ = parse_clipsenet_split(gallery_dir)
     q_tr_items, _ = parse_09v_split(query_dir)
     g_tr_items, _ = parse_09v_split(gallery_dir)
+    max_queries, max_gallery = resolve_subset_limits(args.smoke, args.max_queries, args.max_gallery)
+    q_cs_items, g_cs_items = select_clipsenet_eval_subset(q_cs_items, g_cs_items, max_queries, max_gallery)
+    q_tr_by_path = {str(item["path"]): item for item in q_tr_items}
+    g_tr_by_path = {str(item["path"]): item for item in g_tr_items}
+    q_tr_items = [q_tr_by_path[str(item["path"])] for item in q_cs_items]
+    g_tr_items = [g_tr_by_path[str(item["path"])] for item in g_cs_items]
+    if not q_cs_items or not g_cs_items:
+        raise RuntimeError(f"VeRi subset is empty: query={len(q_cs_items)} gallery={len(g_cs_items)}")
     validate_alignment("query parser", [item["path"] for item in q_cs_items], [item["path"] for item in q_tr_items])
     validate_alignment("gallery parser", [item["path"] for item in g_cs_items], [item["path"] for item in g_tr_items])
 
     print(f"Query images: {len(q_cs_items):,}")
     print(f"Gallery images: {len(g_cs_items):,}")
+    if args.smoke or max_queries is not None or max_gallery is not None:
+        print(f"SMOKE/SUBSET: max_queries={max_queries}, max_gallery={max_gallery}")
     clipsenet = build_clipsenet_model(args.clipsenet_checkpoint, args.device)
     transreid = build_09v_model(args.transreid_checkpoint, args.device)
 
@@ -417,6 +447,12 @@ def main() -> None:
                 "k2": int(args.rerank_k2),
                 "lambda_value": float(args.rerank_lambda),
             },
+            "smoke": bool(args.smoke),
+            "max_queries": max_queries,
+            "max_gallery": max_gallery,
+            "query_count": int(len(q_cs_items)),
+            "gallery_count": int(len(g_cs_items)),
+            "not_for_accuracy_reporting": bool(args.smoke or max_queries is not None or max_gallery is not None),
         },
         "score_fusion": {
             "cosine": raw_cosine,
