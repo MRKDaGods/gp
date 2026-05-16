@@ -366,15 +366,20 @@ def evaluate_ground_plane(
         name="ground_plane",
     )
 
+    num_objects = int(summary["num_objects"].iloc[0])
+    false_positives = int(summary["num_false_positives"].iloc[0])
+    misses = int(summary["num_misses"].iloc[0])
+    moda = 0.0 if num_objects == 0 else 1.0 - (misses + false_positives) / num_objects
+
     return {
-        "moda": float(summary["mota"].iloc[0]),  # In motmetrics, 'mota' IS moda for detection
+        "moda": float(moda),
         "modp": float(summary["motp"].iloc[0]),
         "idf1": float(summary["idf1"].iloc[0]),
         "precision": float(summary["precision"].iloc[0]),
         "recall": float(summary["recall"].iloc[0]),
         "id_switches": int(summary["num_switches"].iloc[0]),
-        "false_positives": int(summary["num_false_positives"].iloc[0]),
-        "misses": int(summary["num_misses"].iloc[0]),
+        "false_positives": false_positives,
+        "misses": misses,
     }
 
 

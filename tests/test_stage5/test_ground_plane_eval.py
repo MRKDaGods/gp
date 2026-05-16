@@ -2,7 +2,7 @@ import json
 
 import numpy as np
 
-from src.stage5_evaluation.ground_plane_eval import load_gt_ground_positions
+from src.stage5_evaluation.ground_plane_eval import evaluate_ground_plane, load_gt_ground_positions
 
 
 def _pos_id(gx: float, gy: float) -> int:
@@ -50,3 +50,15 @@ def test_load_gt_ground_positions_filters_to_camera_visibility(tmp_path) -> None
     gt = load_gt_ground_positions(annotations_dir, calibrations=calibrations)
 
     assert gt[0] == [(1, 0.0, 0.0)]
+
+
+def test_ground_plane_moda_excludes_id_switches() -> None:
+    gt = {frame_id: [(1, float(frame_id), 0.0)] for frame_id in range(6)}
+    pred = {frame_id: [(frame_id + 10, float(frame_id), 0.0)] for frame_id in range(6)}
+
+    metrics = evaluate_ground_plane(gt, pred, threshold_cm=50.0)
+
+    assert metrics["id_switches"] == 5
+    assert metrics["misses"] == 0
+    assert metrics["false_positives"] == 0
+    assert metrics["moda"] == 1.0
