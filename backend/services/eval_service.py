@@ -20,6 +20,7 @@ class EvalSpec:
     eval_type: str
     script: Path
     defaults: dict[str, Any]
+    cli_flag_style: str = "hyphen"
     boolean_flags: dict[str, tuple[str, str]] = field(default_factory=dict)
     allowed_overrides: set[str] = field(default_factory=set)
 
@@ -61,6 +62,7 @@ EVAL_SPECS: dict[str, EvalSpec] = {
     "cityflow_transreid": EvalSpec(
         eval_type="cityflow_transreid",
         script=_repo_path("scripts/eval_cityflowv2_reid.py"),
+        cli_flag_style="underscore",
         defaults={
             "weights": _repo_path("models/reid/transreid_cityflowv2_best.pth"),
             "data_root": _repo_path("data/raw/cityflowv2"),
@@ -68,8 +70,9 @@ EVAL_SPECS: dict[str, EvalSpec] = {
             "device": "cpu",
             "batch_size": 64,
             "num_workers": 0,
-            "img_size": [224, 224],
-            "max_crops": 10,
+            "img_size": [256, 256],
+            "max_crops": 2,
+            "max_ids": 32,
             "qe_k": 0,
             "rerank": True,
             "k1": 20,
@@ -86,6 +89,7 @@ EVAL_SPECS: dict[str, EvalSpec] = {
             "num_workers",
             "img_size",
             "max_crops",
+            "max_ids",
             "qe_k",
             "rerank",
             "k1",
@@ -210,7 +214,7 @@ class EvalService:
                 if flag:
                     command.append(flag)
                 continue
-            command.append(f"--{key.replace('_', '-')}")
+            command.append(_cli_flag(key, spec.cli_flag_style))
             command.extend(_stringify_cli_values(value))
         command.extend(["--output-json", str(result_path)])
         return command
@@ -233,6 +237,14 @@ def _stringify_cli_values(value: Any) -> list[str]:
     if isinstance(value, (list, tuple)):
         return [str(item) for item in value]
     return [str(value)]
+
+
+def _cli_flag(key: str, style: str) -> str:
+    if style == "underscore":
+        return f"--{key}"
+    if style == "hyphen":
+        return f"--{key.replace('_', '-')}"
+    raise ValueError(f"Unsupported CLI flag style: {style}")
 
 
 def _tail_text(path: Path, limit: int = 2000) -> str:

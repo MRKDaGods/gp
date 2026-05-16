@@ -118,7 +118,10 @@ class JobService:
             handler = self.handlers.get(job.eval_type)
             if handler is None:
                 raise ValueError(f"No job handler registered for eval_type={job.eval_type!r}")
-            output = handler(job.payload, job)
+            if asyncio.iscoroutinefunction(handler):
+                output = handler(job.payload, job)
+            else:
+                output = await asyncio.to_thread(handler, job.payload, job)
             if asyncio.iscoroutine(output):
                 output = await output
             job.result = output if isinstance(output, dict) else {"value": output}

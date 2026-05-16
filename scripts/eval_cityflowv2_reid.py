@@ -45,6 +45,7 @@ CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
 
 DATA_ROOT = "data/raw/cityflowv2"
+CITYFLOW_NUM_CAMERAS = 59
 CAMERAS = [
     "S01_c001",
     "S01_c002",
@@ -237,6 +238,16 @@ def build_reid_split(
     return query, gallery
 
 
+def limit_vehicle_ids(
+    all_crops: Dict[int, Dict[str, List[str]]],
+    max_ids: int,
+) -> Dict[int, Dict[str, List[str]]]:
+    if max_ids <= 0 or len(all_crops) <= max_ids:
+        return all_crops
+    selected_ids = sorted(all_crops)[:max_ids]
+    return {vehicle_id: all_crops[vehicle_id] for vehicle_id in selected_ids}
+
+
 # ── Step 3: Dataset & transforms ─────────────────────────────────────────
 
 
@@ -345,6 +356,7 @@ def main():
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--img_size", type=int, nargs=2, default=[224, 224], help="H W")
     parser.add_argument("--max_crops", type=int, default=10, help="Max crops per ID per camera")
+    parser.add_argument("--max_ids", type=int, default=0, help="Optional cap on evaluated vehicle IDs (0=all)")
     parser.add_argument(
         "--output-json",
         type=Path,
@@ -387,6 +399,8 @@ def main():
             parts = fname.split("_")
             tid = int(parts[0])
             cam = parts[1] + "_" + parts[2]
+            if len(all_crops[tid][cam]) >= args.max_crops:
+                continue
             all_crops[tid][cam].append(os.path.join(args.crop_dir, fname))
         all_crops = dict(all_crops)
         total = sum(sum(len(v) for v in c.values()) for c in all_crops.values())
@@ -397,6 +411,7 @@ def main():
             args.data_root, CAMERAS, args.crop_dir,
             max_crops_per_id_cam=args.max_crops,
         )
+    all_crops = limit_vehicle_ids(all_crops, args.max_ids)
 
     # ── 2. Build query/gallery ────────────────────────────────────────
     query_list, gallery_list = build_reid_split(all_crops)
@@ -418,7 +433,7 @@ def main():
     logger.info("Loading TransReID model ...")
     model = build_transreid(
         num_classes=1,
-        num_cameras=20,
+        num_cameras=CITYFLOW_NUM_CAMERAS,
         embed_dim=768,
         vit_model="vit_base_patch16_clip_224.openai",
         pretrained=False,
