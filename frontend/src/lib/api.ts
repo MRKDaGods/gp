@@ -79,6 +79,80 @@ class ApiError extends Error {
   }
 }
 
+export interface ReIDImageInputPayload {
+  id: string;
+  image_base64: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReIDRankedMatch {
+  galleryId: string;
+  rank: number;
+  score: number;
+  distance?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReIDQueryResult {
+  queryId: string;
+  matches: ReIDRankedMatch[];
+  latencyMs: number;
+}
+
+export interface SingleCamReIDRequestPayload {
+  modelId: string;
+  queries: ReIDImageInputPayload[];
+  gallery: ReIDImageInputPayload[];
+  topK?: number;
+  rerank?: boolean;
+  aqeK?: number;
+}
+
+export interface SingleCamReIDResponsePayload {
+  success: boolean;
+  modelId: string;
+  device: string;
+  featureDim: number;
+  queryCount: number;
+  galleryCount: number;
+  results: ReIDQueryResult[];
+  latencyMs: number;
+}
+
+export interface FusionReIDModelPayload {
+  modelId: string;
+  weight: number;
+}
+
+export interface FusionReIDComponentPayload {
+  modelId: string;
+  weight: number;
+  featureDim: number;
+  results: ReIDQueryResult[];
+}
+
+export interface FusionReIDRequestPayload {
+  models: FusionReIDModelPayload[];
+  queries: ReIDImageInputPayload[];
+  gallery: ReIDImageInputPayload[];
+  topK?: number;
+  rerank?: boolean;
+  aqeK?: number;
+}
+
+export interface FusionReIDResponsePayload {
+  success: boolean;
+  modelIds: string[];
+  weights: number[];
+  device: string;
+  queryCount: number;
+  galleryCount: number;
+  results: ReIDQueryResult[];
+  components: FusionReIDComponentPayload[];
+  warnings: string[];
+  latencyMs: number;
+}
+
 async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -103,6 +177,20 @@ async function fetchApi<T>(
   }
 
   return response.json();
+}
+
+export async function singleCamReid(payload: SingleCamReIDRequestPayload): Promise<SingleCamReIDResponsePayload> {
+  return fetchApi<SingleCamReIDResponsePayload>('/v1/reid/single_cam', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fusionReid(payload: FusionReIDRequestPayload): Promise<FusionReIDResponsePayload> {
+  return fetchApi<FusionReIDResponsePayload>('/v1/reid/fusion', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 // ============================================================================
