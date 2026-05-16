@@ -1,0 +1,69 @@
+# 14t VeRi-776 single-camera fusion config
+# This is NOT a CityFlow MTMC pipeline override. The fusion is single-cam-only.
+# See docs/findings.md section 14t (WIN) and section 14u (CityFlow DEAD END).
+
+veri776_14t_fusion:
+  task_type: single_cam_reid
+  primary_reid:
+    name: transreid_09v_v17
+    checkpoint: models/reid/vehicle_transreid_vit_base_veri776.pth
+    stream: global  # 768-d; concat_patch_flip is 1536-d, weaker for this fusion
+    img_size: [224, 224]
+  secondary_reid:
+    name: clipsenet_v6
+    checkpoint: models/reid/clipsenet_v6_veri776_best.pth
+    img_size: [320, 320]
+  fusion:
+    type: score_level
+    formula: "w_clipsenet * S_clipsenet + (1 - w_clipsenet) * S_transreid"
+    w_clipsenet: 0.7
+  postprocessing:
+    aqe:
+      k: 3
+      iterations: 1
+    rerank:
+      k1: 80
+      k2: 15
+      lambda: 0.2
+  expected_metrics:
+    map: 0.9330
+    r1: 0.9845
+    tolerance: 0.005
+  provenance:
+    source_kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
+    docs: docs/findings.md  # section 14t
+    spec: docs/subagent-specs/14t-veri-clipsenet-transreid-fusion.md# 14t VeRi-776 single-camera fusion config
+# This is NOT a CityFlow MTMC pipeline override. The fusion is single-cam-only.
+# See docs/findings.md section 14t (WIN) and section 14u (CityFlow DEAD END).
+
+veri776_14t_fusion:
+  task_type: single_cam_reid
+  primary_reid:
+    name: transreid_09v_v17
+    checkpoint: models/reid/vehicle_transreid_vit_base_veri776.pth
+    stream: global  # 768-d; concat_patch_flip is 1536-d, weaker for this fusion
+    img_size: [224, 224]
+  secondary_reid:
+    name: clipsenet_v6
+    checkpoint: models/reid/clipsenet_v6_veri776_best.pth
+    img_size: [320, 320]
+  fusion:
+    type: score_level
+    formula: "w_clipsenet * S_clipsenet + (1 - w_clipsenet) * S_transreid"
+    w_clipsenet: 0.7
+  postprocessing:
+    aqe:
+      k: 3
+      iterations: 1
+    rerank:
+      k1: 80
+      k2: 15
+      lambda: 0.2
+  expected_metrics:
+    map: 0.9330
+    r1: 0.9845
+    tolerance: 0.005
+  provenance:
+    source_kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
+    docs: docs/findings.md  # section 14t
+    spec: docs/subagent-specs/14t-veri-clipsenet-transreid-fusion.md
