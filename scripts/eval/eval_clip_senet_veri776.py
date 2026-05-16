@@ -997,6 +997,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+from src.serving import reid_loaders as _shared_reid_loaders
+
+build_clipsenet_model = _shared_reid_loaders.build_clipsenet_model
+build_clip_senet_model = _shared_reid_loaders.build_clip_senet_model
+extract_clipsenet_features = _shared_reid_loaders.extract_clipsenet_features
+parse_veri_split = _shared_reid_loaders.parse_veri_split
+
+
 def main() -> None:
     args = parse_args()
     if args.device == "cuda" and not torch.cuda.is_available():
@@ -1024,8 +1032,20 @@ def main() -> None:
     print(f"Query:   {len(query_items):,} images, {query_ids} IDs")
     print(f"Gallery: {len(gallery_items):,} images, {gallery_ids} IDs")
 
-    qf, q_pids, q_camids = extract_features(model, query_loader, args.device)
-    gf, g_pids, g_camids = extract_features(model, gallery_loader, args.device)
+    qf, q_pids, q_camids, _q_paths = extract_clipsenet_features(
+        model,
+        query_items,
+        image_size,
+        args.batch_size,
+        args.device,
+    )
+    gf, g_pids, g_camids, _g_paths = extract_clipsenet_features(
+        model,
+        gallery_items,
+        image_size,
+        args.batch_size,
+        args.device,
+    )
     all_features = np.concatenate([qf, gf], axis=0)
 
     print("qf:", qf.shape)

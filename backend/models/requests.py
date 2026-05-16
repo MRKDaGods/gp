@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PipelineRunRequest(BaseModel):
@@ -33,3 +33,43 @@ class SearchRequest(BaseModel):
     galleryRunId: Optional[str] = None
     trackletId: int
     topK: int = 20
+
+
+class ReIDImageInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: Optional[str] = None
+    image_base64: Optional[str] = None
+    path: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> "ReIDImageInput":
+        source_count = int(self.image_base64 is not None) + int(self.path is not None)
+        if source_count != 1:
+            raise ValueError("Exactly one of image_base64 or path must be supplied")
+        return self
+
+
+class SingleCamReIDRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_id: str = Field(alias="modelId")
+    queries: List[ReIDImageInput]
+    gallery: List[ReIDImageInput]
+    top_k: int = Field(default=20, alias="topK", ge=1, le=100)
+    rerank: bool = False
+    aqe_k: int = Field(default=0, alias="aqeK", ge=0, le=20)
+    normalize: bool = True
+
+    @model_validator(mode="after")
+    def _validate_collection_sizes(self) -> "SingleCamReIDRequest":
+        if not self.queries:
+            raise ValueError("At least one query image is required")
+        if not self.gallery:
+            raise ValueError("At least one gallery image is required")
+        if len(self.queries) > 50:
+            raise ValueError("At most 50 query images are accepted")
+        if len(self.gallery) > 500:
+            raise ValueError("At most 500 gallery images are accepted")
+        return self

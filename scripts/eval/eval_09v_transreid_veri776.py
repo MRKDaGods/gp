@@ -968,7 +968,17 @@ def run_full_eval(
     return results
 
 
+from src.serving import reid_loaders as _shared_reid_loaders
+
+build_09v_model = _shared_reid_loaders.build_09v_model
+build_transreid_model = _shared_reid_loaders.build_transreid_model
+extract_09v_features_with_metadata = _shared_reid_loaders.extract_09v_features_with_metadata
+extract_09v_features = _shared_reid_loaders.extract_09v_features
+parse_split = _shared_reid_loaders.parse_split
+
+
 def parse_args() -> argparse.Namespace:
+
     parser = argparse.ArgumentParser(
         description="Evaluate the 09v TransReID ViT-B/16 CLIP checkpoint on VeRi-776.",
     )
