@@ -40,9 +40,10 @@ EVAL_SPECS: dict[str, EvalSpec] = {
             "batch_size": 64,
             "rerank": True,
             "aqe_k": 2,
+            "smoke": True,
         },
-        boolean_flags={"rerank": ("--rerank", "--no-rerank")},
-        allowed_overrides={"checkpoint", "veri_root", "device", "batch_size", "rerank", "aqe_k"},
+        boolean_flags={"rerank": ("--rerank", "--no-rerank"), "smoke": ("--smoke", "")},
+        allowed_overrides={"checkpoint", "veri_root", "device", "batch_size", "rerank", "aqe_k", "smoke", "full", "max_queries", "max_gallery"},
     ),
     "veri776_clipsenet": EvalSpec(
         eval_type="veri776_clipsenet",
@@ -55,9 +56,10 @@ EVAL_SPECS: dict[str, EvalSpec] = {
             "img_size": [320, 320],
             "rerank": False,
             "aqe_k": 1,
+            "smoke": True,
         },
-        boolean_flags={"rerank": ("--rerank", "--no-rerank")},
-        allowed_overrides={"checkpoint", "veri_root", "device", "batch_size", "img_size", "rerank", "aqe_k"},
+        boolean_flags={"rerank": ("--rerank", "--no-rerank"), "smoke": ("--smoke", "")},
+        allowed_overrides={"checkpoint", "veri_root", "device", "batch_size", "img_size", "rerank", "aqe_k", "smoke", "full", "max_queries", "max_gallery"},
     ),
     "cityflow_transreid": EvalSpec(
         eval_type="cityflow_transreid",
@@ -117,11 +119,13 @@ EVAL_SPECS: dict[str, EvalSpec] = {
             "skip_drift_parents": True,
             "weights_sweep": False,
             "concat_sweep": False,
+            "smoke": True,
         },
         boolean_flags={
             "skip_drift_parents": ("--skip-drift-parents", ""),
             "weights_sweep": ("--weights-sweep", ""),
             "concat_sweep": ("--concat-sweep", ""),
+            "smoke": ("--smoke", ""),
         },
         allowed_overrides={
             "transreid_checkpoint",
@@ -140,6 +144,10 @@ EVAL_SPECS: dict[str, EvalSpec] = {
             "skip_drift_parents",
             "weights_sweep",
             "concat_sweep",
+            "smoke",
+            "full",
+            "max_queries",
+            "max_gallery",
         },
     ),
 }
@@ -206,6 +214,11 @@ class EvalService:
 
     def _build_command(self, spec: EvalSpec, overrides: dict[str, Any], result_path: Path) -> list[str]:
         values = {**spec.defaults, **overrides}
+        full_eval = bool(values.pop("full", False))
+        if full_eval:
+            values["smoke"] = False
+        elif values.get("smoke") and "rerank" in values and "rerank" not in overrides:
+            values["rerank"] = False
         command = [sys.executable, str(spec.script)]
         for key, value in values.items():
             if key in spec.boolean_flags:

@@ -74,12 +74,92 @@ RERANK_CONFIGS = [
     {"label": "k1=50,k2=15,lambda=0.2", "k1": 50, "k2": 15, "lambda_value": 0.2},
     {"label": "k1=80,k2=15,lambda=0.2", "k1": 80, "k2": 15, "lambda_value": 0.2},
 ]
+SMOKE_MAX_QUERIES = 50
+SMOKE_MAX_GALLERY = 200
 EXACT_08_BASELINE_RERANK = {"label": "k1=20,k2=6,lambda=0.3", "k1": 20, "k2": 6, "lambda_value": 0.3}
 GUARANTEED_AQE_RERANK_PAIRS: list[dict[str, Any]] = []
 DEFAULT_BUNDLE_SPECS = [("single_flip", False), ("concat_patch_flip", False)]
 DEVICE = "cpu"
 PIN_MEMORY = False
 NUM_WORKERS = 4
+
+
+def resolve_subset_limits(smoke: bool, max_queries: int | None, max_gallery: int | None) -> tuple[int | None, int | None]:
+    if smoke:
+        return max_queries or SMOKE_MAX_QUERIES, max_gallery or SMOKE_MAX_GALLERY
+    return max_queries, max_gallery
+
+
+def limit_items(items: list[dict[str, Any]], max_items: int | None, label: str) -> list[dict[str, Any]]:
+    if max_items is None:
+        return items
+    if max_items <= 0:
+        raise ValueError(f"--max-{label} must be positive when provided")
+    return items[:max_items]
+
+
+def item_camid(item: dict[str, Any]) -> int:
+    return int(item.get("parsed_camid", item.get("camid", item.get("sie_index", -1))))
+
+
+def select_valid_eval_subset(
+    query_items: list[dict[str, Any]],
+    gallery_items: list[dict[str, Any]],
+    max_queries: int | None,
+    max_gallery: int | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if max_queries is None and max_gallery is None:
+        return query_items, gallery_items
+    if max_queries is not None and max_queries <= 0:
+        raise ValueError("--max-queries must be positive when provided")
+    if max_gallery is not None and max_gallery <= 0:
+        raise ValueError("--max-gallery must be positive when provided")
+
+    target_queries = max_queries or len(query_items)
+    target_gallery = max_gallery or len(gallery_items)
+    selected_queries: list[dict[str, Any]] = []
+    selected_pids: set[int] = set()
+    for query in query_items:
+        query_pid = int(query["pid"])
+        if query_pid in selected_pids:
+            continue
+        query_camid = item_camid(query)
+        has_valid_match = any(int(gallery["pid"]) == query_pid and item_camid(gallery) != query_camid for gallery in gallery_items)
+        if has_valid_match:
+            selected_queries.append(query)
+            selected_pids.add(query_pid)
+        if len(selected_queries) >= target_queries:
+            break
+
+    if not selected_queries:
+        selected_queries = limit_items(query_items, max_queries, "queries")
+
+    query_pid_camids = {(int(query["pid"]), item_camid(query)) for query in selected_queries}
+    selected_gallery: list[dict[str, Any]] = []
+    selected_paths: set[str] = set()
+    for query in selected_queries:
+        query_pid = int(query["pid"])
+        query_camid = item_camid(query)
+        for gallery in gallery_items:
+            gallery_path = str(gallery["path"])
+            if gallery_path in selected_paths:
+                continue
+            if int(gallery["pid"]) == query_pid and item_camid(gallery) != query_camid:
+                selected_gallery.append(gallery)
+                selected_paths.add(gallery_path)
+                break
+    for gallery in gallery_items:
+        if len(selected_gallery) >= target_gallery:
+            break
+        gallery_path = str(gallery["path"])
+        if gallery_path in selected_paths:
+            continue
+        if (int(gallery["pid"]), item_camid(gallery)) in query_pid_camids:
+            continue
+        selected_gallery.append(gallery)
+        selected_paths.add(gallery_path)
+
+    return selected_queries, selected_gallery
 
 
 class VeRiDataset(Dataset):
@@ -702,6 +782,9 @@ def run_full_eval(
     batch_size: int,
     run_rerank: bool,
     output_aqe_k: int,
+    max_queries: int | None = None,
+    max_gallery: int | None = None,
+    smoke: bool = False,
 ) -> dict[str, Any]:
     LOGGER.info("weights=%s", weights_path)
     LOGGER.info("veri_root=%s", veri_root)
@@ -711,8 +794,13 @@ def run_full_eval(
         raise RuntimeError(f"No query jpg files found under {veri_root / 'image_query'}")
     if not gallery:
         raise RuntimeError(f"No gallery jpg files found under {veri_root / 'image_test'}")
-    LOGGER.info("Query: %s images, %s IDs", f"{len(query):,}", n_q)
-    LOGGER.info("Gallery: %s images, %s IDs", f"{len(gallery):,}", n_g)
+    query, gallery = select_valid_eval_subset(query, gallery, max_queries, max_gallery)
+    if not query or not gallery:
+        raise RuntimeError(f"VeRi subset is empty: query={len(query)} gallery={len(gallery)}")
+    LOGGER.info("Query: %s images, %s IDs", f"{len(query):,}", len({item["pid"] for item in query}))
+    LOGGER.info("Gallery: %s images, %s IDs", f"{len(gallery):,}", len({item["pid"] for item in gallery}))
+    if smoke or max_queries is not None or max_gallery is not None:
+        LOGGER.info("SMOKE/SUBSET: max_queries=%s max_gallery=%s", max_queries, max_gallery)
     LOGGER.info("First 5 (path, parsed_camid, sie_index) tuples: %s", [
         (item["path"], item["parsed_camid"], item["sie_index"])
         for item in (query + gallery)[:5]
@@ -764,6 +852,12 @@ def run_full_eval(
             "single_flip_batch_size": int(batch_size),
             "ten_crop_batch_size": TEN_CROP_BATCH_SIZE,
             "evaluated_feature_bundles": [bundle_name for bundle_name, _ in bundle_specs],
+            "smoke": bool(smoke),
+            "max_queries": max_queries,
+            "max_gallery": max_gallery,
+            "query_count": int(len(query)),
+            "gallery_count": int(len(gallery)),
+            "not_for_accuracy_reporting": bool(smoke or max_queries is not None or max_gallery is not None),
         },
         "feature_sets": {
             "ten_crop": {
@@ -987,6 +1081,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cuda", help="Evaluation device. 'cuda' maps to cuda:0.")
     parser.add_argument("--batch-size", type=int, default=SINGLE_FLIP_BATCH_SIZE, help="Batch size for feature extraction")
     parser.add_argument("--output-json", required=True, type=Path, help="Path to write JSON metrics")
+    parser.add_argument("--smoke", action="store_true", help="Run a fast 50 query x 200 gallery validation subset")
+    parser.add_argument("--max-queries", type=int, default=None, help="Limit query images for fast validation")
+    parser.add_argument("--max-gallery", type=int, default=None, help="Limit gallery images for fast validation")
     rerank_group = parser.add_mutually_exclusive_group()
     rerank_group.add_argument("--rerank", dest="rerank", action="store_true", help="Run the notebook rerank sweeps")
     rerank_group.add_argument("--no-rerank", dest="rerank", action="store_false", help="Skip rerank sweeps")
@@ -1014,12 +1111,16 @@ def main() -> None:
     if not (args.veri_root / "image_query").is_dir() or not (args.veri_root / "image_test").is_dir():
         raise FileNotFoundError(f"VeRi root must contain image_query/ and image_test/: {args.veri_root}")
 
+    max_queries, max_gallery = resolve_subset_limits(args.smoke, args.max_queries, args.max_gallery)
     results = run_full_eval(
         weights_path=args.checkpoint.resolve(),
         veri_root=args.veri_root.resolve(),
         batch_size=args.batch_size,
         run_rerank=bool(args.rerank),
         output_aqe_k=int(args.aqe_k),
+        max_queries=max_queries,
+        max_gallery=max_gallery,
+        smoke=bool(args.smoke),
     )
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     with args.output_json.open("w", encoding="utf-8") as handle:
