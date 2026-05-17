@@ -524,5 +524,5 @@ This is an inference-only fusion experiment, not a trained model.
 ### Known Limitations
 
 - Higher single-camera mAP did not transfer to better standalone MTMC; the best DINOv2 standalone MTMC result was 0.744 IDF1 despite mAP=86.79%.
-- The deployed tertiary checkpoint hosting remains partially unresolved in inventory docs: the producing kernel is known, but the hosted dataset was unresolved in the inventory pass.
+- The deployed tertiary checkpoint is hosted only via the producing kernel's output dataset yahiaakhalafallah/09s-dinov2-large-cityflowv2; it is not mirrored into any */mtmc-weights aggregate dataset, so downloads must reference the producing kernel directly.
 - 14g showed the tertiary TTA stream is saturated: adding scale views did not change the ID-switch floor relative to the 14e B1 plateau.
