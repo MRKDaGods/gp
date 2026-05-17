@@ -2,8 +2,11 @@
 
 Multi-camera tracking system for vehicles and humans on a city-wide scale. Processes offline video from multiple stationary cameras, performs detection, single-camera tracking, re-identification, and cross-camera association to produce global trajectories.
 
-## Architecture
+## 🚀 Quick start
 
+To launch the app, see [LAUNCH.md](LAUNCH.md). The short version: `python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload`, `cd frontend`, `npm run dev`.
+
+## Architecture
 ```
 Stage 0: Ingestion       → Frame extraction, preprocessing, format unification
 Stage 1: Tracking        → YOLO26 detection + BoxMOT per-camera tracking
