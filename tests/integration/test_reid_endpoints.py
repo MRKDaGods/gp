@@ -72,6 +72,60 @@ def test_single_cam_reid_happy_path(monkeypatch) -> None:
     assert matches[1]["score"] == 0.0
 
 
+def test_single_cam_reid_cityflow_transreid_happy_path(monkeypatch) -> None:
+    seen_model_ids = []
+    calls = {"extract": 0}
+
+    def fake_load_reid_model(model_id: str, device: str) -> LoadedReIDModel:
+        seen_model_ids.append(model_id)
+        return LoadedReIDModel(
+            model_id=model_id,
+            model=object(),
+            device=device,
+            checkpoint_path=__file__,
+            feature_dim=768,
+            loader="transreid_cityflow",
+            loaded_at=0.0,
+        )
+
+    def fake_extract_features(_loaded_model, images):
+        calls["extract"] += 1
+        assert len(images) == 1
+        features = np.zeros((1, 768), dtype=np.float32)
+        if calls["extract"] == 1:
+            features[0, 0] = 1.0
+        else:
+            features[0, 0] = 0.25
+            features[0, 1] = 0.75
+        return features
+
+    monkeypatch.setattr("backend.services.reid_service.load_reid_model", fake_load_reid_model)
+    monkeypatch.setattr("backend.services.reid_service.extract_features", fake_extract_features)
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/reid/single_cam",
+        json={
+            "modelId": "cityflow_transreid",
+            "queries": [{"id": "q0", "image_base64": _png_b64((255, 0, 0))}],
+            "gallery": [{"id": "g0", "image_base64": _png_b64((255, 0, 0))}],
+            "topK": 1,
+            "rerank": False,
+            "aqeK": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["modelId"] == "cityflow_transreid"
+    assert payload["featureDim"] == 768
+    assert payload["queryCount"] == 1
+    assert payload["galleryCount"] == 1
+    assert seen_model_ids == ["cityflow_transreid"]
+    assert calls["extract"] == 2
+
+
 def test_single_cam_reid_model_not_found() -> None:
     client = TestClient(app)
     response = client.post(

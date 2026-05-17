@@ -32,9 +32,11 @@ REGISTRY_PATH = PROJECT_ROOT / "configs" / "model_registry.yaml"
 CAMERA_PATTERN = re.compile(r"^(?P<pid>-?\d+)_c(?P<camid>\d+)")
 NUM_VERI_CAMERAS = 20
 SIE_NUM_CAMERAS = 20
+CITYFLOW_NUM_CAMERAS = 59
 CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
 TRANSREID_IMG_SIZE = (224, 224)
+CITYFLOW_TRANSREID_IMG_SIZE = (256, 256)
 CONCAT_PATCH_GEM_P = 3.0
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -167,24 +169,45 @@ def parse_veri_split(split_dir: Path) -> tuple[list[dict[str, Any]], int]:
     return items, len(pid_set)
 
 
-def _load_transreid(weights_path: Path, device: str) -> torch.nn.Module:
+def _load_transreid(
+    weights_path: Path,
+    device: str,
+    *,
+    num_cameras: int,
+    img_size: tuple[int, int],
+) -> torch.nn.Module:
     actual_device = _set_runtime(device)
     model = build_transreid(
         num_classes=1,
-        num_cameras=SIE_NUM_CAMERAS,
+        num_cameras=num_cameras,
         embed_dim=768,
         vit_model="vit_base_patch16_clip_224.openai",
         pretrained=False,
         weights_path=str(weights_path),
-        img_size=TRANSREID_IMG_SIZE,
+        img_size=img_size,
     )
     model._concat_patch = False
     model._gem_p = CONCAT_PATCH_GEM_P
+    model._serving_img_size = img_size
     return model.to(actual_device).eval()
 
 
 def build_09v_model(checkpoint: Path, device: str) -> torch.nn.Module:
-    return _load_transreid(checkpoint.expanduser().resolve(), device)
+    return _load_transreid(
+        checkpoint.expanduser().resolve(),
+        device,
+        num_cameras=SIE_NUM_CAMERAS,
+        img_size=TRANSREID_IMG_SIZE,
+    )
+
+
+def build_cityflow_transreid_model(checkpoint: Path, device: str) -> torch.nn.Module:
+    return _load_transreid(
+        checkpoint.expanduser().resolve(),
+        device,
+        num_cameras=CITYFLOW_NUM_CAMERAS,
+        img_size=CITYFLOW_TRANSREID_IMG_SIZE,
+    )
 
 
 def build_transreid_model(checkpoint: Path, device: str) -> torch.nn.Module:
@@ -208,8 +231,11 @@ def _transreid_view_batches_from_paths(paths: list[str], img_size: tuple[int, in
     return [torch.stack(base_views, dim=0), torch.stack(flip_views, dim=0)]
 
 
-def _transreid_view_batches_from_images(images: list[Image.Image]) -> list[torch.Tensor]:
-    base_views = [_resize_and_normalize(image.convert("RGB"), TRANSREID_IMG_SIZE) for image in images]
+def _transreid_view_batches_from_images(
+    images: list[Image.Image],
+    img_size: tuple[int, int] = TRANSREID_IMG_SIZE,
+) -> list[torch.Tensor]:
+    base_views = [_resize_and_normalize(image.convert("RGB"), img_size) for image in images]
     flip_views = [torch.flip(view, dims=[2]) for view in base_views]
     return [torch.stack(base_views, dim=0), torch.stack(flip_views, dim=0)]
 
@@ -303,12 +329,13 @@ def extract_transreid_09v_images(
 ) -> np.ndarray:
     _set_runtime(device)
     model.eval()
+    img_size = getattr(model, "_serving_img_size", TRANSREID_IMG_SIZE)
     batches: list[np.ndarray] = []
     for start in range(0, len(images), batch_size):
         chunk = images[start:start + batch_size]
         cam_tensor = torch.zeros(len(chunk), dtype=torch.long, device=_DEVICE)
         per_view_features = []
-        for view_batch in _transreid_view_batches_from_images(chunk):
+        for view_batch in _transreid_view_batches_from_images(chunk, img_size=img_size):
             view_batch = view_batch.to(_DEVICE, non_blocking=True)
             features = model(view_batch, cam_ids=cam_tensor)
             if isinstance(features, (tuple, list)):
@@ -444,6 +471,9 @@ def _load_reid_model_cached(model_id: str, device: str) -> LoadedReIDModel:
     if model_id == "veri776_09v_v17_transreid":
         model = build_09v_model(checkpoint, device)
         loader = "transreid_09v"
+    elif model_id == "cityflow_transreid":
+        model = build_cityflow_transreid_model(checkpoint, device)
+        loader = "transreid_cityflow"
     elif model_id == "veri776_clipsenet_v6":
         model = build_clipsenet_model(checkpoint, device)
         loader = "clipsenet_v6"
@@ -481,7 +511,7 @@ def extract_features(
 ) -> np.ndarray:
     if not images:
         raise ValueError("At least one image is required for feature extraction")
-    if loaded_model.loader == "transreid_09v":
+    if loaded_model.loader in {"transreid_09v", "transreid_cityflow"}:
         return extract_transreid_09v_images(
             loaded_model.model,
             images,
