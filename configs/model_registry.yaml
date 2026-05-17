@@ -71,6 +71,60 @@ models:
       verified_by: docs/models.md
     tombstone: null
 
+  - id: cityflow_transreid
+    name: CityFlowV2 TransReID single-camera reference
+    task_type: single_cam_reid
+    dataset: cityflowv2
+    description: CityFlowV2-trained TransReID ViT-B/16 CLIP primary feature extractor exposed for single-camera ReID smoke tests and verification.
+    metrics:
+      - name: map
+        value: 0.8153
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
+          line_ref: L748
+        note: CityFlowV2 ad-hoc ReID benchmark mAP for the augoverhaul + EMA training run.
+      - name: r1
+        value: 0.9241
+        verified: true
+        source:
+          kind: docs
+          path: docs/findings.md
+          kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
+          line_ref: L748
+        note: CityFlowV2 ad-hoc ReID benchmark Rank-1 for the base model in the augoverhaul + EMA run.
+    pipeline_config: null
+    model_overrides: []
+    checkpoint_refs:
+      - role: primary_reid
+        local_path: models/reid/transreid_cityflowv2_best.pth
+        expected_sha256: null
+        hosted:
+          - kaggle_dataset: yahiaakhalafallah/mtmc-weights
+            member: reid/transreid_cityflowv2_best.pth
+          - kaggle_dataset: gumfreddy/mtmc-weights
+            member: reid/transreid_cityflowv2_best.pth
+          - kaggle_dataset: mrkdagods/mtmc-weights
+            member: reid/transreid_cityflowv2_best.pth
+        source_training_kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
+        size_bytes: 346518635
+        on_disk: false
+    requirements:
+      gpu_required: false
+      min_vram_gb: 0
+      data_dependencies:
+        - cityflowv2
+    status: production
+    runnable_locally: false
+    notebook_or_kernel_ref: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
+    provenance:
+      created_at: '2026-05-17'
+      created_by_kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
+      verified_by: docs/findings.md
+    tombstone: null
+
   - id: vehicle_mtmc_14k_v1_k7
     name: Vehicle MTMC 14k v1 K7 R50-IBN research
     task_type: mtmc_vehicle

@@ -13,6 +13,7 @@ from backend.services.model_registry import get_registry, list_models, validate_
 REQUIRED_MODEL_IDS = {
     "vehicle_mtmc_14e_b1",
     "vehicle_mtmc_14k_v1_k7",
+    "cityflow_transreid",
     "person_mtmc_12b",
     "person_detector_12a_mvdetr",
     "veri776_14t_fusion",
@@ -50,6 +51,7 @@ def test_filter_by_task_type_works() -> None:
 
     assert models
     assert {model.task_type for model in models} == {"single_cam_reid"}
+    assert "cityflow_transreid" in {model.id for model in models}
     assert "veri776_14t_fusion" in {model.id for model in models}
 
 
