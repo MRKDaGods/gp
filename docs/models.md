@@ -30,9 +30,9 @@
 
 - Local file: models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth (NOT ON LOCAL DISK)
 - Deployed Kaggle file: vehicle_transreid_dinov2_large_cityflowv2_final.pth
-- Hosted: DATASET UNRESOLVED. Visible datasets across gumfreddy, mrkdagods, ali369, and yahiaakhalafallah only expose the mtmc-weights datasets, and none contains the DINOv2 tertiary checkpoint. The deployed path is a Kaggle notebook output source: /kaggle/input/09s-dinov2-large-cityflowv2/vehicle_transreid_dinov2_large_cityflowv2_final.pth.
+- Hosted: as the output of source kernel yahiaakhalafallah/09s-dinov2-large-cityflowv2 (Kaggle kernel-output dataset; not mirrored into any */mtmc-weights aggregate). Deployed path on Kaggle: /kaggle/input/09s-dinov2-large-cityflowv2/vehicle_transreid_dinov2_large_cityflowv2_final.pth. Registry record: configs/model_registry.yaml#L55-L57.
 - Source training: yahiaakhalafallah/09s-dinov2-large-cityflowv2 -> Kaggle notebook output source -> Stage 2 tertiary file. The local notebook defines vehicle_transreid_dinov2_large_cityflowv2_best.pth, vehicle_transreid_dinov2_large_cityflowv2_final.pth, and vehicle_transreid_dinov2_large_cityflowv2_summary.json.
-- Verified metric: UNVERIFIED. The kernel log was accessible but contained no mAP/R1 lines; the output API paged through crop images before the summary JSON and did not expose it in this pass.
+- Verified metric: mAP=86.79%, R1=96.15% (best epoch 115/120), recorded in docs/findings.md L408, L430, L571 from the 09s training kernel log.
 - Embedding dim: 1024D
 - Used at: Stage 2 tertiary, w_tertiary=0.525 in 14e B1
 - Yaml: configs/datasets/cityflowv2.yaml lines 120-130
@@ -89,7 +89,7 @@
 | Variant | Trained on | Best verified mAP / R1 | Source kernel | Deployed? | Notes |
 |---|---|---:|---|---|---|
 | ViT-B/16 CLIP 256px | CityFlowV2 | 0.8153 / 0.9241 | `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` | Yes - primary 14e B1 | AugOverhaul+EMA fine-tune; supersedes the older 80.14% / 92.27% documentation claim. R1 is verified from the retained kernel log, not the metadata JSON. |
-| ViT-B/16 CLIP 256px | VeRi-776 | 0.8997 / 0.9833 | `mrkdagods` 09v v17 | Yes - via 14t fusion | Checkpoint `vehicle_transreid_vit_base_veri776.pth`; one of the two 14t VeRi-776 experts. |
+| ViT-B/16 CLIP 256px | VeRi-776 | 0.8997 / 0.9833 | verifier `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` v17; checkpoint hosted in `mrkdagods/mtmc-weights` + `gumfreddy/mtmc-weights`; original training kernel not separately recorded | Yes - via 14t fusion | Checkpoint `vehicle_transreid_vit_base_veri776.pth`; one of the two 14t VeRi-776 experts. |
 | ViT-B/16 CLIP 384px | CityFlowV2 | 0.8014 / 0.9227 documented; primary artifact UNVERIFIED | `mrkdagods/09b-vehicle-reid-384px-vit-training-v2` | No - DEAD END | MTMC v43/v44 fell to 0.7585/0.7562, about -2.8pp; 384px features captured viewpoint-specific texture that harmed cross-camera association. |
 | ViT-L/14 CLIP | VeRi-776 | 0.8090 / 0.9690 base; 0.8795 / 0.9732 post-rerank | `mrkdagods/14p3-veri-vit-l-14-clip-clean-train` | No - probe only | Larger CLIP TransReID did not beat 09v. The earlier 14p mAP=1.0 signal was treated as overfitting/buggy and not a valid model claim. |
 
