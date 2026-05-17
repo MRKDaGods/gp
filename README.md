@@ -1,168 +1,176 @@
-# MTMC Tracker — Multi-Camera City-Wide Tracking System
+# MTMC Tracker
 
-Multi-camera tracking system for vehicles and humans on a city-wide scale. Processes offline video from multiple stationary cameras, performs detection, single-camera tracking, re-identification, and cross-camera association to produce global trajectories.
+MTMC Tracker is a multi-camera multi-target tracking system for vehicles and
+persons. It was developed as a graduation thesis project and evaluated on AI
+City Challenge 2022 Track 1 (CityFlowV2), WILDTRACK, and VeRi-776.
 
-## 🚀 Quick start
+## Status
 
-To launch the app, see [LAUNCH.md](LAUNCH.md). The short version: `python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload`, `cd frontend`, `npm run dev`.
+The main reproducible metrics currently tracked by the project are:
+
+- Vehicle MTMC on CityFlowV2: MTMC IDF1 0.77936. The AIC22 first-place
+  ensemble reports about 0.8486 IDF1, leaving a gap of about 6.9 percentage
+  points.
+- Person MTMC on WILDTRACK: IDF1 0.946. The project reference target is about
+  0.953 IDF1, leaving a gap of about 0.7 percentage points.
+- Person MTMC on WILDTRACK: MODA 0.903 for the ground-plane tracking operating
+  point.
+- Vehicle ReID on VeRi-776: TransReID ViT-B/16 CLIP mAP 89.97.
+- Vehicle ReID on VeRi-776: CLIP-SENet with rerank and AQE mAP 91.54.
+- Vehicle ReID on VeRi-776: TransReID x CLIP-SENet score fusion mAP 93.30.
+
+These numbers are recorded in `docs/findings.md` and
+`configs/model_registry.yaml`. The main research conclusion is that feature
+quality and cross-camera invariance are the limiting factors for MTMC IDF1.
+Association tuning has been tested extensively and does not close the remaining
+performance gap.
 
 ## Architecture
+
+The offline system is organized as a seven-stage file-based pipeline. Each
+stage reads artifacts from the previous stage and writes run-scoped outputs
+under `data/outputs/`.
+
+```text
+src/stage0/  Ingestion       Frames, preprocessing, dataset normalization
+src/stage1/  Tracking        YOLO26m detection and BoT-SORT tracking
+src/stage2/  Features        TransReID CLIP, HSV, and PCA whitening
+src/stage3/  Indexing        FAISS IndexFlatIP and SQLite metadata
+src/stage4/  Association     Similarity graph and NetworkX components
+src/stage5/  Evaluation      TrackEval IDF1, HOTA, MOTA, and MODA
+src/stage6/  Visualization   Annotated video, BEV, and timeline outputs
 ```
-Stage 0: Ingestion       → Frame extraction, preprocessing, format unification
-Stage 1: Tracking        → YOLO26 detection + BoxMOT per-camera tracking
-Stage 2: Features        → ReID embeddings (TransReID/OSNet) + HSV histograms + PCA
-Stage 3: Indexing        → FAISS vector index + SQLite metadata store
-Stage 4: Association     → Cross-camera matching via similarity graph + connected components
-Stage 5: Evaluation      → HOTA, IDF1, MOTA metrics via TrackEval
-Stage 6: Visualization   → Annotated videos, BEV maps, timeline views
-Apps:    Dashboard       → Next.js web UI, NL query, 3D simulation
+
+The repository also contains a live application stack. `backend/` is a FastAPI
+service layer for model registry access, ReID inference, fusion experiments,
+evaluation jobs, and pipeline orchestration. `frontend/` is the Next.js ATHAR
+dashboard used for interactive ReID search, model fusion, and evaluation
+workflows. The app uses the same model registry and local artifact layout as
+the offline pipeline.
+
+## Repository Layout
+
+```text
+configs/          OmegaConf YAML configuration and model registry entries
+backend/          FastAPI service, routers, schemas, and orchestration code
+frontend/         Next.js ATHAR dashboard
+src/core/         Shared data models, configuration loading, and utilities
+src/stage0/       Frame ingestion and preprocessing
+src/stage1/       Detection and single-camera tracking
+src/stage2/       ReID feature extraction and feature preprocessing
+src/stage3/       FAISS indexing and metadata storage
+src/stage4/       Cross-camera association
+src/stage5/       Evaluation metrics and format conversion
+src/stage6/       Visualization outputs
+src/serving/      ReID model loaders and LRU model cache used by the app
+src/apps/         Streamlit dashboard, NL query tools, and 3D simulation
+scripts/          CLI entry points, setup helpers, and verification scripts
+notebooks/kaggle/ GPU training, pipeline, and verifier notebooks
+tests/            Pytest test suite
+docs/findings.md  Research log, experiment outcomes, and metric claims
+data/             Local datasets and generated outputs, gitignored
+models/           Local model checkpoints, gitignored
 ```
 
 ## Setup
 
-First-time setup after cloning is three commands:
-
-```bash
-pip install -r requirements.txt
-python scripts/download_assets.py --all
-python scripts/verify_assets.py
-```
-
-Prerequisite: configure a Kaggle account and API token at `~/.kaggle/kaggle.json` before running the downloader. Kaggle documents the token flow at <https://www.kaggle.com/docs/api>.
-
-`scripts/download_assets.py --all` downloads the public model checkpoints and the optional VeRi-776 evaluation dataset into the paths used by the pipeline. CityFlowV2 is required for full MTMC evaluation but is not available as a complete public Kaggle dataset; download AI City Challenge 2022 Track 1 manually from <https://www.aicitychallenge.org/2022-data-and-evaluation/> and place it under `data/raw/cityflowv2/`.
-
-Plan for roughly 3 GB for the ReID checkpoints plus VeRi-776 data, and roughly 5 GB or more when keeping CityFlowV2 locally too. See [SETUP.md](SETUP.md) for the longer setup guide and selective download commands.
-
-## Quick Start
-
-### Backend (Python Pipeline)
-
-```bash
-# Install
-pip install -e .
-
-# Download required checkpoints and optional public eval data
-python scripts/download_assets.py --all
-
-# Run full pipeline
-python scripts/run_pipeline.py --config configs/default.yaml
-
-# Run a single stage
-python scripts/run_stage.py --config configs/default.yaml --stage 1
-
-# Run smoke test (tiny data, fast)
-python scripts/run_pipeline.py --config configs/default.yaml --smoke-test
-
-# Launch legacy Streamlit dashboard
-streamlit run src/apps/web_dashboard.py
-```
-
-### Frontend (Next.js Dashboard)
-
-```bash
-# Navigate to frontend directory
-cd frontend
-
-# Install dependencies
-npm install
-
-# Run development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-```
-
-The frontend will be available at `http://localhost:3000`.
-
-### App Layer
-
-The local app stack pairs a FastAPI backend in `backend/` with the Next.js ATHAR dashboard in `frontend/`. The backend exposes dataset-aware pipeline orchestration and timeline query APIs, while the frontend provides the staged upload, inference, review, and output workflow. GPU-heavy detection, tracking, and feature extraction still belong on Kaggle for full runs; the app layer is for local orchestration, review, and demos.
-
-## Frontend Features
-
-Modern Next.js dashboard with UniFi-style dark theme:
-
-1. **Splash Screen** → Animated logo → Main dashboard
-2. **Stage 0: Upload** → Drag-drop upload, video gallery, preview
-3. **Stage 1: Detection** → YOLO bounding boxes (red), auto-run on upload
-4. **Stage 2: Selection** → Click boxes to select (green), multi-select mode
-5. **Stage 3: Inference** → Location filters (Egypt hierarchy), DateTime picker
-6. **Stage 4: Timeline** → Clipchamp-style tracklet editor, split-screen video
-7. **Stage 5: Refinement** → Select reference frames, re-search, variable speed
-8. **Stage 6: Output** → Summarized video, grid view (1x1 to 5x5), statistics
-
-### Frontend Tech Stack
-
-- Next.js 14 + TypeScript + Tailwind CSS
-- shadcn/ui components
-- Zustand (state management)
-- TanStack Query (data fetching)
-- Video.js + Leaflet (future maps)
-
-## Project Structure
-
-```
-configs/          YAML configuration files
-src/core/         Shared data models, config loader, utilities
-src/stage0-6/     Pipeline stages (each with pipeline.py entry point)
-src/apps/         Applications (Streamlit dashboard, NL query, 3D sim)
-frontend/         Next.js web dashboard (NEW)
-scripts/          CLI entry points
-notebooks/kaggle/ Kaggle training notebooks (ReID models)
-tests/            pytest test suite
-docs/             Documentation for team and supervisor
-```
-
-## Future Steps
-
-1. **Local Demo Finalization**: Fully contain the app with local videos (Scene 2 subset for testing), local models, and self-hosted inference to ensure complete end-to-end functionality.
-2. **Full Dataset Processing**: Once verified with the Scene 2 subset, scale inference to support the full uncompressed dataset.
-3. **Cloud Deployment (Production)**: Decouple the monolithic app into a frontend client and a heavy backend server. The backend (inference engine and database) will run on a virtual machine or cloud infrastructure, while the UI will serve as a lightweight frontend connected via API.
-
-## Future: Map-Based Features
-
-When GPS/coordinate data is acquired:
-
-- **2D Interactive Map**: Vehicle paths visualization on Leaflet map
-- **Heatmap**: Vehicle density and common routes
-- **Spatiotemporal Constraints**:
-  - Max speed slider (0-200 km/h) to filter impossible matches
-  - Search radius slider for maximum travel distance
-  - Time window configuration
-
-## Training (Kaggle)
-
-ReID models are trained on Kaggle due to GPU constraints. See `notebooks/kaggle/` for:
-1. `01_dataset_preparation.ipynb` — Prepare Market-1501, VeRi-776
-2. `02_person_reid_training.ipynb` — Train person ReID (OSNet / ResNet50-IBN)
-3. `03_vehicle_reid_training.ipynb` — Train vehicle ReID
-4. `04_advanced_reid_training.ipynb` — TransReID (stretch goal)
-
-After training, download weights to `models/reid/`.
+Use Python 3.10 or newer. On this project, the local virtual environment is
+`.venv`. Install dependencies, configure Kaggle credentials, download public
+checkpoints and optional datasets, and verify the local asset layout with the
+setup scripts. See `SETUP.md` for asset download details and `LAUNCH.md` for
+backend and frontend launch commands. CityFlowV2 must be downloaded manually
+from the AI City Challenge site because the complete dataset is not available
+as a public Kaggle dataset.
 
 ## Datasets
 
-| Dataset | Purpose | Source |
-|---|---|---|
-| Market-1501 | Person ReID training | Kaggle |
-| VeRi-776 | Vehicle ReID training | Kaggle |
-| AI City Challenge 2023 | Vehicle MTMC evaluation | Kaggle |
-| MOT17 | Single-camera tracking validation | Kaggle |
+- CityFlowV2 / AI City Challenge 2022 Track 1: used for vehicle detection,
+  tracking, ReID fine-tuning, MTMC association, and evaluation. Download it
+  from the AI City Challenge data portal:
+  <https://www.aicitychallenge.org/2022-data-and-evaluation/>.
+- WILDTRACK: used for person detection, ground-plane tracking, and
+  multi-camera person MTMC evaluation. Use the WILDTRACK project dataset
+  release.
+- VeRi-776: used for single-camera vehicle ReID training and evaluation for
+  TransReID, CLIP-SENet, and fusion experiments. Public mirrors are available;
+  the setup script uses a Kaggle-hosted copy for optional local evaluation.
 
-## Team
+## Models
 
-See `docs/team_workload.md` for work division across 4 developers.
+The deployed and research checkpoint entries are registered in
+`configs/model_registry.yaml`. The registry contains checkpoint paths, hosted
+artifact references, model status, and verification metadata.
 
-## Documentation
+| Registry entry | Training data | Headline metric |
+| --- | --- | --- |
+| `vehicle_mtmc_14e_b1` | CityFlowV2 | MTMC IDF1 0.77936 |
+| `person_mtmc_12b` | WILDTRACK | IDF1 0.946; MODA 0.903 |
+| `cityflow_transreid` | CityFlowV2 | single-camera mAP 81.53 |
+| `veri776_09v_v17_transreid` | VeRi-776 | mAP 89.97; R1 98.33 |
+| `veri776_clipsenet_v6` | VeRi-776 | rerank+AQE mAP 91.54 |
+| `veri776_14t_fusion` | VeRi-776 | mAP 93.30; R1 98.45 |
 
-- `docs/architecture.md` — System architecture with Mermaid diagrams
-- `docs/data_contracts.md` — Inter-stage data formats
-- `docs/dataset_guide.md` — Dataset preparation guide
-- `docs/setup_guide.md` — Environment setup
-- `docs/kaggle_training_guide.md` — Kaggle training instructions
-- `docs/team_workload.md` — Work division
+## Running The Pipeline
+
+The main entry point is `scripts/run_pipeline.py`:
+
+```bash
+python scripts/run_pipeline.py --config configs/default.yaml
+```
+
+Use `--stages` to run a subset of stages and `--run-id` to control the output
+directory. A small smoke path is available with:
+
+```bash
+python scripts/run_pipeline.py --config configs/default.yaml --smoke-test
+```
+
+GPU-heavy stages, especially detection, tracking, feature extraction, and ReID
+training, are intended to run on Kaggle for this project. Local development is
+used for code editing, CPU-friendly stages, app work, and tests.
+
+## Running The Live App
+
+The live stack consists of a FastAPI backend and the Next.js ATHAR frontend. It
+supports interactive ReID, multi-model score fusion, and standalone evaluation
+jobs. Use `LAUNCH.md` for the current two-terminal launch commands, available
+routes, and troubleshooting notes.
+
+## Tests
+
+Run the Python test suite with:
+
+```bash
+pytest tests/
+```
+
+Run the application end-to-end verifier with:
+
+```bash
+python scripts/test_phase2_e2e.py
+```
+
+Several Kaggle verifier kernels are used for metric-level reproduction and
+regression checks: 14v for CityFlowV2 14e B1 reproduction, 14w for WILDTRACK
+tracking, 14x for CityFlowV2 sibling variants, 14y for VeRi-776 ReID
+checkpoints, 14z for WILDTRACK MVDeTr detector evaluation, and 14aa for the 14t
+fusion path.
+
+## Research Findings
+
+The research record is maintained in `docs/findings.md`, with supporting detail
+in `docs/experiment-log.md`. The project has run more than 225 ablation
+experiments across feature extraction, score fusion, query expansion, FIC
+whitening, graph thresholds, network flow, tracklet filtering, and
+person-tracking variants. The recurring result is that MTMC IDF1 is limited
+mainly by feature quality and cross-camera invariance, not by additional
+association tuning.
+
+The paper direction documented in the repository is an efficiency and ablation
+study: one main model family reaches about 91 percent of the AIC22 first-place
+ensemble score while exposing which pipeline components are already saturated.
+
+## License
+
+The package metadata in `pyproject.toml` declares the project license as MIT. No
+standalone `LICENSE` file is currently present in the repository.
