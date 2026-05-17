@@ -65,8 +65,8 @@ The repo contains the 09v v17 verifier/evaluation notebook, not the original tra
 | Scope | R1 | R5 | R10 | mAP | IDF1 | HOTA | MOTA | IDSW | Kernel | Verification commit SHA |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
 | Best R1 row | 98.33 | 99.05 | 99.34 | 85.14 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` v17 | NOT RECORDED IN REPO — [searched: `docs/experiment-log.md`, `docs/models.md`, `configs/model_registry.yaml`] |
-| Best mAP row | 97.80 | NOT RECORDED IN REPO — [searched: `docs/experiment-log.md`, `docs/findings.md`, `scripts/eval/eval_09v_transreid_veri776.py`] | NOT RECORDED IN REPO — [searched: `docs/experiment-log.md`, `docs/findings.md`, `scripts/eval/eval_09v_transreid_veri776.py`] | 89.97 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` v17 | NOT RECORDED IN REPO — [searched: `docs/experiment-log.md`, `docs/models.md`, `configs/model_registry.yaml`] |
-| Joint row | 98.15 | NOT RECORDED IN REPO — [searched: `docs/experiment-log.md`, `docs/findings.md`, `scripts/eval/eval_09v_transreid_veri776.py`] | NOT RECORDED IN REPO — [searched: `docs/experiment-log.md`, `docs/findings.md`, `scripts/eval/eval_09v_transreid_veri776.py`] | 89.71 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` v17 | NOT RECORDED IN REPO — [searched: `docs/experiment-log.md`, `docs/models.md`, `configs/model_registry.yaml`] |
+| Best mAP row | 97.80 | 98.45 (recovered from Kaggle kernel `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` `veri776_eval_results_v10.json`) | 98.81 (recovered from Kaggle kernel `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` `veri776_eval_results_v10.json`) | 89.97 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` v17 | NOT RECORDED IN REPO — [searched: `docs/experiment-log.md`, `docs/models.md`, `configs/model_registry.yaml`, Kaggle pull `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` `kernel-metadata.json`, `09v-veri-776-eval-transreid-rerank.ipynb`, `veri776_eval_results_v10.json`] |
+| Joint row | 98.15 | 98.51 (recovered from Kaggle kernel `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` `veri776_eval_results_v10.json`) | 98.75 (recovered from Kaggle kernel `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` `veri776_eval_results_v10.json`) | 89.71 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` v17 | NOT RECORDED IN REPO — [searched: `docs/experiment-log.md`, `docs/models.md`, `configs/model_registry.yaml`, Kaggle pull `yahiaakhalafallah/09v-veri-776-eval-transreid-rerank` `kernel-metadata.json`, `09v-veri-776-eval-transreid-rerank.ipynb`, `veri776_eval_results_v10.json`] |
 
 ### Provenance
 
@@ -156,7 +156,7 @@ The repo contains the 09v v17 verifier/evaluation notebook, not the original tra
 
 - The v7 256x256/P=16 retrain regressed versus v6 and is closed.
 - VeRi-trained CLIP-SENet does not transfer to CityFlowV2 MTMC: 13d score-fusion degraded monotonically and standalone CityFlow MTMC reached only 0.6855 IDF1.
-- The paper-claim gap is plausibly tied to unavailable TinyCLIP weights and P100 batch/BN constraints, but the exact missing ingredient is NOT RECORDED IN REPO — [searched: `notebooks/kaggle/13_clip_senet_train/`, `docs/findings.md`, `docs/experiment-log.md`].
+- The paper-claim gap is plausibly tied to unavailable TinyCLIP weights and P100 batch/BN constraints, but the exact missing ingredient and R20 are NOT RECORDED IN REPO — [searched: `notebooks/kaggle/13_clip_senet_train/`, `docs/findings.md`, `docs/experiment-log.md`, Kaggle pull `yahiaakhalafallah/13-clip-senet-train` `vehicle_clip_senet_veri776_metadata.json`, `kernel-metadata.json`, `13-clip-senet-train.ipynb`].
 
 ## cityflow_transreid
 
@@ -184,9 +184,9 @@ The repo contains the 09v v17 verifier/evaluation notebook, not the original tra
 | Field | Value |
 |---|---|
 | dataset name + version | CityFlowV2 / AI City Challenge 2022 Track 1 |
-| ID count | 666 train IDs from CityFlowV2 cameras S01+S03+S04; exact train/test ID split beyond the benchmark construction is NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `configs/model_registry.yaml`, `docs/findings.md`, `docs/models.md`] |
-| image count | train image count NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `configs/model_registry.yaml`, `docs/findings.md`, `docs/models.md`] |
-| train/test split | CityFlowV2 ReID benchmark over S01+S03+S04 cameras; exact split file is NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `configs/model_registry.yaml`, `docs/findings.md`, `docs/models.md`] |
+| ID count | 466 train IDs and 200 eval IDs (recovered from Kaggle kernel `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` `vehicle_reid_cityflowv2_metadata.json`) |
+| image count | 38,537 train images, 909 query images, 15,472 gallery images (recovered from Kaggle kernel `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` `vehicle_reid_cityflowv2_metadata.json`) |
+| train/test split | CityFlowV2 ReID benchmark over the kernel's 59 listed cameras; exact split file is NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `configs/model_registry.yaml`, `docs/findings.md`, `docs/models.md`, Kaggle pull `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` `vehicle_reid_cityflowv2_metadata.json`] |
 
 ### Training Recipe
 
@@ -212,7 +212,7 @@ The repo contains the 09v v17 verifier/evaluation notebook, not the original tra
 
 | Scope | R1 | R5 | R10 | mAP | IDF1 | HOTA | MOTA | IDSW | Kernel | Verification commit SHA |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
-| Single-camera CityFlowV2 reference | 92.41 | NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `docs/findings.md`, `configs/model_registry.yaml`] | NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `docs/findings.md`, `configs/model_registry.yaml`] | 81.53 | N/A | N/A | N/A | N/A | `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` | NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `configs/model_registry.yaml`, `docs/models.md`] |
+| Single-camera CityFlowV2 reference | 92.41 | NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `docs/findings.md`, `configs/model_registry.yaml`, Kaggle pull `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` `vehicle_reid_cityflowv2_metadata.json`] | NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `docs/findings.md`, `configs/model_registry.yaml`, Kaggle pull `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` `vehicle_reid_cityflowv2_metadata.json`] | 81.53 | N/A | N/A | N/A | N/A | `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` | NOT RECORDED IN REPO — [searched: `exported_models/vehicle_reid_cityflowv2_metadata.json`, `configs/model_registry.yaml`, `docs/models.md`, Kaggle pull `gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema` `vehicle_reid_cityflowv2_metadata.json`] |
 | MTMC 14e B1 stack using this primary stream | N/A | N/A | N/A | N/A | 0.77936 | 0.5747 | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `docs/experiment-log.md`, `docs/_data/kaggle_kernel_summaries.json`] | 154 | `yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep`; verifier `yahiaakhalafallah/14v-verify-b1-from-yaml` | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `docs/experiment-log.md`, `configs/model_registry.yaml`] |
 
 ### Provenance
@@ -272,7 +272,7 @@ This is an inference-only fusion experiment, not a trained model.
 | epochs + warmup | N/A, inference-only |
 | loss functions | N/A, inference-only |
 | augmentations | TransReID single_flip feature extraction; CLIP-SENet standard evaluation resize/normalization |
-| hardware + approximate training time | T4, approximately 49.5 min runtime for the fusion sweep |
+| hardware + approximate training time | T4, runtime_sec=2971.8576 / 49.53 min for the fusion sweep (recovered from Kaggle kernel `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` `14t_summary.json`) |
 
 ### Inference Hyperparameters
 
@@ -287,8 +287,8 @@ This is an inference-only fusion experiment, not a trained model.
 
 | Scope | R1 | R5 | R10 | mAP | IDF1 | HOTA | MOTA | IDSW | Kernel | Verification commit SHA |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
-| Best score-fusion row | 98.45 | NOT RECORDED IN REPO — [searched: `scripts/eval/eval_14t_fusion_veri776.py`, `docs/findings.md`, `docs/experiment-log.md`, `docs/subagent-specs/14t-verifier.md`] | NOT RECORDED IN REPO — [searched: `scripts/eval/eval_14t_fusion_veri776.py`, `docs/findings.md`, `docs/experiment-log.md`, `docs/subagent-specs/14t-verifier.md`] | 93.30 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` | NOT RECORDED IN REPO — [searched: `scripts/eval/eval_14t_fusion_veri776.py`, `configs/model_registry.yaml`, `docs/models.md`] |
-| Best concat row | 98.27 | NOT RECORDED IN REPO — [searched: `scripts/eval/eval_14t_fusion_veri776.py`, `docs/findings.md`, `docs/experiment-log.md`, `docs/subagent-specs/14t-verifier.md`] | NOT RECORDED IN REPO — [searched: `scripts/eval/eval_14t_fusion_veri776.py`, `docs/findings.md`, `docs/experiment-log.md`, `docs/subagent-specs/14t-verifier.md`] | 93.19 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` | NOT RECORDED IN REPO — [searched: `scripts/eval/eval_14t_fusion_veri776.py`, `configs/model_registry.yaml`, `docs/models.md`] |
+| Best score-fusion row | 98.45 | 98.75 (recovered from Kaggle kernel `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` `14t_summary.json`) | 99.05 (recovered from Kaggle kernel `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` `14t_summary.json`) | 93.30 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` | NOT RECORDED IN REPO — [searched: `scripts/eval/eval_14t_fusion_veri776.py`, `configs/model_registry.yaml`, `docs/models.md`, Kaggle pull `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` `14t_summary.json`, `14t_fusion_results.json`, `kernel-metadata.json`, `14t-veri-fusion-clip-senet-x-transreid.ipynb`] |
+| Best concat row | 98.27 | 98.57 (recovered from Kaggle kernel `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` `14t_summary.json`) | 98.93 (recovered from Kaggle kernel `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` `14t_summary.json`) | 93.19 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` | NOT RECORDED IN REPO — [searched: `scripts/eval/eval_14t_fusion_veri776.py`, `configs/model_registry.yaml`, `docs/models.md`, Kaggle pull `yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid` `14t_summary.json`, `14t_fusion_results.json`, `kernel-metadata.json`, `14t-veri-fusion-clip-senet-x-transreid.ipynb`] |
 
 ### Provenance
 
@@ -417,10 +417,10 @@ This is an inference-only fusion experiment, not a trained model.
 |---|---|
 | optimizer + LR + schedule | Adam, base_lr=7e-4, backbone_lr=7e-5 (base_lr_ratio=0.1), OneCycleLR for 25 epochs, weight_decay=1e-4 |
 | batch size + sampling strategy | batch_size=1 |
-| epochs + warmup | 25 epochs for 12a v3; best MODA claim at epoch 20; warmup is implicit via OneCycleLR with no separate warmup epochs |
+| epochs + warmup | 25 epochs for 12a v3; best logged detector MODA occurs at epoch 17, while epoch 20 logs MODA=0.921; warmup is implicit via OneCycleLR with no separate warmup epochs (recovered from Kaggle kernel `gumfreddy/12a-wildtrack-mvdetr-training` `MVDeTr/logs/wildtrack/.../log.txt`) |
 | loss functions | CornerNet-style focal loss on heatmap plus L1 offset loss plus L1 size loss with size weight 0.1; per-view image losses alpha=1.0 |
-| augmentations | enabled via `--augmentation true`; exact upstream augmentation list is NOT RECORDED IN REPO — [searched: `notebooks/kaggle/12a_wildtrack_mvdetr/`, `docs/models.md`, `docs/pipeline-person.md`] |
-| hardware + approximate training time | Kaggle T4, approximately 4-6h training time |
+| augmentations | enabled via `--augmentation true`; upstream README describes view-coherent affine transformations on per-view inputs with inverse per-view feature maps for multiview coherency, but exact sampled parameter ranges are NOT RECORDED IN REPO — [searched: `notebooks/kaggle/12a_wildtrack_mvdetr/`, `docs/models.md`, `docs/pipeline-person.md`, Kaggle pull `gumfreddy/12a-wildtrack-mvdetr-training` `MVDeTr/README.md`, `MVDeTr/logs/wildtrack/.../log.txt`, `12a-wildtrack-mvdetr-training.ipynb`] |
+| hardware + approximate training time | Kaggle T4, logged train/test loop time 23,492.727 sec / 6.53h (recovered from Kaggle kernel `gumfreddy/12a-wildtrack-mvdetr-training` `MVDeTr/logs/wildtrack/.../log.txt`) |
 
 ### Inference Hyperparameters
 
@@ -435,7 +435,7 @@ This is an inference-only fusion experiment, not a trained model.
 
 | Scope | R1 | R5 | R10 | mAP | IDF1 | HOTA | MOTA/MODA | IDSW | Kernel | Verification commit SHA |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
-| Detector epoch-20 claim | N/A | N/A | N/A | N/A | N/A | N/A | MODA=0.921 | N/A | `gumfreddy/12a-wildtrack-mvdetr-training` | NOT RECORDED IN REPO — [searched: `notebooks/kaggle/12a_wildtrack_mvdetr/`, `docs/models.md`, `docs/pipeline-person.md`] |
+| Detector training-time best | N/A | N/A | N/A | N/A | N/A | N/A | MODA=0.924 at epoch 17; epoch 20 logs MODA=0.921 | N/A | `gumfreddy/12a-wildtrack-mvdetr-training` | NOT RECORDED IN REPO — [searched: `notebooks/kaggle/12a_wildtrack_mvdetr/`, `docs/models.md`, `docs/pipeline-person.md`, Kaggle pull `gumfreddy/12a-wildtrack-mvdetr-training` `kernel-metadata.json`, `12a-wildtrack-mvdetr-training.ipynb`, `MVDeTr/logs/wildtrack/.../log.txt`] |
 | Exported loaded-model line | N/A | N/A | N/A | N/A | N/A | N/A | MODA=0.913, MODP=0.818, precision=0.947, recall=0.966 | N/A | `gumfreddy/12a-wildtrack-mvdetr-training` | NOT RECORDED IN REPO — [searched: `notebooks/kaggle/12a_wildtrack_mvdetr/`, `docs/models.md`, `docs/pipeline-person.md`] |
 | 12b tracking rerun on 12a v3 detections | N/A | N/A | N/A | N/A | 0.947 | NOT RECORDED IN REPO — [searched: `docs/pipeline-person.md`, `docs/findings.md`, `docs/_data/kaggle_kernel_summaries.json`] | MODA=0.900 | 5 | `gumfreddy/12b-wildtrack-mvdetr-tracking-reid` | NOT RECORDED IN REPO — [searched: `docs/pipeline-person.md`, `docs/findings.md`, `docs/_data/kaggle_kernel_summaries.json`] |
 
@@ -446,12 +446,12 @@ This is an inference-only fusion experiment, not a trained model.
 | training notebook path | [notebooks/kaggle/12a_wildtrack_mvdetr/12a_wildtrack_mvdetr.ipynb](notebooks/kaggle/12a_wildtrack_mvdetr/12a_wildtrack_mvdetr.ipynb) |
 | Kaggle training kernel slug | `gumfreddy/12a-wildtrack-mvdetr-training` |
 | verifier kernel slug | `gumfreddy/12b-wildtrack-mvdetr-tracking-reid` for downstream tracking; 12a kernel also runs detector export/eval |
-| date of best result | 2026-05 era; exact detector best date NOT RECORDED IN REPO — [searched: `docs/models.md`, `docs/pipeline-person.md`, `docs/_data/kaggle_kernel_summaries.json`] |
+| date of best result | 2026-05 era; exact detector best date NOT RECORDED IN REPO — [searched: `docs/models.md`, `docs/pipeline-person.md`, `docs/_data/kaggle_kernel_summaries.json`, Kaggle pull `gumfreddy/12a-wildtrack-mvdetr-training` `kernel-metadata.json`, `MVDeTr/logs/wildtrack/.../log.txt`] |
 | author/account | `gumfreddy` |
 
 ### Known Limitations
 
-- The registry keeps both detector values because MODA=0.921 is the epoch-20 training-time best, while the exported loaded-model line verifies MODA=0.913.
+- The registry keeps both detector values because the training log peaks at MODA=0.924 on epoch 17 and records MODA=0.921 at epoch 20, while the exported loaded-model line verifies MODA=0.913.
 - Better detector MODA did not move WILDTRACK IDF1 beyond the converged 0.947 tracker plateau.
 - Person pipeline is tracker-limited; global optimal and naive tracker variants underperformed the Kalman setup.
 
@@ -490,12 +490,12 @@ This is an inference-only fusion experiment, not a trained model.
 
 | Hyperparameter | Value |
 |---|---|
-| optimizer + LR + schedule | NOT RECORDED IN REPO — [searched: `configs/model_registry.yaml`, `docs/findings.md`, `docs/models.md`, `configs/datasets/cityflowv2.yaml`] |
-| batch size + sampling strategy | batch=32 |
-| epochs + warmup | 120 epochs, best epoch 115/120; warmup NOT RECORDED IN REPO — [searched: `configs/model_registry.yaml`, `docs/findings.md`, `docs/models.md`] |
-| loss functions | stable ID loss + batch-hard triplet + delayed center loss |
-| augmentations | NOT RECORDED IN REPO — [searched: `configs/model_registry.yaml`, `docs/findings.md`, `docs/models.md`, `configs/datasets/cityflowv2.yaml`] |
-| hardware + approximate training time | Kaggle GPU; exact machine shape and training time NOT RECORDED IN REPO — [searched: `configs/model_registry.yaml`, `docs/findings.md`, `docs/models.md`] |
+| optimizer + LR + schedule | AdamW with layer-wise LR decay 0.75, backbone_lr=1.5e-5, head_lr=1.5e-4, weight_decay=1e-4, 10-epoch linear warmup, cosine decay, plus center-loss SGD lr=0.5 (recovered from Kaggle kernel `yahiaakhalafallah/09s-dinov2-large-cityflowv2` notebook source) |
+| batch size + sampling strategy | batch=32, PK sampling P=8 identities x K=4 instances (recovered from Kaggle kernel `yahiaakhalafallah/09s-dinov2-large-cityflowv2` notebook source) |
+| epochs + warmup | 120 epochs, best epoch 115/120, 10 warmup epochs (recovered from Kaggle kernel `yahiaakhalafallah/09s-dinov2-large-cityflowv2` notebook source) |
+| loss functions | CrossEntropy with label smoothing epsilon=0.05 + batch-hard triplet margin=0.3 + delayed center loss weight=5e-4 starting after warmup at epoch index 10 (recovered from Kaggle kernel `yahiaakhalafallah/09s-dinov2-large-cityflowv2` notebook source) |
+| augmentations | Resize 268x268 bicubic, RandomHorizontalFlip p=0.5, Pad(10), RandomCrop 252x252, ColorJitter brightness=0.2 contrast=0.15 saturation=0.1 hue=0.0, CLIP normalization, RandomErasing p=0.5 scale=(0.02,0.33) ratio=(0.3,3.3) value=random (recovered from Kaggle kernel `yahiaakhalafallah/09s-dinov2-large-cityflowv2` notebook source) |
+| hardware + approximate training time | Kaggle `NvidiaTeslaT4`; kernel log reaches 11,759.98 sec / 3.27h through notebook HTML conversion, but a dedicated train-loop walltime artifact is NOT RECORDED IN REPO — [searched: Kaggle pull `yahiaakhalafallah/09s-dinov2-large-cityflowv2` `kernel-metadata.json`, `09s-dinov2-large-cityflowv2.log`, `09s-dinov2-large-cityflowv2.ipynb`] |
 
 ### Inference Hyperparameters
 
@@ -510,7 +510,7 @@ This is an inference-only fusion experiment, not a trained model.
 
 | Scope | R1 | R5 | R10 | mAP | IDF1 | HOTA | MOTA | IDSW | Kernel | Verification commit SHA |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
-| CityFlowV2 single-camera ReID 09s v1 | 96.15 | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `configs/model_registry.yaml`, `docs/models.md`] | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `configs/model_registry.yaml`, `docs/models.md`] | 86.79 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/09s-dinov2-large-cityflowv2` | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `configs/model_registry.yaml`, `docs/models.md`] |
+| CityFlowV2 single-camera ReID 09s v1 | 96.15 | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `configs/model_registry.yaml`, `docs/models.md`, Kaggle pull `yahiaakhalafallah/09s-dinov2-large-cityflowv2` `kernel-metadata.json`, `09s-dinov2-large-cityflowv2.log`, `09s-dinov2-large-cityflowv2.ipynb`] | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `configs/model_registry.yaml`, `docs/models.md`, Kaggle pull `yahiaakhalafallah/09s-dinov2-large-cityflowv2` `kernel-metadata.json`, `09s-dinov2-large-cityflowv2.log`, `09s-dinov2-large-cityflowv2.ipynb`] | 86.79 | N/A | N/A | N/A | N/A | `yahiaakhalafallah/09s-dinov2-large-cityflowv2` | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `configs/model_registry.yaml`, `docs/models.md`, Kaggle pull `yahiaakhalafallah/09s-dinov2-large-cityflowv2` `kernel-metadata.json`, `09s-dinov2-large-cityflowv2.log`, `09s-dinov2-large-cityflowv2.ipynb`] |
 | DINOv2 standalone MTMC best with AFLink | N/A | N/A | N/A | N/A | 0.744 | 0.547 | 0.624 | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `docs/experiment-log.md`, `docs/_data/kaggle_kernel_summaries.json`] | `yahiaakhalafallah/mtmc-10c-dinov2-stages-4-5-association-eval` v2 | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `docs/experiment-log.md`, `docs/_data/kaggle_kernel_summaries.json`] |
 | 14g tertiary 4-view TTA anchor | N/A | N/A | N/A | N/A | 0.77902 | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `docs/experiment-log.md`, `docs/_data/kaggle_kernel_summaries.json`] | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `docs/experiment-log.md`, `docs/_data/kaggle_kernel_summaries.json`] | 154 | `yahiaakhalafallah/14g-dinov2-4view-tta-stage2` | NOT RECORDED IN REPO — [searched: `docs/findings.md`, `docs/experiment-log.md`, `docs/_data/kaggle_kernel_summaries.json`] |
 
