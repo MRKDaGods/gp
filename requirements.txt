@@ -22,6 +22,7 @@ loguru>=0.7
 click>=8.1
 rich>=13.0
 gdown>=4.7
+kaggle>=1.6
 timm>=0.9
 open-clip-torch>=2.26
 scikit-learn>=1.3

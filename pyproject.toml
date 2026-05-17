@@ -57,6 +57,7 @@ dependencies = [
     "loguru>=0.7",
     "click>=8.1",
     "rich>=13.0",
+    "kaggle>=1.6",
 ]
 
 [project.optional-dependencies]
