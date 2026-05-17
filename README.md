@@ -15,6 +15,22 @@ Stage 6: Visualization   → Annotated videos, BEV maps, timeline views
 Apps:    Dashboard       → Next.js web UI, NL query, 3D simulation
 ```
 
+## Setup
+
+First-time setup after cloning is three commands:
+
+```bash
+pip install -r requirements.txt
+python scripts/download_assets.py --all
+python scripts/verify_assets.py
+```
+
+Prerequisite: configure a Kaggle account and API token at `~/.kaggle/kaggle.json` before running the downloader. Kaggle documents the token flow at <https://www.kaggle.com/docs/api>.
+
+`scripts/download_assets.py --all` downloads the public model checkpoints and the optional VeRi-776 evaluation dataset into the paths used by the pipeline. CityFlowV2 is required for full MTMC evaluation but is not available as a complete public Kaggle dataset; download AI City Challenge 2022 Track 1 manually from <https://www.aicitychallenge.org/2022-data-and-evaluation/> and place it under `data/raw/cityflowv2/`.
+
+Plan for roughly 3 GB for the ReID checkpoints plus VeRi-776 data, and roughly 5 GB or more when keeping CityFlowV2 locally too. See [SETUP.md](SETUP.md) for the longer setup guide and selective download commands.
+
 ## Quick Start
 
 ### Backend (Python Pipeline)
@@ -23,8 +39,8 @@ Apps:    Dashboard       → Next.js web UI, NL query, 3D simulation
 # Install
 pip install -e .
 
-# Download pre-trained models (YOLO26, BoxMOT ReID weights)
-python scripts/download_models.py
+# Download required checkpoints and optional public eval data
+python scripts/download_assets.py --all
 
 # Run full pipeline
 python scripts/run_pipeline.py --config configs/default.yaml
