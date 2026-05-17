@@ -46,6 +46,13 @@ def test_required_entries_have_required_fields() -> None:
         assert entry.provenance.verified_by
 
 
+def test_registry_model_ids_are_unique() -> None:
+    registry = get_registry()
+    model_ids = [model.id for model in registry.models]
+
+    assert len(model_ids) == len(set(model_ids))
+
+
 def test_filter_by_task_type_works() -> None:
     models = list_models(task_type="single_cam_reid")
 
