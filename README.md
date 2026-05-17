@@ -101,6 +101,8 @@ The deployed and research checkpoint entries are registered in
 `configs/model_registry.yaml`. The registry contains checkpoint paths, hosted
 artifact references, model status, and verification metadata.
 
+For detailed per-model training recipes, hyperparameters, verified metrics, and known limitations, see [docs/model-cards.md](docs/model-cards.md).
+
 | Registry entry | Training data | Headline metric |
 | --- | --- | --- |
 | `vehicle_mtmc_14e_b1` | CityFlowV2 | MTMC IDF1 0.77936 |
