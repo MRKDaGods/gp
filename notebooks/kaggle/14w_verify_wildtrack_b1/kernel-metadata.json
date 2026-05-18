@@ -1,0 +1,21 @@
+{
+  "id": "gumfreddy/14w-verify-wildtrack-b1",
+  "title": "14w Verify WILDTRACK B1",
+  "description": "Uses the public resume kernel output containing the regenerated 12a MVDeTr test.txt detector output.",
+  "code_file": "14w_verify_wildtrack_b1.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "gumfreddy/mtmc-weights",
+    "aryashah2k/large-scale-multicamera-detection-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/12a-resume-emit-wildtrack-test-txt"
+  ],
+  "model_sources": []
+}
