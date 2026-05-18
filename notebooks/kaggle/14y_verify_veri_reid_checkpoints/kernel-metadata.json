@@ -1,0 +1,23 @@
+{
+  "id": "yahiaakhalafallah/14y-verify-veri-reid-checkpoints",
+  "title": "14y Verify VeRi ReID Checkpoints",
+  "code_file": "14y_verify_veri_reid_checkpoints.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset",
+    "thanhnguyenle/data-aicity-2023-track-2",
+    "yahiaakhalafallah/mtmc-weights",
+    "gumfreddy/mtmc-weights",
+    "mrkdagods/mtmc-weights"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/13-clip-senet-train"
+  ],
+  "model_sources": []
+}
