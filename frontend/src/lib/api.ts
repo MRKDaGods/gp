@@ -9,7 +9,6 @@ import type {
   StageNumber,
   Tracklet,
   VideoFile,
-  WatchlistHit,
 } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8004/api';
@@ -620,17 +619,6 @@ export async function queryTimeline(
   });
 }
 
-export async function searchByImage(
-  imageData: string, // base64
-  topK: number = 20,
-  minSimilarity: number = 0.3
-): Promise<ApiResponse<SearchResult[]>> {
-  return fetchApi('/search/image', {
-    method: 'POST',
-    body: JSON.stringify({ imageData, topK, minSimilarity }),
-  });
-}
-
 export async function searchByTracklet(
   trackletId: number,
   cameraId: string,
@@ -656,16 +644,6 @@ export async function searchTracklet(options: {
       galleryRunId: options.galleryRunId,
       topK: options.topK ?? 20,
     }),
-  });
-}
-
-export async function scanWatchlist(
-  watchlist: { subjectId: string; embedding: number[] }[],
-  threshold: number = 0.55
-): Promise<ApiResponse<WatchlistHit[]>> {
-  return fetchApi('/watchlist/scan', {
-    method: 'POST',
-    body: JSON.stringify({ watchlist, threshold }),
   });
 }
 
@@ -747,41 +725,6 @@ export async function importKaggleRunArtifacts(
 }
 
 // ============================================================================
-// Corrections & Refinement
-// ============================================================================
-
-export async function mergeTracklets(
-  trackletA: { trackletId: number; cameraId: string },
-  trackletB: { trackletId: number; cameraId: string }
-): Promise<ApiResponse<GlobalTrajectory>> {
-  return fetchApi('/corrections/merge', {
-    method: 'POST',
-    body: JSON.stringify({ trackletA, trackletB }),
-  });
-}
-
-export async function splitTrajectory(
-  globalId: number,
-  atTrackletId: number
-): Promise<ApiResponse<GlobalTrajectory[]>> {
-  return fetchApi('/corrections/split', {
-    method: 'POST',
-    body: JSON.stringify({ globalId, atTrackletId }),
-  });
-}
-
-export async function confirmTracklet(
-  trackletId: number,
-  cameraId: string,
-  globalId: number
-): Promise<ApiResponse<void>> {
-  return fetchApi('/corrections/confirm', {
-    method: 'POST',
-    body: JSON.stringify({ trackletId, cameraId, globalId }),
-  });
-}
-
-// ============================================================================
 // Location Data (Egypt Hierarchy)
 // ============================================================================
 
@@ -851,15 +794,6 @@ export function createWebSocket(
 
 export function getFrameUrl(videoId: string, frameId: number): string {
   return `${API_BASE}/frames/${videoId}/${frameId}`;
-}
-
-export function getThumbnailUrl(
-  cameraId: string,
-  trackletId: number,
-  frameId?: number
-): string {
-  const params = frameId !== undefined ? `?frameId=${frameId}` : '';
-  return `${API_BASE}/thumbnails/${cameraId}/${trackletId}${params}`;
 }
 
 export function getVideoStreamUrl(videoId: string): string {

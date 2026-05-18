@@ -143,17 +143,6 @@ export interface SearchResult {
   thumbnail?: string;
 }
 
-export interface WatchlistHit {
-  subjectId: string;
-  globalId: number;
-  similarity: number;
-  trajectoryConfidence: number;
-  camerasSeen: string[];
-  firstSeen: number;
-  lastSeen: number;
-  alertLevel: 'HIGH' | 'MEDIUM' | 'LOW';
-}
-
 // Evaluation metrics
 export interface EvaluationResult {
   mota: number;
