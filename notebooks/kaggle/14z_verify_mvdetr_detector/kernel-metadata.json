@@ -1,0 +1,20 @@
+{
+  "id": "yahiaakhalafallah/14z-verify-mvdetr-detector-moda",
+  "title": "14z Verify MVDeTr Detector MODA",
+  "description": "Uses the public resume kernel output containing the regenerated 12a MVDeTr test.txt detector output.",
+  "code_file": "14z_verify_mvdetr_detector.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "aryashah2k/large-scale-multicamera-detection-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/12a-resume-emit-wildtrack-test-txt"
+  ],
+  "model_sources": []
+}
