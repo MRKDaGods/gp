@@ -1,12 +1,22 @@
 import asyncio
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, WebSocket
 
-from backend.config import OUTPUT_DIR
 from backend.dependencies import get_app_state
-from backend.models.requests import PipelineRunRequest
+from backend.models.requests import PipelineRunRequest, StageExecutionTarget
+from backend.services.kaggle_run_service import (
+    dispatch_stage_to_kaggle,
+    get_kaggle_job_state,
+    refresh_kaggle_job_status,
+)
+from backend.services.kaggle_service import (
+    KaggleAuthError,
+    KaggleConcurrencyError,
+    KaggleValidationError,
+)
 from backend.services.pipeline_service import (
     PipelineModelValidationError,
     _resolve_run_id,
@@ -29,7 +39,18 @@ def _payload_dataset(payload: PipelineRunRequest, config: Dict[str, Any]) -> Opt
     return payload.dataset or config.get("dataset") or config.get("datasetName")
 
 
+def _get_user_video_path(video_id: Optional[str], state: AppState) -> Optional[Path]:
+    if not video_id:
+        return None
+    record = state.uploaded_videos.get(video_id)
+    if not record:
+        return None
+    path = record.get("path")
+    return Path(path) if path else None
+
+
 @router.post("/api/pipeline/run-stage/{stage}")
+@router.post("/pipeline/run-stage/{stage}")
 async def run_stage(
     stage: int,
     background_tasks: BackgroundTasks,
@@ -38,7 +59,8 @@ async def run_stage(
 ):
     """Run a specific pipeline stage"""
     try:
-        print(f"\n[UI Request] Run Stage {stage} Payload: {request.model_dump() if request else 'None'}")
+        request_dump = request.model_dump() if request else "None"
+        print(f"\n[UI Request] Run Stage {stage} Payload: {request_dump}")
         payload = request or PipelineRunRequest()
         requested_run_id = payload.runId or (payload.config or {}).get("runId")
         run_id = _resolve_run_id(str(requested_run_id) if requested_run_id is not None else None)
@@ -54,7 +76,12 @@ async def run_stage(
             fusion=payload.fusion,
         )
 
-        if stage == 1 and not video_id:
+        kaggle_dataset_input = bool(
+            payload.kaggle
+            and payload.kaggle.target == StageExecutionTarget.KAGGLE
+            and payload.kaggle.dataset_slug
+        )
+        if stage == 1 and not video_id and not kaggle_dataset_input:
             raise HTTPException(status_code=400, detail="videoId is required for stage 1")
 
         resolved_camera_id = None
@@ -62,7 +89,10 @@ async def run_stage(
         if video_id:
             if video_id not in state.uploaded_videos:
                 raise HTTPException(status_code=404, detail="Video not found")
-            resolved_camera_id = _detect_camera_for_video(state.uploaded_videos[video_id], camera_id)
+            resolved_camera_id = _detect_camera_for_video(
+                state.uploaded_videos[video_id],
+                camera_id,
+            )
             video_name = state.uploaded_videos[video_id].get("name")
 
         dataset_name = config.get("datasetName") or None
@@ -104,6 +134,41 @@ async def run_stage(
                 "fusion_resolved": resolution.fusion_resolved,
             },
         )
+
+        if payload.kaggle and payload.kaggle.target == StageExecutionTarget.KAGGLE:
+            try:
+                result = dispatch_stage_to_kaggle(
+                    run_id=run_id,
+                    stages=[stage],
+                    config_path=resolution.resolved_config,
+                    config_overrides=resolution.applied_overrides,
+                    model_id=resolution.model_id,
+                    fusion=payload.fusion.model_dump(by_alias=True) if payload.fusion else None,
+                    kaggle_cfg=payload.kaggle,
+                    user_video_path=_get_user_video_path(video_id, state),
+                )
+            except KaggleAuthError as e:
+                raise HTTPException(status_code=401, detail=str(e))
+            except KaggleConcurrencyError as e:
+                raise HTTPException(status_code=429, detail=str(e))
+            except KaggleValidationError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+            state.active_runs[run_id].update(
+                {
+                    "status": "queued",
+                    "message": "Kaggle kernel queued",
+                    "execution_target": "kaggle",
+                    "kaggle": {
+                        "kernel_slug": result.kernel_slug,
+                        "kernel_url": result.kernel_url,
+                        "dataset_slug": result.dataset_slug,
+                        "project_dataset_slug": result.project_dataset_slug,
+                        "status": result.status,
+                    },
+                }
+            )
+            return {"success": True, "data": state.active_runs[run_id]}
 
         reid_model_path = config.get("reid_model_path") or None
         tracker = config.get("tracker") or None
@@ -220,6 +285,21 @@ async def get_pipeline_status(run_id: str, state: AppState = Depends(get_app_sta
     if run_id not in state.active_runs:
         raise HTTPException(status_code=404, detail="Run not found")
     return {"success": True, "data": state.active_runs[run_id]}
+
+
+@router.get("/api/pipeline/kaggle-status/{run_id}")
+@router.get("/pipeline/kaggle-status/{run_id}")
+async def get_kaggle_status(run_id: str):
+    state = get_kaggle_job_state(run_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"No Kaggle job found for run_id {run_id}")
+    try:
+        refreshed = refresh_kaggle_job_status(run_id)
+    except KaggleAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except KaggleValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"success": True, "data": refreshed}
 
 
 @router.post("/api/pipeline/cancel/{run_id}")

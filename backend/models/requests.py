@@ -3,9 +3,30 @@
 from __future__ import annotations
 
 import math
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class StageExecutionTarget(str, Enum):
+    LOCAL = "local"
+    KAGGLE = "kaggle"
+
+
+class KaggleConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    target: StageExecutionTarget = StageExecutionTarget.LOCAL
+    username: Optional[str] = Field(default=None, min_length=1)
+    key: Optional[str] = Field(default=None, min_length=1)
+    dataset_slug: Optional[str] = Field(default=None, alias="datasetSlug")
+
+    @model_validator(mode="after")
+    def validate_creds_pair(self) -> "KaggleConfig":
+        if (self.username is None) != (self.key is None):
+            raise ValueError("If providing Kaggle credentials, both username and key are required")
+        return self
 
 
 class FusionModel(BaseModel):
@@ -72,6 +93,7 @@ class PipelineRunRequest(BaseModel):
     useCpu: bool = False
     config: Optional[Dict[str, Any]] = None
     fusion: Optional[FusionConfig] = None
+    kaggle: Optional[KaggleConfig] = None
 
 
 class TimelineQueryRequest(BaseModel):
