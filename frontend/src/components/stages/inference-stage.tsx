@@ -46,15 +46,9 @@ import {
   usePipelineStore,
   useVideoStore,
 } from "@/store";
-import { getPipelineStatus, runStage, getDatasets, type DatasetFolder } from "@/lib/api";
+import { getPipelineStatus, runStage, getDatasets, type DatasetFolder, type FusionConfigRequest } from "@/lib/api";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
-
-interface RunModelMetadata {
-  modelId: string | null;
-  resolvedConfig: string | null;
-  appliedOverrides: string[];
-  warnings: string[];
-}
+import type { RunModelMetadata } from "@/types";
 
 function extractRunModelMetadata(data: any, selectedModel: ModelEntry | null): RunModelMetadata {
   return {
@@ -66,6 +60,7 @@ function extractRunModelMetadata(data: any, selectedModel: ModelEntry | null): R
         ? data.appliedOverrides
         : selectedModel?.model_overrides ?? [],
     warnings: Array.isArray(data?.warnings) ? data.warnings : [],
+    fusion_resolved: data?.fusion_resolved ?? data?.fusionResolved ?? null,
   };
 }
 
@@ -125,6 +120,7 @@ export function InferenceStage() {
     setIsRunning,
     updateStageProgress,
     stages,
+    setError,
     modelMode,
     setModelMode,
     selectedModelId,
@@ -270,9 +266,34 @@ export function InferenceStage() {
   const handleRunInference = async () => {
     const useDataset = !selectedModelMeta && selectedDataset && selectedDataset !== "__uploaded__";
     const selectedDs = useDataset ? datasets.find((d) => d.name === selectedDataset) : null;
-    const modelRequest = selectedModelId ? { model_id: selectedModelId } : {};
     const effectiveDataset = selectedModelMeta?.dataset ?? (useDataset ? selectedDataset : undefined);
+    const fusionPayload: FusionConfigRequest | null =
+      modelMode === "fusion" && fusion && fusion.models.length >= 2
+        ? {
+            models: fusion.models.map((model) => ({
+              model_id: model.modelId,
+              weight: model.weight,
+            })),
+            aqe_k: fusion.aqeK,
+            k1: fusion.k1,
+            k2: fusion.k2,
+            lambda: fusion.lambda,
+            rerank: fusion.rerank,
+          }
+        : null;
+    const modelIdForRequest = fusionPayload ? null : selectedModelId;
     setRunModelMetadata(null);
+    setError(null);
+
+    if (modelMode === "fusion" && !fusionPayload) {
+      setError("Pick at least 2 models for fusion mode");
+      updateStageProgress(2, {
+        status: "error",
+        progress: 100,
+        message: "Pick at least 2 models for fusion mode",
+      });
+      return;
+    }
 
     if (
       useDataset &&
@@ -328,11 +349,11 @@ export function InferenceStage() {
         videoId: probeVideo.id,
         cameraId,
         dataset: effectiveDataset,
-        ...modelRequest,
+        model_id: modelIdForRequest,
+        fusion: fusionPayload,
         config: {
           dataset: effectiveDataset,
           datasetName: useDataset ? selectedDataset : undefined,
-          ...modelRequest,
         },
       });
       setRunModelMetadata(extractRunModelMetadata(stage2Response.data as any, selectedModelMeta));
@@ -350,11 +371,11 @@ export function InferenceStage() {
         videoId: probeVideo.id,
         cameraId,
         dataset: effectiveDataset,
-        ...modelRequest,
+        model_id: modelIdForRequest,
+        fusion: fusionPayload,
         config: {
           dataset: effectiveDataset,
           datasetName: useDataset ? selectedDataset : undefined,
-          ...modelRequest,
         },
       });
       setRunModelMetadata(extractRunModelMetadata(stage3Response.data as any, selectedModelMeta));
@@ -702,11 +723,57 @@ export function InferenceStage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                  Effective Config
+                  {runModelMetadata?.fusion_resolved ? "Effective Config (Fusion)" : "Effective Config"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
-                {modelMode === "fusion" && fusion ? (
+                {runModelMetadata?.fusion_resolved ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <div className="text-muted-foreground">Run model_id</div>
+                        <div className="font-mono">{runModelMetadata.modelId ?? "resolved by backend"}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Pipeline YAML</div>
+                        <div className="font-mono">{runModelMetadata.resolvedConfig ?? "configs/default.yaml"}</div>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-muted/40 p-3">
+                      <div className="mb-2 text-sm font-medium">Fusion models</div>
+                      <div className="space-y-1.5">
+                        {runModelMetadata.fusion_resolved.models.map((model) => (
+                          <div
+                            key={model.model_id}
+                            className={cn(
+                              "grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-md px-2 py-1",
+                              model.primary && "border border-primary/30 bg-primary/10"
+                            )}
+                          >
+                            <span className="truncate font-mono">{model.model_id}</span>
+                            {model.primary ? <Badge variant="secondary">Primary</Badge> : <span className="text-muted-foreground">Secondary</span>}
+                            <span className="font-mono tabular-nums">{(model.weight * 100).toFixed(0)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg border bg-muted/40 p-3 font-mono sm:grid-cols-5">
+                      <div><span className="text-muted-foreground">aqe_k </span>{runModelMetadata.fusion_resolved.aqe_k}</div>
+                      <div><span className="text-muted-foreground">k1 </span>{runModelMetadata.fusion_resolved.k1}</div>
+                      <div><span className="text-muted-foreground">k2 </span>{runModelMetadata.fusion_resolved.k2}</div>
+                      <div><span className="text-muted-foreground">λ </span>{runModelMetadata.fusion_resolved.lambda}</div>
+                      <div><span className="text-muted-foreground">rerank </span>{runModelMetadata.fusion_resolved.rerank ? "true" : "false"}</div>
+                    </div>
+                    <details className="rounded-lg border bg-muted/40 p-3">
+                      <summary className="cursor-pointer text-sm font-medium">Applied overrides</summary>
+                      <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded bg-background p-3 font-mono text-[11px]">
+                        {runModelMetadata.appliedOverrides.length > 0
+                          ? runModelMetadata.appliedOverrides.join("\n")
+                          : "No registry overrides applied."}
+                      </pre>
+                    </details>
+                  </div>
+                ) : modelMode === "fusion" && fusion ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div>
@@ -715,7 +782,7 @@ export function InferenceStage() {
                       </div>
                       <div>
                         <div className="text-muted-foreground">Pipeline payload</div>
-                        <div className="font-mono">Not sent until Phase 5</div>
+                        <div className="font-mono">Sent as top-level fusion</div>
                       </div>
                     </div>
                     <div className="rounded-lg border bg-muted/40 p-3">

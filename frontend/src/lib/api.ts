@@ -305,13 +305,39 @@ export async function deleteVideo(id: string): Promise<ApiResponse<void>> {
 // Pipeline Stage Execution
 // ============================================================================
 
+export interface FusionModelRequest {
+  model_id: string;
+  weight: number;
+}
+
+export interface FusionConfigRequest {
+  models: FusionModelRequest[];
+  aqe_k: number;
+  k1: number;
+  k2: number;
+  lambda: number;
+  rerank: boolean;
+}
+
+export interface RunStageRequest {
+  runId?: string;
+  videoId?: string;
+  cameraId?: string;
+  dataset?: string;
+  model_id?: string | null;
+  fusion?: FusionConfigRequest | null;
+  smokeTest?: boolean;
+  useCpu?: boolean;
+  config?: Record<string, unknown>;
+}
+
 export async function runStage(
   stage: StageNumber,
-  config?: Record<string, unknown>
+  request?: RunStageRequest
 ): Promise<ApiResponse<PipelineRunStatus>> {
   return fetchApi(`/pipeline/run-stage/${stage}`, {
     method: 'POST',
-    body: JSON.stringify(config || {}),
+    body: JSON.stringify(request || {}),
   });
 }
 

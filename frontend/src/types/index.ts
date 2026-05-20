@@ -165,12 +165,43 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+export interface FusionResolvedModel {
+  model_id: string;
+  weight: number;
+  primary: boolean;
+}
+
+export interface FusionResolved {
+  models: FusionResolvedModel[];
+  aqe_k: number;
+  k1: number;
+  k2: number;
+  lambda: number;
+  rerank: boolean;
+}
+
+export interface RunModelMetadata {
+  modelId: string | null;
+  resolvedConfig: string | null;
+  appliedOverrides: string[];
+  warnings: string[];
+  fusion_resolved?: FusionResolved | null;
+}
+
 export interface PipelineRunStatus {
   runId: string;
   runDir: string;
   stages: StageProgress[];
   startedAt: string;
   status: 'running' | 'completed' | 'error';
+  model_id?: string | null;
+  modelId?: string | null;
+  resolved_config?: string | null;
+  resolvedConfig?: string | null;
+  applied_overrides?: string[];
+  appliedOverrides?: string[];
+  warnings?: string[];
+  fusion_resolved?: FusionResolved | null;
 }
 
 // Websocket messages
