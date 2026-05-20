@@ -5,12 +5,14 @@ in-memory video catalogue and optionally triggers the S01 precompute.
 """
 import asyncio
 import sys as _sys
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import UPLOAD_DIR, OUTPUT_DIR
 from backend.services.job_service import job_service
+from backend.services.kaggle_polling_worker import KagglePollingWorker
 from backend.services.pipeline_service import _background_precompute_dataset
 from backend.services.video_service import _scan_startup_videos
 
@@ -92,4 +94,17 @@ async def _on_startup() -> None:
     _scan_startup_videos()
     job_service.load_jobs()
     job_service.start_worker()
+    kaggle_worker = KagglePollingWorker(
+        output_root=Path("data/outputs"),
+        websocket_manager=None,
+    )
+    await kaggle_worker.start()
+    app.state.kaggle_worker = kaggle_worker
     asyncio.create_task(_background_precompute_dataset())
+
+
+@app.on_event("shutdown")
+async def _on_shutdown() -> None:
+    kaggle_worker = getattr(app.state, "kaggle_worker", None)
+    if kaggle_worker is not None:
+        await kaggle_worker.stop()
