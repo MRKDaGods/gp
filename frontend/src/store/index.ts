@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import type { ModelEntry } from '@/services/models';
 import type {
   Detection,
   GlobalTrajectory,
@@ -27,6 +28,22 @@ export const PIPELINE_STAGE_DEFAULTS: StageProgress[] = [
   { stage: 6, status: 'idle', progress: 0, message: 'Visualization' },
 ];
 
+export type PipelineModelMode = 'single' | 'fusion';
+
+export interface PipelineFusionModel {
+  modelId: string;
+  weight: number;
+}
+
+export interface PipelineFusionConfig {
+  models: PipelineFusionModel[];
+  aqeK: number;
+  rerank: boolean;
+  k1: number;
+  k2: number;
+  lambda: number;
+}
+
 interface PipelineState {
   runId: string | null;
   galleryRunId: string | null;
@@ -36,6 +53,10 @@ interface PipelineState {
   isRunning: boolean;
   currentStage: StageNumber;
   error: string | null;
+  modelMode: PipelineModelMode;
+  selectedModelId: string | null;
+  selectedModelMeta: ModelEntry | null;
+  fusion: PipelineFusionConfig | null;
   /** Incremented when upstream edits invalidate timeline/output; Stage 4 effect must not skip reload. */
   downstreamInvalidateGeneration: number;
 
@@ -49,6 +70,11 @@ interface PipelineState {
   setCurrentStage: (stage: StageNumber) => void;
   setIsRunning: (running: boolean) => void;
   setError: (error: string | null) => void;
+  setModelMode: (mode: PipelineModelMode) => void;
+  setSelectedModel: (id: string, meta: ModelEntry) => void;
+  clearSelectedModel: () => void;
+  setFusionConfig: (cfg: PipelineFusionConfig | null) => void;
+  updateFusionWeights: (weights: PipelineFusionModel[]) => void;
   reset: () => void;
 }
 
@@ -62,6 +88,10 @@ export const usePipelineStore = create<PipelineState>()(
       isRunning: false,
       currentStage: 0,
       error: null,
+      modelMode: 'single',
+      selectedModelId: null,
+      selectedModelMeta: null,
+      fusion: null,
       downstreamInvalidateGeneration: 0,
 
       setRunId: (id) => set({ runId: id }),
@@ -82,6 +112,24 @@ export const usePipelineStore = create<PipelineState>()(
       setIsRunning: (running) => set({ isRunning: running }),
 
       setError: (error) => set({ error }),
+
+      setModelMode: (mode) =>
+        set(
+          mode === 'fusion'
+            ? { modelMode: mode, selectedModelId: null, selectedModelMeta: null }
+            : { modelMode: mode, fusion: null }
+        ),
+
+      setSelectedModel: (id, meta) => set({ selectedModelId: id, selectedModelMeta: meta }),
+
+      clearSelectedModel: () => set({ selectedModelId: null, selectedModelMeta: null }),
+
+      setFusionConfig: (cfg) => set({ fusion: cfg }),
+
+      updateFusionWeights: (weights) =>
+        set((state) => ({
+          fusion: state.fusion ? { ...state.fusion, models: weights } : state.fusion,
+        })),
 
       reset: () =>
         set({

@@ -21,9 +21,11 @@ import {
   Loader2,
   FolderOpen,
   Check,
+  Cpu,
 } from "lucide-react";
 import { useSessionStore, useUIStore, usePipelineStore } from "@/store";
 import type { StageNumber } from "@/types";
+import type { ModelEntry, ModelMetric } from "@/services/models";
 import { GlobalProcessingBanner } from "@/components/layout/global-processing-banner";
 
 import { UploadStage } from "@/components/stages/upload-stage";
@@ -56,10 +58,56 @@ const PIPELINE_STAGE_COMPONENTS: { id: StageNumber; Component: ComponentType }[]
   { id: 6, Component: OutputStage },
 ];
 
+const HEADLINE_METRIC_PRIORITY = ["IDF1", "mAP", "R1"];
+
+function getHeadlineMetric(model: ModelEntry | null): ModelMetric | null {
+  if (!model) return null;
+
+  for (const metricName of HEADLINE_METRIC_PRIORITY) {
+    const metric = model.metrics.find(
+      (candidate) => candidate.verified && candidate.name.toLowerCase() === metricName.toLowerCase()
+    );
+    if (metric) return metric;
+  }
+
+  return null;
+}
+
+function formatModelBadgeBody(
+  modelMode: "single" | "fusion",
+  selectedModelMeta: ModelEntry | null,
+  fusion: { models: Array<{ modelId: string; weight: number }> } | null
+): { primary: string; secondary: string | null; isFallback: boolean } {
+  if (modelMode === "single" && selectedModelMeta) {
+    const metric = getHeadlineMetric(selectedModelMeta);
+
+    return {
+      primary: selectedModelMeta.name,
+      secondary: metric ? `${metric.name} ${metric.value.toFixed(4)}` : null,
+      isFallback: false,
+    };
+  }
+
+  if (modelMode === "fusion" && fusion?.models?.length) {
+    const firstModelNames = fusion.models.slice(0, 2).map((model) => model.modelId).join(", ");
+
+    return {
+      primary: `Fusion · ${fusion.models.length} models`,
+      secondary: firstModelNames || null,
+      isFallback: false,
+    };
+  }
+
+  return { primary: "Using legacy config", secondary: null, isFallback: true };
+}
+
 export function MainDashboard() {
   const { currentStage, setCurrentStage } = useSessionStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const pipelineStages = usePipelineStore((s) => s.stages);
+  const modelMode = usePipelineStore((s) => s.modelMode);
+  const selectedModelMeta = usePipelineStore((s) => s.selectedModelMeta);
+  const fusion = usePipelineStore((s) => s.fusion);
   const [datasetView, setDatasetView] = useState(false);
   const [visitedPipelineStages, setVisitedPipelineStages] = useState<Set<StageNumber>>(
     () => new Set([currentStage])
@@ -71,6 +119,12 @@ export function MainDashboard() {
 
   const getStageStatus = (stageId: number) =>
     pipelineStages.find((s) => s.stage === stageId)?.status ?? "idle";
+
+  const modelBadgeBody = formatModelBadgeBody(modelMode, selectedModelMeta, fusion);
+  const openInferenceStage = () => {
+    setDatasetView(false);
+    setCurrentStage(3);
+  };
 
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 overflow-hidden bg-background">
@@ -144,6 +198,53 @@ export function MainDashboard() {
               </Tooltip>
             );
           })}
+
+          <div className="mt-auto" />
+
+          {/* Active model */}
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={openInferenceStage}
+                className={cn(
+                  "transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  sidebarOpen
+                    ? "rounded-md border bg-muted/30 px-3 py-2 text-left text-xs"
+                    : "flex h-9 w-full items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                )}
+                aria-label="Open active model selection"
+              >
+                {sidebarOpen ? (
+                  <>
+                    <div className="mb-1 flex items-center gap-1.5 text-muted-foreground">
+                      <Cpu className="h-3.5 w-3.5" />
+                      <span>Active model</span>
+                    </div>
+                    <div
+                      className={cn(
+                        "truncate font-medium",
+                        modelBadgeBody.isFallback && "font-normal italic text-muted-foreground"
+                      )}
+                    >
+                      {modelBadgeBody.primary}
+                    </div>
+                    {modelBadgeBody.secondary && (
+                      <div className="truncate text-muted-foreground">{modelBadgeBody.secondary}</div>
+                    )}
+                  </>
+                ) : (
+                  <Cpu className="h-4 w-4" />
+                )}
+              </button>
+            </TooltipTrigger>
+            {!sidebarOpen && (
+              <TooltipContent side="right">
+                {modelBadgeBody.secondary
+                  ? `${modelBadgeBody.primary} · ${modelBadgeBody.secondary}`
+                  : modelBadgeBody.primary}
+              </TooltipContent>
+            )}
+          </Tooltip>
 
           {/* Spacer */}
           <div className="my-2 h-px bg-border" />
