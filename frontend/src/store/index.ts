@@ -5,6 +5,7 @@ import type {
   Detection,
   GlobalTrajectory,
   SessionState,
+  StageExecutionTarget,
   StageNumber,
   StageProgress,
   TimelineTrack,
@@ -29,6 +30,8 @@ export const PIPELINE_STAGE_DEFAULTS: StageProgress[] = [
 ];
 
 export type PipelineModelMode = 'single' | 'fusion';
+
+export type { StageExecutionTarget };
 
 export interface PipelineFusionModel {
   modelId: string;
@@ -144,6 +147,35 @@ export const usePipelineStore = create<PipelineState>()(
         }),
     }),
     { name: 'pipeline-store' }
+  )
+);
+
+interface StageExecutionState {
+  stageExecutionTargets: Record<number, StageExecutionTarget>;
+  setStageExecutionTarget: (stage: number, target: StageExecutionTarget) => void;
+  getStageExecutionTarget: (stage: number) => StageExecutionTarget;
+}
+
+// Keep execution-target preferences in a second persisted store so pipeline run state,
+// selected models, and fusion settings keep their existing transient/reset semantics.
+export const useStageExecutionStore = create<StageExecutionState>()(
+  persist(
+    (set, get) => ({
+      stageExecutionTargets: {},
+      setStageExecutionTarget: (stage, target) =>
+        set((state) => ({
+          stageExecutionTargets: {
+            ...state.stageExecutionTargets,
+            [stage]: target,
+          },
+        })),
+      getStageExecutionTarget: (stage) => get().stageExecutionTargets[stage] ?? 'local',
+    }),
+    {
+      name: 'mtmc-stage-execution-targets',
+      version: 1,
+      partialize: (state) => ({ stageExecutionTargets: state.stageExecutionTargets }),
+    }
   )
 );
 

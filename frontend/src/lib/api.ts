@@ -319,6 +319,13 @@ export interface FusionConfigRequest {
   rerank: boolean;
 }
 
+export interface KaggleRequestConfig {
+  target: 'local' | 'kaggle';
+  username?: string;
+  key?: string;
+  dataset_slug?: string;
+}
+
 export interface RunStageRequest {
   runId?: string;
   videoId?: string;
@@ -329,6 +336,7 @@ export interface RunStageRequest {
   smokeTest?: boolean;
   useCpu?: boolean;
   config?: Record<string, unknown>;
+  kaggle?: KaggleRequestConfig | null;
 }
 
 export async function runStage(

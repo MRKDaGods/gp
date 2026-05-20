@@ -14,6 +14,7 @@ import {
   Camera,
   Video,
   Info,
+  Server,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ModelPicker } from "@/components/ModelPicker";
 import { FusionModelPanel } from "@/components/stages/fusion-model-panel";
+import { KaggleExecutionToggle } from "@/components/stages/kaggle-execution-toggle";
 import type { ModelEntry } from "@/services/models";
 import { fetchModel } from "@/services/models";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -44,11 +46,33 @@ import {
   useDetectionStore,
   useSessionStore,
   usePipelineStore,
+  useStageExecutionStore,
   useVideoStore,
 } from "@/store";
-import { getPipelineStatus, runStage, getDatasets, type DatasetFolder, type FusionConfigRequest } from "@/lib/api";
+import { ApiError, getPipelineStatus, runStage, getDatasets, type DatasetFolder, type FusionConfigRequest } from "@/lib/api";
+import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import type { RunModelMetadata } from "@/types";
+
+function getRunStageErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "Kaggle credentials missing or invalid. Configure them in the sidebar settings.";
+    }
+    if (error.status === 429) {
+      return "Both Kaggle GPU slots are busy. Try again later or run locally.";
+    }
+    if (error.status === 400) {
+      const data = error.data as { detail?: unknown; message?: unknown } | undefined;
+      return String(data?.detail ?? data?.message ?? error.message);
+    }
+    if (error.status === 500) {
+      return "Kaggle dispatch failed. Falling back to local? Check backend logs.";
+    }
+  }
+
+  return error instanceof Error ? error.message : "Inference failed";
+}
 
 function extractRunModelMetadata(data: any, selectedModel: ModelEntry | null): RunModelMetadata {
   return {
@@ -130,6 +154,7 @@ export function InferenceStage() {
     fusion,
   } = usePipelineStore();
   const { currentVideo, setCurrentVideo } = useVideoStore();
+  const getStageExecutionTarget = useStageExecutionStore((state) => state.getStageExecutionTarget);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processStep, setProcessStep] = useState(0);
@@ -282,6 +307,16 @@ export function InferenceStage() {
           }
         : null;
     const modelIdForRequest = fusionPayload ? null : selectedModelId;
+    const executionTarget = getStageExecutionTarget(2);
+    const kaggleCreds = useKaggleCredentialsStore.getState().credentials;
+    const kagglePayload = executionTarget === "kaggle"
+      ? {
+          target: "kaggle" as const,
+          username: kaggleCreds?.username,
+          key: kaggleCreds?.key,
+        }
+      : null;
+    const kaggleRequestPart = kagglePayload ? { kaggle: kagglePayload } : {};
     setRunModelMetadata(null);
     setError(null);
 
@@ -351,6 +386,7 @@ export function InferenceStage() {
         dataset: effectiveDataset,
         model_id: modelIdForRequest,
         fusion: fusionPayload,
+        ...kaggleRequestPart,
         config: {
           dataset: effectiveDataset,
           datasetName: useDataset ? selectedDataset : undefined,
@@ -373,6 +409,7 @@ export function InferenceStage() {
         dataset: effectiveDataset,
         model_id: modelIdForRequest,
         fusion: fusionPayload,
+        ...kaggleRequestPart,
         config: {
           dataset: effectiveDataset,
           datasetName: useDataset ? selectedDataset : undefined,
@@ -409,7 +446,8 @@ export function InferenceStage() {
 
       setCurrentStage(4);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Inference failed";
+      const message = getRunStageErrorMessage(error);
+      setError(message);
       updateStageProgress(2, {
         status: "error",
         progress: 100,
@@ -593,6 +631,19 @@ export function InferenceStage() {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* InferenceStage execution covers both Stage 2 feature extraction and Stage 3 indexing. */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Server className="h-5 w-5" />
+                Execution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <KaggleExecutionToggle stage={2} />
             </CardContent>
           </Card>
 
