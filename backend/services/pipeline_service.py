@@ -134,17 +134,23 @@ def _append_stage2_fusion_overrides(
     slot: str,
     model: ModelEntry,
     architecture: ModelArchitecture,
+    *,
+    include_slot_flags: bool = True,
 ) -> Dict[str, Any]:
     checkpoint_path = _fusion_checkpoint_path(model)
     slot_config: Dict[str, Any] = {
-        "enabled": True,
-        "save_separate": True,
         "model_name": architecture.arch,
         "weights_path": checkpoint_path,
         "embedding_dim": architecture.embedding_dim,
         "input_size": architecture.input_size,
         "clip_normalization": architecture.clip_normalization,
     }
+    if include_slot_flags:
+        slot_config = {
+            "enabled": True,
+            "save_separate": True,
+            **slot_config,
+        }
     if architecture.arch == "transreid" and architecture.vit_model:
         slot_config["vit_model"] = architecture.vit_model
 
@@ -171,18 +177,41 @@ def _resolve_fusion_pipeline_model(
         model = _resolve_fusion_model(entry.model_id)
         _get_arch_metadata(model)
 
-    base_resolution = resolve_pipeline_model(
-        model_id=primary_entry.model_id,
-        dataset=dataset,
-        fusion=None,
-    )
+    primary_model = _resolve_fusion_model(primary_entry.model_id)
+    try:
+        base_resolution = resolve_pipeline_model(
+            model_id=primary_entry.model_id,
+            dataset=dataset,
+            fusion=None,
+        )
+    except PipelineModelValidationError:
+        base_resolution = PipelineModelResolution(
+            model_id=primary_model.id,
+            resolved_config=resolve_pipeline_config_path(dataset),
+            applied_overrides=[],
+            warnings=[],
+            dataset=dataset,
+        )
     overrides = list(base_resolution.applied_overrides)
+    primary_architecture = _get_arch_metadata(primary_model)
+    primary_stage2 = _append_stage2_fusion_overrides(
+        overrides,
+        "vehicle",
+        primary_model,
+        primary_architecture,
+        include_slot_flags=False,
+    )
 
     resolved_models: List[Dict[str, Any]] = [
         {
             "model_id": primary_entry.model_id,
             "weight": primary_entry.weight,
             "role": "primary",
+            "primary": True,
+            "arch": primary_stage2["arch"],
+            "checkpoint": primary_stage2["checkpoint"],
+            "stage2_slot": primary_stage2["stage2_slot"],
+            "stage2_config": primary_stage2["stage2_config"],
         }
     ]
 
@@ -198,7 +227,7 @@ def _resolve_fusion_pipeline_model(
         model = _resolve_fusion_model(entry.model_id)
         architecture = _get_arch_metadata(model)
         resolved_model = _append_stage2_fusion_overrides(overrides, stage2_slot, model, architecture)
-        resolved_model.update({"weight": entry.weight, "role": role})
+        resolved_model.update({"weight": entry.weight, "role": role, "primary": False})
         resolved_models.append(resolved_model)
 
         overrides.extend(
