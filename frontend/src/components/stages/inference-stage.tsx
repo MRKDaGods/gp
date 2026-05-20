@@ -23,7 +23,10 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ModelPicker } from "@/components/ModelPicker";
+import { FusionModelPanel } from "@/components/stages/fusion-model-panel";
 import type { ModelEntry } from "@/services/models";
+import { fetchModel } from "@/services/models";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -122,13 +125,18 @@ export function InferenceStage() {
     setIsRunning,
     updateStageProgress,
     stages,
+    modelMode,
+    setModelMode,
+    selectedModelId,
+    selectedModelMeta,
+    setSelectedModel,
+    clearSelectedModel,
+    fusion,
   } = usePipelineStore();
   const { currentVideo, setCurrentVideo } = useVideoStore();
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processStep, setProcessStep] = useState(0);
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-  const [selectedRegistryModel, setSelectedRegistryModel] = useState<ModelEntry | null>(null);
   const [runModelMetadata, setRunModelMetadata] = useState<RunModelMetadata | null>(null);
   const progressSectionRef = useRef<HTMLDivElement>(null);
 
@@ -158,7 +166,8 @@ export function InferenceStage() {
     void fetchDatasets();
   }, [fetchDatasets]);
 
-  const inferenceContextSig = `${selectedDataset}:${selectedModelId ?? "legacy"}`;
+  const fusionContextSig = fusion?.models.map((model) => `${model.modelId}:${model.weight.toFixed(4)}`).join("|") ?? "none";
+  const inferenceContextSig = `${selectedDataset}:${modelMode}:${selectedModelId ?? "legacy"}:${fusionContextSig}`;
   const skipInferContextFlushRef = useRef(true);
   useEffect(() => {
     if (skipInferContextFlushRef.current) {
@@ -183,7 +192,36 @@ export function InferenceStage() {
 
   const stage2Progress = stages.find((s) => s.stage === 2);
   const stage3Progress = stages.find((s) => s.stage === 3);
-  const effectiveDatasetLabel = selectedRegistryModel?.dataset ?? selectedDataset;
+  const effectiveDatasetLabel = selectedModelMeta?.dataset ?? selectedDataset;
+  const fusionModelCount = fusion?.models.length ?? 0;
+  const fusionRunDisabled = modelMode === "fusion" && fusionModelCount < 2;
+
+  const handleSingleModelSelect = useCallback(
+    (modelId: string | null) => {
+      if (!modelId) {
+        clearSelectedModel();
+        return;
+      }
+
+      void fetchModel(modelId)
+        .then((model) => setSelectedModel(model.id, model))
+        .catch(() => {
+          clearSelectedModel();
+        });
+    },
+    [clearSelectedModel, setSelectedModel]
+  );
+
+  const handleSingleModelChange = useCallback(
+    (model: ModelEntry | null) => {
+      if (model) {
+        setSelectedModel(model.id, model);
+      } else if (!selectedModelId) {
+        clearSelectedModel();
+      }
+    },
+    [clearSelectedModel, selectedModelId, setSelectedModel]
+  );
 
   // Get available cities based on selected governorate
   const availableCities = locationFilter.governorate
@@ -230,10 +268,10 @@ export function InferenceStage() {
   };
 
   const handleRunInference = async () => {
-    const useDataset = !selectedRegistryModel && selectedDataset && selectedDataset !== "__uploaded__";
+    const useDataset = !selectedModelMeta && selectedDataset && selectedDataset !== "__uploaded__";
     const selectedDs = useDataset ? datasets.find((d) => d.name === selectedDataset) : null;
     const modelRequest = selectedModelId ? { model_id: selectedModelId } : {};
-    const effectiveDataset = selectedRegistryModel?.dataset ?? (useDataset ? selectedDataset : undefined);
+    const effectiveDataset = selectedModelMeta?.dataset ?? (useDataset ? selectedDataset : undefined);
     setRunModelMetadata(null);
 
     if (
@@ -297,7 +335,7 @@ export function InferenceStage() {
           ...modelRequest,
         },
       });
-      setRunModelMetadata(extractRunModelMetadata(stage2Response.data as any, selectedRegistryModel));
+      setRunModelMetadata(extractRunModelMetadata(stage2Response.data as any, selectedModelMeta));
       const stage2RunId = (stage2Response.data as any)?.runId ?? probeRunId;
       if (stage2RunId) {
         setRunId(stage2RunId);
@@ -319,7 +357,7 @@ export function InferenceStage() {
           ...modelRequest,
         },
       });
-      setRunModelMetadata(extractRunModelMetadata(stage3Response.data as any, selectedRegistryModel));
+      setRunModelMetadata(extractRunModelMetadata(stage3Response.data as any, selectedModelMeta));
       const stage3RunId = (stage3Response.data as any)?.runId ?? stage2RunId;
       if (stage3RunId) {
         setRunId(stage3RunId);
@@ -423,7 +461,7 @@ export function InferenceStage() {
             <CardContent>
               <div className="space-y-3">
                 <Label>Run inference on</Label>
-                {selectedRegistryModel ? (
+                {selectedModelMeta ? (
                   <div className="rounded-lg border bg-muted/50 p-3">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <Badge variant="secondary" className="uppercase">
@@ -500,7 +538,7 @@ export function InferenceStage() {
                     )}
                   </div>
                 )}
-                {!selectedRegistryModel && selectedDataset && selectedDataset !== "__uploaded__" && (
+                {!selectedModelMeta && selectedDataset && selectedDataset !== "__uploaded__" && (
                   <div className="rounded-lg border p-3 bg-muted/50">
                     {(() => {
                       const ds = datasets.find((d) => d.name === selectedDataset);
@@ -633,22 +671,34 @@ export function InferenceStage() {
 
           {/* Model selector */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Cpu className="h-5 w-5" />
-                Model Registry
-              </CardTitle>
+            <CardHeader className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Cpu className="h-5 w-5" />
+                  Model Registry
+                </CardTitle>
+                <Tabs value={modelMode} onValueChange={(value) => setModelMode(value as "single" | "fusion")}>
+                  <TabsList>
+                    <TabsTrigger value="single">Single model</TabsTrigger>
+                    <TabsTrigger value="fusion">Fusion (2-3 models)</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
             </CardHeader>
             <CardContent className="p-4">
-              <ModelPicker
-                selectedId={selectedModelId}
-                onSelect={setSelectedModelId}
-                onModelChange={setSelectedRegistryModel}
-              />
+              {modelMode === "single" ? (
+                <ModelPicker
+                  selectedId={selectedModelId}
+                  onSelect={handleSingleModelSelect}
+                  onModelChange={handleSingleModelChange}
+                />
+              ) : (
+                <FusionModelPanel />
+              )}
             </CardContent>
           </Card>
 
-          {(selectedRegistryModel || runModelMetadata) && (
+          {(selectedModelMeta || runModelMetadata || (modelMode === "fusion" && fusion)) && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
@@ -656,24 +706,61 @@ export function InferenceStage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div>
-                    <div className="text-muted-foreground">Model</div>
-                    <div className="font-mono">{runModelMetadata?.modelId ?? selectedRegistryModel?.id ?? "legacy"}</div>
+                {modelMode === "fusion" && fusion ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <div className="text-muted-foreground">Mode</div>
+                        <div className="font-mono">Fusion ({fusion.models.length} models)</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Pipeline payload</div>
+                        <div className="font-mono">Not sent until Phase 5</div>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-muted/40 p-3">
+                      <div className="mb-2 text-sm font-medium">Fusion models</div>
+                      <div className="space-y-1.5">
+                        {fusion.models.length > 0 ? fusion.models.map((model) => (
+                          <div key={model.modelId} className="grid grid-cols-[1fr_auto] gap-3">
+                            <span className="truncate font-mono">{model.modelId}</span>
+                            <span className="font-mono tabular-nums">{(model.weight * 100).toFixed(0)}%</span>
+                          </div>
+                        )) : (
+                          <div className="text-muted-foreground">Pick at least 2 models</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg border bg-muted/40 p-3 font-mono sm:grid-cols-5">
+                      <div><span className="text-muted-foreground">aqe_k </span>{fusion.aqeK}</div>
+                      <div><span className="text-muted-foreground">k1 </span>{fusion.k1}</div>
+                      <div><span className="text-muted-foreground">k2 </span>{fusion.k2}</div>
+                      <div><span className="text-muted-foreground">λ </span>{fusion.lambda}</div>
+                      <div><span className="text-muted-foreground">rerank </span>{fusion.rerank ? "true" : "false"}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-muted-foreground">Pipeline YAML</div>
-                    <div className="font-mono">{runModelMetadata?.resolvedConfig ?? selectedRegistryModel?.pipeline_config ?? "configs/default.yaml"}</div>
-                  </div>
-                </div>
-                <details className="rounded-lg border bg-muted/40 p-3">
-                  <summary className="cursor-pointer text-sm font-medium">Applied overrides</summary>
-                  <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded bg-background p-3 font-mono text-[11px]">
-                    {(runModelMetadata?.appliedOverrides ?? selectedRegistryModel?.model_overrides ?? []).length > 0
-                      ? (runModelMetadata?.appliedOverrides ?? selectedRegistryModel?.model_overrides ?? []).join("\n")
-                      : "No registry overrides applied."}
-                  </pre>
-                </details>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <div className="text-muted-foreground">Model</div>
+                        <div className="font-mono">{runModelMetadata?.modelId ?? selectedModelMeta?.id ?? "legacy"}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Pipeline YAML</div>
+                        <div className="font-mono">{runModelMetadata?.resolvedConfig ?? selectedModelMeta?.pipeline_config ?? "configs/default.yaml"}</div>
+                      </div>
+                    </div>
+                    <details className="rounded-lg border bg-muted/40 p-3">
+                      <summary className="cursor-pointer text-sm font-medium">Applied overrides</summary>
+                      <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded bg-background p-3 font-mono text-[11px]">
+                        {(runModelMetadata?.appliedOverrides ?? selectedModelMeta?.model_overrides ?? []).length > 0
+                          ? (runModelMetadata?.appliedOverrides ?? selectedModelMeta?.model_overrides ?? []).join("\n")
+                          : "No registry overrides applied."}
+                      </pre>
+                    </details>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
@@ -687,6 +774,20 @@ export function InferenceStage() {
             </CardHeader>
             <CardContent className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                {modelMode === "fusion" && fusion ? (
+                  <>
+                    <div className="text-muted-foreground">Mode</div>
+                    <div className="font-mono">Fusion ({fusion.models.length} models)</div>
+                    {fusion.models.map((model) => (
+                      <div key={`active-${model.modelId}`} className="contents">
+                        <div className="truncate text-muted-foreground">{model.modelId}</div>
+                        <div className="font-mono tabular-nums">weight {(model.weight * 100).toFixed(0)}%</div>
+                      </div>
+                    ))}
+                    <div className="text-muted-foreground">Fusion hyperparams</div>
+                    <div className="font-mono">aqe_k={fusion.aqeK} · k1={fusion.k1} · k2={fusion.k2} · λ={fusion.lambda} · rerank={fusion.rerank ? "true" : "false"}</div>
+                  </>
+                ) : null}
                 <div className="text-muted-foreground">Detector</div>
                 <div className="font-mono">YOLOv26 · conf 0.25 · IoU 0.65</div>
                 <div className="text-muted-foreground">Tracker</div>
@@ -777,7 +878,7 @@ export function InferenceStage() {
             <Button
               size="lg"
               onClick={handleRunInference}
-              disabled={isProcessing}
+              disabled={isProcessing || fusionRunDisabled}
               className="min-w-[200px]"
             >
               {isProcessing ? (
