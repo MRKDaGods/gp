@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { ModelPicker } from "@/components/ModelPicker";
 import { FusionModelPanel } from "@/components/stages/fusion-model-panel";
 import { KaggleExecutionToggle } from "@/components/stages/kaggle-execution-toggle";
+import { KaggleStatusPanel } from "@/components/stages/kaggle-status-panel";
 import type { ModelEntry } from "@/services/models";
 import { fetchModel } from "@/services/models";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -52,7 +53,7 @@ import {
 import { ApiError, getPipelineStatus, runStage, getDatasets, type DatasetFolder, type FusionConfigRequest } from "@/lib/api";
 import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
-import type { RunModelMetadata } from "@/types";
+import type { PipelineRunStatus, RunModelMetadata } from "@/types";
 
 function getRunStageErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -159,6 +160,8 @@ export function InferenceStage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processStep, setProcessStep] = useState(0);
   const [runModelMetadata, setRunModelMetadata] = useState<RunModelMetadata | null>(null);
+  const [lastRunStageResponse, setLastRunStageResponse] = useState<PipelineRunStatus | null>(null);
+  const [kagglePanelRunId, setKagglePanelRunId] = useState<string | null>(null);
   const progressSectionRef = useRef<HTMLDivElement>(null);
 
   // Dataset folder selector
@@ -213,6 +216,9 @@ export function InferenceStage() {
 
   const stage2Progress = stages.find((s) => s.stage === 2);
   const stage3Progress = stages.find((s) => s.stage === 3);
+  const showKaggleStatusPanel = Boolean(
+    kagglePanelRunId && lastRunStageResponse?.execution_target === "kaggle"
+  );
   const effectiveDatasetLabel = selectedModelMeta?.dataset ?? selectedDataset;
   const fusionModelCount = fusion?.models.length ?? 0;
   const fusionRunDisabled = modelMode === "fusion" && fusionModelCount < 2;
@@ -318,6 +324,8 @@ export function InferenceStage() {
       : null;
     const kaggleRequestPart = kagglePayload ? { kaggle: kagglePayload } : {};
     setRunModelMetadata(null);
+    setLastRunStageResponse(null);
+    setKagglePanelRunId(null);
     setError(null);
 
     if (modelMode === "fusion" && !fusionPayload) {
@@ -392,10 +400,21 @@ export function InferenceStage() {
           datasetName: useDataset ? selectedDataset : undefined,
         },
       });
-      setRunModelMetadata(extractRunModelMetadata(stage2Response.data as any, selectedModelMeta));
-      const stage2RunId = (stage2Response.data as any)?.runId ?? probeRunId;
+      const stage2Data = stage2Response.data ?? null;
+      setLastRunStageResponse(stage2Data);
+      setRunModelMetadata(extractRunModelMetadata(stage2Data as any, selectedModelMeta));
+      const stage2RunId = (stage2Data as any)?.runId ?? probeRunId;
       if (stage2RunId) {
         setRunId(stage2RunId);
+        if (stage2Data?.execution_target === "kaggle") {
+          setKagglePanelRunId(stage2RunId);
+          updateStageProgress(2, {
+            status: "running",
+            progress: 0,
+            message: "Kaggle kernel queued for feature extraction",
+          });
+          return;
+        }
         await pollStageStatus(stage2RunId, 2);
       }
 
@@ -415,10 +434,21 @@ export function InferenceStage() {
           datasetName: useDataset ? selectedDataset : undefined,
         },
       });
-      setRunModelMetadata(extractRunModelMetadata(stage3Response.data as any, selectedModelMeta));
-      const stage3RunId = (stage3Response.data as any)?.runId ?? stage2RunId;
+      const stage3Data = stage3Response.data ?? null;
+      setLastRunStageResponse(stage3Data);
+      setRunModelMetadata(extractRunModelMetadata(stage3Data as any, selectedModelMeta));
+      const stage3RunId = (stage3Data as any)?.runId ?? stage2RunId;
       if (stage3RunId) {
         setRunId(stage3RunId);
+        if (stage3Data?.execution_target === "kaggle") {
+          setKagglePanelRunId(stage3RunId);
+          updateStageProgress(3, {
+            status: "running",
+            progress: 0,
+            message: "Kaggle kernel queued for indexing",
+          });
+          return;
+        }
         await pollStageStatus(stage3RunId, 3);
       }
 
@@ -1015,34 +1045,38 @@ export function InferenceStage() {
           </div>
 
           {/* Processing status (below run — scrollIntoView when started) */}
-          {isProcessing && (
+          {(isProcessing || showKaggleStatusPanel) && (
             <div ref={progressSectionRef} className="scroll-mt-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Cpu className="h-5 w-5 animate-pulse" />
-                    Processing
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <ProcessingStep
-                    step={1}
-                    currentStep={processStep}
-                    title="Stage 2: Feature Extraction"
-                    description="Extracting ReID embeddings using TransReID"
-                    progress={stage2Progress?.progress || 0}
-                    message={stage2Progress?.message}
-                  />
-                  <ProcessingStep
-                    step={2}
-                    currentStep={processStep}
-                    title="Stage 3: Indexing"
-                    description="Building FAISS vector index"
-                    progress={stage3Progress?.progress || 0}
-                    message={stage3Progress?.message}
-                  />
-                </CardContent>
-              </Card>
+              {showKaggleStatusPanel && kagglePanelRunId ? (
+                <KaggleStatusPanel runId={kagglePanelRunId} />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Cpu className="h-5 w-5 animate-pulse" />
+                      Processing
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <ProcessingStep
+                      step={1}
+                      currentStep={processStep}
+                      title="Stage 2: Feature Extraction"
+                      description="Extracting ReID embeddings using TransReID"
+                      progress={stage2Progress?.progress || 0}
+                      message={stage2Progress?.message}
+                    />
+                    <ProcessingStep
+                      step={2}
+                      currentStep={processStep}
+                      title="Stage 3: Indexing"
+                      description="Building FAISS vector index"
+                      progress={stage3Progress?.progress || 0}
+                      message={stage3Progress?.message}
+                    />
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </div>

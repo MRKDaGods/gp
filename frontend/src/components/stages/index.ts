@@ -1,5 +1,6 @@
 export { UploadStage } from "./upload-stage";
 export { DetectionStage } from "./detection-stage";
+export { KaggleStatusPanel } from "./kaggle-status-panel";
 export { SelectionStage } from "./selection-stage";
 export { InferenceStage } from "./inference-stage";
 export { TimelineStage } from "./timeline-stage";

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -17,6 +18,7 @@ from backend.services.kaggle_service import (
     KaggleConcurrencyError,
     KaggleValidationError,
 )
+from backend.services import kaggle_service
 from backend.services.pipeline_service import (
     PipelineModelValidationError,
     _resolve_run_id,
@@ -29,6 +31,8 @@ from backend.services.video_service import _detect_camera_for_video
 from backend.state import AppState
 
 router = APIRouter()
+
+TERMINAL_KAGGLE_STATUSES = {"complete", "error", "cancelled"}
 
 
 def _payload_model_id(payload: PipelineRunRequest, config: Dict[str, Any]) -> Optional[str]:
@@ -47,6 +51,16 @@ def _get_user_video_path(video_id: Optional[str], state: AppState) -> Optional[P
         return None
     path = record.get("path")
     return Path(path) if path else None
+
+
+def _persist_kaggle_state(
+    run_id: str,
+    state: Dict[str, Any],
+    output_root: Path = Path("data/outputs"),
+) -> None:
+    metadata_path = output_root / run_id / "kaggle_job.json"
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text(json.dumps(state, indent=2, ensure_ascii=True), encoding="utf-8")
 
 
 @router.post("/api/pipeline/run-stage/{stage}")
@@ -300,6 +314,31 @@ async def get_kaggle_status(run_id: str):
     except KaggleValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"success": True, "data": refreshed}
+
+
+@router.post("/api/pipeline/kaggle-cancel/{run_id}")
+@router.post("/pipeline/kaggle-cancel/{run_id}")
+async def cancel_kaggle(run_id: str):
+    state = get_kaggle_job_state(run_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"No Kaggle job found for run_id {run_id}")
+
+    if state.get("status") in TERMINAL_KAGGLE_STATUSES:
+        return {
+            "success": True,
+            "data": {**state, "message": "Job already in terminal state"},
+        }
+
+    try:
+        kaggle_service.cancel_kernel(str(state["kernel_slug"]))
+        state["status"] = "cancelled"
+        state["last_polled_at"] = datetime.utcnow().isoformat() + "Z"
+        _persist_kaggle_state(run_id, state)
+        return {"success": True, "data": state}
+    except KaggleAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/api/pipeline/cancel/{run_id}")

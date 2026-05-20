@@ -326,6 +326,21 @@ export interface KaggleRequestConfig {
   dataset_slug?: string;
 }
 
+export interface KaggleJobStatus {
+  run_id: string;
+  kernel_slug: string;
+  kernel_url: string;
+  dataset_slug: string;
+  project_dataset_slug: string;
+  status: 'queued' | 'running' | 'complete' | 'error' | 'cancelled' | 'unknown';
+  stages: number[];
+  started_at: string;
+  last_polled_at: string | null;
+  exit_code: number | null;
+  outputs_downloaded_to: string | null;
+  error?: string | null;
+}
+
 export interface RunStageRequest {
   runId?: string;
   videoId?: string;
@@ -368,6 +383,16 @@ export async function cancelPipeline(
   runId: string
 ): Promise<ApiResponse<void>> {
   return fetchApi(`/pipeline/cancel/${runId}`, { method: 'POST' });
+}
+
+export async function getKaggleStatus(runId: string): Promise<ApiResponse<KaggleJobStatus>> {
+  return fetchApi(`/pipeline/kaggle-status/${encodeURIComponent(runId)}`);
+}
+
+export async function cancelKaggleKernel(runId: string): Promise<ApiResponse<KaggleJobStatus>> {
+  return fetchApi(`/pipeline/kaggle-cancel/${encodeURIComponent(runId)}`, {
+    method: 'POST',
+  });
 }
 
 // ============================================================================

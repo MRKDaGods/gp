@@ -196,6 +196,7 @@ export interface PipelineRunStatus {
   stages: StageProgress[];
   startedAt: string;
   status: 'running' | 'completed' | 'error';
+  execution_target?: StageExecutionTarget;
   model_id?: string | null;
   modelId?: string | null;
   resolved_config?: string | null;
