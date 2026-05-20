@@ -14,11 +14,13 @@ from backend.models.registry import (
     Requirements,
     Tombstone,
 )
-from backend.models.requests import PipelineRunRequest, SearchRequest, TimelineQueryRequest
+from backend.models.requests import FusionConfig, FusionModel, PipelineRunRequest, SearchRequest, TimelineQueryRequest
 
 __all__ = [
     "CheckpointRef",
     "EmbeddingArtifact",
+    "FusionConfig",
+    "FusionModel",
     "HostedCheckpoint",
     "Metric",
     "MetricSource",

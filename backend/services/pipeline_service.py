@@ -25,6 +25,7 @@ from backend.config import (
     UPLOAD_DIR,
     VIDEO_EXTENSIONS,
 )
+from backend.models.requests import FusionConfig
 from backend.services.model_registry import get_model
 from backend.services.tracklet_service import _persist_probe_link
 from backend.services.video_service import (
@@ -46,6 +47,59 @@ DATASET_TASK_BY_NAME = {
     "veri776": "single_cam_reid",
 }
 
+# TODO(Phase 4): replace with registry-driven arch resolution.
+_PHASE3_ARCH_LOOKUP: Dict[str, Dict[str, Any]] = {
+    "vehicle_mtmc_14e_b1": {
+        "arch": "transreid",
+        "model_name": "transreid",
+        "embedding_dim": 768,
+        "input_size": [256, 256],
+        "vit_model": "vit_base_patch16_clip_224.openai",
+        "clip_normalization": True,
+        "num_cameras": 59,
+        "checkpoint_role": "primary_reid",
+    },
+    "cityflow_transreid": {
+        "arch": "transreid",
+        "model_name": "transreid",
+        "embedding_dim": 768,
+        "input_size": [256, 256],
+        "vit_model": "vit_base_patch16_clip_224.openai",
+        "clip_normalization": True,
+        "num_cameras": 59,
+        "checkpoint_role": "primary_reid",
+    },
+    "veri776_09v_v17_transreid": {
+        "arch": "transreid",
+        "model_name": "transreid",
+        "embedding_dim": 768,
+        "input_size": [256, 256],
+        "vit_model": "vit_base_patch16_clip_224.openai",
+        "clip_normalization": True,
+        "num_cameras": 59,
+        "checkpoint_role": "primary_reid",
+    },
+    "veri776_clipsenet_v6": {
+        "arch": "clip_senet",
+        "model_name": "clip_senet",
+        "embedding_dim": 2048,
+        "input_size": [320, 320],
+        "clip_normalization": False,
+        "checkpoint_role": "primary_reid",
+    },
+    "cityflow_dinov2_tertiary": {
+        "arch": "transreid",
+        "model_name": "transreid",
+        "embedding_dim": 1024,
+        "input_size": [252, 252],
+        "vit_model": "vit_large_patch14_dinov2.lvd142m",
+        "clip_normalization": False,
+        "num_cameras": 59,
+        "checkpoint_role": "tertiary_reid",
+        "checkpoint_path": "models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth",
+    },
+}
+
 
 @dataclass(frozen=True)
 class PipelineModelResolution:
@@ -54,6 +108,7 @@ class PipelineModelResolution:
     applied_overrides: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     dataset: Optional[str] = None
+    fusion_resolved: Optional[Dict[str, Any]] = None
 
 
 class PipelineModelValidationError(ValueError):
@@ -88,12 +143,170 @@ def _lookup_registry_model(model_id: str):
     return None
 
 
+def _format_override_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, list):
+        return "[" + ",".join(str(item) for item in value) + "]"
+    return str(value)
+
+
+def _fusion_checkpoint_path(model: Any, arch_config: Dict[str, Any]) -> str:
+    explicit_path = arch_config.get("checkpoint_path")
+    if explicit_path:
+        return str(explicit_path)
+
+    preferred_role = arch_config.get("checkpoint_role", "primary_reid")
+    for checkpoint in model.checkpoint_refs:
+        if checkpoint.role == preferred_role:
+            return checkpoint.local_path
+    for checkpoint in model.checkpoint_refs:
+        if str(checkpoint.role).endswith("_reid"):
+            return checkpoint.local_path
+
+    raise PipelineModelValidationError(
+        f"Model '{model.id}' does not define a ReID checkpoint path for fusion. "
+        "Phase 4 will add registry-driven architecture metadata."
+    )
+
+
+def _fusion_arch_config(model_id: str) -> Dict[str, Any]:
+    arch_config = _PHASE3_ARCH_LOOKUP.get(model_id)
+    if arch_config is None:
+        raise PipelineModelValidationError(
+            f"Model '{model_id}' is missing Phase 3 fusion architecture metadata. "
+            "Wait for Phase 4 registry schema support or add the model to _PHASE3_ARCH_LOOKUP."
+        )
+    return arch_config
+
+
+def _resolve_fusion_model(model_id: str):
+    model = _lookup_registry_model(model_id)
+    if model is None:
+        raise ValueError(f"Unknown model_id in fusion.models: '{model_id}'")
+    return model
+
+
+def _append_stage2_fusion_overrides(
+    overrides: List[str],
+    slot: str,
+    model: Any,
+    arch_config: Dict[str, Any],
+) -> Dict[str, Any]:
+    checkpoint_path = _fusion_checkpoint_path(model, arch_config)
+    slot_config: Dict[str, Any] = {
+        "enabled": True,
+        "save_separate": True,
+        "model_name": arch_config["model_name"],
+        "weights_path": checkpoint_path,
+        "embedding_dim": arch_config["embedding_dim"],
+        "input_size": arch_config["input_size"],
+    }
+    for optional_key in ("vit_model", "clip_normalization", "num_cameras", "concat_patch"):
+        if optional_key in arch_config:
+            slot_config[optional_key] = arch_config[optional_key]
+
+    for key, value in slot_config.items():
+        overrides.append(f"stage2.reid.{slot}.{key}={_format_override_value(value)}")
+
+    return {
+        "model_id": model.id,
+        "arch": arch_config["arch"],
+        "checkpoint": checkpoint_path,
+        "stage2_slot": slot,
+        "stage2_config": slot_config,
+    }
+
+
+def _resolve_fusion_pipeline_model(
+    fusion: FusionConfig,
+    dataset: Optional[str] = None,
+) -> PipelineModelResolution:
+    ordered = sorted(enumerate(fusion.models), key=lambda item: (-item[1].weight, item[0]))
+    primary_entry = ordered[0][1]
+
+    for entry in fusion.models:
+        _resolve_fusion_model(entry.model_id)
+        _fusion_arch_config(entry.model_id)
+
+    base_resolution = resolve_pipeline_model(
+        model_id=primary_entry.model_id,
+        dataset=dataset,
+        fusion=None,
+    )
+    overrides = list(base_resolution.applied_overrides)
+
+    resolved_models: List[Dict[str, Any]] = [
+        {
+            "model_id": primary_entry.model_id,
+            "weight": primary_entry.weight,
+            "role": "primary",
+        }
+    ]
+
+    secondary_path = "${project.output_dir}/${project.run_name}/stage2/embeddings_secondary.npy"
+    tertiary_path = "${project.output_dir}/${project.run_name}/stage2/embeddings_tertiary.npy"
+    slot_specs = [
+        ("vehicle2", "secondary", "secondary_embeddings", secondary_path),
+        ("vehicle3", "tertiary", "tertiary_embeddings", tertiary_path),
+    ]
+
+    for slot_index, (_, entry) in enumerate(ordered[1:]):
+        stage2_slot, role, stage4_slot, embedding_path = slot_specs[slot_index]
+        model = _resolve_fusion_model(entry.model_id)
+        arch_config = _fusion_arch_config(entry.model_id)
+        resolved_model = _append_stage2_fusion_overrides(overrides, stage2_slot, model, arch_config)
+        resolved_model.update({"weight": entry.weight, "role": role})
+        resolved_models.append(resolved_model)
+
+        overrides.extend(
+            [
+                f"stage4.association.{stage4_slot}.path={embedding_path}",
+                f"stage4.association.{stage4_slot}.enabled=true",
+                f"stage4.association.{stage4_slot}.weight={entry.weight}",
+            ]
+        )
+
+    overrides.extend(
+        [
+            f"stage4.association.query_expansion.k={fusion.aqe_k}",
+            f"stage4.association.reranking.enabled={_format_override_value(fusion.rerank)}",
+            f"stage4.association.reranking.k1={fusion.k1}",
+            f"stage4.association.reranking.k2={fusion.k2}",
+            f"stage4.association.reranking.lambda_value={fusion.lambda_}",
+        ]
+    )
+
+    fusion_resolved = {
+        "models": resolved_models,
+        "primary_model_id": primary_entry.model_id,
+        "aqe_k": fusion.aqe_k,
+        "k1": fusion.k1,
+        "k2": fusion.k2,
+        "lambda": fusion.lambda_,
+        "rerank": fusion.rerank,
+    }
+
+    return PipelineModelResolution(
+        model_id=base_resolution.model_id,
+        resolved_config=base_resolution.resolved_config,
+        applied_overrides=overrides,
+        warnings=base_resolution.warnings,
+        dataset=base_resolution.dataset,
+        fusion_resolved=fusion_resolved,
+    )
+
+
 def resolve_pipeline_model(
     model_id: Optional[str] = None,
     dataset: Optional[str] = None,
+    fusion: Optional[FusionConfig] = None,
 ) -> PipelineModelResolution:
     """Resolve an optional registry model selection into pipeline run settings."""
     requested_dataset = _normalise_dataset(dataset)
+
+    if fusion is not None:
+        return _resolve_fusion_pipeline_model(fusion=fusion, dataset=requested_dataset)
 
     if not model_id:
         return PipelineModelResolution(

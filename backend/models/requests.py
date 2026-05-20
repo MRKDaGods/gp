@@ -5,7 +5,59 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class FusionModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_id: str = Field(..., alias="modelId", min_length=1)
+    weight: float = Field(..., ge=0.0, le=1.0)
+
+    @field_validator("model_id")
+    @classmethod
+    def validate_model_id(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Fusion model_id must be a non-empty string")
+        return stripped
+
+    @field_validator("weight")
+    @classmethod
+    def validate_weight(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("Fusion model weights must be finite")
+        return value
+
+
+class FusionConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    models: List[FusionModel] = Field(..., min_length=2, max_length=3)
+    aqe_k: int = Field(default=3, alias="aqeK", ge=0, le=10)
+    k1: int = Field(default=80, ge=1, le=200)
+    k2: int = Field(default=15, ge=1, le=50)
+    lambda_: float = Field(default=0.2, alias="lambda", ge=0.0, le=1.0)
+    rerank: bool = True
+
+    @field_validator("models")
+    @classmethod
+    def validate_unique_ids(cls, value: List[FusionModel]) -> List[FusionModel]:
+        model_ids = [model.model_id for model in value]
+        if len(set(model_ids)) != len(model_ids):
+            raise ValueError("Fusion model IDs must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def normalize_weights(self) -> "FusionConfig":
+        total = sum(model.weight for model in self.models)
+        if total < 0.99 or total > 1.01:
+            raise ValueError("Fusion model weights must sum to 1.0 within tolerance [0.99, 1.01]")
+        if total <= 0:
+            raise ValueError("Fusion model weights must sum to a positive value")
+        for model in self.models:
+            model.weight = model.weight / total
+        return self
 
 
 class PipelineRunRequest(BaseModel):
@@ -19,6 +71,7 @@ class PipelineRunRequest(BaseModel):
     smokeTest: bool = False
     useCpu: bool = False
     config: Optional[Dict[str, Any]] = None
+    fusion: Optional[FusionConfig] = None
 
 
 class TimelineQueryRequest(BaseModel):

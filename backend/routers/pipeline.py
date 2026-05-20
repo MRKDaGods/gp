@@ -38,7 +38,7 @@ async def run_stage(
 ):
     """Run a specific pipeline stage"""
     try:
-        print(f"\n[UI Request] Run Stage {stage} Payload: {request.dict() if request else 'None'}")
+        print(f"\n[UI Request] Run Stage {stage} Payload: {request.model_dump() if request else 'None'}")
         payload = request or PipelineRunRequest()
         requested_run_id = payload.runId or (payload.config or {}).get("runId")
         run_id = _resolve_run_id(str(requested_run_id) if requested_run_id is not None else None)
@@ -51,6 +51,7 @@ async def run_stage(
         resolution = resolve_pipeline_model(
             model_id=_payload_model_id(payload, config),
             dataset=_payload_dataset(payload, config),
+            fusion=payload.fusion,
         )
 
         if stage == 1 and not video_id:
@@ -84,6 +85,7 @@ async def run_stage(
             "resolved_config": resolution.resolved_config,
             "applied_overrides": resolution.applied_overrides,
             "warnings": resolution.warnings,
+            "fusion_resolved": resolution.fusion_resolved,
         }
 
         _write_run_context(
@@ -99,6 +101,7 @@ async def run_stage(
                 "resolved_config": resolution.resolved_config,
                 "applied_overrides": resolution.applied_overrides,
                 "warnings": resolution.warnings,
+                "fusion_resolved": resolution.fusion_resolved,
             },
         )
 
@@ -119,6 +122,7 @@ async def run_stage(
                 "dataset": resolution.dataset,
                 "resolvedConfig": resolution.resolved_config,
                 "appliedOverrides": resolution.applied_overrides,
+                "fusionResolved": resolution.fusion_resolved,
             },
         )
         return {"success": True, "data": state.active_runs[run_id]}
@@ -145,6 +149,7 @@ async def run_full_pipeline(
         resolution = resolve_pipeline_model(
             model_id=_payload_model_id(payload, config),
             dataset=_payload_dataset(payload, config),
+            fusion=payload.fusion,
         )
     except PipelineModelValidationError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
@@ -177,6 +182,7 @@ async def run_full_pipeline(
         "resolved_config": resolution.resolved_config,
         "applied_overrides": resolution.applied_overrides,
         "warnings": resolution.warnings,
+        "fusion_resolved": resolution.fusion_resolved,
     }
     _write_run_context(
         run_id,
@@ -187,6 +193,7 @@ async def run_full_pipeline(
             "resolved_config": resolution.resolved_config,
             "applied_overrides": resolution.applied_overrides,
             "warnings": resolution.warnings,
+            "fusion_resolved": resolution.fusion_resolved,
         },
     )
     background_tasks.add_task(
@@ -200,6 +207,7 @@ async def run_full_pipeline(
             "dataset": resolution.dataset,
             "resolvedConfig": resolution.resolved_config,
             "appliedOverrides": resolution.applied_overrides,
+            "fusionResolved": resolution.fusion_resolved,
             "reidModelPath": config.get("reid_model_path") or None,
         },
     )
