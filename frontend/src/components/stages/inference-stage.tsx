@@ -639,7 +639,7 @@ export function InferenceStage() {
                 Model Registry
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4">
               <ModelPicker
                 selectedId={selectedModelId}
                 onSelect={setSelectedModelId}

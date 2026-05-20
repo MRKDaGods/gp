@@ -93,7 +93,7 @@ export default function FusionPage() {
         <div className="grid gap-6 xl:grid-cols-[460px_1fr]">
           <aside className="space-y-6">
             <Card>
-              <CardContent className="space-y-4 p-4">
+              <CardContent className="space-y-4 p-3">
                 <h2 className="text-sm font-semibold">Models</h2>
                 <ModelPicker
                   selectedId={null}

@@ -159,7 +159,7 @@ export function ModelPicker({
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
             {(["all", "production", "research"] as StatusFilter[]).map((status) => (
               <Button
                 key={status}
@@ -167,7 +167,7 @@ export function ModelPicker({
                 variant={statusFilter === status ? "default" : "outline"}
                 size="sm"
                 onClick={() => setStatusFilter(status)}
-                className="h-8"
+                className="h-8 min-w-[64px] px-3"
               >
                 {status === "all" ? "All" : status[0].toUpperCase() + status.slice(1)}
               </Button>
@@ -177,7 +177,7 @@ export function ModelPicker({
               variant={showDeadEnds ? "secondary" : "outline"}
               size="sm"
               onClick={() => setShowDeadEnds((value) => !value)}
-              className="h-8"
+              className="h-8 min-w-[64px] px-3"
             >
               Show dead ends
             </Button>
@@ -225,7 +225,13 @@ export function ModelPicker({
                 {group.models.length}
               </Badge>
             </div>
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <div
+              className={cn(
+                compact
+                  ? "grid max-h-[calc(100vh-22rem)] grid-cols-1 gap-4 overflow-y-auto pr-1"
+                  : "grid max-h-[calc(100vh-18rem)] grid-cols-1 gap-4 overflow-y-auto pr-1 xl:grid-cols-2"
+              )}
+            >
               {group.models.map((model) => {
                 const isSelected = multiSelect ? selectedIds.includes(model.id) : selectedId === model.id;
                 const disabledReason = getDisabledReason(model, allowUnavailableSelection);
@@ -240,7 +246,7 @@ export function ModelPicker({
                       model.status === "dead_end" && "opacity-75"
                     )}
                   >
-                    <CardContent className={cn("space-y-4 p-4", compact && "space-y-3 p-3")}>
+                    <CardContent className={cn(compact ? "space-y-3 p-4" : "space-y-4 p-5")}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 space-y-1">
                           <p className={cn("font-semibold leading-snug", model.status === "dead_end" && "line-through")}>
@@ -248,23 +254,23 @@ export function ModelPicker({
                           </p>
                           <p className="text-xs text-muted-foreground">{model.dataset}</p>
                         </div>
-                        <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold", STATUS_STYLES[model.status])}>
+                        <span className={cn("shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold tracking-wide", STATUS_STYLES[model.status])}>
                           {model.status}
                         </span>
                       </div>
 
-                      <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="grid grid-cols-2 gap-2">
                         {metrics.map((metric) => (
-                          <div key={`${model.id}-${metric.name}`} className="rounded-md border bg-background p-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs text-muted-foreground">{formatMetricName(metric.name)}</span>
+                          <div key={`${model.id}-${metric.name}`} className="min-w-0 rounded-md border bg-background px-2.5 py-2">
+                            <div className="flex min-w-0 items-center justify-between gap-2">
+                              <span className="block truncate text-xs text-muted-foreground" title={metric.name}>{formatMetricName(metric.name)}</span>
                               {metric.verified ? (
-                                <Badge variant="outline" className="gap-1 border-green-600 text-[10px] text-green-700">
+                                <Badge variant="outline" className="shrink-0 gap-1 border-green-600 text-[10px] text-green-700">
                                   <CheckCircle2 className="h-3 w-3" />
                                   verified
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                                <Badge variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
                                   unverified
                                 </Badge>
                               )}
@@ -280,10 +286,10 @@ export function ModelPicker({
 
                       <div className="flex flex-wrap items-center gap-2">
                         {model.requirements.gpu_required && (
-                          <Badge variant="outline" className="text-[10px]">GPU {model.requirements.min_vram_gb}GB</Badge>
+                          <Badge variant="outline" className="whitespace-nowrap px-2 py-1 text-[11px]">GPU {model.requirements.min_vram_gb}GB</Badge>
                         )}
                         {model.missing_checkpoints.length > 0 && (
-                          <Badge variant="warning" className="text-[10px]">Weights missing</Badge>
+                          <Badge variant="warning" className="whitespace-nowrap px-2 py-1 text-[11px]">Weights missing</Badge>
                         )}
                         {model.notebook_or_kernel_ref && (
                           <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
@@ -295,19 +301,19 @@ export function ModelPicker({
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between gap-2">
-                        {!model.runnable_locally && model.notebook_or_kernel_ref ? (
+                      <div className="flex items-center gap-2">
+                        {!model.runnable_locally && model.notebook_or_kernel_ref && (
                           <Button asChild variant="outline" size="sm">
                             <a href={getKernelHref(model.notebook_or_kernel_ref)} target="_blank" rel="noreferrer">
                               Reproduce on Kaggle
                               <ExternalLink className="ml-2 h-4 w-4" />
                             </a>
                           </Button>
-                        ) : <span />}
+                        )}
                         {disabledReason ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="inline-flex">
+                              <span className="ml-auto inline-flex">
                                 <Button type="button" size="sm" disabled>
                                   Select
                                 </Button>
@@ -321,6 +327,7 @@ export function ModelPicker({
                             size="sm"
                             variant={isSelected ? "default" : "outline"}
                             onClick={() => multiSelect ? toggleMulti(model.id) : onSelect(isSelected ? null : model.id)}
+                            className="ml-auto"
                           >
                             {isSelected ? "Selected" : multiSelect ? "Add" : "Select"}
                           </Button>

@@ -73,7 +73,7 @@ export default function ReIDPage() {
         <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
           <aside className="space-y-6">
             <Card>
-              <CardContent className="space-y-4 p-4">
+              <CardContent className="space-y-4 p-3">
                 <h2 className="text-sm font-semibold">Model</h2>
                 <ModelPicker
                   selectedId={selectedModelId}
