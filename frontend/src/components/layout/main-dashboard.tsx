@@ -22,8 +22,11 @@ import {
   FolderOpen,
   Check,
   Cpu,
+  Settings,
 } from "lucide-react";
 import { useSessionStore, useUIStore, usePipelineStore } from "@/store";
+import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials-modal";
+import { useHasKaggleCredentials } from "@/lib/kaggle-credentials-store";
 import type { StageNumber } from "@/types";
 import type { ModelEntry, ModelMetric } from "@/services/models";
 import { GlobalProcessingBanner } from "@/components/layout/global-processing-banner";
@@ -108,7 +111,9 @@ export function MainDashboard() {
   const modelMode = usePipelineStore((s) => s.modelMode);
   const selectedModelMeta = usePipelineStore((s) => s.selectedModelMeta);
   const fusion = usePipelineStore((s) => s.fusion);
+  const hasKaggleCredentials = useHasKaggleCredentials();
   const [datasetView, setDatasetView] = useState(false);
+  const [kaggleSettingsOpen, setKaggleSettingsOpen] = useState(false);
   const [visitedPipelineStages, setVisitedPipelineStages] = useState<Set<StageNumber>>(
     () => new Set([currentStage])
   );
@@ -200,6 +205,32 @@ export function MainDashboard() {
           })}
 
           <div className="mt-auto" />
+
+          {/* Kaggle credentials */}
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setKaggleSettingsOpen(true)}
+                className={cn(
+                  "group flex w-full items-center rounded-md text-sm font-medium transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  hasKaggleCredentials ? "text-foreground" : "text-muted-foreground",
+                  sidebarOpen ? "gap-3 px-2 py-2" : "h-9 justify-center px-0"
+                )}
+                aria-label="Kaggle credentials"
+              >
+                <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
+                  <Settings className="h-4 w-4" />
+                  {hasKaggleCredentials && (
+                    <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-green-500 ring-2 ring-card" />
+                  )}
+                </span>
+                {sidebarOpen && <span className="truncate">Kaggle credentials</span>}
+              </button>
+            </TooltipTrigger>
+            {!sidebarOpen && (
+              <TooltipContent side="right">Kaggle credentials</TooltipContent>
+            )}
+          </Tooltip>
 
           {/* Active model */}
           <Tooltip delayDuration={0}>
@@ -301,6 +332,7 @@ export function MainDashboard() {
           )}
         </div>
       </main>
+      <KaggleCredentialsModal open={kaggleSettingsOpen} onOpenChange={setKaggleSettingsOpen} />
     </div>
   );
 }
