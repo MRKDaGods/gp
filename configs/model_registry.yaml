@@ -1,3 +1,10 @@
+# Optional per-model architecture metadata for ReID fusion streams:
+# architecture:
+#   arch: <string>              # transreid | clip_senet | dinov2 | resnet50_ibn | osnet | yolov26 | mvdetr
+#   vit_model: <string>         # ViT-family models, e.g. vit_base_patch16_clip
+#   embedding_dim: <int>        # output embedding dimension
+#   input_size: [<H>, <W>]      # image input size
+#   clip_normalization: <bool>  # true for CLIP-pretrained models
 version: 1
 models:
   - id: vehicle_mtmc_14e_b1
@@ -57,6 +64,12 @@ models:
         source_training_kernel: yahiaakhalafallah/09s-dinov2-large-cityflowv2
         size_bytes: null
         on_disk: false
+    architecture:
+      arch: transreid
+      vit_model: vit_base_patch16_clip
+      embedding_dim: 768
+      input_size: [256, 256]
+      clip_normalization: true
     requirements:
       gpu_required: true
       min_vram_gb: 8
@@ -111,6 +124,12 @@ models:
         source_training_kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
         size_bytes: 346518635
         on_disk: false
+    architecture:
+      arch: transreid
+      vit_model: vit_base_patch16_clip
+      embedding_dim: 768
+      input_size: [256, 256]
+      clip_normalization: true
     requirements:
       gpu_required: false
       min_vram_gb: 0
@@ -417,6 +436,12 @@ models:
         source_training_kernel: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
         size_bytes: null
         on_disk: false
+    architecture:
+      arch: transreid
+      vit_model: vit_base_patch16_clip
+      embedding_dim: 768
+      input_size: [256, 256]
+      clip_normalization: true
     requirements:
       gpu_required: true
       min_vram_gb: 8
@@ -467,6 +492,11 @@ models:
         source_training_kernel: yahiaakhalafallah/13-clip-senet-train
         size_bytes: null
         on_disk: false
+    architecture:
+      arch: clip_senet
+      embedding_dim: 768
+      input_size: [320, 320]
+      clip_normalization: true
     requirements:
       gpu_required: true
       min_vram_gb: 8

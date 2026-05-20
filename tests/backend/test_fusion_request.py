@@ -124,6 +124,23 @@ def test_unknown_model_id_in_fusion_models_returns_400(client: TestClient) -> No
     assert "Unknown model_id in fusion.models" in response.json()["detail"]
 
 
+def test_fusion_model_missing_architecture_returns_clear_error(client: TestClient) -> None:
+    response = client.post(
+        "/api/pipeline/run-stage/2",
+        json=_fusion_payload(
+            [
+                {"model_id": "vehicle_mtmc_14e_b1", "weight": 0.7},
+                {"model_id": "vehicle_mtmc_14k_v1_k7", "weight": 0.3},
+            ]
+        ),
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "missing the 'architecture' block in model_registry.yaml" in detail
+    assert "Fusion requires arch metadata" in detail
+
+
 def test_fusion_weights_outside_tolerance_returns_validation_error(client: TestClient) -> None:
     response = client.post(
         "/api/pipeline/run-stage/2",

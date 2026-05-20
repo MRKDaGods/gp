@@ -69,6 +69,12 @@
           "type": "array",
           "items": { "$ref": "#/$defs/checkpointRef" }
         },
+        "architecture": {
+          "anyOf": [
+            { "$ref": "#/$defs/modelArchitecture" },
+            { "type": "null" }
+          ]
+        },
         "requirements": { "$ref": "#/$defs/requirements" },
         "status": {
           "type": "string",
@@ -151,6 +157,26 @@
         "source_training_kernel": { "type": ["string", "null"] },
         "size_bytes": { "type": ["integer", "null"], "minimum": 0 },
         "on_disk": { "type": "boolean" }
+      }
+    },
+    "modelArchitecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["arch", "embedding_dim", "input_size", "clip_normalization"],
+      "properties": {
+        "arch": {
+          "type": "string",
+          "enum": ["transreid", "clip_senet", "dinov2", "resnet50_ibn", "osnet", "yolov26", "mvdetr"]
+        },
+        "vit_model": { "type": ["string", "null"], "minLength": 1 },
+        "embedding_dim": { "type": "integer", "minimum": 1 },
+        "input_size": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "clip_normalization": { "type": "boolean" }
       }
     },
     "hostedCheckpoint": {

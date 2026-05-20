@@ -46,6 +46,16 @@ def test_required_entries_have_required_fields() -> None:
         assert entry.provenance.verified_by
 
 
+def test_registry_architecture_metadata_loads_for_fusion_candidates() -> None:
+    registry = get_registry()
+    entries = {model.id: model for model in registry.models}
+
+    assert entries["veri776_09v_v17_transreid"].architecture is not None
+    assert entries["veri776_09v_v17_transreid"].architecture.arch == "transreid"
+    assert entries["veri776_clipsenet_v6"].architecture is not None
+    assert entries["veri776_clipsenet_v6"].architecture.arch == "clip_senet"
+
+
 def test_registry_model_ids_are_unique() -> None:
     registry = get_registry()
     model_ids = [model.id for model in registry.models]
@@ -92,6 +102,7 @@ def test_get_api_models_returns_expected_shape() -> None:
     assert payload["data"]
     first = payload["data"][0]
     assert {"id", "name", "task_type", "metrics", "status", "missing_checkpoints"}.issubset(first)
+    assert "architecture" in first
     assert all(model["status"] != "dead_end" for model in payload["data"])
 
 

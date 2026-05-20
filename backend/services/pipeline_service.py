@@ -26,6 +26,7 @@ from backend.config import (
     VIDEO_EXTENSIONS,
 )
 from backend.models.requests import FusionConfig
+from backend.models.registry import ModelArchitecture, ModelEntry
 from backend.services.model_registry import get_model
 from backend.services.tracklet_service import _persist_probe_link
 from backend.services.video_service import (
@@ -45,59 +46,6 @@ DATASET_TASK_BY_NAME = {
     "cityflowv2": "mtmc_vehicle",
     "wildtrack": "mtmc_person",
     "veri776": "single_cam_reid",
-}
-
-# TODO(Phase 4): replace with registry-driven arch resolution.
-_PHASE3_ARCH_LOOKUP: Dict[str, Dict[str, Any]] = {
-    "vehicle_mtmc_14e_b1": {
-        "arch": "transreid",
-        "model_name": "transreid",
-        "embedding_dim": 768,
-        "input_size": [256, 256],
-        "vit_model": "vit_base_patch16_clip_224.openai",
-        "clip_normalization": True,
-        "num_cameras": 59,
-        "checkpoint_role": "primary_reid",
-    },
-    "cityflow_transreid": {
-        "arch": "transreid",
-        "model_name": "transreid",
-        "embedding_dim": 768,
-        "input_size": [256, 256],
-        "vit_model": "vit_base_patch16_clip_224.openai",
-        "clip_normalization": True,
-        "num_cameras": 59,
-        "checkpoint_role": "primary_reid",
-    },
-    "veri776_09v_v17_transreid": {
-        "arch": "transreid",
-        "model_name": "transreid",
-        "embedding_dim": 768,
-        "input_size": [256, 256],
-        "vit_model": "vit_base_patch16_clip_224.openai",
-        "clip_normalization": True,
-        "num_cameras": 59,
-        "checkpoint_role": "primary_reid",
-    },
-    "veri776_clipsenet_v6": {
-        "arch": "clip_senet",
-        "model_name": "clip_senet",
-        "embedding_dim": 2048,
-        "input_size": [320, 320],
-        "clip_normalization": False,
-        "checkpoint_role": "primary_reid",
-    },
-    "cityflow_dinov2_tertiary": {
-        "arch": "transreid",
-        "model_name": "transreid",
-        "embedding_dim": 1024,
-        "input_size": [252, 252],
-        "vit_model": "vit_large_patch14_dinov2.lvd142m",
-        "clip_normalization": False,
-        "num_cameras": 59,
-        "checkpoint_role": "tertiary_reid",
-        "checkpoint_path": "models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth",
-    },
 }
 
 
@@ -151,14 +99,9 @@ def _format_override_value(value: Any) -> str:
     return str(value)
 
 
-def _fusion_checkpoint_path(model: Any, arch_config: Dict[str, Any]) -> str:
-    explicit_path = arch_config.get("checkpoint_path")
-    if explicit_path:
-        return str(explicit_path)
-
-    preferred_role = arch_config.get("checkpoint_role", "primary_reid")
+def _fusion_checkpoint_path(model: ModelEntry) -> str:
     for checkpoint in model.checkpoint_refs:
-        if checkpoint.role == preferred_role:
+        if checkpoint.role == "primary_reid":
             return checkpoint.local_path
     for checkpoint in model.checkpoint_refs:
         if str(checkpoint.role).endswith("_reid"):
@@ -166,21 +109,20 @@ def _fusion_checkpoint_path(model: Any, arch_config: Dict[str, Any]) -> str:
 
     raise PipelineModelValidationError(
         f"Model '{model.id}' does not define a ReID checkpoint path for fusion. "
-        "Phase 4 will add registry-driven architecture metadata."
+        "Fusion requires a ReID checkpoint in model_registry.yaml."
     )
 
 
-def _fusion_arch_config(model_id: str) -> Dict[str, Any]:
-    arch_config = _PHASE3_ARCH_LOOKUP.get(model_id)
-    if arch_config is None:
+def _get_arch_metadata(model: ModelEntry) -> ModelArchitecture:
+    if model.architecture is None:
         raise PipelineModelValidationError(
-            f"Model '{model_id}' is missing Phase 3 fusion architecture metadata. "
-            "Wait for Phase 4 registry schema support or add the model to _PHASE3_ARCH_LOOKUP."
+            f"Model '{model.id}' is missing the 'architecture' block in model_registry.yaml. "
+            "Fusion requires arch metadata. See configs/model_registry.yaml for the schema."
         )
-    return arch_config
+    return model.architecture
 
 
-def _resolve_fusion_model(model_id: str):
+def _resolve_fusion_model(model_id: str) -> ModelEntry:
     model = _lookup_registry_model(model_id)
     if model is None:
         raise ValueError(f"Unknown model_id in fusion.models: '{model_id}'")
@@ -190,28 +132,28 @@ def _resolve_fusion_model(model_id: str):
 def _append_stage2_fusion_overrides(
     overrides: List[str],
     slot: str,
-    model: Any,
-    arch_config: Dict[str, Any],
+    model: ModelEntry,
+    architecture: ModelArchitecture,
 ) -> Dict[str, Any]:
-    checkpoint_path = _fusion_checkpoint_path(model, arch_config)
+    checkpoint_path = _fusion_checkpoint_path(model)
     slot_config: Dict[str, Any] = {
         "enabled": True,
         "save_separate": True,
-        "model_name": arch_config["model_name"],
+        "model_name": architecture.arch,
         "weights_path": checkpoint_path,
-        "embedding_dim": arch_config["embedding_dim"],
-        "input_size": arch_config["input_size"],
+        "embedding_dim": architecture.embedding_dim,
+        "input_size": architecture.input_size,
+        "clip_normalization": architecture.clip_normalization,
     }
-    for optional_key in ("vit_model", "clip_normalization", "num_cameras", "concat_patch"):
-        if optional_key in arch_config:
-            slot_config[optional_key] = arch_config[optional_key]
+    if architecture.arch == "transreid" and architecture.vit_model:
+        slot_config["vit_model"] = architecture.vit_model
 
     for key, value in slot_config.items():
         overrides.append(f"stage2.reid.{slot}.{key}={_format_override_value(value)}")
 
     return {
         "model_id": model.id,
-        "arch": arch_config["arch"],
+        "arch": architecture.arch,
         "checkpoint": checkpoint_path,
         "stage2_slot": slot,
         "stage2_config": slot_config,
@@ -226,8 +168,8 @@ def _resolve_fusion_pipeline_model(
     primary_entry = ordered[0][1]
 
     for entry in fusion.models:
-        _resolve_fusion_model(entry.model_id)
-        _fusion_arch_config(entry.model_id)
+        model = _resolve_fusion_model(entry.model_id)
+        _get_arch_metadata(model)
 
     base_resolution = resolve_pipeline_model(
         model_id=primary_entry.model_id,
@@ -254,8 +196,8 @@ def _resolve_fusion_pipeline_model(
     for slot_index, (_, entry) in enumerate(ordered[1:]):
         stage2_slot, role, stage4_slot, embedding_path = slot_specs[slot_index]
         model = _resolve_fusion_model(entry.model_id)
-        arch_config = _fusion_arch_config(entry.model_id)
-        resolved_model = _append_stage2_fusion_overrides(overrides, stage2_slot, model, arch_config)
+        architecture = _get_arch_metadata(model)
+        resolved_model = _append_stage2_fusion_overrides(overrides, stage2_slot, model, architecture)
         resolved_model.update({"weight": entry.weight, "role": role})
         resolved_models.append(resolved_model)
 

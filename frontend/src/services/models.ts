@@ -34,6 +34,14 @@ export interface CheckpointRef {
   on_disk: boolean;
 }
 
+export interface ModelArchitecture {
+  arch: "transreid" | "clip_senet" | "dinov2" | "resnet50_ibn" | "osnet" | "yolov26" | "mvdetr";
+  vit_model?: string | null;
+  embedding_dim: number;
+  input_size: number[];
+  clip_normalization: boolean;
+}
+
 export interface ModelRequirements {
   gpu_required: boolean;
   min_vram_gb: number;
@@ -61,6 +69,7 @@ export interface ModelEntry {
   pipeline_config: string | null;
   model_overrides: string[];
   checkpoint_refs: CheckpointRef[];
+  architecture?: ModelArchitecture | null;
   requirements: ModelRequirements;
   status: ModelStatus;
   runnable_locally: boolean;

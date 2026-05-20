@@ -19,6 +19,15 @@ CheckpointRole = Literal[
     "detector",
     "tracker",
 ]
+ArchitectureName = Literal[
+    "transreid",
+    "clip_senet",
+    "dinov2",
+    "resnet50_ibn",
+    "osnet",
+    "yolov26",
+    "mvdetr",
+]
 
 
 class StrictBaseModel(BaseModel):
@@ -55,6 +64,14 @@ class CheckpointRef(StrictBaseModel):
     on_disk: bool = False
 
 
+class ModelArchitecture(StrictBaseModel):
+    arch: ArchitectureName
+    vit_model: Optional[str] = None
+    embedding_dim: int
+    input_size: List[int]
+    clip_normalization: bool
+
+
 class Requirements(StrictBaseModel):
     gpu_required: bool
     min_vram_gb: int
@@ -82,6 +99,7 @@ class ModelEntry(StrictBaseModel):
     pipeline_config: Optional[str]
     model_overrides: List[str] = Field(default_factory=list)
     checkpoint_refs: List[CheckpointRef] = Field(default_factory=list)
+    architecture: Optional[ModelArchitecture] = None
     requirements: Requirements
     status: ModelStatus
     runnable_locally: bool
