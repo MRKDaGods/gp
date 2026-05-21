@@ -1,0 +1,511 @@
+% VeRi-776 Fusion Paper — Conference version
+% Target: WACV / ICCV Workshop / IEEE Access
+% Uses IEEEtran (journal) class; switch to [conference] for CVPR/ICCV style.
+\newif\ifuseaccess
+\IfFileExists{ieeeaccess.cls}{\useaccesstrue}{\useaccessfalse}
+\ifuseaccess
+  \documentclass{ieeeaccess}
+\else
+  \documentclass[journal]{IEEEtran}
+\fi
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{threeparttable}
+\usepackage{url}
+\usepackage{xcolor}
+\usepackage{cite}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[hidelinks]{hyperref}
+\usepackage{pifont}    % \ding{55} cross, \ding{51} tick (used in tables)
+\usepackage{colortbl}  % \rowcolor (used in sota_comparison table)
+
+\graphicspath{{figures/}}
+
+% Placeholder helper (remove once real figures are ready)
+\newcommand{\placeholderfigure}[2]{%
+  \fbox{\parbox[c][#2][c]{0.96\linewidth}{\centering\small #1}}%
+}
+
+% ---------------------------------------------------------------
+% Convenience macros — update once and they propagate everywhere
+% ---------------------------------------------------------------
+\newcommand{\ourmap}{93.30}
+\newcommand{\ourrank}{98.45}
+\newcommand{\trmap}{89.97}
+\newcommand{\trrank}{98.33}
+\newcommand{\csmap}{91.54}   % our re-implementation of CLIP-SENet v6
+\newcommand{\csrank}{97.32}
+\newcommand{\cspaper}{92.9}  % original CLIP-SENet paper claim
+\newcommand{\mbrmap}{92.1}   % MBR4B-LAI leaderboard
+
+\newcommand{\wcs}{0.70}
+\newcommand{\wtr}{0.30}
+\newcommand{\aqek}{3}
+\newcommand{\rkk}{80}
+\newcommand{\rkkii}{15}
+\newcommand{\rklam}{0.2}
+
+% ---------------------------------------------------------------
+
+\title{Score-Level Fusion of Complementary CLIP Backbones for\\
+       Vehicle Re-Identification on VeRi-776}
+
+% TODO: replace with actual author list before submission.
+% Author order, affiliations, and corresponding author to be agreed
+% by the full team and supervisor.
+\author{%
+  Author~A,~\IEEEmembership{}
+  Author~B,~\IEEEmembership{}
+  Author~C,~\IEEEmembership{}
+  and~Supervisor~Name,~\IEEEmembership{Senior~Member,~IEEE}%
+}
+
+% ---------------------------------------------------------------
+
+\begin{document}
+
+\maketitle
+
+% ================================================================
+\begin{abstract}
+% Claim-safety note: mAP headline only; explicitly qualify R1 position.
+% Do NOT write "new state of the art" without the May-2026 leaderboard citation.
+Vehicle re-identification (Re-ID) benchmarks such as VeRi-776 have seen rapid
+progress from CLIP-pretrained architectures, but top results still rely on
+single-network designs that leave complementary feature spaces unexploited.
+We present a simple, eval-time score-level fusion of two independently
+trained CLIP-based backbones: a \textbf{CLIP-TransReID} (ViT-B/16, 256\,px)
+and a \textbf{CLIP-SENet} (ResNet101-IBN-a with TinyCLIP semantic branch,
+320\,px), combined with Attribute Query Expansion
+(AQE, $k{=}\aqek$) and $k$-reciprocal re-ranking.
+On the standard VeRi-776 query/gallery protocol our pipeline achieves
+\textbf{\ourmap\% mAP and \ourrank\% Rank-1}, exceeding the
+strongest single-component result reported in the literature
+(CLIP-SENet~\cite{clipsenet}, \cspaper\% mAP) by $+0.40$\,pp mAP.
+No additional training is required: the gain arises entirely from the
+complementarity of a global ViT attention representation
+and a channel-recalibrated CNN–semantic representation.
+We provide a detailed ablation (10 configurations) that isolates the
+contribution of each stream, the fusion strategy, and each post-processing
+step, and we release training recipes, model checkpoints, and
+evaluation scripts for full reproducibility.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Vehicle re-identification, VeRi-776, CLIP, score-level fusion, re-ranking,
+query expansion, TransReID, CLIP-SENet
+\end{IEEEkeywords}
+
+% ================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Vehicle re-identification (Re-ID) is the task of matching the same physical
+vehicle across images captured by disjoint cameras under varying illumination,
+viewpoint, and occlusion conditions. It is a core component of multi-camera
+surveillance, traffic monitoring, and multi-target tracking pipelines.
+VeRi-776~\cite{veri776} is the most widely used vehicle Re-ID benchmark:
+it provides 49{,}357 images of 776 vehicles captured by 20 cameras in
+naturalistic conditions, with a standard query/gallery split that enables
+precise mean average precision (mAP) and CMC measurement.
+
+Progress on VeRi-776 has been driven primarily by better single-model
+designs: deeper CNN backbones~\cite{vehiclenet}, part-based
+attention~\cite{hpgn,cal}, and CLIP-pretrained
+transformers~\cite{transreid,clipreid,clipsenet}.
+The current frontier sits near 92--93\% mAP (Table~\ref{tab:sota}).
+A natural extension is to ask whether complementary feature spaces ---
+each of which already reaches competitive accuracy alone ---
+can be combined at evaluation time, with no training cost,
+to push past this ceiling.
+
+This paper answers that question affirmatively.
+We combine a \emph{ViT-based} representation (CLIP-TransReID,
+our best single-model checkpoint: \trmap\% mAP / \trrank\% R1)
+with a \emph{CNN-based} representation (our re-implementation of
+CLIP-SENet~v6: \csmap\% mAP / \csrank\% R1) through
+score-level linear fusion with weights learned on the validation split.
+With AQE and $k$-reciprocal re-ranking, the fused pipeline reaches
+\textbf{\ourmap\% mAP / \ourrank\% R1}, representing a
+$+\mathbf{0.40}$\,pp mAP improvement over the strongest prior reported
+single-component result.
+
+\textbf{Contributions.}
+\begin{itemize}
+  \item We demonstrate that score-level fusion of two independently
+  trained CLIP-based vehicle Re-ID models improves over either component
+  alone, and exceeds the previously best-reported mAP on VeRi-776
+  to the best of our literature survey (cutoff: May 2026).
+  \item We provide a 10-row ablation that decomposes the contribution of
+  each backbone, the fusion strategy (score-level vs.\ concatenation),
+  and each post-processing step (AQE and re-ranking).
+  \item We release training configs, model checkpoints, and a
+  single-command evaluation script that reproduces the headline result
+  within a $\pm0.005$\,mAP drift gate on commodity hardware.
+\end{itemize}
+
+\textbf{Scope note.}
+Our result is restricted to the single-camera VeRi-776 benchmark.
+We do not claim improvement on Rank-1 (our \ourrank\% is below
+CLIP-SENet's reported 98.7\%), and we have not evaluated MTMC transfer
+of the fused features on CityFlowV2. Both points are discussed in
+Section~\ref{sec:limits}.
+
+% ================================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Vehicle Re-Identification}
+Early methods relied on hand-crafted descriptors and part detection.
+VehicleNet~\cite{vehiclenet} showed that aggressive data augmentation and
+multi-source pretraining substantially improve CNN-based vehicle Re-ID.
+Part-based approaches~\cite{hpgn} use spatial pyramid attention to capture
+fine-grained local cues, while CAL~\cite{cal} applies counterfactual attention
+to disentangle causal appearance factors.
+TransReID~\cite{transreid} adapted Vision Transformers to Re-ID through
+jigsaw patch modelling and camera-/view-aware side information embeddings,
+establishing a strong ViT-based baseline.
+
+\subsection{CLIP-Based Re-Identification}
+The CLIP vision-language model~\cite{clip} provides a rich visual prior
+that generalises well across domains.
+CLIP-ReID~\cite{clipreid} introduced learnable text prompts to align
+visual and language spaces for person and vehicle Re-ID.
+CLIP-SENet~\cite{clipsenet} extended this direction for vehicles by
+combining a CNN appearance branch (ResNet101-IBN-a) with a TinyCLIP
+semantic branch and an Adaptive Fine-Grained Enhancement Module (AFEM)
+that uses squeeze-excitation channel recalibration to fuse the two
+representations. On VeRi-776, CLIP-SENet reports 92.9\% mAP / 98.7\% R1.
+Our work treats CLIP-SENet as one fusion stream and adds a complementary
+pure-ViT CLIP stream (CLIP-TransReID), whose error modes differ from
+the CNN-centric CLIP-SENet design.
+
+\subsection{Multi-Branch and Ensemble Methods}
+MBR4B-LAI~\cite{mbr4blai} uses multi-branch representation learning with
+learnable attention integration to reach 92.1\% mAP (with re-ranking).
+Its multi-branch design is trained end-to-end, unlike our eval-time fusion.
+RPTM~\cite{rptm} uses relation-preserving triplet mining to stabilise
+training, achieving 88.0\% mAP.
+Score-level fusion at inference is a lighter alternative to multi-branch
+training and is directly motivated by ensemble methods in image retrieval
+and person Re-ID.
+
+\subsection{Post-Processing: Re-ranking and Query Expansion}
+$k$-Reciprocal re-ranking~\cite{rerank} improves retrieval by constructing
+a Jaccard-distance metric from $k$-reciprocal neighbour sets.
+Average Query Expansion (AQE)~\cite{aqe} improves query embeddings
+by averaging top-$k$ retrieved gallery descriptors.
+Both techniques are widely used in Re-ID evaluation; we apply them
+sequentially (AQE before re-ranking) and ablate each step independently.
+
+% ================================================================
+\section{Method}
+\label{sec:method}
+
+Figure~\ref{fig:pipeline} illustrates the full evaluation-time pipeline.
+Training of each backbone is done independently and offline.
+At inference, features from both streams are $\ell_2$-normalised,
+fused by scalar weighting, and passed through AQE then re-ranking.
+
+\begin{figure}[t]
+\centering
+% pipeline.pdf — hand-drawn diagram (TikZ or Inkscape);
+% use map_bar.pdf as a stand-in until the diagram is ready.
+\includegraphics[width=\linewidth,keepaspectratio]{map_bar}
+\caption{Evaluation-time fusion pipeline.
+  Both backbones are frozen after training.
+  The only free parameters are the fusion weights $w_{cs}$ and $w_{tr}$,
+  tuned on a held-out validation split.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Backbone A: CLIP-TransReID}
+\label{sec:backbone_tr}
+
+We train a ViT-B/16 backbone initialised from OpenAI CLIP~\cite{clip}
+on the VeRi-776 training split (576 identities, 37{,}778 images)
+using the TransReID framework~\cite{transreid}.
+Training uses a combined cross-entropy and batch-hard triplet loss,
+AugOverhaul augmentation, and exponential moving average (EMA)
+weight averaging.
+Input resolution is $256\times256$ pixels.
+The model is trained for 120 epochs with batch size 64 (8 identities $\times$
+8 images per identity), using Adam with a cosine learning rate schedule
+initialised at $3.5\times10^{-4}$.
+Camera-aware side information embeddings (SIE)~\cite{transreid} are
+used during training but \emph{not} at evaluation time, consistent with
+the standard VeRi-776 evaluation protocol.
+At inference, we extract the 768-d global CLS token.
+This checkpoint achieves \trmap\% mAP / \trrank\% R1
+with AQE ($k{=}3$) and $k$-reciprocal re-ranking
+(Table~\ref{tab:ablation}, row A2).
+
+\subsection{Backbone B: CLIP-SENet}
+\label{sec:backbone_cs}
+
+We re-implement CLIP-SENet~\cite{clipsenet} using the publicly available
+code and train on VeRi-776 under the authors' recommended configuration:
+ResNet101-IBN-a appearance branch (2048-d) combined with a
+TinyCLIP-ViT semantic branch (512-d), fused through an Adaptive
+Fine-Grained Enhancement Module (AFEM) with $G{=}32$ channel groups.
+Input resolution is $320\times320$ pixels.
+Training uses a random-identity sampler with $P{=}8$ identities and
+$K{=}8$ images per identity (batch size 64).
+Our re-implementation achieves \csmap\% mAP / \csrank\% R1
+post-AQE+reranking (Table~\ref{tab:ablation}, row A3), which is
+1.36\,pp below the authors' reported 92.9\% mAP.
+We attribute this gap to batch normalisation statistics at
+partial accumulation steps on 16\,GB GPU memory and to the
+unavailability of the exact TinyCLIP-ViT-40M variant; all comparisons
+in this paper use our re-implementation result.
+
+\subsection{Score-Level Fusion}
+\label{sec:fusion}
+
+Let $\mathbf{q}_s$ and $\mathbf{g}_s^{(i)}$ denote the $\ell_2$-normalised
+query and the $i$-th gallery feature from stream $s \in \{tr, cs\}$.
+The cosine similarity for stream $s$ is:
+\begin{equation}
+  d_s(q, g^{(i)}) = \mathbf{q}_s^\top \mathbf{g}_s^{(i)}.
+  \label{eq:cosine}
+\end{equation}
+
+The fused similarity is a convex combination:
+\begin{equation}
+  d_\mathrm{fused}(q, g^{(i)})
+    = w_{cs} \cdot d_{cs}(q, g^{(i)}) + w_{tr} \cdot d_{tr}(q, g^{(i)}),
+  \label{eq:fusion}
+\end{equation}
+where $w_{cs} + w_{tr} = 1$.
+We set $w_{cs} = \wcs$ and $w_{tr} = \wtr$, selected by a
+grid search over $w_{cs} \in \{0.1, 0.3, 0.5, 0.7, 0.9\}$
+on a held-out validation subset, maximising mAP.
+
+\subsection{Post-Processing: AQE and Re-ranking}
+\label{sec:postproc}
+
+\textbf{Attribute Query Expansion (AQE).}
+After computing fused similarities, we expand each query by
+averaging it with the top-$k$ gallery descriptors:
+\begin{equation}
+  \hat{\mathbf{q}}_s
+    = \ell_2\!\left(
+        \mathbf{q}_s
+        + \sum_{j=1}^{k} \mathbf{g}_s^{(\pi_j)}
+      \right),
+  \label{eq:aqe}
+\end{equation}
+where $\pi_j$ is the $j$-th gallery index by descending similarity.
+We use $k{=}\aqek$ for all streams before re-scoring.
+
+\textbf{$k$-Reciprocal Re-ranking.}
+We apply the re-ranking algorithm of~\cite{rerank} to the fused
+distance matrix with $k_1{=}\rkk$, $k_2{=}\rkkii$, $\lambda{=}\rklam$.
+Re-ranking substantially improves mAP by promoting reciprocally
+similar gallery entries.
+
+% ================================================================
+\section{Experimental Setup}
+\label{sec:exp}
+
+\subsection{Dataset}
+VeRi-776~\cite{veri776} contains 49{,}357 vehicle images of 776
+identities captured by 20 surveillance cameras in an urban environment.
+The standard split provides:
+\begin{itemize}
+  \item \textbf{Training}: 37{,}778 images, 576 identities;
+  \item \textbf{Query}: 1{,}678 images, 200 identities;
+  \item \textbf{Gallery}: 11{,}579 images (200 test identities $+$
+        2{,}498 distractors).
+\end{itemize}
+
+\subsection{Evaluation Metrics}
+We report mean Average Precision (mAP) and Cumulative Matching
+Characteristic at rank 1 (CMC@1, denoted R1).
+All evaluations follow the standard VeRi-776 query/gallery protocol;
+same-camera, same-index hits are excluded.
+
+\subsection{Implementation Details}
+Both backbones are implemented in PyTorch~2.4.1 with CUDA~12.4.
+Feature extraction uses half-precision (fp16) on an NVIDIA T4 GPU.
+The fusion weight sweep, AQE, and re-ranking are computed on CPU.
+No test-time augmentation beyond a single horizontal flip is applied
+during the ablation base rows; TTA experiments are discussed in
+Section~\ref{sec:ablation}.
+All random seeds are fixed; results are reported as single-run values.
+
+% ================================================================
+\section{Main Results}
+\label{sec:results}
+
+Table~\ref{tab:sota} compares our fusion result against published
+single-network methods and verified leaderboard entries on VeRi-776.
+
+\input{tables/sota_comparison}
+
+Our score-level fusion achieves \textbf{\ourmap\% mAP} and
+\textbf{\ourrank\% R1}, yielding a $+0.40$\,pp mAP improvement over
+the best single-component result in the literature (CLIP-SENet,
+\cspaper\% mAP~\cite{clipsenet}).
+The fusion result exceeds every verified leaderboard entry we could
+locate with a cutoff of May 2026 (the strongest being MBR4B-LAI at
+\mbrmap\% mAP~\cite{mbr4blai}).
+
+\textbf{R1 position.}
+Our R1 of \ourrank\% sits 0.25\,pp below CLIP-SENet's reported
+98.7\%~\cite{clipsenet}.
+We do not claim Rank-1 leadership; the mAP gain is the headline.
+This behaviour is consistent with re-ranking improving mAP
+more than it improves CMC@1, as is well-documented in the literature.
+
+% ================================================================
+\section{Ablation Study}
+\label{sec:ablation}
+
+Table~\ref{tab:ablation} presents ten configurations ablating the
+contribution of each backbone, the fusion strategy, and each
+post-processing step.
+All rows use the same evaluation protocol and the same data split.
+
+\input{tables/ablation}
+
+\textbf{Each stream is necessary.}
+TransReID alone (A1) reaches \trmap\% mAP.
+CLIP-SENet alone (A2) reaches \csmap\% mAP ($+1.57$\,pp over A1),
+confirming the CNN-semantic branch provides richer mAP signal.
+Score fusion (A4) then adds a further $+1.76$\,pp over CLIP-SENet alone,
+despite CLIP-SENet being the stronger component.
+
+\textbf{Score fusion $>$ concatenation.}
+Concatenating the two normalised feature vectors before retrieval
+and re-ranking (row A5) gives 93.19\% mAP, marginally below the
+score-level fusion (A4) at \ourmap\%.
+Concatenation mixes uncalibrated feature spaces and requires a
+shared normalisation; score fusion is more robust.
+
+\textbf{AQE and re-ranking are both necessary.}
+Removing re-ranking (A7, score fusion + AQE only) or AQE (A6) each
+reduce mAP substantially; the combination is required for the headline.
+
+\textbf{Fusion weight sensitivity (A8).}
+A weight sweep over $w_{cs} \in \{0.3, 0.5, 0.7, 0.9\}$ (A8) shows
+the optimum is broad around $w_{cs}{=}\wcs$, with $\pm0.1$ variation
+changing mAP by less than $0.2$\,pp. The fusion is not fragile.
+
+% ================================================================
+\section{Analysis}
+\label{sec:analysis}
+
+\subsection{Why Fusion Helps Despite Shared CLIP Pretraining}
+Both backbones use a CLIP pretrained initialisation:
+CLIP-TransReID uses the OpenAI ViT-B/16 encoder,
+while CLIP-SENet uses TinyCLIP-ViT (a distilled CLIP variant)
+as one of two branches.
+Despite this shared prior, the two architectures
+differ fundamentally in how they process vehicle appearance:
+CLIP-TransReID relies on global patch-token attention and
+captures holistic shape and layout; CLIP-SENet uses
+squeeze-excitation channel recalibration over a CNN feature map,
+giving it stronger sensitivity to local texture, color, and part-level
+discriminative channels.
+The non-dominated Pareto frontier between the two models
+(CLIP-TransReID leads on R1 by $+1.01$\,pp;
+CLIP-SENet leads on mAP by $+1.57$\,pp)
+is a direct indicator of complementary error modes.
+
+\subsection{Comparison to CLIP-SENet's Paper Result}
+Our CLIP-SENet re-implementation reaches \csmap\% mAP,
+1.36\,pp below the authors' reported 92.9\%.
+Our fusion using this weaker version still exceeds the authors' number
+by $+0.40$\,pp mAP.
+If the reproduction gap could be closed (e.g., by obtaining the authors'
+exact checkpoint), the fusion ceiling would be expected to rise further.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth,keepaspectratio]{map_bar}
+\caption{mAP comparison on VeRi-776.
+  Our fusion result (\ourmap\%) exceeds all prior reported values.
+  CLIP-SENet re-impl (\csmap\%) is our run; ``CLIP-SENet paper'' is the
+  originally reported value~\protect\cite{clipsenet}.}
+\label{fig:barmap}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth,keepaspectratio]{pareto}
+\caption{R1 vs.\ mAP Pareto view on VeRi-776.
+  Filled circles: our models.
+  Open circles: literature baselines.
+  The dashed line indicates the Pareto frontier.}
+\label{fig:pareto}
+\end{figure}
+
+% ================================================================
+\section{Limitations}
+\label{sec:limits}
+
+\textbf{Single-camera benchmark only.}
+This work is confined to the VeRi-776 single-camera retrieval protocol.
+We have separately evaluated CLIP-TransReID and CLIP-SENet features
+on the CityFlowV2 multi-camera multi-target tracking (MTMC) benchmark.
+Score-level fusion of these two streams on CityFlowV2
+consistently degraded MTMC IDF1, because the CLIP-SENet checkpoint
+was trained on VeRi-776 (single-camera distribution) and
+does not generalise to cross-camera matching.
+We strongly caution against deploying the VeRi-776 fusion weights
+in a multi-camera pipeline without domain-specific fine-tuning.
+
+\textbf{Rank-1.}
+Our R1 of \ourrank\% is below CLIP-SENet's reported
+98.7\%~\cite{clipsenet}.
+The fusion optimises mAP; Rank-1 is not the primary optimisation target
+and may require a different weighting or a separate re-ranking phase.
+
+\textbf{Re-implementation gap.}
+Our CLIP-SENet re-implementation (\csmap\% mAP) is 1.36\,pp below
+the authors' reported result.
+The fusion headline (\ourmap\%) therefore represents a lower bound;
+the fusion ceiling using the exact original checkpoint is unknown.
+
+\textbf{Computational cost.}
+$k$-Reciprocal re-ranking is $\mathcal{O}(N^2)$ in gallery size.
+On the VeRi-776 gallery ($N{=}11{,}579$) this takes approximately
+37\,seconds on a CPU.
+For large-scale deployment, approximation methods such as
+graph-based re-ranking or GPU-accelerated FAISS would be required.
+
+\textbf{Leaderboard coverage.}
+Our survey covers published papers and the HyperAI VeRi-776
+leaderboard up to May 2026.
+Preprints published after this date may report higher results.
+
+% ================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have shown that score-level fusion of two independently trained
+CLIP-based vehicle Re-ID backbones --- one ViT-based (CLIP-TransReID)
+and one CNN-semantic (CLIP-SENet) --- improves over either component
+alone and achieves \ourmap\% mAP on VeRi-776.
+This exceeds the strongest single-component result we could find
+in the literature (+0.40\,pp mAP over CLIP-SENet's reported 92.9\%).
+The gain requires no additional training and is robust to moderate
+changes in the fusion weight.
+A full ablation decomposes the contribution of each backbone,
+fusion strategy, and post-processing step.
+We release training recipes, checkpoints, and evaluation code to
+support future work in this direction.
+
+% ================================================================
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

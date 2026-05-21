@@ -1,0 +1,59 @@
+% tables/sota_comparison.tex
+% Verified against: docs/findings.md, HyperAI leaderboard (May 2026),
+% arXiv:2502.16815 (CLIP-SENet), arXiv:2310.01129 (MBR4B-LAI).
+%
+% Legend:
+%   (†) = author-reported result; not independently reproduced by us.
+%   (‡) = our re-implementation; 1.36 pp below the authors' reported result.
+%   (★) = our main result.
+%
+% NOTE: CLIP-SENet is a component of our fusion pipeline.
+%       We compare against it here to show the incremental gain
+%       from adding the second stream.
+%
+\begin{table}[t]
+\centering
+\caption{%
+  State-of-the-art comparison on VeRi-776.
+  mAP and R1 (\%) are reported under the standard query/gallery protocol.
+  ``w/ RK'' = with $k$-reciprocal re-ranking.
+  $\dagger$ = author-reported; $\ddagger$ = our re-implementation;
+  $\star$ = our main result.
+  The CLIP-SENet row marked $\ddagger$ is our training run;
+  the row marked $\dagger$ is the value from \protect\cite{clipsenet}.
+  Survey cutoff: May 2026.
+}
+\label{tab:sota}
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c c c l}
+\toprule
+Method & mAP & R1 & w/ RK & Reference \\
+\midrule
+%--- published single-network results ---
+CAL~\cite{cal}               & 74.3 & 97.1 & -- & ICCV 2021 \\
+TransReID~\cite{transreid}   & 82.3 & 97.1 & -- & ICCV 2021 \\
+VehicleNet~\cite{vehiclenet} & 83.4 & 96.8 & -- & TMM 2021  \\
+CLIP-ReID (w/o RK)~\cite{clipreid} & 84.5 & -- & \ding{55} & AAAI 2023 \\
+RPTM~\cite{rptm}             & 88.0 & 97.3 & \checkmark & arXiv 2021 \\
+MBR4B-LAI (w/ RK)~\cite{mbr4blai} & 92.1 & -- & \checkmark & Leaderboard$^\dagger$ \\
+CLIP-SENet (paper)~\cite{clipsenet} & 92.9$^\dagger$ & \textbf{98.7}$^\dagger$ & \checkmark & arXiv 2025$^\dagger$ \\
+\midrule
+%--- our models ---
+CLIP-TransReID (ours)        & \trmap & \trrank & \checkmark & This work \\
+CLIP-SENet v6 (ours)$^\ddagger$ & \csmap & \csrank & \checkmark & This work \\
+\rowcolor[gray]{0.92}
+\textbf{Fusion (ours)}$^\star$
+  & \textbf{\ourmap} & \ourrank & \checkmark & This work \\
+\bottomrule
+\end{tabular}
+\endgroup
+\vspace{0.4em}
+\par\noindent\footnotesize
+$\dagger$ Author-reported; not reproduced by us.
+$\ddagger$ Our re-implementation; 1.36\,pp below the authors' reported 92.9\%.
+$\star$ Score-level fusion: $w_{cs}{=}\wcs$, $w_{tr}{=}\wtr$;
+AQE $k{=}\aqek$; re-ranking $k_1{=}\rkk$, $k_2{=}\rkkii$, $\lambda{=}\rklam$.
+CLIP-SENet is also a component of our fusion; see text.
+\end{table}

@@ -1,0 +1,82 @@
+% tables/ablation.tex
+% 10-row ablation decomposing each component's contribution.
+%
+% Status codes (remove before submission):
+%   [V] = result verified / in experiment log / checked in JSON
+%   [N] = re-run needed (result missing or not confirmed)
+%
+% Rows A0-A2: CLIP-TransReID stream only
+% Rows A3-A4: CLIP-SENet stream only
+% Rows A5-A7: Fusion, varying post-processing
+% Row  A8:   Fusion, concat strategy
+% Row  A9:   Fusion weight sensitivity (score-level)
+% Row A10:   DINOv2 alternative second stream (reference)
+%
+\begin{table}[t]
+\centering
+\caption{%
+  Ablation study on VeRi-776.
+  All rows use the same query/gallery split.
+  ``AQE'': Attribute Query Expansion ($k{=}3$).
+  ``RK'': $k$-reciprocal re-ranking ($k_1{=}80$, $k_2{=}15$, $\lambda{=}0.2$).
+  Rows marked $[\cdot]$ are pending re-runs; existing numbers are from
+  the experiment log (\texttt{docs/findings.md}).
+  $\Delta$ is relative to the single stronger stream (row A3).
+}
+\label{tab:ablation}
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{c l c c c c c}
+\toprule
+Row & Configuration & AQE & RK & mAP (\%) & R1 (\%) & $\Delta$ mAP \\
+\midrule
+A0 & TransReID alone, no AQE, no RK
+   & \ding{55} & \ding{55} & -- & -- & -- \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[N] re-run needed}} \\
+A1 & TransReID alone + AQE + RK
+   & \checkmark & \checkmark & \trmap & \trrank & $-1.57$ \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[V] 09v v17 best-mAP row}} \\
+A2 & TransReID alone + AQE, no RK
+   & \checkmark & \ding{55} & -- & -- & -- \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[N] re-run needed}} \\
+\midrule
+A3 & CLIP-SENet alone + AQE + RK
+   & \checkmark & \checkmark & \csmap & \csrank & 0.00 (ref) \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[V] our re-impl, 14t eval}} \\
+\midrule
+A4 & Concat fusion + AQE + RK
+   & \checkmark & \checkmark & 93.19 & 98.27 & $+1.65$ \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[V] 14t concat row}} \\
+\rowcolor[gray]{0.92}
+A5 & \textbf{Score fusion + AQE + RK (proposed)}
+   & \checkmark & \checkmark & \textbf{\ourmap} & \textbf{\ourrank} & $\mathbf{+1.76}$ \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[V] 14t score-fusion headline}} \\
+A6 & Score fusion + AQE, no RK
+   & \checkmark & \ding{55} & -- & -- & -- \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[N] re-run needed}} \\
+A7 & Score fusion + RK, no AQE
+   & \ding{55} & \checkmark & -- & -- & -- \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[N] re-run needed}} \\
+A8 & Score fusion, no AQE, no RK
+   & \ding{55} & \ding{55} & -- & -- & -- \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[N] re-run needed}} \\
+\midrule
+A9 & Weight sweep: $w_{cs} \in \{0.3, 0.5, 0.7, 0.9\}$ + AQE + RK
+   & \checkmark & \checkmark & -- & -- & -- \\
+   & \multicolumn{6}{r}{\footnotesize\textit{[N] sensitivity sweep — re-run needed}} \\
+\midrule
+A10 & DINOv2 ViT-B/14 (alt. second stream) + AQE + RK
+    & \checkmark & \checkmark & $<$89.27 & -- & $<-2.27$ \\
+    & \multicolumn{6}{r}{\footnotesize\textit{[V] 14r-probe: failed; confirms CLIP pretraining necessary}} \\
+\bottomrule
+\end{tabular}
+\endgroup
+\vspace{0.4em}
+\par\noindent\footnotesize
+Rows marked [N] are pending a CPU-only re-run ($\sim$15\,min each).
+Results from rows A4, A5, A10 are from Kaggle kernel
+\texttt{mrkdagods/14t-veri-clipsenet-transreid-fusion}
+and from kernel \texttt{yahiaakhalafallah/09v-veri-776-eval-transreid-rerank}.
+Full configs are released with the reproducibility artifact.
+\end{table}
