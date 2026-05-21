@@ -23,8 +23,10 @@ import {
   Check,
   Cpu,
   Settings,
+  Cloud,
+  Server,
 } from "lucide-react";
-import { useSessionStore, useUIStore, usePipelineStore } from "@/store";
+import { useSessionStore, useUIStore, usePipelineStore, useStageExecutionStore } from "@/store";
 import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials-modal";
 import { useHasKaggleCredentials } from "@/lib/kaggle-credentials-store";
 import type { StageNumber } from "@/types";
@@ -111,6 +113,9 @@ export function MainDashboard() {
   const modelMode = usePipelineStore((s) => s.modelMode);
   const selectedModelMeta = usePipelineStore((s) => s.selectedModelMeta);
   const fusion = usePipelineStore((s) => s.fusion);
+  const getStageExecutionTarget = useStageExecutionStore(
+    (s) => (stage: StageNumber) => s.stageExecutionTargets[stage] ?? s.getStageExecutionTarget(stage)
+  );
   const hasKaggleCredentials = useHasKaggleCredentials();
   const [datasetView, setDatasetView] = useState(false);
   const [kaggleSettingsOpen, setKaggleSettingsOpen] = useState(false);
@@ -161,6 +166,8 @@ export function MainDashboard() {
             const isCompleted = status === "completed";
             const isRunning = status === "running";
             const isError = status === "error";
+            const executionTarget = getStageExecutionTarget(stage.id);
+            const isKaggleStage = executionTarget === "kaggle";
 
             return (
               <Tooltip key={stage.id} delayDuration={0}>
@@ -175,21 +182,42 @@ export function MainDashboard() {
                       !sidebarOpen && "justify-center px-0"
                     )}
                   >
-                    <div className={cn(
-                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
-                      isActive && "bg-primary-foreground/20 text-primary-foreground",
-                      isCompleted && !isActive && "bg-green-600/15 text-green-500",
-                      isError && !isActive && "bg-red-600/15 text-red-500",
-                      !isActive && !isCompleted && !isError && "bg-muted-foreground/10 text-muted-foreground",
-                    )}>
-                      {isRunning ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : isCompleted ? (
-                        <Check className="h-3 w-3" />
-                      ) : isError ? (
-                        <span className="text-[10px]">!</span>
-                      ) : (
-                        stage.id
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <div className="relative">
+                        <div className={cn(
+                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                          isActive && "bg-primary-foreground/20 text-primary-foreground",
+                          isCompleted && !isActive && "bg-green-600/15 text-green-500",
+                          isError && !isActive && "bg-red-600/15 text-red-500",
+                          !isActive && !isCompleted && !isError && "bg-muted-foreground/10 text-muted-foreground",
+                        )}>
+                          {isRunning ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : isCompleted ? (
+                            <Check className="h-3 w-3" />
+                          ) : isError ? (
+                            <span className="text-[10px]">!</span>
+                          ) : (
+                            stage.id
+                          )}
+                        </div>
+                        {/* Collapsed local stages skip the Server badge to keep the compact rail legible. */}
+                        {!sidebarOpen && isKaggleStage && (
+                          <Cloud className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-card text-blue-500 ring-1 ring-card" />
+                        )}
+                      </div>
+                      {sidebarOpen && (
+                        <span
+                          className="flex h-4 w-4 items-center justify-center"
+                          title={isKaggleStage ? "Kaggle execution" : "Local execution"}
+                          aria-label={isKaggleStage ? "Kaggle execution" : "Local execution"}
+                        >
+                          {isKaggleStage ? (
+                            <Cloud className="h-3 w-3 text-blue-500" />
+                          ) : (
+                            <Server className="h-3 w-3 text-muted-foreground" />
+                          )}
+                        </span>
                       )}
                     </div>
                     {sidebarOpen && (
@@ -198,7 +226,9 @@ export function MainDashboard() {
                   </button>
                 </TooltipTrigger>
                 {!sidebarOpen && (
-                  <TooltipContent side="right">{stage.label}</TooltipContent>
+                  <TooltipContent side="right">
+                    {isKaggleStage ? `${stage.label} · Kaggle execution` : stage.label}
+                  </TooltipContent>
                 )}
               </Tooltip>
             );
