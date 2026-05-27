@@ -34,7 +34,7 @@ import { GlobalProcessingBanner } from "@/components/layout/global-processing-ba
 import { UploadStage, UploadStageActions } from "@/components/stages/upload-stage";
 import { DetectionStage, DetectionStageActions } from "@/components/stages/detection-stage";
 import { SelectionStage, SelectionStageActions } from "@/components/stages/selection-stage";
-import { InferenceStage } from "@/components/stages/inference-stage";
+import { InferenceActions, InferenceStage } from "@/components/stages/inference-stage";
 import { TimelineStage } from "@/components/stages/timeline-stage";
 import { RefinementStage } from "@/components/stages/refinement-stage";
 import { OutputStage } from "@/components/stages/output-stage";
@@ -56,7 +56,7 @@ const PIPELINE_STAGE_COMPONENTS: { id: StageNumber; Component: ComponentType; Ac
   { id: 0, Component: UploadStage, Actions: UploadStageActions },
   { id: 1, Component: DetectionStage, Actions: DetectionStageActions },
   { id: 2, Component: SelectionStage, Actions: SelectionStageActions },
-  { id: 3, Component: InferenceStage },
+  { id: 3, Component: InferenceStage, Actions: InferenceActions },
   { id: 4, Component: TimelineStage },
   { id: 5, Component: RefinementStage },
   { id: 6, Component: OutputStage },

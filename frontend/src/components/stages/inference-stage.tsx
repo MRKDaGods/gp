@@ -152,23 +152,25 @@ export function InferenceStage() {
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <RunStageWidget
+            stage={2}
+            title="Stage 2 Features"
             target={getStageExecutionTarget(2)}
             runId={activeStage === 2 ? kagglePanelRunId ?? runId : runId}
             status={stage2Status}
             progress={stage2Progress?.progress ?? 0}
             message={stage2Progress?.message}
             isRunning={stage2Status === "running"}
-            runLabel="Stage 2 Features"
             className="min-w-0"
           />
           <RunStageWidget
+            stage={3}
+            title="Stage 3 Index"
             target={getStageExecutionTarget(3)}
             runId={activeStage === 3 ? kagglePanelRunId ?? runId : runId}
             status={stage3Status}
             progress={stage3Progress?.progress ?? 0}
             message={stage3Progress?.message}
             isRunning={stage3Status === "running"}
-            runLabel="Stage 3 Index"
             className="min-w-0"
           />
         </div>
