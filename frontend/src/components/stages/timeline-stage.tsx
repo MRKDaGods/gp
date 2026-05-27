@@ -21,7 +21,9 @@ import {
   useSessionStore,
   useVideoStore,
   useDetectionStore,
+  useStageExecutionStore,
 } from "@/store";
+import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
 import {
   getTracklets,
   getTrajectories,
@@ -90,6 +92,13 @@ export function TimelineStage() {
   const { currentStage } = useSessionStore();
   const { currentVideo } = useVideoStore();
   const { selectedTrackIds: selectedTrackIdSet } = useDetectionStore();
+  const getStageExecutionTarget = useStageExecutionStore((state) => state.getStageExecutionTarget);
+
+  const stage4KaggleRequest = useCallback(() => {
+    if (getStageExecutionTarget(4) !== "kaggle") return {};
+    const credentials = useKaggleCredentialsStore.getState().credentials;
+    return { kaggle: { target: "kaggle" as const, username: credentials?.username, key: credentials?.key } };
+  }, [getStageExecutionTarget]);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -677,7 +686,7 @@ export function TimelineStage() {
           // If stage4 artifacts are missing for this run, execute stage4 then query again.
           if (!q1Data.stage4Available) {
             updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
-            const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id });
+            const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
             if (cancelled) return;
             const stage4RunId = (stageResp.data as any)?.runId ?? runId;
 
@@ -764,7 +773,7 @@ export function TimelineStage() {
               progress: 5,
               message: "Refreshing cross-camera association…",
             });
-            const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id });
+            const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
             if (cancelled || seq !== loadTracksSeqRef.current) return;
             const refreshStage4RunId = (stageResp.data as any)?.runId ?? runId;
 
@@ -895,7 +904,7 @@ export function TimelineStage() {
 
           // No stage4 artifacts yet — run stage 4 now
           updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
-          const stageResp = await runStage(4, { runId, videoId: currentVideo.id });
+          const stageResp = await runStage(4, { runId, videoId: currentVideo.id, ...stage4KaggleRequest() });
           if (cancelled) return;
           const stage4RunId = (stageResp.data as any)?.runId ?? runId;
 
@@ -1310,7 +1319,7 @@ export function TimelineStage() {
     const MAX_POLLS = 800;
 
     try {
-      const stageResp = await runStage(4, { runId: associationRunId, videoId: currentVideo.id });
+      const stageResp = await runStage(4, { runId: associationRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
       const pollRunId = String((stageResp.data as any)?.runId ?? associationRunId);
 
       let done = false;

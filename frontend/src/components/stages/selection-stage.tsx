@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { DisclosurePanel, ErrorBanner, ExecutionTargetToggle } from "@/components/pipeline";
+import { DisclosurePanel, ErrorBanner } from "@/components/pipeline";
 import { getTracklets } from "@/lib/api";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import { cn, getClassColor } from "@/lib/utils";
@@ -259,7 +259,6 @@ export function SelectionStageActions() {
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <ExecutionTargetToggle stage={2} className="min-w-[260px]" />
       <Button type="button" onClick={() => setCurrentStage(3)} disabled={selectedTrackIds.size === 0} aria-label="Continue to Stage 3 inference">
         Continue to Inference
       </Button>
