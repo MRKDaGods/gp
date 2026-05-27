@@ -18,9 +18,7 @@ import {
   Film,
   ChevronLeft,
   ChevronRight,
-  Loader2,
   FolderOpen,
-  Check,
   Cpu,
   Settings,
   Cloud,
@@ -41,6 +39,7 @@ import { TimelineStage } from "@/components/stages/timeline-stage";
 import { RefinementStage } from "@/components/stages/refinement-stage";
 import { OutputStage } from "@/components/stages/output-stage";
 import { DatasetProcessing } from "@/components/stages/dataset-processing";
+import { PipelineRunHeader, StageStatusDot, statusMeta, type StageStatus } from "@/components/pipeline";
 import type { ComponentType } from "react";
 
 const stages = [
@@ -106,10 +105,39 @@ function formatModelBadgeBody(
   return { primary: "Using legacy config", secondary: null, isFallback: true };
 }
 
+function deriveSidebarStageStatus(stageId: StageNumber, pipelineStages: ReturnType<typeof usePipelineStore.getState>["stages"]): StageStatus {
+  const stage = pipelineStages.find((candidate) => candidate.stage === stageId);
+  const previousStage = stageId > 0 ? pipelineStages.find((candidate) => candidate.stage === stageId - 1) : null;
+
+  if (stage?.status === "error" || stage?.error) return "error";
+  if (stage?.status === "running" || ((stage?.progress ?? 0) > 0 && (stage?.progress ?? 0) < 100)) return "running";
+  if ((stage?.progress ?? 0) >= 100) return "done";
+  if (previousStage && previousStage.progress < 100) return "blocked";
+  // TODO(phase-4): incorporate downstream invalidation when stale tracking is surfaced in the UI.
+  return "idle";
+}
+
+function sidebarStatusSentence(
+  stageLabel: string,
+  status: StageStatus,
+  progress: number,
+  executionTarget: "local" | "kaggle"
+): string {
+  if (status === "running") {
+    return `Running on ${executionTarget === "kaggle" ? "Kaggle" : "local"} · ${Math.round(progress)}% complete`;
+  }
+  if (status === "blocked") return `${stageLabel} is blocked - complete the previous stage first`;
+  if (status === "done") return `${stageLabel} is done · ${executionTarget} execution`;
+  if (status === "error") return `${stageLabel} has an error · click to view`;
+  return `${stageLabel} is ${statusMeta(status).label.toLowerCase()} · ${executionTarget} execution`;
+}
+
 export function MainDashboard() {
   const { currentStage, setCurrentStage } = useSessionStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
+  const runId = usePipelineStore((s) => s.runId);
   const pipelineStages = usePipelineStore((s) => s.stages);
+  const pipelineError = usePipelineStore((s) => s.error);
   const modelMode = usePipelineStore((s) => s.modelMode);
   const selectedModelMeta = usePipelineStore((s) => s.selectedModelMeta);
   const fusion = usePipelineStore((s) => s.fusion);
@@ -126,9 +154,6 @@ export function MainDashboard() {
   useEffect(() => {
     setVisitedPipelineStages((prev) => new Set(prev).add(currentStage));
   }, [currentStage]);
-
-  const getStageStatus = (stageId: number) =>
-    pipelineStages.find((s) => s.stage === stageId)?.status ?? "idle";
 
   const modelBadgeBody = formatModelBadgeBody(modelMode, selectedModelMeta, fusion);
   const openInferenceStage = () => {
@@ -162,10 +187,14 @@ export function MainDashboard() {
         <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3">
           {stages.map((stage) => {
             const isActive = !datasetView && currentStage === stage.id;
-            const status = getStageStatus(stage.id);
-            const isCompleted = status === "completed";
-            const isRunning = status === "running";
-            const isError = status === "error";
+            const pipelineStage = pipelineStages.find((candidate) => candidate.stage === stage.id);
+            const status = deriveSidebarStageStatus(stage.id, pipelineStages);
+            const statusSentence = sidebarStatusSentence(
+              stage.label,
+              status,
+              pipelineStage?.progress ?? 0,
+              getStageExecutionTarget(stage.id)
+            );
             const executionTarget = getStageExecutionTarget(stage.id);
             const isKaggleStage = executionTarget === "kaggle";
 
@@ -183,29 +212,11 @@ export function MainDashboard() {
                     )}
                   >
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <div className="relative">
-                        <div className={cn(
-                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
-                          isActive && "bg-primary-foreground/20 text-primary-foreground",
-                          isCompleted && !isActive && "bg-green-600/15 text-green-500",
-                          isError && !isActive && "bg-red-600/15 text-red-500",
-                          !isActive && !isCompleted && !isError && "bg-muted-foreground/10 text-muted-foreground",
-                        )}>
-                          {isRunning ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : isCompleted ? (
-                            <Check className="h-3 w-3" />
-                          ) : isError ? (
-                            <span className="text-[10px]">!</span>
-                          ) : (
-                            stage.id
-                          )}
-                        </div>
-                        {/* Collapsed local stages skip the Server badge to keep the compact rail legible. */}
-                        {!sidebarOpen && isKaggleStage && (
-                          <Cloud className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-card text-blue-500 ring-1 ring-card" />
-                        )}
-                      </div>
+                      <StageStatusDot
+                        status={status}
+                        withCloudOverlay={!sidebarOpen && isKaggleStage}
+                        className={cn(isActive && "ring-2 ring-primary-foreground/40")}
+                      />
                       {sidebarOpen && (
                         <span
                           className="flex h-4 w-4 items-center justify-center"
@@ -221,15 +232,16 @@ export function MainDashboard() {
                       )}
                     </div>
                     {sidebarOpen && (
-                      <span className="truncate">{stage.label}</span>
+                      <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                        <span className="truncate">{stage.label}</span>
+                        <span className="max-w-full truncate text-[11px] font-normal opacity-80">
+                          {status === "blocked" ? `needs Stage ${stage.id - 1}` : `${statusMeta(status).label.toLowerCase()}${status === "running" ? ` · ${Math.round(pipelineStage?.progress ?? 0)}%` : ""}`}
+                        </span>
+                      </span>
                     )}
                   </button>
                 </TooltipTrigger>
-                {!sidebarOpen && (
-                  <TooltipContent side="right">
-                    {isKaggleStage ? `${stage.label} · Kaggle execution` : stage.label}
-                  </TooltipContent>
-                )}
+                <TooltipContent side="right">{statusSentence}</TooltipContent>
               </Tooltip>
             );
           })}
@@ -342,6 +354,14 @@ export function MainDashboard() {
             <DatasetProcessing />
           ) : (
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <PipelineRunHeader
+                runId={runId}
+                currentStage={currentStage}
+                stages={pipelineStages}
+                stageLabels={stages}
+                error={pipelineError}
+                lastRunLabel="-"
+              />
               {PIPELINE_STAGE_COMPONENTS.map(({ id, Component }) =>
                 visitedPipelineStages.has(id) ? (
                   <div
