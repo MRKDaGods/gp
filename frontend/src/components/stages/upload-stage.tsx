@@ -137,7 +137,7 @@ export function UploadStage() {
         setUploadError(null);
 
         const response = await importKaggleRunArtifacts(file, { videoId: videoForLink?.id, cameraId }, setArtifactImportProgress);
-        const importedRunId = (response.data as any)?.runId ?? (response.data as any)?.id ?? null;
+        const importedRunId = response.data?.runId ?? response.data?.id ?? null;
         if (importedRunId) {
           setRunId(importedRunId);
           updateStageProgress(6, { status: "completed", progress: 100, message: "Kaggle artifacts imported" });

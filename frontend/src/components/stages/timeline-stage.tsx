@@ -701,7 +701,7 @@ export function TimelineStage() {
             updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
             const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
             if (cancelled) return;
-            const stage4RunId = (stageResp.data as any)?.runId ?? runId;
+            const stage4RunId = stageResp.data?.runId ?? runId;
 
             let done = false;
             while (!done && !cancelled) {
@@ -786,7 +786,7 @@ export function TimelineStage() {
             });
             const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
             if (cancelled || seq !== loadTracksSeqRef.current) return;
-            const refreshStage4RunId = (stageResp.data as any)?.runId ?? runId;
+            const refreshStage4RunId = stageResp.data?.runId ?? runId;
 
             let refreshDone = false;
             while (!refreshDone && !cancelled) {
@@ -915,7 +915,7 @@ export function TimelineStage() {
           updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
           const stageResp = await runStage(4, { runId, videoId: currentVideo.id, ...stage4KaggleRequest() });
           if (cancelled) return;
-          const stage4RunId = (stageResp.data as any)?.runId ?? runId;
+          const stage4RunId = stageResp.data?.runId ?? runId;
 
           // Poll until done
           let done = false;
@@ -1329,7 +1329,7 @@ export function TimelineStage() {
 
     try {
       const stageResp = await runStage(4, { runId: associationRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
-      const pollRunId = String((stageResp.data as any)?.runId ?? associationRunId);
+      const pollRunId = String(stageResp.data?.runId ?? associationRunId);
 
       let done = false;
       for (let i = 0; !done && i < MAX_POLLS; i += 1) {

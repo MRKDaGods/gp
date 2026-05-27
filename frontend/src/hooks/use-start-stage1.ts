@@ -48,7 +48,7 @@ export function useStartStage1() {
         config: { tracker: "deepocsort" },
         kaggle,
       });
-      const nextRunId = response.data?.runId ?? (response.data as any)?.id ?? null;
+      const nextRunId = response.data?.runId ?? response.data?.id ?? null;
       if (nextRunId) setRunId(nextRunId);
       options.afterStart?.();
     } catch (error) {

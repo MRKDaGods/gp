@@ -15,7 +15,7 @@ import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import type { ModelEntry } from "@/services/models";
 import { useDetectionStore, usePipelineStore, useSessionStore, useStageExecutionStore, useVideoStore } from "@/store";
-import type { PipelineRunStatus, RunModelMetadata, StageNumber } from "@/types";
+import type { RunModelMetadata, SingleStageRunStatus, StageNumber } from "@/types";
 
 function getRunStageErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -31,7 +31,7 @@ function getRunStageErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Inference failed";
 }
 
-function extractRunModelMetadata(data: any, selectedModel: ModelEntry | null): RunModelMetadata {
+function extractRunModelMetadata(data: SingleStageRunStatus | null, selectedModel: ModelEntry | null): RunModelMetadata {
   return {
     modelId: data?.model_id ?? data?.modelId ?? selectedModel?.id ?? null,
     resolvedConfig: data?.resolved_config ?? data?.resolvedConfig ?? selectedModel?.pipeline_config ?? null,
@@ -48,11 +48,11 @@ function extractRunModelMetadata(data: any, selectedModel: ModelEntry | null): R
 interface InferenceRunState {
   activeStage: 2 | 3 | null;
   runModelMetadata: RunModelMetadata | null;
-  lastRunStageResponse: PipelineRunStatus | null;
+  lastRunStageResponse: SingleStageRunStatus | null;
   kagglePanelRunId: string | null;
   setActiveStage: (stage: 2 | 3 | null) => void;
   setRunModelMetadata: (metadata: RunModelMetadata | null) => void;
-  setLastRunStageResponse: (response: PipelineRunStatus | null) => void;
+  setLastRunStageResponse: (response: SingleStageRunStatus | null) => void;
   setKagglePanelRunId: (runId: string | null) => void;
   resetRunArtifacts: () => void;
 }
@@ -302,8 +302,8 @@ export function InferenceActions() {
 
       const responseData = response.data ?? null;
       setLastRunStageResponse(responseData);
-      setRunModelMetadata(extractRunModelMetadata(responseData as any, selectedModelMeta));
-      const nextRunId = (responseData as any)?.runId ?? probeRunId;
+      setRunModelMetadata(extractRunModelMetadata(responseData, selectedModelMeta));
+      const nextRunId = responseData?.runId ?? probeRunId;
       if (nextRunId) setRunId(nextRunId);
 
       if (nextRunId && responseData?.execution_target === "kaggle") {

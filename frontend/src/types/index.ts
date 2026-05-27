@@ -61,6 +61,20 @@ export interface Tracklet {
   thumbnail?: string; // base64 or URL
 }
 
+export interface TrackletSummary {
+  id: number;
+  cameraId: string;
+  startFrame: number;
+  endFrame: number;
+  numFrames: number;
+  duration: number;
+  className: string;
+  classId: number;
+  confidence: number;
+  representativeFrame: number;
+  representativeBbox: number[];
+}
+
 // Global trajectory (cross-camera)
 export interface GlobalTrajectory {
   globalId: number;
@@ -192,12 +206,38 @@ export interface RunModelMetadata {
   fusion_resolved?: FusionResolved | null;
 }
 
+export type PipelineExecutionStatus = 'queued' | 'running' | 'completed' | 'complete' | 'error' | 'failed' | 'cancelled' | string;
+
+export interface SingleStageRunStatus {
+  runId: string;
+  id?: string;
+  stage?: StageNumber;
+  status: PipelineExecutionStatus;
+  progress?: number;
+  stageProgress?: Partial<StageProgress>;
+  message?: string;
+  error?: string | null;
+  execution_target?: StageExecutionTarget;
+  executionTarget?: StageExecutionTarget;
+  kaggle?: unknown;
+  model_id?: string | null;
+  modelId?: string | null;
+  resolved_config?: string | null;
+  resolvedConfig?: string | null;
+  applied_overrides?: string[];
+  appliedOverrides?: string[];
+  warnings?: string[];
+  fusion_resolved?: FusionResolved | null;
+  fusionResolved?: FusionResolved | null;
+}
+
 export interface PipelineRunStatus {
   runId: string;
+  id?: string;
   runDir: string;
   stages: StageProgress[];
   startedAt: string;
-  status: 'running' | 'completed' | 'error';
+  status: PipelineExecutionStatus;
   execution_target?: StageExecutionTarget;
   model_id?: string | null;
   modelId?: string | null;

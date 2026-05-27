@@ -77,9 +77,8 @@ export function SelectionStage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const resp: any = await getTracklets(undefined, currentVideo.id);
-      const data = resp?.data ?? resp;
-      setTracklets(Array.isArray(data) ? data : []);
+      const resp = await getTracklets(undefined, currentVideo.id);
+      setTracklets(Array.isArray(resp.data) ? resp.data : []);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setLoadError(`Failed to load tracklets: ${msg}`);

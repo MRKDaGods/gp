@@ -6,8 +6,9 @@ import type {
   GlobalTrajectory,
   PipelineRunStatus,
   SearchResult,
+  SingleStageRunStatus,
   StageNumber,
-  Tracklet,
+  TrackletSummary,
   VideoFile,
 } from '@/types';
 
@@ -395,7 +396,7 @@ export interface RunStageRequest {
 export async function runStage(
   stage: StageNumber,
   request?: RunStageRequest
-): Promise<ApiResponse<PipelineRunStatus>> {
+): Promise<ApiResponse<SingleStageRunStatus>> {
   return fetchApi(`/pipeline/run-stage/${stage}`, {
     method: 'POST',
     body: JSON.stringify(request || {}),
@@ -525,7 +526,7 @@ export async function buildIndex(
 export async function getTracklets(
   cameraId?: string,
   videoId?: string
-): Promise<ApiResponse<Tracklet[]>> {
+): Promise<ApiResponse<TrackletSummary[]>> {
   const query = new URLSearchParams();
   if (cameraId) query.set('cameraId', cameraId);
   if (videoId) query.set('videoId', videoId);
