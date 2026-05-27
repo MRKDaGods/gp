@@ -10,6 +10,7 @@ export interface PlaybackControlsProps {
   isPlaying?: boolean;
   currentFrame?: number;
   totalFrames?: number;
+  positionLabel?: string;
   speed?: number;
   speedOptions?: number[];
   onPlayPause?: () => void;
@@ -24,6 +25,7 @@ export function PlaybackControls({
   isPlaying = false,
   currentFrame = 0,
   totalFrames = 0,
+  positionLabel,
   speed = 1,
   speedOptions = [0.5, 1, 2, 4],
   onPlayPause,
@@ -58,23 +60,25 @@ export function PlaybackControls({
           aria-label="Playback frame"
         />
         <span className="w-24 text-right font-mono text-xs text-muted-foreground">
-          {currentFrame}/{maxFrame}
+          {positionLabel ?? `${currentFrame}/${maxFrame}`}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1">
-        {speedOptions.map((option) => (
-          <Button
-            key={option}
-            type="button"
-            variant={option === speed ? "secondary" : "ghost"}
-            size="sm"
-            className="h-8 px-2 text-xs"
-            onClick={() => onSpeedChange?.(option)}
-          >
-            {option}x
-          </Button>
-        ))}
-      </div>
+      {onSpeedChange ? (
+        <div className="flex flex-wrap items-center gap-1">
+          {speedOptions.map((option) => (
+            <Button
+              key={option}
+              type="button"
+              variant={option === speed ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 px-2 text-xs"
+              onClick={() => onSpeedChange(option)}
+            >
+              {option}x
+            </Button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -36,7 +36,7 @@ import { DetectionStage, DetectionStageActions } from "@/components/stages/detec
 import { SelectionStage, SelectionStageActions } from "@/components/stages/selection-stage";
 import { InferenceActions, InferenceStage } from "@/components/stages/inference-stage";
 import { TimelineStage, TimelineStageActions } from "@/components/stages/timeline-stage";
-import { RefinementStage } from "@/components/stages/refinement-stage";
+import { RefinementStage, RefinementStageActions } from "@/components/stages/refinement-stage";
 import { OutputStage } from "@/components/stages/output-stage";
 import { DatasetProcessing } from "@/components/stages/dataset-processing";
 import { PipelineRunHeader, StageShell, StageStatusDot, stageContract, statusMeta, type StageStatus } from "@/components/pipeline";
@@ -58,7 +58,7 @@ const PIPELINE_STAGE_COMPONENTS: { id: StageNumber; Component: ComponentType; Ac
   { id: 2, Component: SelectionStage, Actions: SelectionStageActions },
   { id: 3, Component: InferenceStage, Actions: InferenceActions },
   { id: 4, Component: TimelineStage, Actions: TimelineStageActions },
-  { id: 5, Component: RefinementStage },
+  { id: 5, Component: RefinementStage, Actions: RefinementStageActions },
   { id: 6, Component: OutputStage },
 ];
 
