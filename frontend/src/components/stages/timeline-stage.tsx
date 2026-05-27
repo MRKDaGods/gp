@@ -701,7 +701,7 @@ export function TimelineStage() {
             updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
             const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
             if (cancelled) return;
-            const stage4RunId = stageResp.data?.runId ?? runId;
+            const stage4RunId = String(stageResp.data?.runId ?? runId);
 
             let done = false;
             while (!done && !cancelled) {
@@ -786,7 +786,7 @@ export function TimelineStage() {
             });
             const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
             if (cancelled || seq !== loadTracksSeqRef.current) return;
-            const refreshStage4RunId = stageResp.data?.runId ?? runId;
+            const refreshStage4RunId = String(stageResp.data?.runId ?? runId);
 
             let refreshDone = false;
             while (!refreshDone && !cancelled) {
@@ -915,7 +915,7 @@ export function TimelineStage() {
           updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
           const stageResp = await runStage(4, { runId, videoId: currentVideo.id, ...stage4KaggleRequest() });
           if (cancelled) return;
-          const stage4RunId = stageResp.data?.runId ?? runId;
+          const stage4RunId = String(stageResp.data?.runId ?? runId);
 
           // Poll until done
           let done = false;
@@ -1221,6 +1221,8 @@ export function TimelineStage() {
     (alt: MatchedAlternative) => {
       if (!selectedTrack || !selectedTrackId) return;
 
+      // Alternatives are intentionally frontend-only timeline edits; backend persistence is out of scope for this flow.
+
       const selectedKey = `${selectedTrack.cameraId}:${selectedTrack.trackletId}`;
       const sourceForCurrent =
         currentAlternativeByTrackId[selectedTrackId]
@@ -1308,6 +1310,7 @@ export function TimelineStage() {
   };
 
   const handleConfirmToggle = (trackId: string, isConfirmed: boolean) => {
+    // Confirm/reject is local UI state by design; generated artifacts remain the backend source of truth.
     if (isConfirmed) {
       unconfirmTrack(trackId);
     } else {

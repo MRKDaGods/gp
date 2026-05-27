@@ -500,26 +500,6 @@ export async function getFrameWithDetections(
 }
 
 // ============================================================================
-// Stage 2-3: Features & Indexing
-// ============================================================================
-
-export async function extractFeatures(
-  trackletIds: number[],
-  cameraId: string
-): Promise<ApiResponse<void>> {
-  return fetchApi('/features/extract', {
-    method: 'POST',
-    body: JSON.stringify({ trackletIds, cameraId }),
-  });
-}
-
-export async function buildIndex(
-  runId: string
-): Promise<ApiResponse<void>> {
-  return fetchApi(`/index/build/${runId}`, { method: 'POST' });
-}
-
-// ============================================================================
 // Stage 4: Association & Search
 // ============================================================================
 
@@ -820,35 +800,6 @@ export async function importKaggleRunArtifacts(
     xhr.open('POST', apiUrl('/runs/import-kaggle'));
     xhr.send(formData);
   });
-}
-
-// ============================================================================
-// Location Data (Egypt Hierarchy)
-// ============================================================================
-
-export async function getGovernorates(): Promise<
-  ApiResponse<{ id: string; name: string; nameAr: string }[]>
-> {
-  return fetchApi('/locations/governorates');
-}
-
-export async function getCities(
-  governorateId: string
-): Promise<ApiResponse<{ id: string; name: string; nameAr: string }[]>> {
-  return fetchApi(`/locations/cities/${governorateId}`);
-}
-
-export async function getZones(
-  cityId: string
-): Promise<ApiResponse<{ id: string; name: string; nameAr: string }[]>> {
-  return fetchApi(`/locations/zones/${cityId}`);
-}
-
-export async function getCameras(
-  zoneId?: string
-): Promise<ApiResponse<{ id: string; name: string; location: unknown }[]>> {
-  const params = zoneId ? `?zoneId=${zoneId}` : '';
-  return fetchApi(`/cameras${params}`);
 }
 
 // ============================================================================
