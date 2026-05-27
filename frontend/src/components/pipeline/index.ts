@@ -5,6 +5,7 @@ export * from "./feedback/StalenessChip";
 export * from "./header/PipelineRunHeader";
 export * from "./media/PlaybackControls";
 export * from "./run/RunStageWidget";
+export * from "./run/ExecutionTargetToggle";
 export * from "./shell/ActionsFooter";
 export * from "./shell/ContractBanner";
 export * from "./shell/StageShell";

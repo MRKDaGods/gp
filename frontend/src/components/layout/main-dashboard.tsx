@@ -31,7 +31,7 @@ import type { StageNumber } from "@/types";
 import type { ModelEntry, ModelMetric } from "@/services/models";
 import { GlobalProcessingBanner } from "@/components/layout/global-processing-banner";
 
-import { UploadStage } from "@/components/stages/upload-stage";
+import { UploadStage, UploadStageActions } from "@/components/stages/upload-stage";
 import { DetectionStage } from "@/components/stages/detection-stage";
 import { SelectionStage } from "@/components/stages/selection-stage";
 import { InferenceStage } from "@/components/stages/inference-stage";
@@ -52,8 +52,8 @@ const stages = [
   { id: 6 as StageNumber, label: "Output", icon: Film },
 ];
 
-const PIPELINE_STAGE_COMPONENTS: { id: StageNumber; Component: ComponentType }[] = [
-  { id: 0, Component: UploadStage },
+const PIPELINE_STAGE_COMPONENTS: { id: StageNumber; Component: ComponentType; Actions?: ComponentType }[] = [
+  { id: 0, Component: UploadStage, Actions: UploadStageActions },
   { id: 1, Component: DetectionStage },
   { id: 2, Component: SelectionStage },
   { id: 3, Component: InferenceStage },
@@ -362,7 +362,7 @@ export function MainDashboard() {
                 error={pipelineError}
                 lastRunLabel="-"
               />
-              {PIPELINE_STAGE_COMPONENTS.map(({ id, Component }) =>
+              {PIPELINE_STAGE_COMPONENTS.map(({ id, Component, Actions }) =>
                 visitedPipelineStages.has(id) ? (
                   <div
                     key={id}
@@ -391,6 +391,7 @@ export function MainDashboard() {
                               setCurrentStage(stageId);
                             },
                           }}
+                          actions={Actions ? { run: <Actions /> } : undefined}
                         >
                           <Component />
                         </StageShell>
