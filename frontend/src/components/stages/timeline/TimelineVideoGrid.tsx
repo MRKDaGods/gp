@@ -4,12 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Car, Loader2 } from "lucide-react";
 
 import { TrackletFrameView } from "@/components/ui/double-buffered-img";
-import { getRunFullFrameUrl, getTrackletSequence, type TrackletSequenceFrame } from "@/lib/api";
+import { apiUrl, getRunFullFrameUrl, getTrackletSequence, type TrackletSequenceFrame } from "@/lib/api";
 import { cn, formatDuration } from "@/lib/utils";
 
 import type { TimelinePreviewCamera } from "./types";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 
 function shouldUseRunCropsForCamera(runId: string | undefined, _cameraId: string): boolean {
   if (!runId) return false;
@@ -147,7 +145,7 @@ function CameraPreview({
     if (globalId == null || trackId == null) return null;
     const safeCam = String(cameraId).replace(/[/\\]/g, "_");
     const filename = `global_${globalId}_cam_${safeCam}_track_${trackId}.mp4`;
-    return `${API_BASE}/runs/${probeRunId}/matched_clips/${filename}`;
+    return apiUrl(`/runs/${probeRunId}/matched_clips/${filename}`);
   })();
 
   const trackSeqKey =
@@ -264,10 +262,10 @@ function CameraPreview({
       ? `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`
       : "x1=0&y1=0&x2=9999&y2=9999";
     if (cropRunId && shouldUseRunCropsForCamera(cropRunId, track.cameraId)) {
-      return `${API_BASE}/crops/run/${cropRunId}?cameraId=${encodeURIComponent(track.cameraId)}&frameId=${frameId}&${bboxParams}`;
+      return apiUrl(`/crops/run/${cropRunId}?cameraId=${encodeURIComponent(track.cameraId)}&frameId=${frameId}&${bboxParams}`);
     }
     if (videoId) {
-      return `${API_BASE}/crops/${videoId}?frameId=${frameId}&${bboxParams}`;
+      return apiUrl(`/crops/${videoId}?frameId=${frameId}&${bboxParams}`);
     }
     return null;
   })();

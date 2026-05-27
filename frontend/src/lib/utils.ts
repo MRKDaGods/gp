@@ -1,6 +1,8 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+import { apiBase } from "@/lib/api";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -26,16 +28,9 @@ export function formatTimestamp(timestamp: number): string {
   });
 }
 
-const DEFAULT_PUBLIC_API_URL = "http://localhost:8004/api";
-
 /** Turn fetch() failures into a short actionable message for stage banners / toasts. */
 export function formatNetworkFailure(err: unknown): string {
-  const base =
-    typeof process !== "undefined" &&
-    process.env?.NEXT_PUBLIC_API_URL &&
-    String(process.env.NEXT_PUBLIC_API_URL).trim() !== ""
-      ? String(process.env.NEXT_PUBLIC_API_URL)
-      : DEFAULT_PUBLIC_API_URL;
+  const base = apiBase();
   const raw = err instanceof Error ? err.message : String(err);
   if (/failed to fetch|network error|networkerror|load failed|network request failed/i.test(raw)) {
     return (

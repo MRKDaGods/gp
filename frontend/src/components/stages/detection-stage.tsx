@@ -40,11 +40,10 @@ import {
   getPipelineStatus,
   getFrameUrl,
   getVideoStreamUrl,
+  apiUrl,
 } from "@/lib/api";
 import type { BoundingBox, Detection, VideoFile } from "@/types";
 import { DoubleBufferedFrameImg } from "@/components/ui/double-buffered-img";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 
 function detectionCropUrl(
   videoId: string,
@@ -54,7 +53,7 @@ function detectionCropUrl(
   minEdge: number = 160
 ): string {
   const { x1, y1, x2, y2 } = bbox;
-  return `${API_BASE}/crops/${encodeURIComponent(videoId)}?frameId=${frameId}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&quality=${quality}&minEdge=${minEdge}&pad=0.12`;
+  return apiUrl(`/crops/${encodeURIComponent(videoId)}?frameId=${frameId}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&quality=${quality}&minEdge=${minEdge}&pad=0.12`);
 }
 
 /**

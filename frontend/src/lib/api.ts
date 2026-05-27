@@ -11,7 +11,16 @@ import type {
   VideoFile,
 } from '@/types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+export function apiBase(): string {
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+}
+
+export function apiUrl(path: string): string {
+  const suffix = path.startsWith('/') ? path : `/${path}`;
+  return `${apiBase()}${suffix}`;
+}
+
+export const API_BASE = apiBase();
 
 function extractApiErrorMessage(data: unknown, fallback: string): string {
   if (data && typeof data === 'object') {
@@ -222,7 +231,7 @@ async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE}${endpoint}`;
+  const url = apiUrl(endpoint);
 
   const response = await fetch(url, {
     ...options,
@@ -303,7 +312,7 @@ export async function uploadVideo(
 
     xhr.onerror = () => reject(new ApiError('Network error', 0));
 
-    xhr.open('POST', `${API_BASE}/videos/upload`);
+    xhr.open('POST', apiUrl('/videos/upload'));
     xhr.send(formData);
   });
 }
@@ -619,7 +628,7 @@ export function getMatchedAlternativeClipUrl(runId: string, clipPath: string): s
     .filter(Boolean)
     .map((part) => encodeURIComponent(part))
     .join("/");
-  return `${API_BASE}/runs/${encodeURIComponent(runId)}/matched_alternatives/${safePath}`;
+  return apiUrl(`/runs/${encodeURIComponent(runId)}/matched_alternatives/${safePath}`);
 }
 
 /** Sampled frames for timeline tracklet preview (full frame + bbox sync). */
@@ -663,7 +672,7 @@ export function getRunFullFrameUrl(
     cameraId,
     frameId: String(frameId),
   });
-  return `${API_BASE}/runs/${encodeURIComponent(runId)}/full_frame?${q.toString()}`;
+  return apiUrl(`/runs/${encodeURIComponent(runId)}/full_frame?${q.toString()}`);
 }
 
 export async function getTrajectories(
@@ -807,7 +816,7 @@ export async function importKaggleRunArtifacts(
 
     xhr.onerror = () => reject(new ApiError('Network error', 0));
 
-    xhr.open('POST', `${API_BASE}/runs/import-kaggle`);
+    xhr.open('POST', apiUrl('/runs/import-kaggle'));
     xhr.send(formData);
   });
 }
@@ -851,7 +860,7 @@ export function createWebSocket(
   onError?: (error: Event) => void,
   onClose?: () => void
 ): WebSocket {
-  const wsUrl = `${API_BASE.replace('http', 'ws')}/ws/pipeline/${runId}`;
+  const wsUrl = `${apiBase().replace('http', 'ws')}/ws/pipeline/${runId}`;
   const ws = new WebSocket(wsUrl);
 
   ws.onmessage = (event) => {
@@ -880,11 +889,11 @@ export function createWebSocket(
 // ============================================================================
 
 export function getFrameUrl(videoId: string, frameId: number): string {
-  return `${API_BASE}/frames/${videoId}/${frameId}`;
+  return apiUrl(`/frames/${videoId}/${frameId}`);
 }
 
 export function getVideoStreamUrl(videoId: string): string {
-  return `${API_BASE}/videos/stream/${videoId}`;
+  return apiUrl(`/videos/stream/${videoId}`);
 }
 
 // ============================================================================

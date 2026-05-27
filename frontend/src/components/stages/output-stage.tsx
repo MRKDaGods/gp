@@ -28,6 +28,8 @@ import type { TimelineTrack } from "@/types";
 import {
   exportTrajectories,
   generateSummaryVideo,
+  apiBase,
+  apiUrl,
   getDatasets,
   getMatchedSummary,
   getTracklets,
@@ -40,7 +42,7 @@ import {
   buildGoogleMapsPathShareUrl,
 } from "@/lib/maps-share";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
+const API_BASE = apiBase();
 const outputPalette = ["#22c55e", "#3b82f6", "#f97316", "#e11d48", "#06b6d4", "#8b5cf6", "#f59e0b"];
 const OUTPUT_EXPORT_EVENT = "mtmc:stage6:export";
 
@@ -426,7 +428,7 @@ export function OutputStage() {
     return `${backendOrigin}/${url}`;
   }, [backendOrigin]);
 
-  const rawStreamUrl = currentVideo ? `${API_BASE}/videos/stream/${currentVideo.id}` : null;
+  const rawStreamUrl = currentVideo ? apiUrl(`/videos/stream/${currentVideo.id}`) : null;
   const streamUrl = summaryVideoUrl ?? rawStreamUrl;
 
   useEffect(() => {

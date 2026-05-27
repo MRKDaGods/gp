@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
+import { apiUrl } from "@/lib/api";
 
 export type ModelTaskType = "mtmc_vehicle" | "mtmc_person" | "single_cam_reid" | "detector_only";
 export type ModelStatus = "production" | "research" | "dead_end" | "reference";
@@ -94,7 +94,7 @@ interface ApiResponse<T> {
 }
 
 async function fetchRegistry<T>(endpoint: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  const response = await fetch(apiUrl(endpoint), {
     headers: { "Content-Type": "application/json" },
   });
 

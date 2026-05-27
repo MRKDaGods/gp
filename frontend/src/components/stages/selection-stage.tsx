@@ -10,12 +10,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DisclosurePanel, ErrorBanner } from "@/components/pipeline";
-import { getTracklets } from "@/lib/api";
+import { apiUrl, getTracklets } from "@/lib/api";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import { cn, getClassColor } from "@/lib/utils";
 import { useDetectionStore, useSessionStore, useVideoStore } from "@/store";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 
 function uploadVideoCropUrl(
   videoId: string,
@@ -28,7 +26,7 @@ function uploadVideoCropUrl(
   const minEdge = opts?.minEdge ?? 200;
   const pad = opts?.pad ?? 0.12;
   const [x1, y1, x2, y2] = bbox;
-  return `${API_BASE}/crops/${encodeURIComponent(videoId)}?frameId=${frameId}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&quality=${q}&minEdge=${minEdge}&pad=${pad}`;
+  return apiUrl(`/crops/${encodeURIComponent(videoId)}?frameId=${frameId}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&quality=${q}&minEdge=${minEdge}&pad=${pad}`);
 }
 
 interface SampleFrame {

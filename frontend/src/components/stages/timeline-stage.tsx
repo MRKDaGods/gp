@@ -33,6 +33,7 @@ import {
   queryTimeline,
   getMatchedSummary,
   getMatchedAlternatives,
+  apiUrl,
   type MatchedAlternative,
 } from "@/lib/api";
 import type { TimelineTrack, TrajectorySegment } from "@/types";
@@ -47,8 +48,6 @@ import type {
   TimelineCameraLaneSegment as CameraLaneSegment,
   TimelineCameraLaneSegmentWithSum as CameraLaneSegmentWithSum,
 } from "./timeline/types";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 
 /** Playhead & ruler updates/sec while playing — lower = less React work (grid + memos). */
 const TIMELINE_PLAYHEAD_FPS = 12;
@@ -1093,9 +1092,9 @@ export function TimelineStage() {
       previewUrl: source?.previewUrl
         ?? (
           probeRunIdForMedia && track.globalId != null
-            ? `${API_BASE}/runs/${encodeURIComponent(probeRunIdForMedia)}/matched_clips/${encodeURIComponent(
+            ? apiUrl(`/runs/${encodeURIComponent(probeRunIdForMedia)}/matched_clips/${encodeURIComponent(
               `global_${track.globalId}_cam_${String(track.cameraId).replace(/[/\\]/g, "_")}_track_${track.trackletId}.mp4`
-            )}`
+            )}`)
             : undefined
         ),
       rank: 0,
