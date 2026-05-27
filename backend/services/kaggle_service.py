@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterator, List, Literal, Optional
 
+
 KernelStatusValue = Literal["queued", "running", "complete", "error", "cancelled", "unknown"]
 
 _TERMINAL_KERNEL_STATUSES: set[KernelStatusValue] = {"complete", "error", "cancelled"}
