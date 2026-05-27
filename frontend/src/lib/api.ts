@@ -673,7 +673,7 @@ export async function getTrajectories(
 }
 
 export async function queryTimeline(
-  probeRunId: string | null | undefined,
+  probeRunId: string,
   videoId: string,
   selectedTrackIds: string[],
   opts?: {
@@ -694,11 +694,11 @@ export async function queryTimeline(
   };
 }>> {
   const body: Record<string, unknown> = {
+    runId: probeRunId,
     videoId,
     selectedTrackIds,
     skipExports: opts?.skipExports ?? false,
   };
-  if (probeRunId) body.runId = probeRunId;
   const g = opts?.galleryRunId;
   if (g) body.galleryRunId = g;
   return fetchApi('/timeline/query', {

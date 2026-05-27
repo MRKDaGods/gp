@@ -602,10 +602,10 @@ export function TimelineStage() {
         const sortedSel = selectedTrackIdsArr.slice().sort().join(",");
         const exportDedupeKey = (probeKey: string) =>
           `${probeKey}|${galleryRunId ?? ""}|${currentVideo.id}|${sortedSel}`;
-        const callQueryTimeline = async (probeHint: string | undefined) => {
-          const dk = exportDedupeKey(probeHint ?? runId ?? "");
+        const callQueryTimeline = async (probeHint: string) => {
+          const dk = exportDedupeKey(probeHint);
           const skipExports = lastExportedQueryKeyRef.current === dk;
-          const res = await queryTimeline(probeHint ?? runId ?? undefined, currentVideo.id, selectedTrackIdsArr, {
+          const res = await queryTimeline(probeHint, currentVideo.id, selectedTrackIdsArr, {
             galleryRunId: galleryRunId ?? undefined,
             skipExports,
           });
@@ -623,12 +623,26 @@ export function TimelineStage() {
           selectedTrackIds: selectedTrackIdsArr,
         });
 
+        if (selectedTrackIdSet.size > 0 && !runId) {
+          finalTracksSet = true;
+          setTracks([]);
+          updateStageProgress(4, {
+            status: "error",
+            progress: 0,
+            message: "Stage 4 query needs a completed probe run. Run Stage 1-3 for the selected video before querying a gallery.",
+          });
+          console.warn("queryTimeline skipped: missing required probe runId", { galleryRunId });
+          console.groupEnd();
+          return;
+        }
+        const probeRunId = String(runId);
+
         // Query mode: resolve selected tracklets to matched trajectories on backend.
         // Use galleryRunId (precomputed dataset) when available; fall back to probe runId.
         const effectiveGalleryRunId = galleryRunId ?? runId;
         if (effectiveGalleryRunId && selectedTrackIdSet.size > 0) {
           attemptedAssociation = true;
-          const q1 = await callQueryTimeline(runId ?? undefined);
+          const q1 = await callQueryTimeline(probeRunId);
           if (cancelled || seq !== loadTracksSeqRef.current) return;
 
           const q1Data: any = q1.data ?? {};
@@ -710,9 +724,7 @@ export function TimelineStage() {
             }
 
             if (!cancelled) {
-              const q2 = await callQueryTimeline(
-                typeof stage4RunId === "string" ? stage4RunId : undefined
-              );
+              const q2 = await callQueryTimeline(stage4RunId);
               if (cancelled || seq !== loadTracksSeqRef.current) return;
               const q2Data: any = q2.data ?? {};
               const pr2 = applyTimelineResolvedProbe(q2Data.diagnostics);
@@ -797,9 +809,7 @@ export function TimelineStage() {
             }
 
             if (!cancelled && seq === loadTracksSeqRef.current) {
-              const qRefresh = await callQueryTimeline(
-                typeof refreshStage4RunId === "string" ? refreshStage4RunId : undefined
-              );
+              const qRefresh = await callQueryTimeline(refreshStage4RunId);
               if (cancelled || seq !== loadTracksSeqRef.current) return;
               const qRefreshData: any = qRefresh.data ?? {};
               const prR = applyTimelineResolvedProbe(qRefreshData.diagnostics);
