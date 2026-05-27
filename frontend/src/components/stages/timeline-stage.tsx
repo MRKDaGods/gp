@@ -23,6 +23,7 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { DisclosurePanel } from "@/components/pipeline";
+import { ExecutionTargetToggle } from "@/components/pipeline/run/ExecutionTargetToggle";
 import {
   useTimelineStore,
   usePipelineStore,
@@ -35,6 +36,7 @@ import {
   getTrajectories,
   runStage,
   getPipelineStatus,
+  cancelPipeline,
   queryTimeline,
   getMatchedSummary,
   getMatchedAlternatives,
@@ -60,6 +62,8 @@ const TIMELINE_PLAYHEAD_FPS = 12;
 /** Tracklet full-frame picks/sec while playing (lower than playhead to limit image decode load). */
 const TRACKLET_PICK_FPS = 15;
 const TRACKLET_PICK_BUCKET_SEC = 1 / TRACKLET_PICK_FPS;
+const TIMELINE_SHOW_ALTERNATIVES_EVENT = "mtmc:timeline:show-alternatives";
+const TIMELINE_RERUN_ASSOCIATION_EVENT = "mtmc:timeline:rerun-association";
 
 /** Any segment (wall-clock) contains video time `t`. */
 function trackIsActiveAtVideoTime(track: TimelineTrack, videoTime: number): boolean {
@@ -92,7 +96,7 @@ export function TimelineStage() {
     stages,
     downstreamInvalidateGeneration,
   } = usePipelineStore();
-  const { currentStage, setCurrentStage } = useSessionStore();
+  const { currentStage } = useSessionStore();
   const { currentVideo } = useVideoStore();
   const { selectedTrackIds: selectedTrackIdSet } = useDetectionStore();
 
@@ -1302,10 +1306,6 @@ export function TimelineStage() {
     }
   };
 
-  const handleProceed = () => {
-    setCurrentStage(5);
-  };
-
   const handleRerunAssociation = async () => {
     if (!currentVideo) return;
     const associationRunId = galleryRunId ?? runId;
@@ -1374,6 +1374,20 @@ export function TimelineStage() {
       setTracksLoading(false);
     }
   };
+
+  useEffect(() => {
+    const openAlternatives = () => setAlternativesOpen(true);
+    const rerunAssociation = () => {
+      void handleRerunAssociation();
+    };
+
+    window.addEventListener(TIMELINE_SHOW_ALTERNATIVES_EVENT, openAlternatives);
+    window.addEventListener(TIMELINE_RERUN_ASSOCIATION_EVENT, rerunAssociation);
+    return () => {
+      window.removeEventListener(TIMELINE_SHOW_ALTERNATIVES_EVENT, openAlternatives);
+      window.removeEventListener(TIMELINE_RERUN_ASSOCIATION_EVENT, rerunAssociation);
+    };
+  }, [handleRerunAssociation]);
 
   const confirmedCount = useMemo(
     () => tracks.filter((t) => t.confirmed).length,
@@ -1536,22 +1550,6 @@ export function TimelineStage() {
           <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
             {confirmedCount} confirmed
           </Badge>
-          <Button
-            className="shrink-0"
-            variant="outline"
-            disabled={tracksLoading}
-            onClick={handleRerunAssociation}
-          >
-            <RefreshCw className={cn("mr-2 h-4 w-4", tracksLoading && "animate-spin")} />
-            Rerun Association
-          </Button>
-          <Button className="shrink-0" variant="outline" onClick={() => setAlternativesOpen(true)}>
-            Alternatives
-          </Button>
-          <Button className="shrink-0" onClick={handleProceed}>
-            Continue to Refinement
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
         </div>
       </header>
 
@@ -1726,5 +1724,57 @@ export function TimelineStage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export function TimelineStageActions() {
+  const { runId, galleryRunId, stages, updateStageProgress } = usePipelineStore();
+  const { setCurrentStage } = useSessionStore();
+  const stage4Progress = stages.find((stage) => stage.stage === 4);
+  const isRunning = stage4Progress?.status === "running";
+  const cancelRunId = galleryRunId ?? runId;
+
+  const dispatchTimelineEvent = (eventName: string) => {
+    window.dispatchEvent(new Event(eventName));
+  };
+
+  const handleCancel = async () => {
+    if (!cancelRunId) {
+      updateStageProgress(4, { status: "idle", progress: 0, message: "Stage 4 cancelled" });
+      return;
+    }
+
+    try {
+      await cancelPipeline(cancelRunId);
+    } finally {
+      updateStageProgress(4, { status: "idle", progress: 0, message: "Stage 4 cancelled" });
+    }
+  };
+
+  return (
+    <>
+      <ExecutionTargetToggle stage={4} className="min-w-[260px]" />
+      {isRunning ? (
+        <Button type="button" variant="outline" onClick={() => void handleCancel()} aria-label="Cancel Stage 4 association run">
+          Cancel
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={isRunning}
+        onClick={() => dispatchTimelineEvent(TIMELINE_RERUN_ASSOCIATION_EVENT)}
+      >
+        <RefreshCw className={cn("mr-2 h-4 w-4", isRunning && "animate-spin")} />
+        Run Association
+      </Button>
+      <Button type="button" variant="outline" onClick={() => dispatchTimelineEvent(TIMELINE_SHOW_ALTERNATIVES_EVENT)}>
+        Alternatives
+      </Button>
+      <Button type="button" onClick={() => setCurrentStage(5)}>
+        Continue to Refinement
+        <ArrowRight className="ml-2 h-4 w-4" />
+      </Button>
+    </>
   );
 }
