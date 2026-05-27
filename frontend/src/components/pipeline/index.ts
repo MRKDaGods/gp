@@ -9,3 +9,4 @@ export * from "./shell/ActionsFooter";
 export * from "./shell/ContractBanner";
 export * from "./shell/StageShell";
 export * from "./status";
+export * from "./contracts";

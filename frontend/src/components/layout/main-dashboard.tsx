@@ -39,7 +39,7 @@ import { TimelineStage } from "@/components/stages/timeline-stage";
 import { RefinementStage } from "@/components/stages/refinement-stage";
 import { OutputStage } from "@/components/stages/output-stage";
 import { DatasetProcessing } from "@/components/stages/dataset-processing";
-import { PipelineRunHeader, StageStatusDot, statusMeta, type StageStatus } from "@/components/pipeline";
+import { PipelineRunHeader, StageShell, StageStatusDot, stageContract, statusMeta, type StageStatus } from "@/components/pipeline";
 import type { ComponentType } from "react";
 
 const stages = [
@@ -374,7 +374,28 @@ export function MainDashboard() {
                       currentStage !== id && "hidden"
                     )}
                   >
-                    <Component />
+                    {(() => {
+                      const status = deriveSidebarStageStatus(id, pipelineStages);
+                      const blockedBy = status === "blocked" && id > 0
+                        ? { label: `Stage ${id - 1}`, stage: (id - 1) as StageNumber }
+                        : null;
+
+                      return (
+                        <StageShell
+                          contract={{
+                            ...stageContract(id),
+                            status,
+                            blockedBy,
+                            onNavigateToStage: (stageId) => {
+                              setDatasetView(false);
+                              setCurrentStage(stageId);
+                            },
+                          }}
+                        >
+                          <Component />
+                        </StageShell>
+                      );
+                    })()}
                   </div>
                 ) : null
               )}
