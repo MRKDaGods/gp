@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { DisclosurePanel, ErrorBanner, RunStageWidget, toStageStatus } from "@/components/pipeline";
+import { DisclosurePanel, ErrorBanner } from "@/components/pipeline";
 import { useToast } from "@/hooks/use-toast";
 import { getVideos, importKaggleRunArtifacts, runStage, uploadVideo } from "@/lib/api";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
@@ -331,10 +331,10 @@ export function UploadStage() {
 export function UploadStageActions() {
   const { currentVideo } = useVideoStore();
   const { setCurrentStage } = useSessionStore();
-  const { runId, stages, isRunning, setRunId, setIsRunning, updateStageProgress } = usePipelineStore();
+  const { stages, isRunning, setRunId, setIsRunning, updateStageProgress } = usePipelineStore();
   const { toast } = useToast();
   const stage1Progress = stages.find((stage) => stage.stage === 1);
-  const status = toStageStatus(stage1Progress);
+  const isStage1Running = isRunning && stage1Progress?.status === "running";
 
   const handleContinue = async () => {
     if (!currentVideo) return;
@@ -358,18 +358,15 @@ export function UploadStageActions() {
   };
 
   return (
-    <RunStageWidget
-      target="local"
-      runId={runId}
-      status={status}
-      progress={stage1Progress?.progress ?? 0}
-      message={stage1Progress?.message}
-      isRunning={isRunning && status === "running"}
+    <Button
+      type="button"
+      onClick={() => void handleContinue()}
       disabled={!currentVideo}
-      runLabel="Continue to Stage 1"
-      onRun={() => void handleContinue()}
-      className="min-w-[280px]"
-    />
+      aria-label={currentVideo ? "Continue to Stage 1 detection" : "Select a video before continuing to Stage 1"}
+    >
+      {isStage1Running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+      {isStage1Running ? "Starting Stage 1..." : "Continue to Stage 1"}
+    </Button>
   );
 }
 

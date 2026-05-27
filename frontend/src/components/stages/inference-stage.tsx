@@ -360,9 +360,9 @@ export function InferenceActions() {
 
   return (
     <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <ExecutionTargetToggle stage={2} className="min-w-[240px]" />
-        <ExecutionTargetToggle stage={3} className="min-w-[240px]" />
+      <div className="flex flex-wrap items-center gap-2">
+        <ExecutionTargetToggle stage={2} variant="compact" />
+        <ExecutionTargetToggle stage={3} variant="compact" />
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
         {isRunning ? (
@@ -370,14 +370,22 @@ export function InferenceActions() {
             Cancel
           </Button>
         ) : null}
-        <Button type="button" onClick={() => void runBackendStage(2)} disabled={isRunning || fusionRunDisabled || selectedTrackIds.size === 0} aria-label="Run Stage 2 feature extraction">
-          {stage2Status === "running" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-          Run Features
-        </Button>
-        <Button type="button" onClick={() => void runBackendStage(3)} disabled={isRunning || fusionRunDisabled || !runId} aria-label="Run Stage 3 indexing">
-          {stage3Status === "running" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
-          Run Index
-        </Button>
+        <RunStageWidget
+          mode="button-only"
+          runLabel="Run Features"
+          isRunning={stage2Status === "running"}
+          disabled={isRunning || fusionRunDisabled || selectedTrackIds.size === 0}
+          onRun={() => void runBackendStage(2)}
+          runIcon={stage2Status === "running" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+        />
+        <RunStageWidget
+          mode="button-only"
+          runLabel="Run Index"
+          isRunning={stage3Status === "running"}
+          disabled={isRunning || fusionRunDisabled || !runId}
+          onRun={() => void runBackendStage(3)}
+          runIcon={stage3Status === "running" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
+        />
         <Button type="button" onClick={() => setCurrentStage(4)} disabled={stage3Progress?.progress !== 100} aria-label="Continue to Stage 4 timeline">
           Continue to Stage 4
           <ArrowRight className="ml-2 h-4 w-4" />

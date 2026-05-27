@@ -21,6 +21,8 @@ export interface RunStageWidgetProps {
   isRunning?: boolean;
   disabled?: boolean;
   runLabel?: string;
+  runIcon?: ReactNode;
+  mode?: "full" | "button-only";
   onRun?: () => void;
   children?: ReactNode;
   className?: string;
@@ -38,6 +40,8 @@ export function RunStageWidget({
   isRunning = false,
   disabled = false,
   runLabel = "Run stage",
+  runIcon,
+  mode = "full",
   onRun,
   children,
   className,
@@ -51,12 +55,27 @@ export function RunStageWidget({
   const showKaggle = stageTarget === "kaggle" && Boolean(runId) && (isRunning || resolvedStatus === "running");
   const showControls = Boolean(onRun || children);
 
+  if (mode === "button-only") {
+    return (
+      <div className={cn("flex flex-wrap items-center gap-2", className)}>
+        {onRun ? (
+          <Button type="button" onClick={onRun} disabled={disabled || isRunning}>
+            {runIcon}
+            {isRunning ? "Running..." : runLabel}
+          </Button>
+        ) : null}
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className={cn("space-y-3", className)}>
       {showControls ? (
         <div className="flex flex-wrap items-center gap-2">
           {onRun ? (
             <Button type="button" onClick={onRun} disabled={disabled || isRunning}>
+              {runIcon}
               {isRunning ? "Running..." : runLabel}
             </Button>
           ) : null}

@@ -624,6 +624,8 @@ export function DetectionStage() {
   };
 
   const hasVideo = Boolean(currentVideo);
+  const stage1Progress = stages.find((stage) => stage.stage === 1);
+  const stage1Status = toStageStatus(stage1Progress);
 
   const countByClassId = (classId: number) =>
     detections.filter((d) => d.classId === classId).length;
@@ -631,6 +633,18 @@ export function DetectionStage() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <ErrorBanner title="Detection failed" message={videoError} className="mx-4 mt-4 shrink-0 sm:mx-6" />
+      {stage1Status === "running" ? (
+        <RunStageWidget
+          stage={1}
+          title="Stage 1 Detection"
+          runId={runId}
+          status={stage1Status}
+          progress={stage1Progress?.progress ?? 0}
+          message={stage1Progress?.message}
+          isRunning
+          className="mx-4 mt-4 shrink-0 sm:mx-6"
+        />
+      ) : null}
 
       {/* Main content */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
@@ -1015,7 +1029,7 @@ export function DetectionStageActions() {
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <ExecutionTargetToggle stage={1} className="min-w-[260px]" />
+      <ExecutionTargetToggle stage={1} variant="compact" />
       {isRunning && status === "running" ? (
         <Button type="button" variant="outline" onClick={() => void handleCancel()} aria-label="Cancel Stage 1 run">
           Cancel
@@ -1030,8 +1044,8 @@ export function DetectionStageActions() {
         isRunning={isRunning && status === "running"}
         disabled={!currentVideo}
         runLabel="Run Stage 1"
+        mode="button-only"
         onRun={() => void handleRun()}
-        className="min-w-[260px]"
       />
       <Button type="button" onClick={() => setCurrentStage(2)} disabled={selectedTrackIds.size === 0} aria-label="Continue to Stage 2 selection">
         Continue to Stage 2

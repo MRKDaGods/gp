@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Cloud, Server } from "lucide-react";
+import { AlertTriangle, Cloud, KeyRound, Server } from "lucide-react";
 
 import { KaggleCredentialsStatus } from "@/components/layout/kaggle-status-indicator";
 import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials-modal";
@@ -12,16 +12,66 @@ import { useStageExecutionStore } from "@/store";
 
 export interface ExecutionTargetToggleProps {
   stage: number;
+  variant?: "full" | "compact";
   className?: string;
 }
 
-export function ExecutionTargetToggle({ stage, className }: ExecutionTargetToggleProps) {
+export function ExecutionTargetToggle({ stage, variant = "full", className }: ExecutionTargetToggleProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const target = useStageExecutionStore((state) => state.getStageExecutionTarget(stage));
   const setStageExecutionTarget = useStageExecutionStore((state) => state.setStageExecutionTarget);
   const credentials = useKaggleCredentialsStore((state) => state.credentials);
   const isKaggle = target === "kaggle";
   const Icon = isKaggle ? Cloud : Server;
+
+  if (variant === "compact") {
+    return (
+      <div className={cn("flex flex-wrap items-center gap-2", className)}>
+        <div className="inline-flex items-center rounded-md border bg-muted/20 p-0.5" aria-label={`Stage ${stage} execution target`}>
+          <button
+            type="button"
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              !isKaggle ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setStageExecutionTarget(stage, "local")}
+            aria-pressed={!isKaggle}
+          >
+            <Server className="h-3.5 w-3.5" />
+            Local
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              isKaggle ? "bg-background text-sky-600 shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setStageExecutionTarget(stage, "kaggle")}
+            aria-pressed={isKaggle}
+          >
+            <Cloud className="h-3.5 w-3.5" />
+            Kaggle
+          </button>
+        </div>
+
+        {isKaggle ? (
+          <Button
+            type="button"
+            variant={credentials ? "ghost" : "outline"}
+            size="sm"
+            className={cn("h-8 gap-1.5 px-2 text-xs", !credentials && "border-amber-500/40 text-amber-600")}
+            onClick={() => setModalOpen(true)}
+            aria-label="Configure Kaggle credentials"
+          >
+            {credentials ? <KeyRound className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+            {credentials ? credentials.username : "Credentials"}
+          </Button>
+        ) : null}
+
+        <KaggleCredentialsModal open={modalOpen} onOpenChange={setModalOpen} />
+      </div>
+    );
+  }
 
   return (
     <div className={cn("space-y-3", className)}>

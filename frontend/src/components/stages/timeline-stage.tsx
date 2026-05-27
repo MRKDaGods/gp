@@ -1689,7 +1689,7 @@ export function TimelineStageActions() {
 
   return (
     <>
-      <ExecutionTargetToggle stage={4} className="min-w-[260px]" />
+      <ExecutionTargetToggle stage={4} variant="compact" />
       {isRunning ? (
         <Button type="button" variant="outline" onClick={() => void handleCancel()} aria-label="Cancel Stage 4 association run">
           Cancel
