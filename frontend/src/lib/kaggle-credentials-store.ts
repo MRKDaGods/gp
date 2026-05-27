@@ -10,8 +10,11 @@ export interface KaggleCredentials {
 
 export interface KaggleCredentialsState {
   credentials: KaggleCredentials | null;
+  modalOpen: boolean;
   setCredentials: (creds: KaggleCredentials | null) => void;
   clearCredentials: () => void;
+  setModalOpen: (open: boolean) => void;
+  openCredentialsModal: () => void;
 }
 
 /**
@@ -25,8 +28,11 @@ export const useKaggleCredentialsStore = create<KaggleCredentialsState>()(
   persist(
     (set) => ({
       credentials: null,
+      modalOpen: false,
       setCredentials: (credentials) => set({ credentials }),
       clearCredentials: () => set({ credentials: null }),
+      setModalOpen: (modalOpen) => set({ modalOpen }),
+      openCredentialsModal: () => set({ modalOpen: true }),
     }),
     {
       name: 'mtmc-kaggle-credentials',

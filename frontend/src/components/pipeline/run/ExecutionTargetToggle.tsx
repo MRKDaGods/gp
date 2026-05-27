@@ -1,6 +1,4 @@
 "use client";
-
-import { useState } from "react";
 import { AlertTriangle, Cloud, KeyRound, Server } from "lucide-react";
 
 import { KaggleCredentialsStatus } from "@/components/layout/kaggle-status-indicator";
@@ -17,10 +15,11 @@ export interface ExecutionTargetToggleProps {
 }
 
 export function ExecutionTargetToggle({ stage, variant = "full", className }: ExecutionTargetToggleProps) {
-  const [modalOpen, setModalOpen] = useState(false);
   const target = useStageExecutionStore((state) => state.getStageExecutionTarget(stage));
   const setStageExecutionTarget = useStageExecutionStore((state) => state.setStageExecutionTarget);
   const credentials = useKaggleCredentialsStore((state) => state.credentials);
+  const modalOpen = useKaggleCredentialsStore((state) => state.modalOpen);
+  const setModalOpen = useKaggleCredentialsStore((state) => state.setModalOpen);
   const isKaggle = target === "kaggle";
   const Icon = isKaggle ? Cloud : Server;
 

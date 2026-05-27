@@ -13,6 +13,18 @@ import type {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
+function extractApiErrorMessage(data: unknown, fallback: string): string {
+  if (data && typeof data === 'object') {
+    const record = data as { detail?: unknown; message?: unknown; error?: unknown };
+    const detail = record.detail;
+    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (Array.isArray(detail) && detail.length > 0) return JSON.stringify(detail);
+    if (typeof record.message === 'string' && record.message.trim()) return record.message;
+    if (typeof record.error === 'string' && record.error.trim()) return record.error;
+  }
+  return fallback;
+}
+
 function normalizeVideoFile(raw: any): VideoFile {
   return {
     id: String(raw.id),
@@ -75,6 +87,28 @@ class ApiError extends Error {
   ) {
     super(message);
     this.name = 'ApiError';
+  }
+
+  static async fromResponse(response: Response): Promise<ApiError> {
+    const contentType = response.headers.get('content-type') ?? '';
+    const data = contentType.includes('application/json')
+      ? await response.json().catch(() => undefined)
+      : await response.text().catch(() => undefined);
+    const message = extractApiErrorMessage(data, response.statusText || `HTTP ${response.status}`);
+    return new ApiError(message, response.status, data);
+  }
+
+  static fromXhr(xhr: XMLHttpRequest, fallback: string): ApiError {
+    const raw = xhr.responseText;
+    let data: unknown = undefined;
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = raw;
+      }
+    }
+    return new ApiError(extractApiErrorMessage(data, fallback), xhr.status, data);
   }
 }
 
@@ -199,12 +233,7 @@ async function fetchApi<T>(
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new ApiError(
-      errorData.message || `HTTP ${response.status}`,
-      response.status,
-      errorData
-    );
+    throw await ApiError.fromResponse(response);
   }
 
   return response.json();
@@ -268,7 +297,7 @@ export async function uploadVideo(
           data: parsed?.data ? normalizeVideoFile(parsed.data) : undefined,
         });
       } else {
-        reject(new ApiError('Upload failed', xhr.status));
+        reject(ApiError.fromXhr(xhr, 'Upload failed'));
       }
     };
 
@@ -772,7 +801,7 @@ export async function importKaggleRunArtifacts(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(JSON.parse(xhr.responseText));
       } else {
-        reject(new ApiError('Kaggle import failed', xhr.status));
+        reject(ApiError.fromXhr(xhr, 'Kaggle import failed'));
       }
     };
 

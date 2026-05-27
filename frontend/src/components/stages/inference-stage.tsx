@@ -20,7 +20,7 @@ import type { PipelineRunStatus, RunModelMetadata, StageNumber } from "@/types";
 function getRunStageErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return "Kaggle credentials missing or invalid. Configure them in the sidebar settings.";
-    if (error.status === 429) return "Both Kaggle GPU slots are busy. Try again later or run locally.";
+    if (error.status === 429) return "Both Kaggle slots busy — try again later";
     if (error.status === 400) {
       const data = error.data as { detail?: unknown; message?: unknown } | undefined;
       return String(data?.detail ?? data?.message ?? error.message);
@@ -335,6 +335,9 @@ export function InferenceActions() {
         }
       }
     } catch (error) {
+      if (request.executionTarget === "kaggle" && error instanceof ApiError && error.status === 401) {
+        useKaggleCredentialsStore.getState().openCredentialsModal();
+      }
       const message = getRunStageErrorMessage(error);
       setError(message);
       updateStageProgress(stage, { status: "error", progress: 100, message });

@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 
+import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials-modal";
 import { Button } from "@/components/ui/button";
 import { KaggleStatusPanel } from "@/components/stages/kaggle-status-panel";
 import { cn } from "@/lib/utils";
+import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
 import { usePipelineStore, useStageExecutionStore } from "@/store";
 import type { StageExecutionTarget, StageNumber } from "@/types";
 
@@ -48,6 +50,8 @@ export function RunStageWidget({
 }: RunStageWidgetProps) {
   const stageProgress = usePipelineStore((state) => stage !== undefined ? state.stages.find((candidate) => candidate.stage === stage) : null);
   const stageTarget = useStageExecutionStore((state) => stage !== undefined ? state.getStageExecutionTarget(stage) : target);
+  const modalOpen = useKaggleCredentialsStore((state) => state.modalOpen);
+  const setModalOpen = useKaggleCredentialsStore((state) => state.setModalOpen);
   const resolvedStatus = status ?? toStageStatus(stageProgress);
   const resolvedProgress = progress ?? stageProgress?.progress ?? 0;
   const resolvedMessage = eta ? `${message ?? stageProgress?.message ?? "Waiting to run"} · ETA ${eta}` : message ?? stageProgress?.message;
@@ -65,6 +69,7 @@ export function RunStageWidget({
           </Button>
         ) : null}
         {children}
+        <KaggleCredentialsModal open={modalOpen} onOpenChange={setModalOpen} />
       </div>
     );
   }
@@ -87,6 +92,7 @@ export function RunStageWidget({
       ) : (
         <StageProgressCard title={resolvedTitle} status={resolvedStatus} progress={resolvedProgress} message={resolvedMessage} />
       )}
+      <KaggleCredentialsModal open={modalOpen} onOpenChange={setModalOpen} />
     </div>
   );
 }

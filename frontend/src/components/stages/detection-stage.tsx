@@ -34,6 +34,7 @@ import {
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import {
   cancelPipeline,
+  ApiError,
   getDetections,
   getAllDetections,
   getPipelineStatus,
@@ -47,6 +48,13 @@ import type { BoundingBox, Detection, VideoFile } from "@/types";
 import { DoubleBufferedFrameImg } from "@/components/ui/double-buffered-img";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
+
+function getRunStageErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 429) {
+    return "Both Kaggle slots busy — try again later";
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 
 function detectionCropUrl(
   videoId: string,
@@ -1010,7 +1018,10 @@ export function DetectionStageActions() {
       const nextRunId = (response.data as any)?.runId ?? (response.data as any)?.id ?? null;
       if (nextRunId) setRunId(nextRunId);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      if (kaggle?.target === "kaggle" && err instanceof ApiError && err.status === 401) {
+        useKaggleCredentialsStore.getState().openCredentialsModal();
+      }
+      const msg = getRunStageErrorMessage(err);
       setIsRunning(false);
       updateStageProgress(1, { status: "error", progress: 100, message: `Failed to start Stage 1: ${msg}` });
       toast({ title: "Failed to start Stage 1", description: msg, variant: "destructive" });
