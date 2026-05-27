@@ -840,7 +840,6 @@ export function createWebSocket(
   };
 
   ws.onclose = () => {
-    console.log('WebSocket closed');
     onClose?.();
   };
 

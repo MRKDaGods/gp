@@ -27,7 +27,7 @@ export function StageStatusBadge({ status = "idle", label, size = "sm", classNam
         className
       )}
     >
-      <Icon className={cn(size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4", status === "running" && "animate-spin")} />
+      <Icon className={cn(size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4", status === "running" && "motion-safe:animate-spin")} />
       <span>{label ?? meta.label}</span>
     </span>
   );

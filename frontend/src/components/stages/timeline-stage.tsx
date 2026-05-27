@@ -1699,12 +1699,13 @@ export function TimelineStageActions() {
         type="button"
         variant="outline"
         disabled={isRunning}
+        aria-label="Run Stage 4 association"
         onClick={() => dispatchTimelineEvent(TIMELINE_RERUN_ASSOCIATION_EVENT)}
       >
         <RefreshCw className={cn("mr-2 h-4 w-4", isRunning && "animate-spin")} />
         Run Association
       </Button>
-      <Button type="button" variant="outline" onClick={() => dispatchTimelineEvent(TIMELINE_SHOW_ALTERNATIVES_EVENT)}>
+      <Button type="button" variant="outline" onClick={() => dispatchTimelineEvent(TIMELINE_SHOW_ALTERNATIVES_EVENT)} aria-label="Show timeline alternatives">
         Alternatives
       </Button>
       <Button type="button" onClick={() => setCurrentStage(5)}>

@@ -27,7 +27,7 @@ export function ExecutionTargetToggle({ stage, variant = "full", className }: Ex
   if (variant === "compact") {
     return (
       <div className={cn("flex flex-wrap items-center gap-2", className)}>
-        <div className="inline-flex items-center rounded-md border bg-muted/20 p-0.5" aria-label={`Stage ${stage} execution target`}>
+        <div className="inline-flex items-center rounded-md border bg-muted/20 p-0.5" role="group" aria-label={`Stage ${stage} execution target`}>
           <button
             type="button"
             className={cn(

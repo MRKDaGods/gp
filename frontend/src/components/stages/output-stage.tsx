@@ -955,6 +955,7 @@ export function OutputStage() {
                 variant="ghost"
                 size="icon"
                 className="absolute bottom-3 right-3 h-8 w-8 bg-black/40 text-white hover:bg-white/20 hover:text-white"
+                aria-label="Toggle output video fullscreen"
                 onClick={() => {
                   const v = videoRef.current;
                   if (!v) return;

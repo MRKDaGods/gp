@@ -111,6 +111,7 @@ export function PipelineRunHeader({
         onClick={copyRunId}
         disabled={!runId}
         title={runId ? "Copy runId" : "No active run"}
+        aria-label={runId ? `Copy runId ${runId}` : "No active runId to copy"}
       >
         <Clipboard className="h-3.5 w-3.5" />
         <span className="truncate">runId: {runId ?? "-"}</span>
