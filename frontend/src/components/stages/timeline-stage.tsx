@@ -14,8 +14,6 @@ import {
   SkipForward,
   ZoomIn,
   ZoomOut,
-  Check,
-  Layers,
   ArrowRight,
   RefreshCw,
 } from "lucide-react";
@@ -24,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
+import { DisclosurePanel } from "@/components/pipeline";
 import {
   useTimelineStore,
   usePipelineStore,
@@ -43,8 +41,10 @@ import {
   type MatchedAlternative,
 } from "@/lib/api";
 import type { TimelineTrack, TrajectorySegment } from "@/types";
-import { AlternativesPanel } from "./timeline/AlternativesSheet";
+import { AlternativesSheet } from "./timeline/AlternativesSheet";
 import { NLETimeline } from "./timeline/NLETimeline";
+import { TimelineAdvancedControls } from "./timeline/TimelineAdvancedControls";
+import { TimelineDebugPanel } from "./timeline/TimelineDebugPanel";
 import { TimelineVideoGrid } from "./timeline/TimelineVideoGrid";
 import { TrackletRail } from "./timeline/TrackletRail";
 import type {
@@ -107,6 +107,7 @@ export function TimelineStage() {
   const [alternativesLoading, setAlternativesLoading] = useState(false);
   const [alternativesError, setAlternativesError] = useState<string | null>(null);
   const [alternativesCameraCount, setAlternativesCameraCount] = useState(0);
+  const [alternativesOpen, setAlternativesOpen] = useState(false);
   const [alternativeHistoryByTrackId, setAlternativeHistoryByTrackId] = useState<Record<string, MatchedAlternative[]>>({});
   const [currentAlternativeByTrackId, setCurrentAlternativeByTrackId] = useState<Record<string, MatchedAlternative>>({});
   const [playingTrackletsOnly, setPlayingTrackletsOnly] = useState(false);
@@ -1544,6 +1545,9 @@ export function TimelineStage() {
             <RefreshCw className={cn("mr-2 h-4 w-4", tracksLoading && "animate-spin")} />
             Rerun Association
           </Button>
+          <Button className="shrink-0" variant="outline" onClick={() => setAlternativesOpen(true)}>
+            Alternatives
+          </Button>
           <Button className="shrink-0" onClick={handleProceed}>
             Continue to Refinement
             <ArrowRight className="ml-2 h-4 w-4" />
@@ -1551,102 +1555,18 @@ export function TimelineStage() {
         </div>
       </header>
 
-      {/* Main content */}
-      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-        {/* Left panel */}
-        <aside className="flex min-h-0 w-64 min-w-0 max-w-[40vw] shrink-0 flex-col overflow-hidden border-r bg-muted/20 sm:max-w-none">
-          <div className="p-4 border-b">
-            <h3 className="font-semibold flex items-center gap-2">
-              <Layers className="h-4 w-4" />
-              Association Progress
-            </h3>
-          </div>
-          <div className="p-4">
-            {stage4Progress?.status === "running" ? (
-              <div className="space-y-3">
-                <div className="flex min-w-0 justify-between gap-2 text-sm">
-                  <span className="min-w-0 break-words text-xs">{stage4Progress.message}</span>
-                  <span className="shrink-0 font-mono">{stage4Progress.progress}%</span>
-                </div>
-                <Progress value={stage4Progress.progress} className="h-2" />
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4">
+          {stage4Progress?.status === "running" ? (
+            <div className="rounded-md border bg-card p-3">
+              <div className="mb-2 flex min-w-0 justify-between gap-2 text-sm">
+                <span className="min-w-0 break-words text-xs">{stage4Progress.message}</span>
+                <span className="shrink-0 font-mono">{stage4Progress.progress}%</span>
               </div>
-            ) : stage4Progress?.status === "error" ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
-                {stage4Progress.message || "Association failed"}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-green-500">
-                <Check className="h-4 w-4" />
-                <span className="text-sm">Association complete</span>
-              </div>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Split screen control */}
-          <div className="p-4">
-            <h4 className="text-sm font-medium mb-3">Camera Grid</h4>
-            {playbackFilterActive && (
-              <p className="text-[10px] text-muted-foreground mb-2 leading-snug">
-                Playback: {camerasForPreview.length} camera{camerasForPreview.length !== 1 ? "s" : ""} with
-                active tracklets now
-              </p>
-            )}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Cameras</span>
-                <span className="text-sm font-medium">{effectiveSplitCount}</span>
-              </div>
-              {playingTrackletsOnly ? (
-                <p className="text-[10px] text-muted-foreground leading-snug">
-                  Grid size follows active cameras (slider off in adaptive mode).
-                </p>
-              ) : null}
-              <Slider
-                value={[Math.min(effectiveSplitCount, 8)]}
-                min={1}
-                max={8}
-                step={1}
-                disabled={playingTrackletsOnly}
-                onValueChange={(v) => setSplitCount(v[0])}
-              />
+              <Progress value={stage4Progress.progress} className="h-2" />
             </div>
-          </div>
+          ) : null}
 
-          <Separator />
-
-          <TrackletRail
-            listRef={trajectoryListRef}
-            tracks={tracks}
-            visibleTracks={trajectoryListTracks}
-            tracksLoading={tracksLoading}
-            selectedTrackId={selectedTrackId}
-            selectedTrackletCount={selectedTrackletCount}
-            stage4Progress={stage4Progress}
-            playingTrackletsOnly={playingTrackletsOnly}
-            activeAtPlayheadIds={activeAtPlayheadIds}
-            onPlayingTrackletsOnlyChange={setPlayingTrackletsOnly}
-            onSelectTrack={handleTrackClick}
-            onConfirmToggle={handleConfirmToggle}
-            onRemoveTrack={removeTrack}
-          />
-
-          <div className="border-t p-4">
-            <AlternativesPanel
-              selectedTrack={selectedTrack}
-              alternatives={topAlternatives}
-              alternativesLoading={alternativesLoading}
-              alternativesError={alternativesError}
-              alternativesCameraCount={alternativesCameraCount}
-              probeRunId={probeRunIdForMedia}
-              onApplyAlternative={handleApplyAlternative}
-            />
-          </div>
-        </aside>
-
-        {/* Main timeline area */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <TimelineVideoGrid
             cameras={activeCamerasForGrid}
             splitCount={effectiveSplitCount}
@@ -1724,19 +1644,84 @@ export function TimelineStage() {
             </div>
           </div>
 
-          <NLETimeline
-            timelineRef={timelineRef}
-            cameraLanes={cameraLanes}
-            selectedLaneId={selectedLaneId}
-            timelineStart={timelineStart}
-            timelineEnd={timelineEnd}
-            currentTime={currentTime}
-            playheadVideoTime={absCurrentTime}
-            rulerTickCount={rulerTickCount}
-            rulerTickInterval={rulerTickInterval}
-            rulerPlayheadLeft={rulerPlayheadLeft}
-            timeToPixel={timeToPixel}
-            onLaneClick={(laneId) => setSelectedLaneId(selectedLaneId === laneId ? null : laneId)}
+          <div className="grid min-h-[360px] gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="flex min-h-[320px] min-w-0 overflow-hidden rounded-md border bg-card">
+              <NLETimeline
+                timelineRef={timelineRef}
+                cameraLanes={cameraLanes}
+                selectedLaneId={selectedLaneId}
+                timelineStart={timelineStart}
+                timelineEnd={timelineEnd}
+                currentTime={currentTime}
+                playheadVideoTime={absCurrentTime}
+                rulerTickCount={rulerTickCount}
+                rulerTickInterval={rulerTickInterval}
+                rulerPlayheadLeft={rulerPlayheadLeft}
+                timeToPixel={timeToPixel}
+                onLaneClick={(laneId) => setSelectedLaneId(selectedLaneId === laneId ? null : laneId)}
+              />
+            </div>
+            <aside className="flex min-h-[320px] min-w-0 flex-col overflow-hidden rounded-md border bg-muted/20">
+              <TrackletRail
+                listRef={trajectoryListRef}
+                tracks={tracks}
+                visibleTracks={trajectoryListTracks}
+                tracksLoading={tracksLoading}
+                selectedTrackId={selectedTrackId}
+                selectedTrackletCount={selectedTrackletCount}
+                stage4Progress={stage4Progress}
+                playingTrackletsOnly={playingTrackletsOnly}
+                activeAtPlayheadIds={activeAtPlayheadIds}
+                onSelectTrack={handleTrackClick}
+                onConfirmToggle={handleConfirmToggle}
+                onRemoveTrack={removeTrack}
+              />
+            </aside>
+          </div>
+
+          <DisclosurePanel title="Advanced" description="Camera grid density, timeline zoom, and playhead-follow behavior.">
+            <TimelineAdvancedControls
+              effectiveSplitCount={effectiveSplitCount}
+              cameraCount={camerasForPreview.length}
+              playbackFilterActive={playbackFilterActive}
+              playingTrackletsOnly={playingTrackletsOnly}
+              zoom={zoom}
+              tracksCount={tracks.length}
+              onSplitCountChange={setSplitCount}
+              onPlayingTrackletsOnlyChange={setPlayingTrackletsOnly}
+              onZoomChange={setZoom}
+            />
+          </DisclosurePanel>
+
+          <DisclosurePanel title="Debug" tier="debug" description="Raw Stage 4 counters, resolved run identifiers, and association status.">
+            <TimelineDebugPanel
+              runId={runId}
+              galleryRunId={galleryRunId}
+              resolvedProbeRunId={resolvedProbeRunId}
+              currentStage={currentStage}
+              triggerReload={triggerReload}
+              downstreamInvalidateGeneration={downstreamInvalidateGeneration}
+              tracksCount={tracks.length}
+              confirmedCount={confirmedCount}
+              selectedTrackletCount={selectedTrackletCount}
+              cameraLaneCount={shownCameraLanes}
+              alternativesCount={topAlternatives.length}
+              alternativesCameraCount={alternativesCameraCount}
+              timelineDataSource={timelineDataSource}
+              stage4Progress={stage4Progress}
+            />
+          </DisclosurePanel>
+
+          <AlternativesSheet
+            open={alternativesOpen}
+            onOpenChange={setAlternativesOpen}
+            selectedTrack={selectedTrack}
+            alternatives={topAlternatives}
+            alternativesLoading={alternativesLoading}
+            alternativesError={alternativesError}
+            alternativesCameraCount={alternativesCameraCount}
+            probeRunId={probeRunIdForMedia}
+            onApplyAlternative={handleApplyAlternative}
           />
         </div>
       </div>

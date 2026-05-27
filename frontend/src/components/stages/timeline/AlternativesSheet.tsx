@@ -87,7 +87,7 @@ export interface AlternativesSheetProps extends AlternativesPanelProps {
 export function AlternativesSheet({ open, onOpenChange, ...panelProps }: AlternativesSheetProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="left-auto right-0 top-0 h-dvh max-h-dvh w-full max-w-[420px] translate-x-0 translate-y-0 rounded-none border-y-0 border-r-0 p-0 sm:rounded-none data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right">
+      <DialogContent className="left-auto right-0 top-0 flex h-dvh max-h-dvh w-full max-w-[420px] translate-x-0 translate-y-0 flex-col rounded-none border-y-0 border-r-0 p-0 sm:rounded-none data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right">
         <DialogHeader className="border-b px-4 py-4 pr-12">
           <DialogTitle>Alternatives</DialogTitle>
           <DialogDescription>Review candidate swaps for the selected trajectory.</DialogDescription>

@@ -5,8 +5,6 @@ import { Check, Loader2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { cn, formatDuration, getCameraColor } from "@/lib/utils";
 import type { StageProgress, TimelineTrack } from "@/types";
 
@@ -20,7 +18,6 @@ export interface TrackletRailProps {
   stage4Progress?: StageProgress;
   playingTrackletsOnly: boolean;
   activeAtPlayheadIds: Set<string>;
-  onPlayingTrackletsOnlyChange: (value: boolean) => void;
   onSelectTrack: (trackId: string) => void;
   onConfirmToggle: (trackId: string, isConfirmed: boolean) => void;
   onRemoveTrack: (trackId: string) => void;
@@ -36,29 +33,12 @@ export function TrackletRail({
   stage4Progress,
   playingTrackletsOnly,
   activeAtPlayheadIds,
-  onPlayingTrackletsOnlyChange,
   onSelectTrack,
   onConfirmToggle,
   onRemoveTrack,
 }: TrackletRailProps) {
   return (
     <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
-      <div className="mb-2 flex items-start gap-2">
-        <Checkbox
-          id="timeline-playing-only"
-          className="mt-0.5"
-          checked={playingTrackletsOnly}
-          disabled={tracks.length === 0}
-          onCheckedChange={(value) => onPlayingTrackletsOnlyChange(value === true)}
-        />
-        <Label
-          htmlFor="timeline-playing-only"
-          className="cursor-pointer text-xs font-normal leading-snug text-muted-foreground"
-        >
-          Adaptive mode: trajectory list and preview grid follow the playhead - only identities
-          and cameras with live segments at the current video time (updates while scrubbing or playing).
-        </Label>
-      </div>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h4 className="text-sm font-medium">Trajectories</h4>
         {tracks.length > 0 && playingTrackletsOnly && (
