@@ -32,7 +32,7 @@ import type { ModelEntry, ModelMetric } from "@/services/models";
 import { GlobalProcessingBanner } from "@/components/layout/global-processing-banner";
 
 import { UploadStage, UploadStageActions } from "@/components/stages/upload-stage";
-import { DetectionStage } from "@/components/stages/detection-stage";
+import { DetectionStage, DetectionStageActions } from "@/components/stages/detection-stage";
 import { SelectionStage } from "@/components/stages/selection-stage";
 import { InferenceStage } from "@/components/stages/inference-stage";
 import { TimelineStage } from "@/components/stages/timeline-stage";
@@ -54,7 +54,7 @@ const stages = [
 
 const PIPELINE_STAGE_COMPONENTS: { id: StageNumber; Component: ComponentType; Actions?: ComponentType }[] = [
   { id: 0, Component: UploadStage, Actions: UploadStageActions },
-  { id: 1, Component: DetectionStage },
+  { id: 1, Component: DetectionStage, Actions: DetectionStageActions },
   { id: 2, Component: SelectionStage },
   { id: 3, Component: InferenceStage },
   { id: 4, Component: TimelineStage },

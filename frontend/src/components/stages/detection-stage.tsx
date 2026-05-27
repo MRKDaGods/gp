@@ -11,10 +11,6 @@ import {
   type SyntheticEvent,
 } from "react";
 import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
   Loader2,
   Car,
   Truck,
@@ -24,22 +20,29 @@ import {
 } from "lucide-react";
 import { cn, bboxToStyle } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { DisclosurePanel, ErrorBanner, ExecutionTargetToggle, PlaybackControls, RunStageWidget, toStageStatus } from "@/components/pipeline";
 import {
   useVideoStore,
   useDetectionStore,
   usePipelineStore,
   useSessionStore,
+  useStageExecutionStore,
 } from "@/store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import {
+  cancelPipeline,
   getDetections,
   getAllDetections,
   getPipelineStatus,
   getFrameUrl,
   getVideoStreamUrl,
+  runStage,
 } from "@/lib/api";
+import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
+import { useToast } from "@/hooks/use-toast";
 import type { BoundingBox, Detection, VideoFile } from "@/types";
 import { DoubleBufferedFrameImg } from "@/components/ui/double-buffered-img";
 
@@ -251,7 +254,7 @@ const DetectionStreamVideo = memo(function DetectionStreamVideo({
 export function DetectionStage() {
   const { currentVideo, currentFrame, setCurrentFrame, isPlaying, setIsPlaying } =
     useVideoStore();
-   const {detections,setDetections,selectedTrackIds,toggleTrackSelection,deselectAll,hoveredId,setHoveredId,}
+   const {detections,setDetections,selectedTrackIds,toggleTrackSelection,selectAll,deselectAll,multiSelectMode,setMultiSelectMode,hoveredId,setHoveredId,}
     = useDetectionStore();
   const { runId, stages, updateStageProgress, setIsRunning } = usePipelineStore();
   const { setCurrentStage } = useSessionStore();
@@ -620,12 +623,6 @@ export function DetectionStage() {
     setIsPlaying(!isPlaying);
   };
 
-  const handleProceed = () => {
-    if (selectedTrackIds.size > 0) {
-      setCurrentStage(2);
-    }
-  };
-
   const hasVideo = Boolean(currentVideo);
 
   const countByClassId = (classId: number) =>
@@ -633,26 +630,7 @@ export function DetectionStage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold">Stage 1: Vehicle Detection</h1>
-          <p className="text-sm text-muted-foreground">
-            YOLOv26 + Deep OC-SORT on CityFlowV2 footage
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Badge variant="secondary">
-            {detections.length} vehicles detected
-          </Badge>
-          <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
-            {selectedTrackIds.size} selected
-          </Badge>
-          <Button className="shrink-0" onClick={handleProceed} disabled={selectedTrackIds.size === 0}>
-            Continue to Selection
-          </Button>
-        </div>
-      </header>
+      <ErrorBanner title="Detection failed" message={videoError} className="mx-4 mt-4 shrink-0 sm:mx-6" />
 
       {/* Main content */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
@@ -818,73 +796,50 @@ export function DetectionStage() {
                 </div>
               </>
             )}
-
-            {videoError && (
-              <div className="absolute top-3 left-3 right-3 z-20 rounded-md border border-red-500/50 bg-red-950/80 backdrop-blur-sm text-sm text-red-100 overflow-hidden">
-                <div className="flex items-start gap-2 px-3 py-2">
-                  <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-red-300 text-xs uppercase tracking-wide mb-1">Pipeline Error</p>
-                    <p className="break-words text-red-100">{videoError}</p>
-                    {errorDetail && (
-                      <details className="mt-2">
-                        <summary className="text-xs text-red-400 cursor-pointer hover:text-red-300">Show full traceback</summary>
-                        <pre className="mt-1 text-[10px] text-red-300/80 font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto bg-black/40 rounded p-2">{errorDetail}</pre>
-                      </details>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Video controls */}
-          <div className="mt-4 flex shrink-0 flex-wrap items-center gap-3 rounded-lg bg-muted/30 p-3 sm:gap-4">
-            <div className="flex shrink-0 items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={() => seekToFrame(0)} disabled={isLoading || !hasVideo}>
-                <SkipBack className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="default"
-                size="icon"
-                onClick={togglePlayback}
-                disabled={isLoading || !hasVideo}
-              >
-                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => seekToFrame(Math.max(totalFrames - 1, 0))}
-                disabled={isLoading || !hasVideo}
-              >
-                <SkipForward className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="min-w-[120px] flex-1 basis-[160px]">
-              <Slider
-                value={[currentFrame]}
-                max={Math.max(totalFrames - 1, 0)}
-                step={1}
-                onValueChange={(v) => seekToFrame(v[0])}
-                disabled={isLoading || !hasVideo}
-              />
-            </div>
-
-            <div className="shrink-0 text-right font-mono text-sm text-muted-foreground">
-              {currentFrame}/{Math.max(totalFrames - 1, 0)} frames
-            </div>
-          </div>
+          <PlaybackControls
+            className="mt-4 shrink-0"
+            isPlaying={isPlaying}
+            currentFrame={currentFrame}
+            totalFrames={totalFrames}
+            speedOptions={[]}
+            onPlayPause={togglePlayback}
+            onFrameChange={seekToFrame}
+            onStepBack={() => seekToFrame(0)}
+            onStepForward={() => seekToFrame(Math.max(totalFrames - 1, 0))}
+          />
         </div>
 
         {/* Sidebar - Detection list */}
         <aside className="flex max-h-[42vh] min-h-0 w-full shrink-0 flex-col border-t border-border bg-muted/20 lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
           <div className="shrink-0 border-b bg-muted/30 p-4">
-            <h3 className="font-semibold">Detected Vehicles</h3>
-            <p className="text-sm text-muted-foreground">
-              Click boxes or list items to select
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="font-semibold">Detected Vehicles</h3>
+                <p className="text-sm text-muted-foreground">Click boxes or list items to select</p>
+              </div>
+              <Badge variant="secondary" className="shrink-0">{detections.length}</Badge>
+            </div>
+          </div>
+          <div className="shrink-0 space-y-3 border-b p-3">
+            <DisclosurePanel title="Advanced" description="Selection controls for the current detection set.">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox id="stage1-multi-select" checked={multiSelectMode} onCheckedChange={(checked) => setMultiSelectMode(checked === true)} />
+                  <Label htmlFor="stage1-multi-select" className="text-sm">Multi-select mode</Label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={selectAll} disabled={detections.length === 0} aria-label="Select all visible detections">
+                    Select All
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={deselectAll} disabled={selectedTrackIds.size === 0} aria-label="Deselect all selected detections">
+                    Deselect All
+                  </Button>
+                </div>
+              </div>
+            </DisclosurePanel>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
             <div className="space-y-2">
@@ -962,8 +917,7 @@ export function DetectionStage() {
             </div>
           </div>
 
-          {/* Selection summary */}
-          <div className="shrink-0 border-t bg-muted/30 p-4">
+          <div className="shrink-0 space-y-3 border-t bg-muted/30 p-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm text-muted-foreground">Selected</span>
               <div className="flex items-center gap-2">
@@ -994,19 +948,94 @@ export function DetectionStage() {
                 ))}
               </div>
             )}
-            <Button
-              className="w-full"
-              onClick={handleProceed}
-              disabled={selectedTrackIds.size === 0}
-            >
-              {selectedTrackIds.size > 0
-                ? `Track ${selectedTrackIds.size} Vehicle${selectedTrackIds.size > 1 ? 's' : ''}`
-                : "Select vehicles to continue"
-              }
-            </Button>
+            <DisclosurePanel title="Debug" tier="debug" description="Frame and request telemetry.">
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <div className="flex justify-between gap-3"><span>Frame</span><span className="font-mono">{currentFrame}/{Math.max(totalFrames - 1, 0)}</span></div>
+                <div className="flex justify-between gap-3"><span>Raw detections</span><span className="font-mono">{detections.length}</span></div>
+                <div className="flex justify-between gap-3"><span>Selected tracks</span><span className="font-mono">{selectedTrackIds.size}</span></div>
+                <div className="flex justify-between gap-3"><span>Model</span><span className="font-mono">YOLOv26 + Deep OC-SORT</span></div>
+                <div className="break-all font-mono">videoId: {currentVideo?.id ?? "none"}</div>
+                {errorDetail ? <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-background p-2">{errorDetail}</pre> : null}
+              </div>
+            </DisclosurePanel>
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+export function DetectionStageActions() {
+  const { currentVideo } = useVideoStore();
+  const { selectedTrackIds } = useDetectionStore();
+  const { setCurrentStage } = useSessionStore();
+  const { runId, stages, isRunning, setRunId, setIsRunning, updateStageProgress } = usePipelineStore();
+  const getStageExecutionTarget = useStageExecutionStore((state) => state.getStageExecutionTarget);
+  const { toast } = useToast();
+  const stageProgress = stages.find((stage) => stage.stage === 1);
+  const status = toStageStatus(stageProgress);
+  const executionTarget = getStageExecutionTarget(1);
+
+  const handleRun = async () => {
+    if (!currentVideo) return;
+    const credentials = useKaggleCredentialsStore.getState().credentials;
+    const kaggle = executionTarget === "kaggle"
+      ? { target: "kaggle" as const, username: credentials?.username, key: credentials?.key }
+      : null;
+
+    flushPipelineFromStage(1);
+    setIsRunning(true);
+    updateStageProgress(1, { status: "running", progress: 0, message: `Queued Stage 1 for ${currentVideo.name}` });
+
+    try {
+      const response = await runStage(1, {
+        videoId: currentVideo.id,
+        config: { tracker: "deepocsort" },
+        kaggle,
+      });
+      const nextRunId = (response.data as any)?.runId ?? (response.data as any)?.id ?? null;
+      if (nextRunId) setRunId(nextRunId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setIsRunning(false);
+      updateStageProgress(1, { status: "error", progress: 100, message: `Failed to start Stage 1: ${msg}` });
+      toast({ title: "Failed to start Stage 1", description: msg, variant: "destructive" });
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!runId) return;
+    try {
+      await cancelPipeline(runId);
+    } finally {
+      setIsRunning(false);
+      updateStageProgress(1, { status: "idle", progress: 0, message: "Stage 1 cancelled" });
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <ExecutionTargetToggle stage={1} className="min-w-[260px]" />
+      {isRunning && status === "running" ? (
+        <Button type="button" variant="outline" onClick={() => void handleCancel()} aria-label="Cancel Stage 1 run">
+          Cancel
+        </Button>
+      ) : null}
+      <RunStageWidget
+        target={executionTarget}
+        runId={runId}
+        status={status}
+        progress={stageProgress?.progress ?? 0}
+        message={stageProgress?.message}
+        isRunning={isRunning && status === "running"}
+        disabled={!currentVideo}
+        runLabel="Run Stage 1"
+        onRun={() => void handleRun()}
+        className="min-w-[260px]"
+      />
+      <Button type="button" onClick={() => setCurrentStage(2)} disabled={selectedTrackIds.size === 0} aria-label="Continue to Stage 2 selection">
+        Continue to Stage 2
+      </Button>
     </div>
   );
 }
