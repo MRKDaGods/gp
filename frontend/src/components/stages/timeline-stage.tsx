@@ -15,30 +15,16 @@ import {
   ZoomIn,
   ZoomOut,
   Check,
-  X,
-  ChevronDown,
   Layers,
-  Camera,
   ArrowRight,
-  Car,
   RefreshCw,
-  Loader2,
 } from "lucide-react";
 import { cn, formatDuration, formatNetworkFailure, getCameraColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   useTimelineStore,
   usePipelineStore,
@@ -54,14 +40,18 @@ import {
   queryTimeline,
   getMatchedSummary,
   getMatchedAlternatives,
-  getMatchedAlternativeClipUrl,
-  getTrackletSequence,
-  getRunFullFrameUrl,
   type MatchedAlternative,
-  type TrackletSequenceFrame,
 } from "@/lib/api";
 import type { TimelineTrack, TrajectorySegment } from "@/types";
-import { TrackletFrameView } from "@/components/ui/double-buffered-img";
+import { AlternativesPanel } from "./timeline/AlternativesSheet";
+import { NLETimeline } from "./timeline/NLETimeline";
+import { TimelineVideoGrid } from "./timeline/TimelineVideoGrid";
+import { TrackletRail } from "./timeline/TrackletRail";
+import type {
+  TimelineCameraLane as CameraLane,
+  TimelineCameraLaneSegment as CameraLaneSegment,
+  TimelineCameraLaneSegmentWithSum as CameraLaneSegmentWithSum,
+} from "./timeline/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 
@@ -70,13 +60,6 @@ const TIMELINE_PLAYHEAD_FPS = 12;
 /** Tracklet full-frame picks/sec while playing (lower than playhead to limit image decode load). */
 const TRACKLET_PICK_FPS = 15;
 const TRACKLET_PICK_BUCKET_SEC = 1 / TRACKLET_PICK_FPS;
-
-function shouldUseRunCropsForCamera(runId: string | undefined, _cameraId: string): boolean {
-  if (!runId) return false;
-  // Dataset precompute runs are scene-scoped; lane labels are often `c006` without a scene prefix,
-  // so comparing scene from the camera id string falsely disabled all run crops.
-  return true;
-}
 
 /** Any segment (wall-clock) contains video time `t`. */
 function trackIsActiveAtVideoTime(track: TimelineTrack, videoTime: number): boolean {
@@ -179,25 +162,6 @@ export function TimelineStage() {
     },
     []
   );
-
-  type CameraLaneSegment = TrajectorySegment & {
-    trajectoryId: string;
-    globalId?: number;
-    confidence?: number;
-    className?: string;
-    confirmed?: boolean;
-  };
-
-  type CameraLaneSegmentWithSum = CameraLaneSegment & { sumStart: number; sumEnd: number };
-
-  type CameraLane = {
-    id: string;
-    cameraId: string;
-    label: string;
-    startTime: number;
-    endTime: number;
-    segments: CameraLaneSegmentWithSum[];
-  };
 
   const parseSelectedTrackId = (rawId: string): number | null => {
     const direct = Number(rawId);
@@ -1652,159 +1616,48 @@ export function TimelineStage() {
 
           <Separator />
 
-          {/* Tracklet list */}
-          <div
-            ref={trajectoryListRef}
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4"
-          >
-            <div className="mb-2 flex items-start gap-2">
-              <Checkbox
-                id="timeline-playing-only"
-                className="mt-0.5"
-                checked={playingTrackletsOnly}
-                disabled={tracks.length === 0}
-                onCheckedChange={(v) => setPlayingTrackletsOnly(v === true)}
-              />
-              <Label
-                htmlFor="timeline-playing-only"
-                className="text-xs font-normal leading-snug text-muted-foreground cursor-pointer"
-              >
-                Adaptive mode: trajectory list and preview grid follow the playhead — only identities
-                and cameras with live segments at the current video time (updates while scrubbing or playing).
-              </Label>
-            </div>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h4 className="text-sm font-medium">Trajectories</h4>
-              {tracks.length > 0 && playingTrackletsOnly && (
-                <Badge variant="outline" className="text-[10px] font-normal tabular-nums">
-                  {trajectoryListTracks.length} at playhead
-                </Badge>
-              )}
-            </div>
-            {tracksLoading ? (
-              <div className="mt-3 flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                <span className="text-xs">Loading trajectories and previews…</span>
-              </div>
-            ) : tracks.length === 0 ? (
-              <p className="text-xs text-muted-foreground mt-2">
-                {selectedTrackletCount > 0
-                  ? (stage4Progress?.message || "No trajectories match selected tracklets. Run Stage 4 to associate them.")
-                  : "No tracklet data yet."}
-              </p>
-            ) : playingTrackletsOnly && trajectoryListTracks.length === 0 ? (
-              <p className="text-xs text-amber-600/90 dark:text-amber-400/90 mt-2">
-                No trajectory spans the current video time. Move the playhead to a segment.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {trajectoryListTracks.map((track) => (
-                  <TrackletItem
-                    key={track.id}
-                    track={track}
-                    isSelected={selectedTrackId === track.id}
-                    isActiveAtPlayhead={
-                      !playingTrackletsOnly && activeAtPlayheadIds.has(track.id)
-                    }
-                    onClick={() => handleTrackClick(track.id)}
-                    onConfirm={() => handleConfirmToggle(track.id, track.confirmed)}
-                    onRemove={() => removeTrack(track.id)}
-                  />
-                ))}
-              </div>
-            )}
+          <TrackletRail
+            listRef={trajectoryListRef}
+            tracks={tracks}
+            visibleTracks={trajectoryListTracks}
+            tracksLoading={tracksLoading}
+            selectedTrackId={selectedTrackId}
+            selectedTrackletCount={selectedTrackletCount}
+            stage4Progress={stage4Progress}
+            playingTrackletsOnly={playingTrackletsOnly}
+            activeAtPlayheadIds={activeAtPlayheadIds}
+            onPlayingTrackletsOnlyChange={setPlayingTrackletsOnly}
+            onSelectTrack={handleTrackClick}
+            onConfirmToggle={handleConfirmToggle}
+            onRemoveTrack={removeTrack}
+          />
 
-            <Separator className="my-3" />
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium">Top 5 Alternatives</h4>
-              {selectedTrack ? (
-                <Badge variant="outline" className="text-[10px]">
-                  {selectedTrack.cameraId} &middot; #{selectedTrack.trackletId} &middot; {alternativesCameraCount || "-"} cams
-                </Badge>
-              ) : null}
-            </div>
-
-            {!selectedTrack ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Select a trajectory to load alternatives from matched/top5_alternatives.
-              </p>
-            ) : alternativesLoading ? (
-              <div className="mt-2 flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                <span className="text-xs">Loading top alternatives&hellip;</span>
-              </div>
-            ) : alternativesError ? (
-              <p className="mt-2 text-xs text-muted-foreground">{alternativesError}</p>
-            ) : topAlternatives.length === 0 ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                No alternative clips were found for this selection.
-              </p>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {topAlternatives.map((alt) => (
-                  <AlternativeTrackletItem
-                    key={`${alt.rank}-${alt.cameraId}-${alt.trackId}-${alt.clipPath}`}
-                    alternative={alt}
-                    videoUrl={
-                      alt.previewUrl
-                        ? alt.previewUrl
-                        : probeRunIdForMedia && alt.clipPath
-                          ? getMatchedAlternativeClipUrl(probeRunIdForMedia, alt.clipPath)
-                          : ""
-                    }
-                    onUse={() => handleApplyAlternative(alt)}
-                  />
-                ))}
-              </div>
-            )}
+          <div className="border-t p-4">
+            <AlternativesPanel
+              selectedTrack={selectedTrack}
+              alternatives={topAlternatives}
+              alternativesLoading={alternativesLoading}
+              alternativesError={alternativesError}
+              alternativesCameraCount={alternativesCameraCount}
+              probeRunId={probeRunIdForMedia}
+              onApplyAlternative={handleApplyAlternative}
+            />
           </div>
         </aside>
 
         {/* Main timeline area */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {/* Video preview area — bounded height so timeline + header fit in viewport */}
-          <div
-            className="relative shrink-0 border-b bg-slate-900 p-2"
-            style={{ height: "clamp(200px, min(42vh, 50dvh), 560px)" }}
-          >
-            <div
-              className="grid h-full min-h-0 min-w-0 gap-1"
-              style={{
-                gridTemplateColumns: `repeat(${Math.ceil(Math.sqrt(effectiveSplitCount))}, minmax(0, 1fr))`,
-                gridTemplateRows: `repeat(${Math.ceil(effectiveSplitCount / Math.ceil(Math.sqrt(effectiveSplitCount)))}, minmax(0, 1fr))`,
-              }}
-            >
-              {activeCamerasForGrid.map((cam) => (
-                <CameraPreview
-                  key={cam.id}
-                  camera={cam}
-                  isActive={Boolean(cam.segment)}
-                  isPast={cam.isPast}
-                  isNext={cam.isNext}
-                  absCurrentTime={coarsePlayheadVideoTime}
-                  trackletPickTime={trackletPickTime}
-                  isPlaying={isPlaying}
-                  primarySeg={cam.primarySeg}
-                  probeRunId={probeRunIdForMedia ?? undefined}
-                  videoId={currentVideo?.id}
-                  cropRunId={cropRunId}
-                />
-              ))}
-            </div>
-            {tracksLoading && (
-              <div
-                className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-md bg-slate-950/85 px-4"
-                role="status"
-                aria-live="polite"
-                aria-label="Loading timeline previews"
-              >
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-center text-sm text-muted-foreground">
-                  Loading camera previews…
-                </p>
-              </div>
-            )}
-          </div>
+          <TimelineVideoGrid
+            cameras={activeCamerasForGrid}
+            splitCount={effectiveSplitCount}
+            tracksLoading={tracksLoading}
+            currentVideoId={currentVideo?.id}
+            currentVideoTime={coarsePlayheadVideoTime}
+            trackletPickTime={trackletPickTime}
+            isPlaying={isPlaying}
+            probeRunId={probeRunIdForMedia ?? undefined}
+            cropRunId={cropRunId}
+          />
 
           {/* Timeline controls */}
           <div className="flex shrink-0 flex-wrap items-end gap-3 border-b border-border/50 bg-background/80 p-3 backdrop-blur-sm sm:gap-4 sm:p-4">
@@ -1871,665 +1724,22 @@ export function TimelineStage() {
             </div>
           </div>
 
-          {/* Timeline: fixed camera labels + scrollable tracks (clean NLE-style) */}
-          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden border-t border-border/50 bg-background">
-            <div
-              className="flex w-[5.5rem] shrink-0 flex-col border-r border-border/60 bg-muted/25"
-              aria-label="Camera lanes"
-            >
-              <div className="flex h-10 shrink-0 items-end border-b border-border/60 pb-1 pl-2.5">
-                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Camera
-                </span>
-              </div>
-              {cameraLanes.map((lane) => {
-                const confs = lane.segments
-                  .map((s) => Number(s.confidence ?? 0))
-                  .filter((v) => Number.isFinite(v) && v > 0);
-                const best = confs.length > 0 ? Math.max(...confs) : 0;
-                const sel = selectedLaneId === lane.id;
-                return (
-                  <button
-                    key={lane.id}
-                    type="button"
-                    className={cn(
-                      "flex h-10 shrink-0 flex-col items-stretch justify-center border-b border-border/50 px-2.5 text-left transition-colors",
-                      "hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                      sel && "bg-primary/12"
-                    )}
-                    onClick={() => setSelectedLaneId(sel ? null : lane.id)}
-                    title={lane.label}
-                  >
-                    <span className="truncate font-mono text-[11px] font-semibold leading-tight text-foreground">
-                      {lane.cameraId}
-                    </span>
-                    {best > 0 && (
-                      <span className="text-[9px] tabular-nums text-muted-foreground">
-                        {Math.round(best * 100)}% match
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <ScrollArea className="h-full min-h-0 min-w-0 flex-1">
-              <div ref={timelineRef} className="min-w-max pb-3 pl-2 pr-4 pt-2">
-                <div
-                  className="relative mb-0 h-10 overflow-visible border-b border-border/30 bg-muted/5"
-                  style={{ width: timeToPixel(timelineEnd) }}
-                >
-                  {Array.from({ length: rulerTickCount }).map((_, i) => {
-                    const absTime = timelineStart + i * rulerTickInterval;
-                    return (
-                      <div
-                        key={i}
-                        className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
-                        style={{ left: timeToPixel(absTime) }}
-                      >
-                        <span className="mb-0.5 select-none text-[9px] tabular-nums tracking-tight text-muted-foreground/45">
-                          {formatDuration(absTime)}
-                        </span>
-                        <div className="h-1.5 w-px bg-border/80" />
-                      </div>
-                    );
-                  })}
-                  <div
-                    className="pointer-events-none absolute inset-y-0 z-30 w-px -translate-x-1/2 bg-foreground/32"
-                    style={{ left: rulerPlayheadLeft }}
-                    aria-hidden
-                  />
-                </div>
-
-                <div className="flex flex-col">
-                  {cameraLanes.map((lane) => (
-                    <TimelineRow
-                      key={lane.id}
-                      lane={lane}
-                      timelineEnd={timelineEnd}
-                      isSelected={selectedLaneId === lane.id}
-                      onClick={() => setSelectedLaneId(selectedLaneId === lane.id ? null : lane.id)}
-                      timeToPixel={timeToPixel}
-                      currentTime={currentTime}
-                      playheadVideoTime={absCurrentTime}
-                    />
-                  ))}
-                </div>
-              </div>
-              <ScrollBar orientation="horizontal" />
-            </ScrollArea>
-          </div>
+          <NLETimeline
+            timelineRef={timelineRef}
+            cameraLanes={cameraLanes}
+            selectedLaneId={selectedLaneId}
+            timelineStart={timelineStart}
+            timelineEnd={timelineEnd}
+            currentTime={currentTime}
+            playheadVideoTime={absCurrentTime}
+            rulerTickCount={rulerTickCount}
+            rulerTickInterval={rulerTickInterval}
+            rulerPlayheadLeft={rulerPlayheadLeft}
+            timeToPixel={timeToPixel}
+            onLaneClick={(laneId) => setSelectedLaneId(selectedLaneId === laneId ? null : laneId)}
+          />
         </div>
       </div>
     </div>
-  );
-}
-
-/**
- * Keeps preview tiles from turning into ultra-wide strips: 16:9 frame centered in the cell,
- * typical for CityFlow / traffic footage (letterboxed in the grid slot).
- */
-function TimelinePreviewAspectShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-900 via-slate-950 to-black p-1 sm:p-1.5">
-      <div
-        className={cn(
-          "flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-md",
-          "border border-white/10 bg-black shadow-inner",
-          "aspect-video h-full w-auto max-h-full max-w-full"
-        )}
-      >
-        <div className="relative flex h-full min-h-0 w-full min-w-0 items-center justify-center">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CameraPreview({
-  camera,
-  isActive,
-  isPast,
-  isNext,
-  absCurrentTime,
-  trackletPickTime,
-  isPlaying,
-  primarySeg,
-  probeRunId,
-  videoId,
-  cropRunId,
-}: {
-  camera: { id: string; name: string; location: string; activeTrack?: any };
-  isActive: boolean;
-  isPast?: boolean;
-  isNext?: boolean;
-  absCurrentTime: number;
-  /** Quantized time for tracklet frame index — reduces full-frame URL churn vs playhead. */
-  trackletPickTime: number;
-  isPlaying: boolean;
-  primarySeg?: { globalId?: number; cameraId: string; trackId: number; start: number; end: number };
-  probeRunId?: string;
-  videoId?: string;
-  /** Run id whose stage0/ holds frames (gallery precompute), not necessarily the probe run */
-  cropRunId?: string;
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const seekWallRef = useRef(absCurrentTime);
-  const clipStartWallRef = useRef(primarySeg?.start ?? 0);
-  const [clipFailed, setClipFailed] = useState(false);
-  /** While paused, follow the playhead after a short debounce so we don't hammer seek/decode (black flashes). */
-  const [stableScrubTime, setStableScrubTime] = useState(absCurrentTime);
-  const [trackSeq, setTrackSeq] = useState<{
-    key: string;
-    width: number;
-    height: number;
-    frames: TrackletSequenceFrame[];
-  } | null>(null);
-
-  // Derive clip URL directly from segment metadata — no async state needed.
-  // Pattern: outputs/{probeRunId}/matched/global_{gid}_cam_{cameraId}_track_{tid}.mp4
-  const clipUrl = (() => {
-    if (!probeRunId || !primarySeg) return null;
-    const { globalId, cameraId, trackId } = primarySeg;
-    if (globalId == null || trackId == null) return null;
-    const safeCam = String(cameraId).replace(/[/\\]/g, "_");
-    const filename = `global_${globalId}_cam_${safeCam}_track_${trackId}.mp4`;
-    return `${API_BASE}/runs/${probeRunId}/matched_clips/${filename}`;
-  })();
-
-  const trackSeqKey =
-    primarySeg?.cameraId != null && primarySeg.trackId != null
-      ? `${String(primarySeg.cameraId)}|${Number(primarySeg.trackId)}`
-      : "";
-
-  const segmentIdentityKey = `${trackSeqKey}|${primarySeg?.globalId ?? ""}|${clipUrl ?? ""}`;
-  const prevSegmentIdentityRef = useRef<string>("");
-
-  useEffect(() => {
-    if (!cropRunId || !primarySeg?.cameraId || primarySeg.trackId == null) {
-      setTrackSeq(null);
-      return;
-    }
-    const key = `${String(primarySeg.cameraId)}|${Number(primarySeg.trackId)}`;
-    let cancelled = false;
-    setTrackSeq((prev) => (prev?.key === key ? prev : null));
-    void (async () => {
-      try {
-        const data = await getTrackletSequence(
-          cropRunId,
-          String(primarySeg.cameraId),
-          Number(primarySeg.trackId),
-          120
-        );
-        if (cancelled) return;
-        if (data?.frames?.length) {
-          setTrackSeq({
-            key,
-            width: data.width,
-            height: data.height,
-            frames: data.frames,
-          });
-        } else {
-          setTrackSeq(null);
-        }
-      } catch {
-        if (!cancelled) setTrackSeq(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [cropRunId, primarySeg?.cameraId, primarySeg?.trackId]);
-
-  useEffect(() => {
-    if (segmentIdentityKey !== prevSegmentIdentityRef.current) {
-      prevSegmentIdentityRef.current = segmentIdentityKey;
-      setStableScrubTime(absCurrentTime);
-    }
-  }, [segmentIdentityKey, absCurrentTime]);
-
-  useEffect(() => {
-    if (isPlaying) {
-      setStableScrubTime(absCurrentTime);
-      return;
-    }
-    const id = window.setTimeout(() => setStableScrubTime(absCurrentTime), 90);
-    return () => window.clearTimeout(id);
-  }, [absCurrentTime, isPlaying]);
-
-  seekWallRef.current = isPlaying ? absCurrentTime : stableScrubTime;
-
-  useEffect(() => {
-    setClipFailed(false);
-  }, [clipUrl]);
-
-  const clipStartSec = primarySeg?.start ?? 0;
-  clipStartWallRef.current = clipStartSec;
-
-  // Seek once metadata is ready for a new clip only (deps: clip only — wall time read from refs).
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v || !clipUrl) return;
-    const onCanPlay = () => {
-      const vv = videoRef.current;
-      if (!vv) return;
-      vv.currentTime = Math.max(0, seekWallRef.current - clipStartWallRef.current);
-    };
-    v.addEventListener("canplay", onCanPlay, { once: true });
-    return () => v.removeEventListener("canplay", onCanPlay);
-  }, [clipUrl]);
-
-  // Playing: only fix large drift. Paused: seek matches debounced scrub time (avoids rapid seeks → black frames).
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v || !clipUrl) return;
-    if (isPlaying) {
-      const seekTo = Math.max(0, absCurrentTime - clipStartSec);
-      if (Math.abs(v.currentTime - seekTo) > 1.25) v.currentTime = seekTo;
-      return;
-    }
-    const seekTo = Math.max(0, stableScrubTime - clipStartSec);
-    if (Math.abs(v.currentTime - seekTo) < 0.04) return;
-    v.currentTime = seekTo;
-  }, [isPlaying, absCurrentTime, stableScrubTime, clipUrl, clipStartSec]);
-
-  // Play/pause in sync with timeline
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v || !clipUrl) return;
-    if (isPlaying) {
-      v.play().catch(() => { });
-    } else {
-      v.pause();
-    }
-  }, [isPlaying, clipUrl]);
-  // Build a crop URL from the track's representative frame (gallery run stage0, or upload video)
-  const cropUrl = (() => {
-    if (!camera.activeTrack) return null;
-    const t = camera.activeTrack;
-    const bbox = t.representativeBbox;
-    const frameId = t.representativeFrame;
-    if (frameId == null) return null;
-    const bboxParams = (bbox && bbox.length === 4)
-      ? `x1=${bbox[0]}&y1=${bbox[1]}&x2=${bbox[2]}&y2=${bbox[3]}`
-      : "x1=0&y1=0&x2=9999&y2=9999";
-    if (cropRunId && shouldUseRunCropsForCamera(cropRunId, t.cameraId)) {
-      return `${API_BASE}/crops/run/${cropRunId}?cameraId=${encodeURIComponent(t.cameraId)}&frameId=${frameId}&${bboxParams}`;
-    }
-    if (videoId) {
-      return `${API_BASE}/crops/${videoId}?frameId=${frameId}&${bboxParams}`;
-    }
-    return null;
-  })();
-
-  const trackletFramePick = (() => {
-    if (!trackSeq?.frames?.length || !primarySeg || !trackSeqKey || trackSeq.key !== trackSeqKey) {
-      return null;
-    }
-    const segStart = primarySeg.start;
-    const segEnd = Math.max(primarySeg.end, segStart + 1e-3);
-    const tPick = isPlaying ? trackletPickTime : stableScrubTime;
-    const u = Math.min(1, Math.max(0, (tPick - segStart) / (segEnd - segStart)));
-    const frames = trackSeq.frames;
-    let best = frames[0];
-    let bestD = 1;
-    for (const f of frames) {
-      const d = Math.abs(f.timeRel - u);
-      if (d < bestD) {
-        bestD = d;
-        best = f;
-      }
-    }
-    return { frame: best };
-  })();
-
-  const trackletFullSrc =
-    trackletFramePick && cropRunId
-      ? getRunFullFrameUrl(
-        cropRunId,
-        String(primarySeg!.cameraId),
-        trackletFramePick.frame.frameId
-      )
-      : null;
-
-  const showTrackletFrames = Boolean(trackletFullSrc && trackletFramePick);
-  const showVideoClip = Boolean(clipUrl && !clipFailed && !showTrackletFrames);
-  const showCropOnly = Boolean(cropUrl && !showTrackletFrames && !showVideoClip);
-
-  const ringClass = showTrackletFrames
-    ? isActive
-      ? "ring-2 ring-green-500"
-      : isPast
-        ? "ring-1 ring-orange-500/60 opacity-70"
-        : isNext
-          ? "ring-1 ring-blue-400/60 opacity-70"
-          : "opacity-50"
-    : clipUrl && !clipFailed
-      ? isActive
-        ? "ring-2 ring-green-500"
-        : isPast
-          ? "ring-1 ring-orange-500/60 opacity-70"
-          : isNext
-            ? "ring-1 ring-blue-400/60 opacity-70"
-            : "opacity-50"
-      : isActive
-        ? "ring-2 ring-green-500"
-        : isPast
-          ? "ring-1 ring-orange-400/50 opacity-50"
-          : isNext
-            ? "ring-1 ring-blue-400/50 opacity-40"
-            : "opacity-30";
-
-  const statusLabel = isActive ? null : isPast ? "PAST" : isNext ? "NEXT" : null;
-  const statusColor = isPast ? "text-orange-400" : "text-blue-400";
-
-  return (
-    <div
-      className={cn(
-        "relative h-full min-h-0 w-full min-w-0 overflow-hidden rounded",
-        ringClass
-      )}
-    >
-      {/* Camera feed — 16:9 shell + object-contain so tiles never look panoramic / stretched. */}
-      <TimelinePreviewAspectShell>
-        {showTrackletFrames ? (
-          <TrackletFrameView
-            src={trackletFullSrc!}
-            bbox={trackletFramePick!.frame.bbox}
-          />
-        ) : showVideoClip ? (
-          <video
-            key={clipUrl}
-            ref={videoRef}
-            src={clipUrl!}
-            poster={cropUrl ?? undefined}
-            className="max-h-full max-w-full object-contain"
-            muted
-            playsInline
-            preload="auto"
-            onError={() => setClipFailed(true)}
-          />
-        ) : showCropOnly ? (
-          <img
-            src={cropUrl!}
-            alt={camera.id}
-            className="max-h-full max-w-full object-contain"
-            draggable={false}
-          />
-        ) : (
-          <div className="relative h-full min-h-0 w-full min-w-0">
-            <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-20" preserveAspectRatio="none">
-              <line x1="50%" y1="30%" x2="20%" y2="100%" stroke="white" strokeWidth="1" />
-              <line x1="50%" y1="30%" x2="80%" y2="100%" stroke="white" strokeWidth="1" />
-            </svg>
-            {isActive && camera.activeTrack && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                <div
-                  className="flex h-6 w-10 items-center justify-center rounded border-2"
-                  style={{ borderColor: camera.activeTrack.color || "#22c55e", backgroundColor: `${camera.activeTrack.color || "#22c55e"}33` }}
-                >
-                  <Car className="h-4 w-4 text-white" />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </TimelinePreviewAspectShell>
-
-      {/* Camera info overlay */}
-      <div className="absolute top-0 left-0 right-0 p-1 bg-black/60">
-        <div className="flex items-center gap-1">
-          <div
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              isActive
-                ? isPlaying
-                  ? "bg-green-500"
-                  : "bg-green-500 animate-pulse"
-                : isPast
-                  ? "bg-orange-400"
-                  : isNext
-                    ? "bg-blue-400"
-                    : "bg-gray-500"
-            )}
-          />
-          <span className="text-white text-[10px] font-mono">{camera.id}</span>
-          {statusLabel && (
-            <span className={cn("text-[9px] font-bold ml-auto", statusColor)}>{statusLabel}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Timestamp (source video time; ruler uses combined tracklet duration) */}
-      <div className="absolute bottom-0 left-0 right-0 p-1 bg-black/60">
-        <span className="text-white/70 text-[9px] font-mono">
-          {formatDuration(absCurrentTime)}
-        </span>
-      </div>
-    </div>
-  );
-}
-interface TrackletItemProps {
-  track: TimelineTrack;
-  isSelected: boolean;
-  /** Segments cover current video playhead (wall-clock). */
-  isActiveAtPlayhead?: boolean;
-  onClick: () => void;
-  onConfirm: () => void;
-  onRemove: () => void;
-}
-
-function TrackletItem({
-  track,
-  isSelected,
-  isActiveAtPlayhead = false,
-  onClick,
-  onConfirm,
-  onRemove,
-}: TrackletItemProps) {
-  const nCams = track.segments ? new Set(track.segments.map((s) => s.cameraId)).size : 1;
-  const primaryColor = track.segments?.[0]?.color ?? getCameraColor(track.cameraId);
-
-  return (
-    <div
-      data-track-id={track.id}
-      className={cn(
-        "p-2 rounded-lg border cursor-pointer transition-all",
-        isSelected && "border-primary bg-primary/5",
-        track.confirmed && !isSelected && "border-green-500/50 bg-green-500/5",
-        isActiveAtPlayhead && !isSelected && "border-l-2 border-l-emerald-500 bg-emerald-500/5"
-      )}
-      onClick={onClick}
-    >
-      <div className="flex items-center gap-2">
-        {/* mini camera-strip: up to 3 colored dots per camera */}
-        <div className="flex gap-0.5 flex-shrink-0">
-          {track.segments
-            ? Array.from(new Set(track.segments.map((s) => s.cameraId))).slice(0, 4).map((cid) => (
-              <div key={cid} className="h-3 w-1.5 rounded-full" style={{ backgroundColor: getCameraColor(cid) }} />
-            ))
-            : <div className="h-3 w-3 rounded-full" style={{ backgroundColor: primaryColor }} />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium truncate">{track.label ?? track.cameraId}</p>
-          <p className="text-[10px] text-muted-foreground">
-            {formatDuration(track.startTime)} → {formatDuration(track.endTime)}
-            {nCams > 1 && <span className="ml-1 text-blue-400">· {nCams} cams</span>}
-          </p>
-          {typeof track.confidence === "number" && track.confidence > 0 && (
-            <p className="text-[9px] text-muted-foreground">
-              confidence: {(track.confidence * 100).toFixed(0)}%
-            </p>
-          )}
-        </div>
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfirm();
-            }}
-          >
-            <Check className={cn("h-3 w-3", track.confirmed ? "text-green-500" : "text-muted-foreground")} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-          >
-            <X className="h-3 w-3 text-muted-foreground hover:text-red-500" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AlternativeTrackletItem({
-  alternative,
-  videoUrl,
-  onUse,
-}: {
-  alternative: MatchedAlternative;
-  videoUrl: string;
-  onUse: () => void;
-}) {
-  return (
-    <div className="rounded-md border border-border/60 bg-muted/20 p-2">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold text-blue-400">ALT #{alternative.rank}</span>
-        <span className="text-[10px] tabular-nums text-muted-foreground">
-          score {(alternative.score * 100).toFixed(1)}%
-        </span>
-      </div>
-
-      {videoUrl ? (
-        <video
-          src={videoUrl}
-          className="mb-2 h-20 w-full rounded object-cover"
-          controls
-          muted
-          playsInline
-          preload="metadata"
-        />
-      ) : null}
-
-      <div className="space-y-0.5 text-[10px] text-muted-foreground">
-        <p className="font-mono text-foreground/90">
-          {alternative.cameraId} &middot; track {alternative.trackId}
-        </p>
-        <p>
-          global {alternative.globalId ?? "?"} &middot; {Math.max(1, alternative.numCameras)} cams
-        </p>
-      </div>
-
-      <Button
-        variant="outline"
-        size="sm"
-        className="mt-2 h-6 w-full text-[10px]"
-        onClick={onUse}
-      >
-        Use In Timeline
-      </Button>
-    </div>
-  );
-}
-
-interface TimelineRowProps {
-  lane: {
-    id: string;
-    cameraId: string;
-    label: string;
-    segments: Array<TrajectorySegment & {
-      trajectoryId: string;
-      globalId?: number;
-      confidence?: number;
-      className?: string;
-      confirmed?: boolean;
-      sumStart: number;
-      sumEnd: number;
-    }>;
-  };
-  timelineEnd: number;
-  isSelected: boolean;
-  onClick: () => void;
-  timeToPixel: (time: number) => number;
-  /** Ruler offset (sum of tracklet durations up to the playhead). */
-  currentTime: number;
-  /** Mapped source video time for highlighting segments vs wall-clock. */
-  playheadVideoTime: number;
-}
-
-/**
- * Single scrollable track row (camera label lives in the fixed left column).
- * Capsule segments only — no stretched thumbnails.
- */
-function TimelineRow({
-  lane,
-  timelineEnd,
-  isSelected,
-  onClick,
-  timeToPixel,
-  currentTime,
-  playheadVideoTime,
-}: TimelineRowProps) {
-  const isCurrentlyActive = lane.segments.some(
-    (seg) => playheadVideoTime >= seg.start && playheadVideoTime <= seg.end
-  );
-  const segments = lane.segments;
-
-  return (
-    <button
-      type="button"
-      className={cn(
-        "relative h-10 cursor-pointer border-b border-border/40 text-left transition-colors",
-        "hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-        isSelected && "bg-primary/8",
-        isCurrentlyActive && "bg-muted/20"
-      )}
-      style={{ width: timeToPixel(timelineEnd) }}
-      onClick={onClick}
-      title={lane.label}
-    >
-      <div className="pointer-events-none absolute inset-x-0 top-1/2 h-6 -translate-y-1/2 bg-muted/40" />
-      {segments.map((seg, i) => {
-        const segLeft = timeToPixel(seg.sumStart);
-        const segWidth = Math.max(timeToPixel(seg.sumEnd) - timeToPixel(seg.sumStart), 3);
-        const isSegActive =
-          playheadVideoTime >= seg.start && playheadVideoTime <= seg.end;
-
-        return (
-          <div
-            key={`${seg.cameraId}-${seg.trackId}-${seg.trajectoryId}-${i}`}
-            className={cn(
-              "absolute top-1/2 h-2.5 -translate-y-1/2 rounded-full border transition-shadow",
-              "border-black/20 shadow-sm",
-              isSegActive && "z-[5] h-3 shadow-md ring-2 ring-white/50",
-              seg.confirmed && "ring-1 ring-green-500/80 ring-offset-1 ring-offset-background"
-            )}
-            style={{
-              left: segLeft,
-              width: segWidth,
-              backgroundColor: seg.color,
-              opacity: isSegActive ? 1 : 0.72,
-            }}
-            title={`G-${String(seg.globalId ?? 0).padStart(4, "0")} · ${formatDuration(seg.start)} → ${formatDuration(seg.end)}`}
-          />
-        );
-      })}
-
-      <div
-        className="pointer-events-none absolute inset-y-0 z-20 w-px -translate-x-1/2 bg-foreground/22"
-        style={{ left: timeToPixel(currentTime) }}
-        aria-hidden
-      />
-    </button>
   );
 }
