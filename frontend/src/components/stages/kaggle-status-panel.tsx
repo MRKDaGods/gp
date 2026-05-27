@@ -13,6 +13,8 @@ import {
 import { cn } from "@/lib/utils";
 import { cancelKaggleKernel, type KaggleJobStatus } from "@/lib/api";
 import { useKaggleStatus } from "@/hooks/use-kaggle-status";
+import { usePipelineStore } from "@/store";
+import type { StageNumber } from "@/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 
 export interface KaggleStatusPanelProps {
   runId: string;
+  stage?: StageNumber;
   className?: string;
 }
 
@@ -133,10 +136,11 @@ function TerminalMessage({ status }: { status: KaggleJobStatus }) {
   return null;
 }
 
-export function KaggleStatusPanel({ runId, className }: KaggleStatusPanelProps) {
-  const { status, isPolling, error, isLoading } = useKaggleStatus(runId);
+export function KaggleStatusPanel({ runId, stage, className }: KaggleStatusPanelProps) {
+  const { status, isPolling, error, isLoading } = useKaggleStatus(runId, { stage });
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const setStageCancelled = usePipelineStore((state) => state.setStageCancelled);
 
   const isActive = status?.status === "queued" || status?.status === "running";
 
@@ -145,6 +149,9 @@ export function KaggleStatusPanel({ runId, className }: KaggleStatusPanelProps) 
     setIsCancelling(true);
     try {
       await cancelKaggleKernel(runId);
+      if (stage !== undefined) {
+        setStageCancelled(stage, `Stage ${stage} cancelled on Kaggle`);
+      }
     } catch (err) {
       setCancelError(err instanceof Error ? err.message : "Unable to cancel Kaggle kernel");
     } finally {

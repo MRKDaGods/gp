@@ -88,7 +88,7 @@ export function RunStageWidget({
         </div>
       ) : null}
       {showKaggle && runId ? (
-        <KaggleStatusPanel runId={runId} />
+        <KaggleStatusPanel runId={runId} stage={stage} />
       ) : (
         <StageProgressCard title={resolvedTitle} status={resolvedStatus} progress={resolvedProgress} message={resolvedMessage} />
       )}

@@ -1,6 +1,6 @@
 import type { StageProgress } from "@/types";
 
-export const STAGE_STATUSES = ["idle", "blocked", "running", "done", "stale", "error"] as const;
+export const STAGE_STATUSES = ["idle", "blocked", "running", "done", "stale", "error", "cancelled"] as const;
 
 export type StageStatus = (typeof STAGE_STATUSES)[number];
 
@@ -23,6 +23,7 @@ export function toStageStatus(
   options: ToStageStatusOptions = {}
 ): StageStatus {
   if (!stage) return "idle";
+  if (stage.status === "cancelled") return "cancelled";
   if (stage.status === "error" || stage.error) return "error";
   if (stage.status === "running" || (stage.progress > 0 && stage.progress < 100)) return "running";
   if (options.blocked) return "blocked";

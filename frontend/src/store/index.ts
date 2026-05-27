@@ -70,6 +70,8 @@ interface PipelineState {
     coords: Record<string, { lat: number; lng: number; label?: string }> | null
   ) => void;
   updateStageProgress: (stage: StageNumber, progress: Partial<StageProgress>) => void;
+  setStageStatus: (stage: StageNumber, status: StageProgress['status'], message?: string) => void;
+  setStageCancelled: (stage: StageNumber, message?: string) => void;
   setCurrentStage: (stage: StageNumber) => void;
   setIsRunning: (running: boolean) => void;
   setError: (error: string | null) => void;
@@ -107,6 +109,7 @@ export const usePipelineStore = create<PipelineState>()(
         set((state) => {
           const now = Date.now();
           const isCompleting = progress.status === 'completed';
+          const isTerminal = progress.status === 'completed' || progress.status === 'error' || progress.status === 'cancelled';
 
           return {
             stages: state.stages.map((s) => {
@@ -115,7 +118,7 @@ export const usePipelineStore = create<PipelineState>()(
                 const next: StageProgress = { ...s, ...progress };
 
                 if (isStarting) next.lastRunAt = now;
-                if (isCompleting) {
+                if (isTerminal) {
                   next.completedAt = now;
                   next.lastRunAt = next.lastRunAt ?? now;
                   next.staleSince = null;
@@ -139,6 +142,58 @@ export const usePipelineStore = create<PipelineState>()(
 
               return s;
             }),
+          };
+        }),
+
+      setStageStatus: (stage, status, message) =>
+        set((state) => {
+          const now = Date.now();
+          const isCompleting = status === 'completed';
+          const isTerminal = status === 'completed' || status === 'error' || status === 'cancelled';
+
+          return {
+            isRunning: state.isRunning && !isTerminal,
+            stages: state.stages.map((s) => {
+              if (s.stage === stage) {
+                return {
+                  ...s,
+                  status,
+                  progress: status === 'completed' ? 100 : status === 'running' ? s.progress : s.progress,
+                  message: message ?? s.message,
+                  completedAt: isTerminal ? now : s.completedAt,
+                  lastRunAt: s.lastRunAt ?? now,
+                  staleSince: status === 'running' || isTerminal ? null : s.staleSince,
+                  error: status === 'error' ? message ?? s.error : undefined,
+                };
+              }
+
+              if (isCompleting && s.stage > stage && s.completedAt !== null) {
+                return { ...s, staleSince: now };
+              }
+
+              return s;
+            }),
+          };
+        }),
+
+      setStageCancelled: (stage, message) =>
+        set((state) => {
+          const now = Date.now();
+          return {
+            isRunning: false,
+            stages: state.stages.map((s) =>
+              s.stage === stage
+                ? {
+                    ...s,
+                    status: 'cancelled',
+                    message: message ?? `Stage ${stage} cancelled`,
+                    completedAt: now,
+                    lastRunAt: s.lastRunAt ?? now,
+                    staleSince: null,
+                    error: undefined,
+                  }
+                : s
+            ),
           };
         }),
 

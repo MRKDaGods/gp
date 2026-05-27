@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, Ban, CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, Circle, Loader2, OctagonX, XCircle } from "lucide-react";
 
 import type { StageStatus, StageStatusMeta } from "./types";
 
@@ -61,6 +61,15 @@ export const STAGE_STATUS_META: Record<StageStatus, StageStatusMetaWithIcon> = {
     borderClassName: "border-rose-500/20",
     dotClassName: "border-rose-500 bg-rose-500/10 text-rose-600",
     icon: XCircle,
+  },
+  cancelled: {
+    label: "Cancelled",
+    sentence: "Last run was cancelled.",
+    textClassName: "text-amber-700",
+    bgClassName: "bg-amber-500/10",
+    borderClassName: "border-amber-500/20",
+    dotClassName: "border-amber-500 bg-amber-500/10 text-amber-700",
+    icon: OctagonX,
   },
 };
 

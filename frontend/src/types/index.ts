@@ -7,7 +7,7 @@ export type StageNumber = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export type StageExecutionTarget = 'local' | 'kaggle';
 
-export type StageStatus = 'idle' | 'running' | 'completed' | 'error';
+export type StageStatus = 'idle' | 'running' | 'completed' | 'error' | 'cancelled';
 
 export interface StageProgress {
   stage: StageNumber;

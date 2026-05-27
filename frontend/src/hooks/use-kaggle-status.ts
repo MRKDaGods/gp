@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, getKaggleStatus, type KaggleJobStatus } from "@/lib/api";
+import { usePipelineStore } from "@/store";
+import type { StageNumber } from "@/types";
 
 const POLL_INTERVAL_MS = 5_000;
 const MAX_ERROR_BACKOFF_MS = 60_000;
@@ -18,6 +20,10 @@ export interface UseKaggleStatusResult {
   isLoading: boolean;
 }
 
+export interface UseKaggleStatusOptions {
+  stage?: StageNumber;
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const data = error.data as { detail?: unknown; message?: unknown } | undefined;
@@ -26,7 +32,7 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unable to fetch Kaggle status";
 }
 
-export function useKaggleStatus(runId: string | null): UseKaggleStatusResult {
+export function useKaggleStatus(runId: string | null, options: UseKaggleStatusOptions = {}): UseKaggleStatusResult {
   const [status, setStatus] = useState<KaggleJobStatus | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +81,17 @@ export function useKaggleStatus(runId: string | null): UseKaggleStatusResult {
         setError(null);
         errorDelay = POLL_INTERVAL_MS;
 
+        if (nextStatus && options.stage !== undefined && TERMINAL_STATUSES.has(nextStatus.status)) {
+          const pipelineStore = usePipelineStore.getState();
+          if (nextStatus.status === "complete") {
+            pipelineStore.setStageStatus(options.stage, "completed", `Stage ${options.stage} complete on Kaggle`);
+          } else if (nextStatus.status === "error") {
+            pipelineStore.setStageStatus(options.stage, "error", nextStatus.error ?? `Stage ${options.stage} failed on Kaggle`);
+          } else if (nextStatus.status === "cancelled") {
+            pipelineStore.setStageCancelled(options.stage, `Stage ${options.stage} cancelled on Kaggle`);
+          }
+        }
+
         if (!nextStatus || TERMINAL_STATUSES.has(nextStatus.status)) {
           setIsPolling(false);
           clearPendingTimeout();
@@ -109,7 +126,7 @@ export function useKaggleStatus(runId: string | null): UseKaggleStatusResult {
       cancelled = true;
       clearPendingTimeout();
     };
-  }, [runId]);
+  }, [runId, options.stage]);
 
   return { status, isPolling, error, isLoading };
 }
