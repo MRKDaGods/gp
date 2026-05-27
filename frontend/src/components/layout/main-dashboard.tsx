@@ -24,7 +24,7 @@ import {
   Cloud,
   Server,
 } from "lucide-react";
-import { useSessionStore, useUIStore, usePipelineStore, useStageExecutionStore } from "@/store";
+import { useSessionStore, useUIStore, usePipelineStore } from "@/store";
 import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials-modal";
 import { useHasKaggleCredentials } from "@/lib/kaggle-credentials-store";
 import type { StageNumber } from "@/types";
@@ -39,7 +39,8 @@ import { TimelineStage, TimelineStageActions } from "@/components/stages/timelin
 import { RefinementStage, RefinementStageActions } from "@/components/stages/refinement-stage";
 import { OutputStage, OutputStageActions } from "@/components/stages/output-stage";
 import { DatasetProcessing } from "@/components/stages/dataset-processing";
-import { PipelineRunHeader, StageShell, StageStatusDot, stageContract, statusMeta, type StageStatus } from "@/components/pipeline";
+import { PipelineRunHeader, StageShell, StageStatusDot, StalenessChip, stageContract, statusMeta, type StageStatus } from "@/components/pipeline";
+import { useStageState } from "@/hooks/useStageState";
 import type { ComponentType } from "react";
 
 const stages = [
@@ -105,18 +106,6 @@ function formatModelBadgeBody(
   return { primary: "Using legacy config", secondary: null, isFallback: true };
 }
 
-function deriveSidebarStageStatus(stageId: StageNumber, pipelineStages: ReturnType<typeof usePipelineStore.getState>["stages"]): StageStatus {
-  const stage = pipelineStages.find((candidate) => candidate.stage === stageId);
-  const previousStage = stageId > 0 ? pipelineStages.find((candidate) => candidate.stage === stageId - 1) : null;
-
-  if (stage?.status === "error" || stage?.error) return "error";
-  if (stage?.status === "running" || ((stage?.progress ?? 0) > 0 && (stage?.progress ?? 0) < 100)) return "running";
-  if ((stage?.progress ?? 0) >= 100) return "done";
-  if (previousStage && previousStage.progress < 100) return "blocked";
-  // TODO(phase-4): incorporate downstream invalidation when stale tracking is surfaced in the UI.
-  return "idle";
-}
-
 function sidebarStatusSentence(
   stageLabel: string,
   status: StageStatus,
@@ -132,6 +121,124 @@ function sidebarStatusSentence(
   return `${stageLabel} is ${statusMeta(status).label.toLowerCase()} · ${executionTarget} execution`;
 }
 
+function SidebarStageRow({
+  stage,
+  isActive,
+  sidebarOpen,
+  onSelect,
+}: {
+  stage: (typeof stages)[number];
+  isActive: boolean;
+  sidebarOpen: boolean;
+  onSelect: () => void;
+}) {
+  const stageState = useStageState(stage.id);
+  const progress = stageState.progress?.progress ?? 0;
+  const statusSentence = sidebarStatusSentence(stage.label, stageState.status, progress, stageState.executionTarget);
+  const isKaggleStage = stageState.executionTarget === "kaggle";
+
+  return (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <button
+          onClick={onSelect}
+          className={cn(
+            "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors",
+            isActive
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            !sidebarOpen && "justify-center px-0"
+          )}
+        >
+          <div className="flex shrink-0 items-center gap-1.5">
+            <StageStatusDot
+              status={stageState.status}
+              withCloudOverlay={!sidebarOpen && isKaggleStage}
+              className={cn(isActive && "ring-2 ring-primary-foreground/40")}
+            />
+            {sidebarOpen && (
+              <span
+                className="flex h-4 w-4 items-center justify-center"
+                title={isKaggleStage ? "Kaggle execution" : "Local execution"}
+                aria-label={isKaggleStage ? "Kaggle execution" : "Local execution"}
+              >
+                {isKaggleStage ? (
+                  <Cloud className="h-3 w-3 text-blue-500" />
+                ) : (
+                  <Server className="h-3 w-3 text-muted-foreground" />
+                )}
+              </span>
+            )}
+          </div>
+          {sidebarOpen && (
+            <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+              <span className="truncate">{stage.label}</span>
+              {stageState.status === "stale" ? (
+                <StalenessChip label="Stale" />
+              ) : (
+                <span className="max-w-full truncate text-[11px] font-normal opacity-80">
+                  {stageState.status === "blocked" ? `needs Stage ${stage.id - 1}` : `${statusMeta(stageState.status).label.toLowerCase()}${stageState.status === "running" ? ` · ${Math.round(progress)}%` : ""}`}
+                </span>
+              )}
+            </span>
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">{statusSentence}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function PipelineStagePanel({
+  id,
+  Component,
+  Actions,
+  currentStage,
+  setDatasetView,
+  setCurrentStage,
+}: {
+  id: StageNumber;
+  Component: ComponentType;
+  Actions?: ComponentType;
+  currentStage: StageNumber;
+  setDatasetView: (value: boolean) => void;
+  setCurrentStage: (stage: StageNumber) => void;
+}) {
+  const stageState = useStageState(id);
+  const blockedBy = stageState.status === "blocked" && id > 0
+    ? { label: `Stage ${id - 1}`, stage: (id - 1) as StageNumber }
+    : null;
+  const baseContract = stageContract(id);
+
+  return (
+    <div
+      role="tabpanel"
+      id={`pipeline-stage-${id}`}
+      aria-hidden={currentStage !== id}
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+        currentStage !== id && "hidden"
+      )}
+    >
+      <StageShell
+        contract={{
+          ...baseContract,
+          status: stageState.status,
+          blockedBy,
+          produces: stageState.isStale ? baseContract.produces?.map((chip) => ({ ...chip, stale: true })) : baseContract.produces,
+          onNavigateToStage: (stageId) => {
+            setDatasetView(false);
+            setCurrentStage(stageId);
+          },
+        }}
+        actions={Actions ? { run: <Actions /> } : undefined}
+      >
+        <Component />
+      </StageShell>
+    </div>
+  );
+}
+
 export function MainDashboard() {
   const { currentStage, setCurrentStage } = useSessionStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
@@ -141,9 +248,6 @@ export function MainDashboard() {
   const modelMode = usePipelineStore((s) => s.modelMode);
   const selectedModelMeta = usePipelineStore((s) => s.selectedModelMeta);
   const fusion = usePipelineStore((s) => s.fusion);
-  const getStageExecutionTarget = useStageExecutionStore(
-    (s) => (stage: StageNumber) => s.stageExecutionTargets[stage] ?? s.getStageExecutionTarget(stage)
-  );
   const hasKaggleCredentials = useHasKaggleCredentials();
   const [datasetView, setDatasetView] = useState(false);
   const [kaggleSettingsOpen, setKaggleSettingsOpen] = useState(false);
@@ -187,62 +291,14 @@ export function MainDashboard() {
         <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3">
           {stages.map((stage) => {
             const isActive = !datasetView && currentStage === stage.id;
-            const pipelineStage = pipelineStages.find((candidate) => candidate.stage === stage.id);
-            const status = deriveSidebarStageStatus(stage.id, pipelineStages);
-            const statusSentence = sidebarStatusSentence(
-              stage.label,
-              status,
-              pipelineStage?.progress ?? 0,
-              getStageExecutionTarget(stage.id)
-            );
-            const executionTarget = getStageExecutionTarget(stage.id);
-            const isKaggleStage = executionTarget === "kaggle";
-
             return (
-              <Tooltip key={stage.id} delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => { setDatasetView(false); setCurrentStage(stage.id); }}
-                    className={cn(
-                      "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      !sidebarOpen && "justify-center px-0"
-                    )}
-                  >
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <StageStatusDot
-                        status={status}
-                        withCloudOverlay={!sidebarOpen && isKaggleStage}
-                        className={cn(isActive && "ring-2 ring-primary-foreground/40")}
-                      />
-                      {sidebarOpen && (
-                        <span
-                          className="flex h-4 w-4 items-center justify-center"
-                          title={isKaggleStage ? "Kaggle execution" : "Local execution"}
-                          aria-label={isKaggleStage ? "Kaggle execution" : "Local execution"}
-                        >
-                          {isKaggleStage ? (
-                            <Cloud className="h-3 w-3 text-blue-500" />
-                          ) : (
-                            <Server className="h-3 w-3 text-muted-foreground" />
-                          )}
-                        </span>
-                      )}
-                    </div>
-                    {sidebarOpen && (
-                      <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                        <span className="truncate">{stage.label}</span>
-                        <span className="max-w-full truncate text-[11px] font-normal opacity-80">
-                          {status === "blocked" ? `needs Stage ${stage.id - 1}` : `${statusMeta(status).label.toLowerCase()}${status === "running" ? ` · ${Math.round(pipelineStage?.progress ?? 0)}%` : ""}`}
-                        </span>
-                      </span>
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">{statusSentence}</TooltipContent>
-              </Tooltip>
+              <SidebarStageRow
+                key={stage.id}
+                stage={stage}
+                isActive={isActive}
+                sidebarOpen={sidebarOpen}
+                onSelect={() => { setDatasetView(false); setCurrentStage(stage.id); }}
+              />
             );
           })}
 
@@ -364,40 +420,15 @@ export function MainDashboard() {
               />
               {PIPELINE_STAGE_COMPONENTS.map(({ id, Component, Actions }) =>
                 visitedPipelineStages.has(id) ? (
-                  <div
+                  <PipelineStagePanel
                     key={id}
-                    role="tabpanel"
-                    id={`pipeline-stage-${id}`}
-                    aria-hidden={currentStage !== id}
-                    className={cn(
-                      "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-                      currentStage !== id && "hidden"
-                    )}
-                  >
-                    {(() => {
-                      const status = deriveSidebarStageStatus(id, pipelineStages);
-                      const blockedBy = status === "blocked" && id > 0
-                        ? { label: `Stage ${id - 1}`, stage: (id - 1) as StageNumber }
-                        : null;
-
-                      return (
-                        <StageShell
-                          contract={{
-                            ...stageContract(id),
-                            status,
-                            blockedBy,
-                            onNavigateToStage: (stageId) => {
-                              setDatasetView(false);
-                              setCurrentStage(stageId);
-                            },
-                          }}
-                          actions={Actions ? { run: <Actions /> } : undefined}
-                        >
-                          <Component />
-                        </StageShell>
-                      );
-                    })()}
-                  </div>
+                    id={id}
+                    Component={Component}
+                    Actions={Actions}
+                    currentStage={currentStage}
+                    setDatasetView={setDatasetView}
+                    setCurrentStage={setCurrentStage}
+                  />
                 ) : null
               )}
             </div>

@@ -20,13 +20,13 @@ import type {
 
 /** Canonical sidebar pipeline labels — shared by pipeline store reset + downstream flush. */
 export const PIPELINE_STAGE_DEFAULTS: StageProgress[] = [
-  { stage: 0, status: 'idle', progress: 0, message: 'Ingestion' },
-  { stage: 1, status: 'idle', progress: 0, message: 'Detection & Tracking' },
-  { stage: 2, status: 'idle', progress: 0, message: 'Feature Extraction' },
-  { stage: 3, status: 'idle', progress: 0, message: 'Indexing' },
-  { stage: 4, status: 'idle', progress: 0, message: 'Association' },
-  { stage: 5, status: 'idle', progress: 0, message: 'Evaluation' },
-  { stage: 6, status: 'idle', progress: 0, message: 'Visualization' },
+  { stage: 0, status: 'idle', progress: 0, message: 'Ingestion', completedAt: null, lastRunAt: null, staleSince: null },
+  { stage: 1, status: 'idle', progress: 0, message: 'Detection & Tracking', completedAt: null, lastRunAt: null, staleSince: null },
+  { stage: 2, status: 'idle', progress: 0, message: 'Feature Extraction', completedAt: null, lastRunAt: null, staleSince: null },
+  { stage: 3, status: 'idle', progress: 0, message: 'Indexing', completedAt: null, lastRunAt: null, staleSince: null },
+  { stage: 4, status: 'idle', progress: 0, message: 'Association', completedAt: null, lastRunAt: null, staleSince: null },
+  { stage: 5, status: 'idle', progress: 0, message: 'Evaluation', completedAt: null, lastRunAt: null, staleSince: null },
+  { stage: 6, status: 'idle', progress: 0, message: 'Visualization', completedAt: null, lastRunAt: null, staleSince: null },
 ];
 
 export type PipelineModelMode = 'single' | 'fusion';
@@ -104,11 +104,43 @@ export const usePipelineStore = create<PipelineState>()(
       setMapCameraCoordinates: (coords) => set({ mapCameraCoordinates: coords }),
 
       updateStageProgress: (stage, progress) =>
-        set((state) => ({
-          stages: state.stages.map((s) =>
-            s.stage === stage ? { ...s, ...progress } : s
-          ),
-        })),
+        set((state) => {
+          const now = Date.now();
+          const isCompleting = progress.status === 'completed';
+
+          return {
+            stages: state.stages.map((s) => {
+              if (s.stage === stage) {
+                const isStarting = progress.status === 'running' && s.status !== 'running';
+                const next: StageProgress = { ...s, ...progress };
+
+                if (isStarting) next.lastRunAt = now;
+                if (isCompleting) {
+                  next.completedAt = now;
+                  next.lastRunAt = next.lastRunAt ?? now;
+                  next.staleSince = null;
+                }
+                if (progress.status === 'running' || progress.status === 'idle') {
+                  next.staleSince = null;
+                }
+                if (progress.status === 'error') {
+                  next.error = progress.error ?? progress.message ?? s.error;
+                }
+                if (progress.status && progress.status !== 'error') {
+                  next.error = progress.error;
+                }
+
+                return next;
+              }
+
+              if (isCompleting && s.stage > stage && s.completedAt !== null) {
+                return { ...s, staleSince: now };
+              }
+
+              return s;
+            }),
+          };
+        }),
 
       setCurrentStage: (stage) => set({ currentStage: stage }),
 

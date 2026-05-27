@@ -6,6 +6,7 @@ import { AlertTriangle, Clipboard, GitBranch } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useStageState } from "@/hooks/useStageState";
 import { cn } from "@/lib/utils";
 import type { StageNumber, StageProgress } from "@/types";
 
@@ -51,6 +52,7 @@ export function PipelineRunHeader({
   className,
 }: PipelineRunHeaderProps) {
   const label = stageLabels.find((stage) => stage.id === currentStage)?.label ?? `Stage ${currentStage}`;
+  const currentStageState = useStageState(currentStage);
   const progress = useMemo(() => overallProgress(stages), [stages]);
 
   const copyRunId = () => {
@@ -88,7 +90,7 @@ export function PipelineRunHeader({
           1 error
         </Badge>
       ) : (
-        <StageStatusBadge status="idle" label="No errors" />
+        <StageStatusBadge status={currentStageState.status} />
       )}
     </div>
   );

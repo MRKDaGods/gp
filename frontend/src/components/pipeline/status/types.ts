@@ -13,10 +13,20 @@ export interface StageStatusMeta {
   dotClassName: string;
 }
 
-export function toStageStatus(stage?: Pick<StageProgress, "status" | "progress" | "error"> | null): StageStatus {
+export interface ToStageStatusOptions {
+  blocked?: boolean;
+  stale?: boolean;
+}
+
+export function toStageStatus(
+  stage?: Pick<StageProgress, "status" | "progress" | "error" | "completedAt" | "staleSince"> | null,
+  options: ToStageStatusOptions = {}
+): StageStatus {
   if (!stage) return "idle";
   if (stage.status === "error" || stage.error) return "error";
   if (stage.status === "running" || (stage.progress > 0 && stage.progress < 100)) return "running";
+  if (options.blocked) return "blocked";
+  if (options.stale || (stage.staleSince !== null && stage.completedAt !== null && stage.staleSince > stage.completedAt)) return "stale";
   if (stage.status === "completed" || stage.progress >= 100) return "done";
   return "idle";
 }

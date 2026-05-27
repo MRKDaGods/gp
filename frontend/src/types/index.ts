@@ -15,7 +15,9 @@ export interface StageProgress {
   progress: number; // 0-100
   message: string;
   startedAt?: string;
-  completedAt?: string;
+  completedAt: number | null;
+  lastRunAt: number | null;
+  staleSince: number | null;
   error?: string;
 }
 
