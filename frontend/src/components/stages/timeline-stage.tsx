@@ -8,21 +8,12 @@ import {
   useMemo,
 } from "react";
 import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  ZoomIn,
-  ZoomOut,
   ArrowRight,
   RefreshCw,
 } from "lucide-react";
 import { cn, formatDuration, formatNetworkFailure, getCameraColor } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { DisclosurePanel } from "@/components/pipeline";
+import { DisclosurePanel, ErrorBanner, PlaybackControls, StageProgressCard, toStageStatus } from "@/components/pipeline";
 import { ExecutionTargetToggle } from "@/components/pipeline/run/ExecutionTargetToggle";
 import {
   useTimelineStore,
@@ -105,7 +96,7 @@ export function TimelineStage() {
   const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
   const [splitCount, setSplitCount] = useState<number | null>(null);
   const [triggerReload, setTriggerReload] = useState(0);
-  const [matchedFallbackActive, setMatchedFallbackActive] = useState(false);
+  const [, setMatchedFallbackActive] = useState(false);
   const [tracksLoading, setTracksLoading] = useState(false);
   const [topAlternatives, setTopAlternatives] = useState<MatchedAlternative[]>([]);
   const [alternativesLoading, setAlternativesLoading] = useState(false);
@@ -1395,8 +1386,6 @@ export function TimelineStage() {
   );
   const timelineDataSource = tracks.some((t) => t.id.startsWith("real-") || t.id.startsWith("traj-")) ? "real" : "demo";
 
-  // For summary badge: how many trajectories are shown vs total selected tracklets
-  const shownTrajectories = tracks.length;
   const shownCameraLanes = cameraLanes.length;
   const selectedTrackletCount = selectedTrackIdSet.size;
 
@@ -1526,43 +1515,19 @@ export function TimelineStage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-6">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold">Stage 4: Cross-Camera Timeline</h1>
-          <p className="text-sm text-muted-foreground">
-            DeepOCSORT tracklet association across CityFlow cameras
-          </p>
-        </div>
-        <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
-          {matchedFallbackActive && (
-            <Badge variant="outline" className="border-yellow-500/60 text-yellow-400 bg-yellow-500/10">
-              ⚠ Fallback: pre-exported matched clips
-            </Badge>
-          )}
-          <Badge variant="secondary">{shownTrajectories} trajectories</Badge>
-          <Badge variant="secondary">{shownCameraLanes} camera rows</Badge>
-          {selectedTrackletCount > 0 && (
-            <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10">
-              {selectedTrackletCount} selected tracklets
-            </Badge>
-          )}
-          <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
-            {confirmedCount} confirmed
-          </Badge>
-        </div>
-      </header>
-
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="mx-auto flex max-w-7xl flex-col gap-4">
+          <ErrorBanner
+            title="Association failed"
+            message={stage4Progress?.status === "error" ? stage4Progress.message || "Association failed" : null}
+          />
           {stage4Progress?.status === "running" ? (
-            <div className="rounded-md border bg-card p-3">
-              <div className="mb-2 flex min-w-0 justify-between gap-2 text-sm">
-                <span className="min-w-0 break-words text-xs">{stage4Progress.message}</span>
-                <span className="shrink-0 font-mono">{stage4Progress.progress}%</span>
-              </div>
-              <Progress value={stage4Progress.progress} className="h-2" />
-            </div>
+            <StageProgressCard
+              title="Association progress"
+              status={toStageStatus(stage4Progress)}
+              progress={stage4Progress.progress}
+              message={stage4Progress.message}
+            />
           ) : null}
 
           <TimelineVideoGrid
@@ -1577,69 +1542,31 @@ export function TimelineStage() {
             cropRunId={cropRunId}
           />
 
-          {/* Timeline controls */}
-          <div className="flex shrink-0 flex-wrap items-end gap-3 border-b border-border/50 bg-background/80 p-3 backdrop-blur-sm sm:gap-4 sm:p-4">
-            <div className="flex shrink-0 items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={() => setCurrentTime(0)}>
-                <SkipBack className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="default"
-                size="icon"
-                onClick={() => setIsPlaying(!isPlaying)}
-              >
-                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => setCurrentTime(totalDuration)}>
-                <SkipForward className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="min-w-[140px] flex-1 basis-[min(100%,280px)]">
-              <div className="mb-1 flex items-baseline justify-between gap-2">
-                <span className="text-[11px] tabular-nums tracking-wide text-muted-foreground/70">
-                  {tracks.length > 0 ? (
-                    <>
-                      <span className="text-foreground/85">{formatDuration(timelineStart + currentTime)}</span>
-                      <span className="text-muted-foreground/35"> · </span>
-                      {formatDuration(timelineEnd)}
-                    </>
-                  ) : (
-                    "…"
-                  )}
-                </span>
-              </div>
-              <Slider
-                tone="muted"
-                value={[currentTime]}
-                max={totalDuration}
-                step={0.5}
-                onValueChange={(v) => setCurrentTime(v[0])}
-                title={
-                  tracks.length > 0
-                    ? `Combined ${formatDuration(timelineStart + currentTime)} (video ${formatDuration(absCurrentTime)})`
-                    : undefined
-                }
-              />
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <span className="w-12 shrink-0 text-center font-mono text-sm sm:w-14">{(zoom * 100).toFixed(0)}%</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setZoom(Math.min(4, zoom + 0.25))}
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-            </div>
+          <PlaybackControls
+            isPlaying={isPlaying}
+            currentFrame={Math.round(currentTime * 2)}
+            totalFrames={Math.max(1, Math.round(totalDuration * 2) + 1)}
+            speedOptions={[]}
+            onPlayPause={() => setIsPlaying(!isPlaying)}
+            onStepBack={() => setCurrentTime(0)}
+            onStepForward={() => setCurrentTime(totalDuration)}
+            onFrameChange={(frame) => setCurrentTime(Math.min(totalDuration, frame / 2))}
+          />
+          <div className="-mt-3 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] tabular-nums tracking-wide text-muted-foreground/70">
+            <span>
+              {tracks.length > 0 ? (
+                <>
+                  <span className="text-foreground/85">{formatDuration(timelineStart + currentTime)}</span>
+                  <span className="text-muted-foreground/35"> / </span>
+                  {formatDuration(timelineEnd)}
+                </>
+              ) : (
+                "..."
+              )}
+            </span>
+            {tracks.length > 0 ? (
+              <span>video {formatDuration(absCurrentTime)}</span>
+            ) : null}
           </div>
 
           <div className="grid min-h-[360px] gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
