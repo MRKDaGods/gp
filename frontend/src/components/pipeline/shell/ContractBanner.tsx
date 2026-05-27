@@ -1,10 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { HelpCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { StageNumber } from "@/types";
 
@@ -16,6 +17,7 @@ export interface ContractChip {
   stage?: StageNumber;
   missing?: boolean;
   stale?: boolean;
+  render?: ReactNode;
 }
 
 export interface BlockedRequirement {
@@ -44,7 +46,11 @@ function ContractChipList({ label, chips }: { label: string; chips: ContractChip
           -
         </Badge>
       ) : (
-        chips.map((chip) => (
+        chips.map((chip) => chip.render ? (
+          <span key={`${label}-${chip.label}-${chip.stage ?? "none"}`} className="inline-flex max-w-full">
+            {chip.render}
+          </span>
+        ) : (
           <Badge
             key={`${label}-${chip.label}-${chip.stage ?? "none"}`}
             variant="outline"
@@ -98,16 +104,16 @@ export function ContractBanner({
           </div>
         </div>
         {helpText ? (
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
+          <Popover>
+            <PopoverTrigger asChild>
               <Button type="button" variant="ghost" size="icon" className="h-8 w-8 self-start lg:self-center" aria-label={`About Stage ${stage}`}>
                 <HelpCircle className="h-4 w-4" />
               </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="max-w-xs">
+            </PopoverTrigger>
+            <PopoverContent align="end" className="max-w-[340px] text-sm leading-6">
               {helpText}
-            </TooltipContent>
-          </Tooltip>
+            </PopoverContent>
+          </Popover>
         ) : null}
       </div>
     </div>

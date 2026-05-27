@@ -34,6 +34,7 @@ import { UploadStage, UploadStageActions } from "@/components/stages/upload-stag
 import { DetectionStage, DetectionStageActions } from "@/components/stages/detection-stage";
 import { SelectionStage, SelectionStageActions } from "@/components/stages/selection-stage";
 import { InferenceActions, InferenceStage } from "@/components/stages/inference-stage";
+import { InferenceDatasetChip } from "@/components/stages/inference/InferenceDatasetChip";
 import { TimelineStage, TimelineStageActions } from "@/components/stages/timeline-stage";
 import { RefinementStage, RefinementStageActions } from "@/components/stages/refinement-stage";
 import { OutputStage, OutputStageActions } from "@/components/stages/output-stage";
@@ -63,6 +64,7 @@ const PIPELINE_STAGE_COMPONENTS: { id: StageNumber; Component: ComponentType; Ac
 ];
 
 const HEADLINE_METRIC_PRIORITY = ["IDF1", "mAP", "R1"];
+const TARGET_VISIBLE_STAGES = new Set<StageNumber>([1, 3, 4]);
 
 function getHeadlineMetric(model: ModelEntry | null): ModelMetric | null {
   if (!model) return null;
@@ -134,6 +136,7 @@ function SidebarStageRow({
   const stageState = useStageState(stage.id);
   const progress = stageState.progress?.progress ?? 0;
   const statusSentence = sidebarStatusSentence(stage.label, stageState.status, progress, stageState.executionTarget);
+  const showExecutionTarget = TARGET_VISIBLE_STAGES.has(stage.id);
   const isKaggleStage = stageState.executionTarget === "kaggle";
 
   return (
@@ -152,10 +155,10 @@ function SidebarStageRow({
           <div className="flex shrink-0 items-center gap-1.5">
             <StageStatusDot
               status={stageState.status}
-              withCloudOverlay={!sidebarOpen && isKaggleStage}
+              withCloudOverlay={!sidebarOpen && showExecutionTarget && isKaggleStage}
               className={cn(isActive && "ring-2 ring-primary-foreground/40")}
             />
-            {sidebarOpen && (
+            {sidebarOpen && showExecutionTarget && (
               <span
                 className="flex h-4 w-4 items-center justify-center"
                 title={isKaggleStage ? "Kaggle execution" : "Local execution"}
@@ -208,6 +211,9 @@ function PipelineStagePanel({
     ? { label: `Stage ${id - 1}`, stage: (id - 1) as StageNumber }
     : null;
   const baseContract = stageContract(id);
+  const needs = id === 3
+    ? [...(baseContract.needs ?? []), { label: "Dataset", render: <InferenceDatasetChip /> }]
+    : baseContract.needs;
 
   return (
     <div
@@ -222,6 +228,7 @@ function PipelineStagePanel({
       <StageShell
         contract={{
           ...baseContract,
+          needs,
           status: stageState.status,
           blockedBy,
           produces: stageState.isStale ? baseContract.produces?.map((chip) => ({ ...chip, stale: true })) : baseContract.produces,

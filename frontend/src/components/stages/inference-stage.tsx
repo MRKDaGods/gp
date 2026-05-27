@@ -139,14 +139,11 @@ export function InferenceStage() {
 
         <ErrorBanner title="Inference failed" message={errorMessage} />
 
-        {runModelMetadata?.warnings.length ? (
-          <div className="rounded-md border border-yellow-600/30 bg-yellow-600/10 p-3 text-sm">
-            <p className="font-medium text-yellow-800 dark:text-yellow-200">Model registry warning</p>
-            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-              {runModelMetadata.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-            </ul>
-          </div>
-        ) : null}
+        <ErrorBanner
+          severity="warning"
+          title="Model registry warning"
+          message={runModelMetadata?.warnings.length ? runModelMetadata.warnings.join("\n") : null}
+        />
 
         <InferenceModelCard />
 
@@ -175,7 +172,7 @@ export function InferenceStage() {
           />
         </div>
 
-        <DisclosurePanel title="Advanced" tier="advanced" description="Dataset source, location cascade, and date range filters.">
+        <DisclosurePanel title="Advanced" tier="advanced" description="Location cascade and date range filters.">
           <InferenceSourceCard />
         </DisclosurePanel>
 
