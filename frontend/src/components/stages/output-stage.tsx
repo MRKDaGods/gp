@@ -5,17 +5,12 @@ import type { LatLngTuple } from "leaflet";
 import dynamic from "next/dynamic";
 import {
   Download,
-  Play,
-  Pause,
   Camera,
   Maximize2,
   Car,
   Truck,
   Bus,
-  CheckCircle2,
-  Loader2,
   TrendingUp,
-  Route,
   Gauge,
   Copy,
 } from "lucide-react";
@@ -25,8 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import { DisclosurePanel, ErrorBanner, PlaybackControls, StageProgressCard } from "@/components/pipeline";
 import { usePipelineStore, useTimelineStore, useVideoStore } from "@/store";
 import type { CameraMapCoordinateEntry } from "@/lib/api";
 import type { TimelineTrack } from "@/types";
@@ -47,6 +42,7 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
 const outputPalette = ["#22c55e", "#3b82f6", "#f97316", "#e11d48", "#06b6d4", "#8b5cf6", "#f59e0b"];
+const OUTPUT_EXPORT_EVENT = "mtmc:stage6:export";
 
 const VehiclePathMap = dynamic(() => import("@/components/maps/vehicle-path-map"), { ssr: false });
 
@@ -155,6 +151,8 @@ interface OutputTrajectory {
   confidence: number;
   color: string;
 }
+
+type ExportFormat = "mp4" | "json" | "csv";
 
 function cameraKeyForMatch(cam: string): string {
   return normalizeCameraId(cam) ?? String(cam).trim();
@@ -368,9 +366,10 @@ export function OutputStage() {
   const [selectedTrajectoryId, setSelectedTrajectoryId] = useState<number | null>(null);
   const [dataSource, setDataSource] = useState<"real" | "none">("none");
   const [error, setError] = useState<string | null>(null);
-  const [exportFormat, setExportFormat] = useState<"mp4" | "json" | "csv">("mp4");
   const [isExporting, setIsExporting] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(2);
+  const [quality, setQuality] = useState("standard");
+  const [hiddenTrajectoryIds, setHiddenTrajectoryIds] = useState<Set<number>>(() => new Set());
   const [hydratedLatestRunId, setHydratedLatestRunId] = useState<string | null>(null);
   const [outputFetchState, setOutputFetchState] = useState<"idle" | "loading" | "ready">("idle");
   const [summaryVideoUrl, setSummaryVideoUrl] = useState<string | null>(null);
@@ -397,6 +396,11 @@ export function OutputStage() {
     [trajectories, timelineTracks, timelineClipFilterEngaged]
   );
 
+  const visibleTrajectories = useMemo(
+    () => displayTrajectories.filter((trajectory) => !hiddenTrajectoryIds.has(trajectory.id)),
+    [displayTrajectories, hiddenTrajectoryIds]
+  );
+
   const summaryVideoPayload = useMemo(():
     | { includeClips: { camera_id: string; track_id: number }[] }
     | undefined => {
@@ -416,11 +420,11 @@ export function OutputStage() {
   );
 
   const backendOrigin = API_BASE.endsWith("/api") ? API_BASE.slice(0, -4) : API_BASE;
-  const toAbsoluteUrl = (url: string) => {
+  const toAbsoluteUrl = useCallback((url: string) => {
     if (url.startsWith("http://") || url.startsWith("https://")) return url;
     if (url.startsWith("/")) return `${backendOrigin}${url}`;
     return `${backendOrigin}/${url}`;
-  };
+  }, [backendOrigin]);
 
   const rawStreamUrl = currentVideo ? `${API_BASE}/videos/stream/${currentVideo.id}` : null;
   const streamUrl = summaryVideoUrl ?? rawStreamUrl;
@@ -518,7 +522,7 @@ export function OutputStage() {
 
   // -- Export handlers -----------------------------------------------------
 
-  const handleDownloadVideo = async () => {
+  const handleDownloadVideo = useCallback(async () => {
     if (isExporting) return;
     if (!effectiveRunId) {
       if (streamUrl) window.open(streamUrl, "_blank", "noopener,noreferrer");
@@ -533,20 +537,29 @@ export function OutputStage() {
     } finally {
       setIsExporting(false);
     }
-  };
+  }, [effectiveRunId, isExporting, streamUrl, summaryVideoPayload, toAbsoluteUrl]);
 
-  const handleExportTracklets = async () => {
+  const handleExportTracklets = useCallback(async (format: Exclude<ExportFormat, "mp4">) => {
     if (!effectiveRunId || isExporting) return;
-    const fmt = exportFormat === "mp4" ? "json" : exportFormat;
     try {
       setIsExporting(true);
-      const response = await exportTrajectories(effectiveRunId, fmt);
+      const response = await exportTrajectories(effectiveRunId, format);
       const downloadUrl = response.data?.downloadUrl;
       if (downloadUrl) window.open(toAbsoluteUrl(downloadUrl), "_blank", "noopener,noreferrer");
     } finally {
       setIsExporting(false);
     }
-  };
+  }, [effectiveRunId, isExporting, toAbsoluteUrl]);
+
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const format = (event as CustomEvent<{ format: ExportFormat }>).detail?.format ?? "mp4";
+      if (format === "mp4") void handleDownloadVideo();
+      else void handleExportTracklets(format);
+    };
+    window.addEventListener(OUTPUT_EXPORT_EVENT, listener);
+    return () => window.removeEventListener(OUTPUT_EXPORT_EVENT, listener);
+  }, [handleDownloadVideo, handleExportTracklets]);
 
   // -- Data loading --------------------------------------------------------
 
@@ -664,15 +677,15 @@ export function OutputStage() {
   }, [currentVideo?.id, runId, currentVideo?.latestRunId, summaryVideoRequestKey]);
 
   useEffect(() => {
-    if (displayTrajectories.length === 0) {
+    if (visibleTrajectories.length === 0) {
       if (selectedTrajectoryId !== null) setSelectedTrajectoryId(null);
       return;
     }
     const hasSelected =
       selectedTrajectoryId != null &&
-      displayTrajectories.some((t) => t.id === selectedTrajectoryId);
-    if (!hasSelected) setSelectedTrajectoryId(displayTrajectories[0].id);
-  }, [displayTrajectories, selectedTrajectoryId]);
+      visibleTrajectories.some((t) => t.id === selectedTrajectoryId);
+    if (!hasSelected) setSelectedTrajectoryId(visibleTrajectories[0].id);
+  }, [visibleTrajectories, selectedTrajectoryId]);
 
   // -- Derived stats -------------------------------------------------------
 
@@ -682,7 +695,7 @@ export function OutputStage() {
 
     const camerasFromTrajectories = new Set<string>();
     let crossCameraFromTrajectories = 0;
-    displayTrajectories.forEach((traj) => {
+    visibleTrajectories.forEach((traj) => {
       traj.cameras.forEach((cam) => camerasFromTrajectories.add(cam));
       if (traj.cameras.length > 1) crossCameraFromTrajectories += 1;
     });
@@ -692,8 +705,8 @@ export function OutputStage() {
       : camerasFromTrajectories.size;
 
     const uniqueVehicles = hasMatched
-      ? Math.max(ms.totalMatchedTracklets ?? 0, displayTrajectories.length)
-      : displayTrajectories.length;
+      ? Math.max(ms.totalMatchedTracklets ?? 0, visibleTrajectories.length)
+      : visibleTrajectories.length;
 
     const crossCameraMatches = hasMatched
       ? ms.totalMatchedTrajectories ?? 0
@@ -703,16 +716,16 @@ export function OutputStage() {
     const clipConfidences = clips.map((c: any) => Number(c.confidence ?? 0)).filter((c: number) => c > 0);
     const avgConfidence = clipConfidences.length > 0
       ? clipConfidences.reduce((a: number, b: number) => a + b, 0) / clipConfidences.length
-      : displayTrajectories.length > 0
-        ? displayTrajectories.reduce((sum, traj) => sum + traj.confidence, 0) / displayTrajectories.length
+      : visibleTrajectories.length > 0
+        ? visibleTrajectories.reduce((sum, traj) => sum + traj.confidence, 0) / visibleTrajectories.length
         : 0;
 
     return { camerasAnalyzed, uniqueVehicles, crossCameraMatches, avgConfidence };
-  }, [displayTrajectories, matchedSummary]);
+  }, [visibleTrajectories, matchedSummary]);
 
   const selectedTrajectory = useMemo(
-    () => displayTrajectories.find((t) => t.id === selectedTrajectoryId) ?? null,
-    [displayTrajectories, selectedTrajectoryId]
+    () => visibleTrajectories.find((t) => t.id === selectedTrajectoryId) ?? null,
+    [visibleTrajectories, selectedTrajectoryId]
   );
 
   const coordRegistry = useMemo(
@@ -892,51 +905,15 @@ export function OutputStage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold">Results & Export</h1>
-          <p className="text-sm text-muted-foreground">
-            Multi-camera tracking summary
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {outputFetchState === "loading" && (
-            <Badge variant="secondary" className="gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-              Loading…
-            </Badge>
-          )}
-          {dataSource === "real" && outputFetchState === "ready" && (
-            <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              Ready
-            </Badge>
-          )}
-        </div>
-      </header>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
+        <ErrorBanner title="Failed to load output data" message={error} />
+        {outputFetchState === "loading" ? (
+          <StageProgressCard title="Generating summary video" status="running" progress={45} message="Loading trajectories and preparing preview..." />
+        ) : null}
 
-      {/* Error banner */}
-      {error && (
-        <div className="flex shrink-0 items-start gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-3 sm:px-6">
-          <Route className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-destructive">Failed to load output data</p>
-            <p className="break-words text-xs text-muted-foreground">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Two-panel content */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-
-        {/* Left panel: video + trajectory list */}
-        <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 space-y-4">
-          {/* Video player */}
-          <div
-            className="relative w-full overflow-hidden rounded-lg border border-border bg-slate-900"
-            style={{ height: "calc(100vh - 10rem)" }}
-          >
+        <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
+          <section className="min-w-0 space-y-3">
+            <div className="relative h-[min(58vh,560px)] min-h-[320px] w-full overflow-hidden rounded-md border border-border bg-slate-900">
             {streamUrl ? (
               <video
                 ref={videoRef}
@@ -973,53 +950,89 @@ export function OutputStage() {
                 {outputStats.uniqueVehicles} Tracked
               </span>
             </div>
-
-            {/* Controls */}
-            <div className="pointer-events-auto absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/80 to-transparent p-3">
-              <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
-                  onClick={() => void togglePlayback()}
-                >
-                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                </Button>
-                <Slider
-                  className="flex-1"
-                  value={[playbackProgressPct]}
-                  max={100}
-                  step={0.1}
-                  onValueChange={(v) => seekToPercent(v[0])}
-                  disabled={!durationSec}
-                />
-                <span className="shrink-0 text-xs font-mono tabular-nums text-white">
-                  {formatClock(currentTimeSec)} / {formatClock(durationSec)}
-                </span>
-                <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-mono text-white/70">
-                  {playbackSpeed}x
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
-                  onClick={() => {
-                    const v = videoRef.current;
-                    if (!v) return;
-                    if (!document.fullscreenElement) void v.parentElement?.requestFullscreen?.();
-                    else void document.exitFullscreen();
-                  }}
-                >
-                  <Maximize2 className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute bottom-3 right-3 h-8 w-8 bg-black/40 text-white hover:bg-white/20 hover:text-white"
+                onClick={() => {
+                  const v = videoRef.current;
+                  if (!v) return;
+                  if (!document.fullscreenElement) void v.parentElement?.requestFullscreen?.();
+                  else void document.exitFullscreen();
+                }}
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
 
-          {hasMapLayer && (
-            <Card>
+            <PlaybackControls
+              isPlaying={isPlaying}
+              currentFrame={Math.round(playbackProgressPct * 10)}
+              totalFrames={1001}
+              positionLabel={`${formatClock(currentTimeSec)} / ${formatClock(durationSec)}`}
+              onPlayPause={() => void togglePlayback()}
+              onFrameChange={(frame) => seekToPercent(frame / 10)}
+              onStepBack={() => seekToPercent(Math.max(0, playbackProgressPct - 2))}
+              onStepForward={() => seekToPercent(Math.min(100, playbackProgressPct + 2))}
+            />
+
+            <DisclosurePanel title="Advanced" description="Output preview quality, playback speed, and visible trajectories.">
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">Quality</Label>
+                  <select className="w-full rounded border bg-background px-3 py-2 text-sm" value={quality} onChange={(event) => setQuality(event.target.value)}>
+                    <option value="draft">Draft</option>
+                    <option value="standard">Standard</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Playback speed - {playbackSpeed}x</Label>
+                  <Slider value={[playbackSpeed]} min={1} max={16} step={1} onValueChange={(value) => setPlaybackSpeed(value[0])} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Visible trajectories</Label>
+                  <div className="max-h-36 space-y-1 overflow-auto rounded border bg-muted/20 p-2">
+                    {displayTrajectories.length === 0 ? <p className="text-xs text-muted-foreground">No trajectories loaded.</p> : null}
+                    {displayTrajectories.map((trajectory) => (
+                      <label key={trajectory.id} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={!hiddenTrajectoryIds.has(trajectory.id)}
+                          onChange={(event) => {
+                            setHiddenTrajectoryIds((prev) => {
+                              const next = new Set(prev);
+                              if (event.target.checked) next.delete(trajectory.id);
+                              else next.add(trajectory.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: trajectory.color }} />
+                        <span className="truncate">{trajectory.vehicleId}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </DisclosurePanel>
+
+            <DisclosurePanel title="Debug" tier="debug" description="Raw counts and export readiness.">
+              <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                <StatRow icon={Camera} label="Cameras" value={String(outputStats.camerasAnalyzed)} />
+                <StatRow icon={Car} label="Vehicles" value={String(outputStats.uniqueVehicles)} />
+                <StatRow icon={TrendingUp} label="Cross-cam" value={String(outputStats.crossCameraMatches)} />
+                <StatRow icon={Gauge} label="Avg. Conf." value={`${(outputStats.avgConfidence * 100).toFixed(0)}%`} />
+                <div className="break-all font-mono sm:col-span-2 lg:col-span-4">runId: {effectiveRunId ?? "none"}</div>
+                <div className="break-all font-mono sm:col-span-2 lg:col-span-4">exportReady: {effectiveRunId ? "yes" : "no"}</div>
+              </div>
+            </DisclosurePanel>
+          </section>
+
+          <aside className="min-w-0 space-y-3">
+            {hasMapLayer ? (
+              <Card>
               <CardHeader className="space-y-1">
                 <CardTitle className="text-sm">Vehicle Path Map</CardTitle>
                 <p className="text-xs text-muted-foreground">
@@ -1040,10 +1053,10 @@ export function OutputStage() {
                       const nextId = Number(e.target.value);
                       setSelectedTrajectoryId(Number.isFinite(nextId) ? nextId : null);
                     }}
-                    disabled={displayTrajectories.length === 0}
+                    disabled={visibleTrajectories.length === 0}
                   >
-                    {displayTrajectories.length === 0 && <option value="">No trajectories</option>}
-                    {displayTrajectories.map((trajectory) => (
+                    {visibleTrajectories.length === 0 && <option value="">No trajectories</option>}
+                    {visibleTrajectories.map((trajectory) => (
                       <option key={trajectory.id} value={trajectory.id}>
                         {trajectory.vehicleId} ({trajectory.cameras.length} cams)
                       </option>
@@ -1135,73 +1148,45 @@ export function OutputStage() {
                 </div>
               </CardContent>
             </Card>
-          )}
-
+            ) : (
+              <div className="flex h-72 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+                No camera map coordinates available.
+              </div>
+            )}
+          </aside>
         </div>
-
-        {/* Right sidebar */}
-        <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-muted/20 p-4 lg:w-80 lg:border-l lg:border-t-0">
-
-          {/* Quick stats */}
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Summary
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            <StatRow icon={Camera} label="Cameras" value={String(outputStats.camerasAnalyzed)} />
-            <StatRow icon={Car} label="Vehicles" value={String(outputStats.uniqueVehicles)} />
-            <StatRow icon={TrendingUp} label="Cross-cam" value={String(outputStats.crossCameraMatches)} />
-            <StatRow icon={Gauge} label="Avg. Conf." value={`${(outputStats.avgConfidence * 100).toFixed(0)}%`} />
-          </div>
-
-          <Separator className="my-5" />
-
-          {/* Playback speed */}
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Playback Speed — {playbackSpeed}x
-          </h3>
-          <Slider
-            value={[playbackSpeed]}
-            min={1}
-            max={16}
-            step={1}
-            onValueChange={(v) => setPlaybackSpeed(v[0])}
-          />
-
-          <Separator className="my-5" />
-
-          {/* Export */}
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Export
-          </h3>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Format</Label>
-              <select
-                className="w-full rounded border bg-background px-3 py-2 text-sm"
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value as "mp4" | "json" | "csv")}
-              >
-                <option value="mp4">MP4 Video</option>
-                <option value="json">JSON Tracklets</option>
-                <option value="csv">CSV Export</option>
-              </select>
-            </div>
-            <Button className="w-full" onClick={handleDownloadVideo} disabled={isExporting}>
-              <Download className="mr-2 h-4 w-4" />
-              Download Video
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleExportTracklets}
-              disabled={!effectiveRunId || isExporting || outputFetchState === "loading"}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Export Tracklets
-            </Button>
-          </div>
-        </aside>
       </div>
+    </div>
+  );
+}
+
+export function OutputStageActions() {
+  const [format, setFormat] = useState<ExportFormat>("mp4");
+
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <fieldset className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
+        <legend className="sr-only">Export format</legend>
+        {(["mp4", "json", "csv"] as ExportFormat[]).map((option) => (
+          <label key={option} className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <input
+              type="radio"
+              name="stage6-export-format"
+              value={option}
+              checked={format === option}
+              onChange={() => setFormat(option)}
+            />
+            {option}
+          </label>
+        ))}
+      </fieldset>
+      <Button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent(OUTPUT_EXPORT_EVENT, { detail: { format } }))}
+      >
+        <Download className="mr-2 h-4 w-4" />
+        Generate & Download
+      </Button>
     </div>
   );
 }
