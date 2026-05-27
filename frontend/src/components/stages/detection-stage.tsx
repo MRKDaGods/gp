@@ -32,29 +32,19 @@ import {
   useStageExecutionStore,
 } from "@/store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
+import { useStartStage1 } from "@/hooks/use-start-stage1";
 import {
   cancelPipeline,
-  ApiError,
   getDetections,
   getAllDetections,
   getPipelineStatus,
   getFrameUrl,
   getVideoStreamUrl,
-  runStage,
 } from "@/lib/api";
-import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
-import { useToast } from "@/hooks/use-toast";
 import type { BoundingBox, Detection, VideoFile } from "@/types";
 import { DoubleBufferedFrameImg } from "@/components/ui/double-buffered-img";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8004/api";
-
-function getRunStageErrorMessage(error: unknown): string {
-  if (error instanceof ApiError && error.status === 429) {
-    return "Both Kaggle slots busy — try again later";
-  }
-  return error instanceof Error ? error.message : String(error);
-}
 
 function detectionCropUrl(
   videoId: string,
@@ -991,41 +981,15 @@ export function DetectionStageActions() {
   const { currentVideo } = useVideoStore();
   const { selectedTrackIds } = useDetectionStore();
   const { setCurrentStage } = useSessionStore();
-  const { runId, stages, isRunning, setRunId, setIsRunning, updateStageProgress } = usePipelineStore();
+  const { runId, stages, isRunning, setIsRunning, updateStageProgress } = usePipelineStore();
   const getStageExecutionTarget = useStageExecutionStore((state) => state.getStageExecutionTarget);
-  const { toast } = useToast();
+  const startStage1 = useStartStage1();
   const stageProgress = stages.find((stage) => stage.stage === 1);
   const status = toStageStatus(stageProgress);
   const executionTarget = getStageExecutionTarget(1);
 
   const handleRun = async () => {
-    if (!currentVideo) return;
-    const credentials = useKaggleCredentialsStore.getState().credentials;
-    const kaggle = executionTarget === "kaggle"
-      ? { target: "kaggle" as const, username: credentials?.username, key: credentials?.key }
-      : null;
-
-    flushPipelineFromStage(1);
-    setIsRunning(true);
-    updateStageProgress(1, { status: "running", progress: 0, message: `Queued Stage 1 for ${currentVideo.name}` });
-
-    try {
-      const response = await runStage(1, {
-        videoId: currentVideo.id,
-        config: { tracker: "deepocsort" },
-        kaggle,
-      });
-      const nextRunId = (response.data as any)?.runId ?? (response.data as any)?.id ?? null;
-      if (nextRunId) setRunId(nextRunId);
-    } catch (err) {
-      if (kaggle?.target === "kaggle" && err instanceof ApiError && err.status === 401) {
-        useKaggleCredentialsStore.getState().openCredentialsModal();
-      }
-      const msg = getRunStageErrorMessage(err);
-      setIsRunning(false);
-      updateStageProgress(1, { status: "error", progress: 100, message: `Failed to start Stage 1: ${msg}` });
-      toast({ title: "Failed to start Stage 1", description: msg, variant: "destructive" });
-    }
+    await startStage1();
   };
 
   const handleCancel = async () => {

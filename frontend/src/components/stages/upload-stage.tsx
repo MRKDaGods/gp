@@ -10,7 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DisclosurePanel, ErrorBanner } from "@/components/pipeline";
 import { useToast } from "@/hooks/use-toast";
-import { getVideos, importKaggleRunArtifacts, runStage, uploadVideo } from "@/lib/api";
+import { useStartStage1 } from "@/hooks/use-start-stage1";
+import { getVideos, importKaggleRunArtifacts, uploadVideo } from "@/lib/api";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
 import { usePipelineStore, useSessionStore, useVideoStore } from "@/store";
@@ -331,30 +332,14 @@ export function UploadStage() {
 export function UploadStageActions() {
   const { currentVideo } = useVideoStore();
   const { setCurrentStage } = useSessionStore();
-  const { stages, isRunning, setRunId, setIsRunning, updateStageProgress } = usePipelineStore();
-  const { toast } = useToast();
+  const { stages, isRunning } = usePipelineStore();
+  const startStage1 = useStartStage1();
   const stage1Progress = stages.find((stage) => stage.stage === 1);
   const isStage1Running = isRunning && stage1Progress?.status === "running";
 
   const handleContinue = async () => {
     if (!currentVideo) return;
-
-    flushPipelineFromStage(1);
-    setRunId(null);
-    setIsRunning(true);
-    updateStageProgress(1, { status: "running", progress: 0, message: `Queued Stage 1 for ${currentVideo.name}` });
-
-    try {
-      const response = await runStage(1, { videoId: currentVideo.id, config: { tracker: "deepocsort" } });
-      const nextRunId = (response.data as any)?.runId ?? (response.data as any)?.id ?? null;
-      if (nextRunId) setRunId(nextRunId);
-      setCurrentStage(1);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setIsRunning(false);
-      updateStageProgress(1, { status: "error", progress: 100, message: `Failed to start Stage 1: ${msg}` });
-      toast({ title: "Failed to start Stage 1", description: msg, variant: "destructive" });
-    }
+    await startStage1({ resetRunId: true, afterStart: () => setCurrentStage(1) });
   };
 
   return (
