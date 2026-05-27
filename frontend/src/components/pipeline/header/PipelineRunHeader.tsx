@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Clipboard, GitBranch } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { useStageState } from "@/hooks/useStageState";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ export interface PipelineRunHeaderProps {
   stageLabels?: PipelineRunHeaderStage[];
   error?: string | null;
   lastRunLabel?: string;
+  onSelectErrorStage?: (stage: StageNumber) => void;
   className?: string;
 }
 
@@ -42,6 +43,18 @@ function overallProgress(stages: StageProgress[]): number {
   return stages.reduce((total, stage) => total + Math.max(0, Math.min(100, stage.progress)), 0) / stages.length;
 }
 
+function formatRelativeTimestamp(timestamp: number | null): string {
+  if (!timestamp) return "-";
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 10) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 export function PipelineRunHeader({
   runId = null,
   currentStage = 0,
@@ -49,11 +62,38 @@ export function PipelineRunHeader({
   stageLabels = DEFAULT_STAGE_LABELS,
   error = null,
   lastRunLabel = "-",
+  onSelectErrorStage,
   className,
 }: PipelineRunHeaderProps) {
+  const [, setClockTick] = useState(0);
   const label = stageLabels.find((stage) => stage.id === currentStage)?.label ?? `Stage ${currentStage}`;
   const currentStageState = useStageState(currentStage);
   const progress = useMemo(() => overallProgress(stages), [stages]);
+  const errorStages = useMemo(
+    () => stages
+      .filter((stage) => stage.status === "error" || Boolean(stage.error))
+      .map((stage) => ({
+        stage: stage.stage,
+        label: stageLabels.find((candidate) => candidate.id === stage.stage)?.label ?? `Stage ${stage.stage}`,
+        message: stage.error ?? stage.message ?? error ?? "Stage failed",
+      }))
+      .slice(-5)
+      .reverse(),
+    [error, stageLabels, stages]
+  );
+  const latestRunAt = useMemo(
+    () => stages.reduce<number | null>((latest, stage) => {
+      const value = stage.lastRunAt ?? null;
+      return value !== null && (latest === null || value > latest) ? value : latest;
+    }, null),
+    [stages]
+  );
+  const resolvedLastRunLabel = latestRunAt ? formatRelativeTimestamp(latestRunAt) : lastRunLabel;
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setClockTick((tick) => tick + 1), 30000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const copyRunId = () => {
     if (runId && typeof navigator !== "undefined") {
@@ -78,20 +118,44 @@ export function PipelineRunHeader({
       <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
         <GitBranch className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">Stage {currentStage + 1}/7 · {label}</span>
+        <StageStatusBadge status={currentStageState.status} />
       </div>
       <div className="hidden min-w-[140px] max-w-[220px] flex-1 items-center gap-2 md:flex">
         <Progress value={progress} className="h-1.5" />
         <span className="w-9 text-right font-mono text-xs text-muted-foreground">{Math.round(progress)}%</span>
       </div>
-      <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">last run: {lastRunLabel}</span>
-      {error ? (
-        <Badge variant="outline" className="gap-1 border-rose-500/30 bg-rose-500/10 text-rose-600">
-          <AlertTriangle className="h-3.5 w-3.5" />
-          1 error
-        </Badge>
-      ) : (
-        <StageStatusBadge status={currentStageState.status} />
-      )}
+      <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">last run: {resolvedLastRunLabel}</span>
+      {errorStages.length > 0 ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 border-rose-500/30 bg-rose-500/10 px-2 text-xs text-rose-600 hover:bg-rose-500/15 hover:text-rose-700"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {errorStages.length} {errorStages.length === 1 ? "error" : "errors"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80 space-y-3 p-3">
+            <div className="text-sm font-medium">Recent errors</div>
+            <div className="space-y-2">
+              {errorStages.map((stageError) => (
+                <button
+                  key={`${stageError.stage}-${stageError.message}`}
+                  type="button"
+                  className="w-full rounded-md border bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:border-rose-500/40 hover:bg-rose-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => onSelectErrorStage?.(stageError.stage)}
+                >
+                  <div className="font-medium">Stage {stageError.stage} · {stageError.label}</div>
+                  <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{stageError.message}</div>
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      ) : null}
     </div>
   );
 }

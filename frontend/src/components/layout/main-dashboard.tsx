@@ -29,7 +29,6 @@ import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials
 import { useHasKaggleCredentials } from "@/lib/kaggle-credentials-store";
 import type { StageNumber } from "@/types";
 import type { ModelEntry, ModelMetric } from "@/services/models";
-import { GlobalProcessingBanner } from "@/components/layout/global-processing-banner";
 
 import { UploadStage, UploadStageActions } from "@/components/stages/upload-stage";
 import { DetectionStage, DetectionStageActions } from "@/components/stages/detection-stage";
@@ -404,7 +403,6 @@ export function MainDashboard() {
 
       {/* Main content */}
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <GlobalProcessingBanner />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {datasetView ? (
             <DatasetProcessing />
@@ -416,7 +414,10 @@ export function MainDashboard() {
                 stages={pipelineStages}
                 stageLabels={stages}
                 error={pipelineError}
-                lastRunLabel="-"
+                onSelectErrorStage={(stageId) => {
+                  setDatasetView(false);
+                  setCurrentStage(stageId);
+                }}
               />
               {PIPELINE_STAGE_COMPONENTS.map(({ id, Component, Actions }) =>
                 visitedPipelineStages.has(id) ? (
