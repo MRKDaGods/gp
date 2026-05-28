@@ -195,7 +195,9 @@ across image scales via a pyramid graph network, achieving 80.18\% mAP and
 A Strong Baseline~\cite{cybercore2021strong} (CVPR-W AICity 2021) combined
 ResNet101-IBN-a with multi-head attention for multi-domain training, reaching
 87.1\% mAP and establishing a competitive ResNet-family ceiling prior to
-transformer approaches.
+transformer approaches. Khorramshahi et al.~\cite{khorramshahi2023selfsupervision}
+later revisited scalable vehicle ReID through self-supervised pretraining across
+ResNet, ViT, Swin, and ConvNeXt backbones in the AI City setting.
 
 \subsection{Transformer-Based Vehicle Re-Identification}
 TransReID~\cite{he2021transreid} (ICCV 2021) was the first pure Vision
@@ -214,6 +216,10 @@ VeRi-776~\cite{opencodepapers2024veri}. CLIP-ReID uses the same ViT-B/16 CLIP
 backbone family as the present work; our recipe surpasses it by $+5.47$\,pp
 mAP purely through recipe differences (loss, augmentation, post-processing),
 not architectural changes.
+Recent transformer variants have broadened this line beyond single-domain
+VeRi-style retrieval: MSFFT~\cite{holla2024msfft} fuses multi-scale transformer
+features for cross-platform vehicle ReID, while MiKeCoCo~\cite{kuang2025mikecoco}
+uses CLIP-guided prompt knowledge for generalizable vehicle ReID.
 
 RPTM~\cite{ghosh2023rptm} (WACV 2023) proposed relation-preserving triplet
 mining to stabilise triplet loss training across hard and semi-hard negatives,
@@ -244,7 +250,9 @@ distance, improving retrieval precision without requiring labelled data.
 Zhang et al.~\cite{zhang2022vehiclererank} extended this idea specifically
 for vehicle ReID by incorporating orientation-guided query expansion, showing
 that viewpoint-consistent neighbour selection further improves re-ranking
-for highly viewpoint-sensitive queries.
+for highly viewpoint-sensitive queries. Moral et al.~\cite{moral2023syntheticrerank}
+also studied vehicle-specific post-processing, including gallery video-clip
+information in the re-ranking step on CityFlow-ReID and VeRi-776.
 
 Average Query Expansion (AQE)~\cite{arandjelovic2012aqe} replaces each query
 feature with the mean of its top-$k$ retrieved gallery features, smoothing the
