@@ -50,10 +50,35 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+        },
+        "accent-strong": {
+          DEFAULT: "hsl(var(--accent-strong))",
+          foreground: "hsl(var(--accent-strong-foreground))",
+        },
+        status: {
+          idle: "hsl(var(--status-idle))",
+          blocked: "hsl(var(--status-blocked))",
+          running: "hsl(var(--status-running))",
+          done: "hsl(var(--status-done))",
+          stale: "hsl(var(--status-stale))",
+          error: "hsl(var(--status-error))",
+          cancelled: "hsl(var(--status-cancelled))",
+        },
         // MTMC tracker specific
         detection: {
-          unselected: "#ef4444", // red-500
-          selected: "#22c55e",   // green-500
+          unselected: "hsl(var(--destructive))",
+          selected: "hsl(var(--success))",
         },
         camera: {
           1: "#3b82f6",
