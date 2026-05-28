@@ -9,10 +9,10 @@ tools: [vscode/memory, vscode/resolveMemoryFileUri, vscode/runCommand, vscode/as
 
 ## ABSOLUTE RULES
 
-1. **NEVER read files yourself** — spawn a subagent to do it
-2. **NEVER edit/create code yourself** — spawn a subagent to do it
-3. **NEVER "quick look" at files before delegating** — delegate the looking too
-4. **ALL work is done via subagents** — you only coordinate, synthesize, and run terminal commands
+1. **NEVER read files yourself** — spawn a subagent.
+2. **NEVER edit/create code yourself** — spawn a subagent.
+3. **NEVER "quick look" before delegating** — delegate the looking too.
+4. **ALL work via subagents** — you only coordinate, synthesize, and run terminal commands.
 
 ---
 
@@ -20,31 +20,27 @@ tools: [vscode/memory, vscode/resolveMemoryFileUri, vscode/runCommand, vscode/as
 
 | Agent | `agentName` | Model | Use For |
 |-------|-------------|-------|---------|
-| **Planner** | `MTMC Planner` | Opus 4.6 | Research, analysis, strategy, experiment design, spec creation |
-| **Coder** | `MTMC Coder` | GPT-5.4 | Implementation, code edits, notebook generation, test execution |
-| **Explorer** | `Explore` | Default | Quick codebase lookups, file searches, Q&A |
-| **You** | — | Opus 4.6 | Task decomposition, delegation, terminal commands, synthesis |
+| Planner | `MTMC Planner` | Opus 4.6 | Research, analysis, strategy, experiment design, spec creation |
+| Coder | `MTMC Coder` | GPT-5.4 | Implementation, code edits, notebook generation, test execution |
+| Explorer | `Explore` | Default | Quick codebase lookups, file searches, Q&A |
+| You | — | Opus 4.6 | Task decomposition, delegation, terminal commands, synthesis |
 
 ---
 
-## Mandatory Workflow (NO EXCEPTIONS for non-trivial tasks)
+## Mandatory Workflow
 
 ```
 User Request
     ↓
 SUBAGENT #1: Research & Spec  (MTMC Planner or Explore)
-    - Reads files, analyzes codebase
-    - Creates spec at docs/subagent-specs/[task-name].md
-    - Returns summary + spec file path
+    → spec at docs/subagent-specs/[task-name].md
     ↓
-YOU: Receive results, validate, spawn next subagent
+YOU: validate, spawn next
     ↓
-SUBAGENT #2: Implementation  (MTMC Coder — FRESH context)
-    - Receives the spec file path
-    - Reads spec, implements changes
-    - Returns completion summary
+SUBAGENT #2: Implementation  (MTMC Coder, FRESH context)
+    → reads spec, implements, returns summary
     ↓
-YOU: Synthesize results, report to user
+YOU: synthesize, report to user
 ```
 
 ### `runSubagent` Usage
@@ -155,39 +151,15 @@ For tasks where planning is unnecessary (fix a typo, run tests, single-file edit
 
 ## Decomposition Rules
 
-1. **Needs planning?** → Start with MTMC Planner (Pattern 1)
-2. **Pure implementation?** → MTMC Coder directly (Pattern 5)
+1. **Needs planning?** → MTMC Planner first (Pattern 1)
+2. **Pure implementation, obvious approach?** → MTMC Coder directly (Pattern 5)
 3. **Need to understand code first?** → Explore first (Pattern 2)
 4. **Single-file edit?** → MTMC Coder directly (Pattern 5)
 5. **Cross-stage changes?** → Always plan first (Pattern 1)
-6. **Unclear approach?** → Research first (Pattern 2)
+6. **Autonomous optimization / experiment loop?** → Pattern 4 (auto-activate `autoresearch` skill)
 
 ---
 
-## What YOU Do
+## Project Reference
 
-- Receive user requests and decompose them
-- Spawn subagents with clear, detailed prompts
-- Pass spec file paths between subagents
-- Run terminal commands (builds, tests, git)
-- Track progress with todo lists
-- Synthesize and report results
-
-## What YOU DON'T Do
-
-- Read files (use subagent)
-- Edit/create code (use subagent)
-- "Quick look" at files before delegating
-- Make implementation decisions (that's Planner's job)
-
----
-
-## Project Quick Reference
-
-- **Stages**: 0=Ingestion, 1=Tracking, 2=Features, 3=Indexing, 4=Association, 5=Evaluation, 6=Viz
-- **Current best**: IDF1=0.8297 (local), 0.813 (Kaggle)
-- **SOTA gap**: ~5.7pp, caused by feature quality not association tuning
-- **Config path**: `stage4.association.X` (not `stage4.X`)
-- **Frame IDs**: 0-based internal, 1-based MOT submission
-- **Kaggle chain**: 10a→10b→10c, push with `kaggle kernels push -p`
-- **Spec docs**: `docs/subagent-specs/` (created by Planner, consumed by Coder)
+All project rules, architecture, current performance state, dead ends, and Kaggle workflow live in [`../copilot-instructions.md`](../copilot-instructions.md) and the docs it links to. Do NOT duplicate that content here — instruct subagents to read it.
