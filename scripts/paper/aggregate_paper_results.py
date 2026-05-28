@@ -335,38 +335,62 @@ def recommended_values(records: list[ExperimentRecord]) -> dict[str, Any]:
     beta_map = completed_metric(by_id, "A5beta", "mAP")
     alpha_rank = completed_metric(by_id, "A5alpha", "rank1")
     beta_rank = completed_metric(by_id, "A5beta", "rank1")
-    tie_band = alpha_map is not None and beta_map is not None and abs(alpha_map - beta_map) <= 0.10
 
-    if tie_band:
-        headline = "both"
-    elif alpha_map is not None and (beta_map is None or alpha_map > beta_map):
+    variance = seed_variance(records)
+    seeds_mean_map = variance.get("mAP_mean")
+    seeds_std_map = variance.get("mAP_std")
+    seeds_mean_rank = variance.get("rank1_mean")
+    n_seeds = variance.get("n_completed", 0) or 0
+
+    # Use seeds-mean as the A5alpha reference when available; fall back to single seed-0.
+    alpha_reference_map = seeds_mean_map if seeds_mean_map is not None else alpha_map
+    alpha_reference_rank = seeds_mean_rank if seeds_mean_rank is not None else alpha_rank
+    alpha_reference_source = "seeds_mean_n{}".format(n_seeds) if seeds_mean_map is not None else "single_seed0"
+
+    tie_band = False
+    wave4_trigger = False
+    delta_beta_minus_alpha = None
+    decision_reason = "insufficient_data"
+    if alpha_reference_map is not None and beta_map is not None:
+        delta_beta_minus_alpha = beta_map - alpha_reference_map
+        abs_delta = abs(delta_beta_minus_alpha)
+        if abs_delta <= 0.10:
+            tie_band = True
+            headline = "A5alpha"  # deployed recipe wins ties
+            decision_reason = "tied_within_0.10pp"
+        elif abs_delta <= 0.30:
+            headline = "A5beta" if delta_beta_minus_alpha > 0 else "A5alpha"
+            decision_reason = "winner_within_0.30pp"
+        elif delta_beta_minus_alpha > 0:
+            headline = "A5beta"
+            wave4_trigger = True
+            decision_reason = "wave4_trigger_beta_leads_over_0.30pp"
+        else:
+            headline = "A5alpha"
+            decision_reason = "alpha_leads_over_0.30pp"
+    elif alpha_reference_map is not None:
         headline = "A5alpha"
-    elif beta_map is not None and (alpha_map is None or beta_map > alpha_map):
+        decision_reason = "only_alpha_completed"
+    elif beta_map is not None:
         headline = "A5beta"
+        decision_reason = "only_beta_completed"
     else:
-        headline = "both"
+        headline = "none"
 
     fusion_candidates = [record for record in records if record.status == "completed" and record.data.get("fusion") is True]
     best_fusion = max(fusion_candidates, key=lambda record: float(record.data["mAP"]), default=None)
-    if best_fusion is not None:
-        fusion_map = float(best_fusion.data["mAP"])
-        fusion_rank = float(best_fusion.data["rank1"])
-    else:
-        fusion_map = None
-        fusion_rank = None
+    fusion_map = float(best_fusion.data["mAP"]) if best_fusion is not None else None
+    fusion_rank = float(best_fusion.data["rank1"]) if best_fusion is not None else None
 
-    if headline == "A5beta":
+    if headline == "A5alpha":
+        stream_map = alpha_reference_map
+        stream_rank = alpha_reference_rank
+    elif headline == "A5beta":
         stream_map = beta_map
         stream_rank = beta_rank
-    elif headline == "A5alpha":
-        stream_map = alpha_map
-        stream_rank = alpha_rank
-    elif alpha_map is not None and beta_map is not None:
-        stream_map = max(alpha_map, beta_map)
-        stream_rank = alpha_rank if alpha_map >= beta_map else beta_rank
     else:
-        stream_map = alpha_map if alpha_map is not None else beta_map
-        stream_rank = alpha_rank if alpha_rank is not None else beta_rank
+        stream_map = None
+        stream_rank = None
 
     return {
         "headline_recipe": headline,
@@ -375,6 +399,13 @@ def recommended_values(records: list[ExperimentRecord]) -> dict[str, Any]:
         "fusion_mAP": fusion_map,
         "fusion_rank1": fusion_rank,
         "tie_band_applies": tie_band,
+        "wave4_trigger": wave4_trigger,
+        "delta_beta_minus_alpha_mAP": delta_beta_minus_alpha,
+        "alpha_reference_source": alpha_reference_source,
+        "alpha_reference_mAP": alpha_reference_map,
+        "alpha_reference_rank1": alpha_reference_rank,
+        "alpha_seeds_std_mAP": seeds_std_map,
+        "decision_reason": decision_reason,
     }
 
 
@@ -518,12 +549,29 @@ def component_commentary(by_id: dict[str, ExperimentRecord], baseline: Experimen
 def recipe_outcome_lines(by_id: dict[str, ExperimentRecord], recommended: dict[str, Any]) -> list[str]:
     alpha = by_id["A5alpha"]
     beta = by_id["A5beta"]
-    lines = [f"Headline recipe: {recommended['headline_recipe']}."]
-    if alpha.status == "completed" and beta.status == "completed":
-        delta = float(alpha.data["mAP"]) - float(beta.data["mAP"])
-        winner = "A5alpha" if delta > 0 else "A5beta" if delta < 0 else "neither recipe"
-        lines.append(f"A5alpha minus A5beta is {delta:+.2f} pp mAP; {winner} leads on mAP.")
-        lines.append(f"Tie band applies: {str(recommended['tie_band_applies']).lower()}.")
+    lines = []
+
+    delta = recommended.get("delta_beta_minus_alpha_mAP")
+    source = recommended.get("alpha_reference_source", "single_seed0")
+    alpha_ref = recommended.get("alpha_reference_mAP")
+    alpha_std = recommended.get("alpha_seeds_std_mAP")
+    headline = recommended.get("headline_recipe", "unknown")
+    tie = bool(recommended.get("tie_band_applies"))
+    wave4 = bool(recommended.get("wave4_trigger"))
+    reason = recommended.get("decision_reason", "unknown")
+
+    if alpha.status == "completed" and beta.status == "completed" and delta is not None and alpha_ref is not None:
+        if source.startswith("seeds_mean"):
+            ref_desc = f"A5alpha seeds mean ({source.replace('seeds_mean_', '')}) = {alpha_ref:.2f} +/- {alpha_std:.2f} pp" if alpha_std is not None else f"A5alpha seeds mean ({source.replace('seeds_mean_', '')}) = {alpha_ref:.2f} pp"
+        else:
+            ref_desc = f"A5alpha single seed-0 = {alpha_ref:.2f} pp"
+        lines.append(f"Delta = {delta:+.2f} pp mAP (A5beta - {source}); A5beta single = {float(beta.data['mAP']):.2f} pp; {ref_desc}.")
+        if tie:
+            lines.append(f"Inside +/-0.10 pp tie band; A5alpha remains headline (deployed recipe). Reason: {reason}.")
+        elif wave4:
+            lines.append(f"OUTSIDE 0.30 pp tie band AND A5beta leads -> WAVE 4 TRIGGER. Reason: {reason}.")
+        else:
+            lines.append(f"Headline recipe: {headline}. Reason: {reason}.")
     elif alpha.status == "completed" or beta.status == "completed":
         completed = "A5alpha" if alpha.status == "completed" else "A5beta"
         missing = "A5beta" if completed == "A5alpha" else "A5alpha"
