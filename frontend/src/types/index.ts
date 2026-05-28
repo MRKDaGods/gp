@@ -353,6 +353,7 @@ export interface UserPreferences {
 // Session state
 export interface SessionState {
   currentStage: StageNumber;
+  isDemoMode: boolean;
   selectedVideo?: VideoFile;
   selectedDetections: string[];
   selectedTracklets: number[];

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DisclosurePanel, ErrorBanner } from "@/components/pipeline";
 import { useToast } from "@/hooks/use-toast";
 import { useStartStage1 } from "@/hooks/use-start-stage1";
@@ -25,8 +26,8 @@ function inferCameraId(video: VideoFile): string {
 
 export function UploadStage() {
   const { videos, setVideos, addVideo, setCurrentVideo, currentVideo } = useVideoStore();
-  const { setCurrentStage } = useSessionStore();
-  const { setRunId, updateStageProgress } = usePipelineStore();
+  const { setCurrentStage, setDemoMode } = useSessionStore();
+  const { setRunId, setCurrentStage: setPipelineCurrentStage, updateStageProgress } = usePipelineStore();
   const { toast } = useToast();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -171,17 +172,32 @@ export function UploadStage() {
     flushPipelineFromStage(1);
     setRunId(null);
     setCurrentVideo(candidate);
+    setDemoMode(true);
     setCurrentStage(1);
-    toast({ title: "Using real video", description: `Loaded ${candidate.name} for YOLOv26 + Deep OC-SORT detection.`, variant: "success" });
+    setPipelineCurrentStage(1);
+    toast({ title: "Demo loaded", description: `Loaded ${candidate.name} without starting a backend pipeline run.`, variant: "success" });
   };
 
   return (
     <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
       <div className="mb-4 flex justify-end">
-        <Button type="button" variant="outline" onClick={handleDemoMode} aria-label="Start demo mode with the first available video">
-          <Play className="mr-2 h-4 w-4" />
-          Demo Mode
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-accent-strong/40 text-accent-strong hover:bg-accent-strong/10 hover:text-accent-strong"
+              onClick={handleDemoMode}
+              aria-label="Try demo with the first loaded local video"
+            >
+              <Play className="mr-2 h-4 w-4" />
+              Try Demo
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent align="end" className="max-w-xs">
+            Loads the first local video and opens detection setup. No backend pipeline run starts, and you can exit any time.
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       <ErrorBanner title="Upload issue" message={loadError ?? uploadError} />

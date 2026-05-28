@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -19,12 +20,14 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
+  Info,
+  LogOut,
   Cpu,
   Settings,
   Cloud,
   Server,
 } from "lucide-react";
-import { useSessionStore, useUIStore, usePipelineStore } from "@/store";
+import { useSessionStore, useUIStore, usePipelineStore, useVideoStore, useDetectionStore, useTrackletStore, useTimelineStore } from "@/store";
 import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials-modal";
 import { useHasKaggleCredentials } from "@/lib/kaggle-credentials-store";
 import type { StageNumber } from "@/types";
@@ -246,7 +249,7 @@ function PipelineStagePanel({
 }
 
 export function MainDashboard() {
-  const { currentStage, setCurrentStage } = useSessionStore();
+  const { currentStage, isDemoMode, setCurrentStage, setDemoMode, resetSession } = useSessionStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const runId = usePipelineStore((s) => s.runId);
   const pipelineStages = usePipelineStore((s) => s.stages);
@@ -254,6 +257,12 @@ export function MainDashboard() {
   const modelMode = usePipelineStore((s) => s.modelMode);
   const selectedModelMeta = usePipelineStore((s) => s.selectedModelMeta);
   const fusion = usePipelineStore((s) => s.fusion);
+  const resetPipeline = usePipelineStore((s) => s.reset);
+  const setCurrentVideo = useVideoStore((s) => s.setCurrentVideo);
+  const setIsPlaying = useVideoStore((s) => s.setIsPlaying);
+  const resetDetections = useDetectionStore((s) => s.reset);
+  const resetTracklets = useTrackletStore((s) => s.reset);
+  const resetTimeline = useTimelineStore((s) => s.resetAfterUpstreamEdit);
   const hasKaggleCredentials = useHasKaggleCredentials();
   const [datasetView, setDatasetView] = useState(false);
   const [kaggleSettingsOpen, setKaggleSettingsOpen] = useState(false);
@@ -269,6 +278,18 @@ export function MainDashboard() {
   const openInferenceStage = () => {
     setDatasetView(false);
     setCurrentStage(3);
+  };
+
+  const exitDemoMode = () => {
+    resetPipeline();
+    resetDetections();
+    resetTracklets();
+    resetTimeline();
+    setCurrentVideo(null);
+    setIsPlaying(false);
+    resetSession();
+    setDemoMode(false);
+    setDatasetView(false);
   };
 
   return (
@@ -427,6 +448,17 @@ export function MainDashboard() {
                   setCurrentStage(stageId);
                 }}
               />
+              {isDemoMode ? (
+                <div className="flex shrink-0 items-center gap-3 border-b border-border/60 bg-accent-strong/10 px-4 py-2 text-sm sm:px-6">
+                  <Info className="h-4 w-4 shrink-0 text-accent-strong" aria-hidden="true" />
+                  <Badge variant="outline" className="border-accent-strong/40 text-accent-strong">Demo run</Badge>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">Demo run loaded from a local sample video. Backend pipeline work has not started.</span>
+                  <Button type="button" variant="destructive" size="sm" className="h-7 gap-1.5 px-2 text-xs" onClick={exitDemoMode}>
+                    <LogOut className="h-3.5 w-3.5" />
+                    Exit demo
+                  </Button>
+                </div>
+              ) : null}
               {PIPELINE_STAGE_COMPONENTS.map(({ id, Component, Actions }) =>
                 visitedPipelineStages.has(id) ? (
                   <PipelineStagePanel

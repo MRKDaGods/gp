@@ -344,6 +344,7 @@ interface DetectionState {
   setMultiSelectMode: (enabled: boolean) => void;
   setHoveredId: (id: string | null) => void;
   getSelectedDetections: () => Detection[];
+  reset: () => void;
 }
 
 export const useDetectionStore = create<DetectionState>()(
@@ -431,6 +432,15 @@ export const useDetectionStore = create<DetectionState>()(
           (d) => d.trackId != null && state.selectedTrackIds.has(d.trackId)
         );
       },
+
+      reset: () =>
+        set({
+          detections: [],
+          selectedIds: new Set(),
+          selectedTrackIds: new Set(),
+          multiSelectMode: true,
+          hoveredId: null,
+        }),
     }),
     { name: 'detection-store' }
   )
@@ -452,6 +462,7 @@ interface TrackletState {
   toggleTrackletSelection: (id: number) => void;
   selectTrajectory: (id: number | null) => void;
   clearSelections: () => void;
+  reset: () => void;
 }
 
 export const useTrackletStore = create<TrackletState>()(
@@ -481,6 +492,14 @@ export const useTrackletStore = create<TrackletState>()(
 
       clearSelections: () =>
         set({ selectedTrackletIds: new Set(), selectedTrajectoryId: null }),
+
+      reset: () =>
+        set({
+          tracklets: [],
+          trajectories: [],
+          selectedTrackletIds: new Set(),
+          selectedTrajectoryId: null,
+        }),
     }),
     { name: 'tracklet-store' }
   )
@@ -640,6 +659,7 @@ interface SessionStore extends SessionState {
 
   // Actions
   setCurrentStage: (stage: StageNumber) => void;
+  setDemoMode: (enabled: boolean) => void;
   setSelectedVideo: (video: VideoFile | undefined) => void;
   addSelectedDetection: (id: string) => void;
   removeSelectedDetection: (id: string) => void;
@@ -668,6 +688,7 @@ const defaultPreferences: UserPreferences = {
 
 const initialSession: SessionState = {
   currentStage: 0,
+  isDemoMode: false,
   selectedVideo: undefined,
   selectedDetections: [],
   selectedTracklets: [],
@@ -685,6 +706,8 @@ export const useSessionStore = create<SessionStore>()(
         preferences: defaultPreferences,
 
         setCurrentStage: (stage) => set({ currentStage: stage }),
+
+        setDemoMode: (enabled) => set({ isDemoMode: enabled }),
 
         setSelectedVideo: (video) => set({ selectedVideo: video }),
 
