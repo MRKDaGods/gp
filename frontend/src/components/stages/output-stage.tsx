@@ -915,7 +915,7 @@ export function OutputStage() {
 
         <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
           <section className="min-w-0 space-y-3">
-            <div className="relative h-[min(58vh,560px)] min-h-[320px] w-full overflow-hidden rounded-md border border-border bg-slate-900">
+            <div className="relative h-[min(58vh,560px)] min-h-[320px] w-full overflow-hidden rounded-md border border-border bg-background">
             {streamUrl ? (
               <video
                 ref={videoRef}
@@ -942,7 +942,7 @@ export function OutputStage() {
             )}
 
             {videoLoadError && (
-              <div className="absolute bottom-16 left-3 right-3 rounded-md bg-red-950/90 px-3 py-2 text-center text-xs text-red-100">
+              <div className="absolute bottom-16 left-3 right-3 rounded-md border border-destructive/40 bg-destructive/90 px-3 py-2 text-center text-xs text-destructive-foreground">
                 {videoLoadError}
               </div>
             )}
@@ -1074,7 +1074,7 @@ export function OutputStage() {
                     <p className="text-xs text-muted-foreground">No camera sequence available for this track.</p>
                   )}
                   {missingCameraIds.length > 0 && (
-                    <p className="text-xs text-amber-500">
+                    <p className="text-xs text-warning">
                       Missing coordinates: {missingCameraIds.map((id) => `Camera ${id}`).join(", ")}
                     </p>
                   )}

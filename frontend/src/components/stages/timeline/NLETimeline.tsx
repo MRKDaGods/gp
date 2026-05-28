@@ -176,7 +176,7 @@ function TimelineRow({
               "absolute top-1/2 h-2.5 -translate-y-1/2 rounded-full border transition-shadow",
               "border-black/20 shadow-sm",
               isSegmentActive && "z-[5] h-3 shadow-md ring-2 ring-white/50",
-              segment.confirmed && "ring-1 ring-green-500/80 ring-offset-1 ring-offset-background"
+              segment.confirmed && "ring-1 ring-success/80 ring-offset-1 ring-offset-background"
             )}
             style={{
               left: segmentLeft,

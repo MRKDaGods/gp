@@ -173,7 +173,7 @@ export function DatasetProcessing() {
                         {ds.alreadyProcessed && !isProcessing && (
                           <Badge
                             variant="secondary"
-                            className="bg-green-500/10 text-green-500 border-green-500/30"
+                            className="border-success/30 bg-success/10 text-success"
                           >
                             <CheckCircle2 className="h-3 w-3 mr-1" />
                             Processed
@@ -200,7 +200,7 @@ export function DatasetProcessing() {
                           className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs"
                         >
                           {cam.hasVideo ? (
-                            <Video className="h-3 w-3 text-green-500" />
+                            <Video className="h-3 w-3 text-success" />
                           ) : (
                             <Camera className="h-3 w-3 text-muted-foreground" />
                           )}

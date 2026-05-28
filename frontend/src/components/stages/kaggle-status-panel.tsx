@@ -27,12 +27,12 @@ export interface KaggleStatusPanelProps {
 }
 
 const STATUS_STYLES: Record<KaggleJobStatus["status"], string> = {
-  queued: "border-slate-300 bg-slate-100 text-slate-700",
-  running: "border-blue-300 bg-blue-100 text-blue-700",
-  complete: "border-green-300 bg-green-100 text-green-700",
-  error: "border-red-300 bg-red-100 text-red-700",
-  cancelled: "border-amber-300 bg-amber-100 text-amber-700",
-  unknown: "border-slate-300 bg-slate-100 text-slate-700",
+  queued: "border-status-idle/40 bg-status-idle/10 text-status-idle",
+  running: "border-status-running/40 bg-status-running/10 text-status-running",
+  complete: "border-status-done/40 bg-status-done/10 text-status-done",
+  error: "border-status-error/40 bg-status-error/10 text-status-error",
+  cancelled: "border-status-cancelled/40 bg-status-cancelled/10 text-status-cancelled",
+  unknown: "border-status-idle/40 bg-status-idle/10 text-status-idle",
 };
 
 function formatRelativeTime(value: string | null): string {
@@ -77,7 +77,7 @@ function RunningMessage({ status }: { status: KaggleJobStatus["status"] }) {
 
   if (status === "running") {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+      <div className="flex items-center gap-2 rounded-md border border-status-running/40 bg-status-running/10 p-3 text-sm text-status-running">
         <Loader2 className="h-4 w-4 animate-spin" />
         Kernel is executing on Kaggle
       </div>
@@ -91,12 +91,12 @@ function TerminalMessage({ status }: { status: KaggleJobStatus }) {
   if (status.status === "complete") {
     const exitCodeOk = status.exit_code === 0 || status.exit_code === null;
     return (
-      <div className="flex items-start gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+      <div className="flex items-start gap-2 rounded-md border border-success/40 bg-success/10 p-3 text-sm text-success">
         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0 space-y-1">
           <div className="font-medium">Outputs downloaded</div>
           <div className="truncate font-mono text-xs">{truncatePath(status.outputs_downloaded_to)}</div>
-          <div className={cn("text-xs", exitCodeOk ? "text-green-700" : "text-red-700")}>
+          <div className={cn("text-xs", exitCodeOk ? "text-success" : "text-destructive")}>
             Exit code: {status.exit_code ?? "pending"}
           </div>
         </div>
@@ -126,7 +126,7 @@ function TerminalMessage({ status }: { status: KaggleJobStatus }) {
 
   if (status.status === "cancelled") {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+      <div className="flex items-center gap-2 rounded-md border border-status-cancelled/40 bg-status-cancelled/10 p-3 text-sm text-status-cancelled">
         <OctagonX className="h-4 w-4" />
         Kernel was cancelled
       </div>
@@ -161,7 +161,7 @@ export function KaggleStatusPanel({ runId, stage, className }: KaggleStatusPanel
 
   if (isLoading) {
     return (
-      <Card className={cn("border-blue-200 bg-blue-50/40", className)}>
+      <Card className={cn("border-status-running/40 bg-status-running/10", className)}>
         <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading Kaggle status...
@@ -175,10 +175,10 @@ export function KaggleStatusPanel({ runId, stage, className }: KaggleStatusPanel
   }
 
   return (
-    <Card className={cn("overflow-hidden border-blue-200 bg-blue-50/30", className)}>
+    <Card className={cn("overflow-hidden border-border/60 bg-card shadow-sm", className)}>
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
         <CardTitle className="flex min-w-0 items-center gap-2 text-base">
-          <Cloud className="h-4 w-4 shrink-0 text-blue-600" />
+          <Cloud className="h-4 w-4 shrink-0 text-accent-strong" />
           <span className="truncate">Running on Kaggle</span>
         </CardTitle>
         {status ? <StatusBadge status={status.status} /> : null}
@@ -200,7 +200,7 @@ export function KaggleStatusPanel({ runId, stage, className }: KaggleStatusPanel
                   href={status.kernel_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex max-w-full items-center gap-1 font-mono text-xs text-blue-700 underline-offset-4 hover:underline"
+                  className="inline-flex max-w-full items-center gap-1 font-mono text-xs text-accent-strong underline-offset-4 hover:underline"
                 >
                   <span className="truncate">{status.kernel_slug}</span>
                   <ExternalLink className="h-3.5 w-3.5 shrink-0" />

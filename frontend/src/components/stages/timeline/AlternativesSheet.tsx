@@ -112,7 +112,7 @@ function AlternativeTrackletItem({
   return (
     <div className="rounded-md border border-border/60 bg-muted/20 p-2">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold text-blue-400">ALT #{alternative.rank}</span>
+        <span className="text-[10px] font-semibold text-info">ALT #{alternative.rank}</span>
         <span className="text-[10px] tabular-nums text-muted-foreground">
           score {(alternative.score * 100).toFixed(1)}%
         </span>

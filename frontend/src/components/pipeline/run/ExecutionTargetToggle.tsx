@@ -43,7 +43,7 @@ export function ExecutionTargetToggle({ stage, variant = "full", className }: Ex
             type="button"
             className={cn(
               "inline-flex h-8 items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              isKaggle ? "bg-background text-sky-600 shadow-sm" : "text-muted-foreground hover:text-foreground"
+              isKaggle ? "bg-background text-accent-strong shadow-sm" : "text-muted-foreground hover:text-foreground"
             )}
             onClick={() => setStageExecutionTarget(stage, "kaggle")}
             aria-pressed={isKaggle}
@@ -58,7 +58,7 @@ export function ExecutionTargetToggle({ stage, variant = "full", className }: Ex
             type="button"
             variant={credentials ? "ghost" : "outline"}
             size="sm"
-            className={cn("h-8 gap-1.5 px-2 text-xs", !credentials && "border-amber-500/40 text-amber-600")}
+            className={cn("h-8 gap-1.5 px-2 text-xs", !credentials && "border-warning/40 text-warning")}
             onClick={() => setModalOpen(true)}
             aria-label="Configure Kaggle credentials"
           >
@@ -77,7 +77,7 @@ export function ExecutionTargetToggle({ stage, variant = "full", className }: Ex
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <Icon className={cn("h-4 w-4", isKaggle ? "text-sky-600" : "text-muted-foreground")} />
+            <Icon className={cn("h-4 w-4", isKaggle ? "text-accent-strong" : "text-muted-foreground")} />
             <span>Run on Kaggle</span>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -93,7 +93,7 @@ export function ExecutionTargetToggle({ stage, variant = "full", className }: Ex
           onClick={() => setStageExecutionTarget(stage, isKaggle ? "local" : "kaggle")}
           className={cn(
             "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            isKaggle ? "border-sky-600 bg-sky-600" : "border-input bg-muted"
+            isKaggle ? "border-accent-strong bg-accent-strong" : "border-input bg-muted"
           )}
         >
           <span
@@ -114,7 +114,7 @@ export function ExecutionTargetToggle({ stage, variant = "full", className }: Ex
           </div>
 
           {!credentials ? (
-            <div className="flex items-start gap-2 text-xs text-yellow-700 dark:text-yellow-300">
+            <div className="flex items-start gap-2 text-xs text-warning">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>No credentials set; falls back to the server Kaggle account.</span>
             </div>

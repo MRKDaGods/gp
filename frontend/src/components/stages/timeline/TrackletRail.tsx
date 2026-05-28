@@ -59,7 +59,7 @@ export function TrackletRail({
             : "No tracklet data yet."}
         </p>
       ) : playingTrackletsOnly && visibleTracks.length === 0 ? (
-        <p className="mt-2 text-xs text-amber-600/90 dark:text-amber-400/90">
+        <p className="mt-2 text-xs text-warning/90">
           No trajectory spans the current video time. Move the playhead to a segment.
         </p>
       ) : (
@@ -107,8 +107,8 @@ function TrackletItem({
       className={cn(
         "cursor-pointer rounded-lg border p-2 transition-all",
         isSelected && "border-primary bg-primary/5",
-        track.confirmed && !isSelected && "border-green-500/50 bg-green-500/5",
-        isActiveAtPlayhead && !isSelected && "border-l-2 border-l-emerald-500 bg-emerald-500/5"
+        track.confirmed && !isSelected && "border-success/50 bg-success/5",
+        isActiveAtPlayhead && !isSelected && "border-l-2 border-l-success bg-success/5"
       )}
       onClick={onClick}
     >
@@ -126,7 +126,7 @@ function TrackletItem({
           <p className="truncate text-xs font-medium">{track.label ?? track.cameraId}</p>
           <p className="text-[10px] text-muted-foreground">
             {formatDuration(track.startTime)} - {formatDuration(track.endTime)}
-            {cameraCount > 1 && <span className="ml-1 text-blue-400">- {cameraCount} cams</span>}
+            {cameraCount > 1 && <span className="ml-1 text-info">- {cameraCount} cams</span>}
           </p>
           {typeof track.confidence === "number" && track.confidence > 0 && (
             <p className="text-[9px] text-muted-foreground">
@@ -144,7 +144,7 @@ function TrackletItem({
               onConfirm();
             }}
           >
-            <Check className={cn("h-3 w-3", track.confirmed ? "text-green-500" : "text-muted-foreground")} />
+            <Check className={cn("h-3 w-3", track.confirmed ? "text-success" : "text-muted-foreground")} />
           </Button>
           <Button
             variant="ghost"
@@ -155,7 +155,7 @@ function TrackletItem({
               onRemove();
             }}
           >
-            <X className="h-3 w-3 text-muted-foreground hover:text-red-500" />
+            <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
           </Button>
         </div>
       </div>

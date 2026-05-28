@@ -137,9 +137,9 @@ export function FusionModelPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-yellow-600/30 bg-yellow-600/10 p-3 text-sm">
+      <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
         <div className="flex items-start gap-2">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-yellow-700" />
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
           <p>14t canonical fusion was tuned on VeRi-776. Cross-domain use on CityFlowV2 may not match VeRi-776 metrics.</p>
         </div>
       </div>

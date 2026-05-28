@@ -313,12 +313,12 @@ export function UploadStage() {
               .
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3">
-                <p className="mb-1 text-xs font-medium text-emerald-600">Recommended</p>
+              <div className="rounded-md border border-success/30 bg-success/10 p-3">
+                <p className="mb-1 text-xs font-medium text-success">Recommended</p>
                 <p className="text-xs">AI City Challenge, VeRi-776, and CityFlow benchmark footage.</p>
               </div>
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
-                <p className="mb-1 text-xs font-medium text-amber-600">Limited support</p>
+              <div className="rounded-md border border-warning/30 bg-warning/10 p-3">
+                <p className="mb-1 text-xs font-medium text-warning">Limited support</p>
                 <p className="text-xs">Random videos, non-traffic scenes, and low-resolution sources.</p>
               </div>
             </div>

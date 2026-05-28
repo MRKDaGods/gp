@@ -30,8 +30,8 @@ export function DisclosurePanel({
   return (
     <section
       className={cn(
-        "rounded-md border bg-card",
-        tier === "debug" && "border-dashed bg-muted/20",
+        "rounded-md border border-border/60 bg-muted/30",
+        tier === "debug" && "border-dashed",
         className
       )}
     >
@@ -57,7 +57,7 @@ export function DisclosurePanel({
         <ChevronDown className={cn("mt-0.5 h-4 w-4 shrink-0 transition-transform", open && "rotate-180")} />
       </Button>
       {open ? (
-        <div id={panelId} className="border-t px-4 py-4">
+        <div id={panelId} className="border-t border-border/60 px-4 py-4">
           {children}
         </div>
       ) : null}

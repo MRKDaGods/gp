@@ -359,7 +359,7 @@ function FrameCard({ frame, active, isSelected, onSelect, disabled }: { frame: R
       type="button"
       className={cn(
         "relative aspect-video overflow-hidden rounded-md border-2 text-left transition-all",
-        isSelected ? "border-emerald-500 shadow-lg shadow-emerald-500/20" : "border-transparent hover:border-primary/50",
+        isSelected ? "border-success shadow-lg shadow-success/20" : "border-transparent hover:border-primary/50",
         active && "ring-2 ring-primary/40",
         disabled && !isSelected && "cursor-not-allowed opacity-50"
       )}
@@ -377,7 +377,7 @@ function FrameCard({ frame, active, isSelected, onSelect, disabled }: { frame: R
         </span>
       )}
       {isSelected ? (
-        <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500">
+        <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-success">
           <Check className="h-3 w-3 text-white" />
         </span>
       ) : null}

@@ -66,7 +66,7 @@ export function InferenceDatasetChip() {
               <DatasetOption
                 key={dataset.name}
                 active={selectedDataset === dataset.name}
-                icon={<FolderOpen className="h-4 w-4 text-amber-500" />}
+                icon={<FolderOpen className="h-4 w-4 text-warning" />}
                 title={dataset.name}
                 description={`${dataset.cameraCount} cameras, ${dataset.videosFound} videos`}
                 badge={dataset.alreadyProcessed ? "Processed" : undefined}

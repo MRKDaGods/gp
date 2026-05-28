@@ -109,7 +109,7 @@ function ClassIconFallback({
   classId: number;
   isSelected: boolean;
 }) {
-  const cls = cn("h-6 w-6", isSelected ? "text-green-500" : "text-muted-foreground");
+  const cls = cn("h-6 w-6", isSelected ? "text-success" : "text-muted-foreground");
   if (classId === 2) return <Car className={cls} />;
   if (classId === 7) return <Truck className={cls} />;
   if (classId === 5) return <Bus className={cls} />;
@@ -162,7 +162,7 @@ const DetectionCropThumb = memo(function DetectionCropThumb({
       ref={rootRef}
       className={cn(
         "relative h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-muted",
-        isSelected ? "border-green-500/70 ring-1 ring-green-500/40" : "border-border"
+        isSelected ? "border-success/70 ring-1 ring-success/40" : "border-border"
       )}
     >
       {!visible ? (
@@ -171,7 +171,7 @@ const DetectionCropThumb = memo(function DetectionCropThumb({
         <div
           className={cn(
             "flex h-full w-full items-center justify-center",
-            isSelected ? "bg-green-500/20" : "bg-muted"
+            isSelected ? "bg-success/20" : "bg-muted"
           )}
         >
           <ClassIconFallback classId={classId} isSelected={isSelected} />
@@ -653,9 +653,9 @@ export function DetectionStage() {
             className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-black"
           >
             {!hasVideo ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
+              <div className="absolute inset-0 flex items-center justify-center bg-background">
                 <div className="max-w-md text-center text-white/85 px-6">
-                  <AlertCircle className="h-12 w-12 mx-auto mb-3 text-amber-400" />
+                  <AlertCircle className="h-12 w-12 mx-auto mb-3 text-warning" />
                   <p className="font-medium">No video selected</p>
                   <p className="text-sm text-white/60 mt-2">
                     Go back to Upload and pick a CityFlowV2 video. The stage will run YOLOv26 detection with Deep OC-SORT tracking.
@@ -666,7 +666,7 @@ export function DetectionStage() {
                 </div>
               </div>
             ) : isLoading ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
+              <div className="absolute inset-0 flex items-center justify-center bg-background">
                 <div className="flex flex-col items-center gap-4">
                   <Loader2 className="h-14 w-14 text-primary animate-spin" />
                   <div className="text-center">
@@ -701,7 +701,7 @@ export function DetectionStage() {
                       <div className="flex items-center gap-2">
                         <div
                           className={cn(
-                            "h-2.5 w-2.5 rounded-full bg-red-500 shadow-lg shadow-red-500/50",
+                            "h-2.5 w-2.5 rounded-full bg-destructive shadow-lg shadow-destructive/50",
                             !isPlaying && "animate-pulse"
                           )}
                         />
@@ -741,7 +741,7 @@ export function DetectionStage() {
                           {countByClassId(5)}
                         </span>
                       </span>
-                      <span className="text-green-400">
+                      <span className="text-success">
                         {selectedTrackIds.size} selected for tracking
                       </span>
                     </div>
@@ -768,8 +768,8 @@ export function DetectionStage() {
                           "absolute border-2 cursor-pointer",
                           !isPlaying && "transition-all duration-150",
                           isSelected
-                            ? "border-green-500 bg-green-500/20 shadow-lg shadow-green-500/30"
-                            : "border-red-500 bg-red-500/10",
+                            ? "border-success bg-success/20 shadow-lg shadow-success/30"
+                            : "border-destructive bg-destructive/10",
                           isHovered && "ring-2 ring-white/50 scale-[1.02]"
                         )}
                         style={{
@@ -787,7 +787,7 @@ export function DetectionStage() {
                         <div
                           className={cn(
                             "absolute -top-6 left-0 px-2 py-0.5 text-xs font-medium text-white rounded-sm whitespace-nowrap",
-                            isSelected ? "bg-green-600" : "bg-red-600"
+                            isSelected ? "bg-success" : "bg-destructive"
                           )}
                         >
                           {detection.className} {(detection.confidence * 100).toFixed(0)}%
@@ -795,7 +795,7 @@ export function DetectionStage() {
 
                         {/* Selection checkmark */}
                         {isSelected && (
-                          <div className="absolute -top-2 -right-2 h-5 w-5 bg-green-500 rounded-full flex items-center justify-center border-2 border-white">
+                          <div className="absolute -top-2 -right-2 h-5 w-5 bg-success rounded-full flex items-center justify-center border-2 border-white">
                             <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                             </svg>
@@ -867,7 +867,7 @@ export function DetectionStage() {
                     className={cn(
                       "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
                       isSelected
-                        ? "border-green-500 bg-green-500/10"
+                        ? "border-success bg-success/10"
                         : "border-transparent bg-background/50 hover:bg-background",
                       isHovered && "ring-1 ring-primary"
                     )}
@@ -887,17 +887,17 @@ export function DetectionStage() {
                       <div
                         className={cn(
                           "flex h-16 w-16 shrink-0 items-center justify-center rounded-md",
-                          isSelected ? "bg-green-500/20" : "bg-muted"
+                          isSelected ? "bg-success/20" : "bg-muted"
                         )}
                       >
                         {detection.classId === 2 && (
-                          <Car className={cn("h-6 w-6", isSelected ? "text-green-500" : "text-muted-foreground")} />
+                          <Car className={cn("h-6 w-6", isSelected ? "text-success" : "text-muted-foreground")} />
                         )}
                         {detection.classId === 7 && (
-                          <Truck className={cn("h-6 w-6", isSelected ? "text-green-500" : "text-muted-foreground")} />
+                          <Truck className={cn("h-6 w-6", isSelected ? "text-success" : "text-muted-foreground")} />
                         )}
                         {detection.classId === 5 && (
-                          <Bus className={cn("h-6 w-6", isSelected ? "text-green-500" : "text-muted-foreground")} />
+                          <Bus className={cn("h-6 w-6", isSelected ? "text-success" : "text-muted-foreground")} />
                         )}
                       </div>
                     )}
@@ -914,7 +914,7 @@ export function DetectionStage() {
                     </div>
                     <div className={cn(
                       "h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                      isSelected ? "bg-green-500 border-green-500" : "border-muted-foreground/30"
+                      isSelected ? "bg-success border-success" : "border-muted-foreground/30"
                     )}>
                       {isSelected && (
                         <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">

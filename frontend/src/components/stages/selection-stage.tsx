@@ -328,7 +328,7 @@ function TrackletCard({
     <Card
       className={cn(
         "cursor-pointer transition-all hover:shadow-md",
-        isSelected ? "border-green-500 shadow-lg shadow-green-500/20" : "hover:border-red-500/50"
+        isSelected ? "border-success shadow-lg shadow-success/20" : "hover:border-destructive/50"
       )}
       onClick={onToggle}
       role="button"
@@ -365,7 +365,7 @@ function TrackletCard({
             </div>
           ) : null}
 
-          <div className={cn("absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full", isSelected ? "bg-green-500" : "bg-red-500")}>
+          <div className={cn("absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full", isSelected ? "bg-success" : "bg-destructive")}>
             {isSelected ? <CheckCircle2 className="h-4 w-4 text-white" /> : <XCircle className="h-4 w-4 text-white" />}
           </div>
 

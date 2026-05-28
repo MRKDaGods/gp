@@ -42,7 +42,7 @@ export function TimelineVideoGrid({
 
   return (
     <div
-      className="relative shrink-0 border-b bg-slate-900 p-2"
+      className="relative shrink-0 border-b border-border/60 bg-background p-2"
       style={{ height: "clamp(200px, min(42vh, 50dvh), 560px)" }}
     >
       <div
@@ -71,7 +71,7 @@ export function TimelineVideoGrid({
       </div>
       {tracksLoading && (
         <div
-          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-md bg-slate-950/85 px-4"
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-md bg-background/85 px-4 backdrop-blur"
           role="status"
           aria-live="polite"
           aria-label="Loading timeline previews"
@@ -302,30 +302,30 @@ function CameraPreview({
 
   const ringClass = showTrackletFrames
     ? isActive
-      ? "ring-2 ring-green-500"
+      ? "ring-2 ring-success"
       : isPast
-        ? "ring-1 ring-orange-500/60 opacity-70"
+        ? "ring-1 ring-warning/60 opacity-70"
         : isNext
-          ? "ring-1 ring-blue-400/60 opacity-70"
+          ? "ring-1 ring-info/60 opacity-70"
           : "opacity-50"
     : clipUrl && !clipFailed
       ? isActive
-        ? "ring-2 ring-green-500"
+        ? "ring-2 ring-success"
         : isPast
-          ? "ring-1 ring-orange-500/60 opacity-70"
+          ? "ring-1 ring-warning/60 opacity-70"
           : isNext
-            ? "ring-1 ring-blue-400/60 opacity-70"
+            ? "ring-1 ring-info/60 opacity-70"
             : "opacity-50"
       : isActive
-        ? "ring-2 ring-green-500"
+        ? "ring-2 ring-success"
         : isPast
-          ? "ring-1 ring-orange-400/50 opacity-50"
+          ? "ring-1 ring-warning/50 opacity-50"
           : isNext
-            ? "ring-1 ring-blue-400/50 opacity-40"
+            ? "ring-1 ring-info/50 opacity-40"
             : "opacity-30";
 
   const statusLabel = isActive ? null : isPast ? "PAST" : isNext ? "NEXT" : null;
-  const statusColor = isPast ? "text-orange-400" : "text-blue-400";
+  const statusColor = isPast ? "text-warning" : "text-info";
 
   return (
     <div className={cn("relative h-full min-h-0 w-full min-w-0 overflow-hidden rounded", ringClass)}>
@@ -357,8 +357,8 @@ function CameraPreview({
                 <div
                   className="flex h-6 w-10 items-center justify-center rounded border-2"
                   style={{
-                    borderColor: camera.activeTrack.color || "#22c55e",
-                    backgroundColor: `${camera.activeTrack.color || "#22c55e"}33`,
+                    borderColor: camera.activeTrack.color || "hsl(var(--success))",
+                    backgroundColor: camera.activeTrack.color ? `${camera.activeTrack.color}33` : "hsl(var(--success) / 0.2)",
                   }}
                 >
                   <Car className="h-4 w-4 text-white" />
@@ -376,12 +376,12 @@ function CameraPreview({
               "h-1.5 w-1.5 rounded-full",
               isActive
                 ? isPlaying
-                  ? "bg-green-500"
-                  : "animate-pulse bg-green-500"
+                  ? "bg-success"
+                  : "animate-pulse bg-success"
                 : isPast
-                  ? "bg-orange-400"
+                  ? "bg-warning"
                   : isNext
-                    ? "bg-blue-400"
+                    ? "bg-info"
                     : "bg-gray-500"
             )}
           />

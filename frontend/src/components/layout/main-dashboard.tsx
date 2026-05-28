@@ -145,7 +145,7 @@ function SidebarStageRow({
         <button
           onClick={onSelect}
           className={cn(
-            "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors",
+            "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             isActive
               ? "bg-primary text-primary-foreground"
               : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -165,7 +165,7 @@ function SidebarStageRow({
                 aria-label={isKaggleStage ? "Kaggle execution" : "Local execution"}
               >
                 {isKaggleStage ? (
-                  <Cloud className="h-3 w-3 text-blue-500" />
+                  <Cloud className="h-3 w-3 text-accent-strong" />
                 ) : (
                   <Server className="h-3 w-3 text-muted-foreground" />
                 )}
@@ -276,12 +276,12 @@ export function MainDashboard() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "flex min-h-0 min-w-0 flex-shrink-0 flex-col overflow-x-hidden border-r bg-card transition-all duration-300",
+          "flex min-h-0 min-w-0 flex-shrink-0 flex-col overflow-x-hidden border-r border-border/60 bg-card/40 transition-all duration-300",
           sidebarOpen ? "w-56" : "w-14"
         )}
       >
         {/* Toggle at the top */}
-        <div className={cn("flex shrink-0 items-center border-b", sidebarOpen ? "justify-end px-2 py-2" : "justify-center py-2")}>
+        <div className={cn("flex shrink-0 items-center border-b border-border/60", sidebarOpen ? "justify-end px-2 py-2" : "justify-center py-2")}>
           <Button
             variant="ghost"
             size="icon"
@@ -325,7 +325,7 @@ export function MainDashboard() {
                 <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
                   <Settings className="h-4 w-4" />
                   {hasKaggleCredentials && (
-                    <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-green-500 ring-2 ring-card" />
+                    <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-success ring-2 ring-card" />
                   )}
                 </span>
                 {sidebarOpen && <span className="truncate">Kaggle credentials</span>}
@@ -391,7 +391,7 @@ export function MainDashboard() {
                 onClick={() => setDatasetView(true)}
                 aria-label="Open dataset workspace"
                 className={cn(
-                  "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors",
+                  "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   datasetView
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",

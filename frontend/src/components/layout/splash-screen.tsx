@@ -108,7 +108,7 @@ export function SplashScreen() {
         {/* Loading bar — driven by React state, no CSS animation flicker */}
         <div className="mt-4 h-[2px] w-48 overflow-hidden rounded-full bg-white/10">
           <div
-            className="h-full rounded-full bg-blue-400/60"
+            className="h-full rounded-full bg-accent-strong/60"
             style={{
               width: `${barWidth}%`,
               transition: "width 2.5s ease-out",

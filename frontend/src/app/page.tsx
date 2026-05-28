@@ -9,15 +9,15 @@ import { MainDashboard } from "@/components/layout/main-dashboard";
 function Phase2Navigation() {
   return (
     <nav aria-label="Phase 2" className="absolute right-4 top-4 z-20 flex gap-2">
-      <Link href="/reid" className="inline-flex h-9 items-center gap-2 rounded-md border bg-background/95 px-3 text-sm font-medium shadow-sm hover:bg-muted">
+      <Link href="/reid" className="inline-flex h-9 items-center gap-2 rounded-md border border-border/60 bg-background/95 px-3 text-sm font-medium shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
         <ScanSearch className="h-4 w-4" />
         ReID
       </Link>
-      <Link href="/fusion" className="inline-flex h-9 items-center gap-2 rounded-md border bg-background/95 px-3 text-sm font-medium shadow-sm hover:bg-muted">
+      <Link href="/fusion" className="inline-flex h-9 items-center gap-2 rounded-md border border-border/60 bg-background/95 px-3 text-sm font-medium shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
         <GitMerge className="h-4 w-4" />
         Fusion
       </Link>
-      <Link href="/eval" className="inline-flex h-9 items-center gap-2 rounded-md border bg-background/95 px-3 text-sm font-medium shadow-sm hover:bg-muted">
+      <Link href="/eval" className="inline-flex h-9 items-center gap-2 rounded-md border border-border/60 bg-background/95 px-3 text-sm font-medium shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
         <ClipboardList className="h-4 w-4" />
         Eval
       </Link>
