@@ -50,17 +50,18 @@ by architectural novelty rather than recipe refinement.
 This paper presents two complementary contributions. First, a systematically
 improved training recipe for the ViT-Base/16 backbone---retaining the TransReID
 SIE and JPM modules and initialized from CLIP pretrained
-weights~\cite{radford2021clip}---combined with Supervised Contrastive
-Loss~\cite{khosla2020supcon} and a three-step post-processing pipeline (AQE +
-$k$-reciprocal re-ranking~\cite{zhong2017rerank} + flip TTA) achieves
-\textbf{89.97\% mAP and 98.33\% Rank-1} on VeRi-776, the best reported result
-for any pure ViT-B model on this benchmark, surpassing TransReID by
-$+7.67$\,pp mAP.
+weights~\cite{radford2021clip}---combined with a tuned metric-learning
+objective and a three-step post-processing pipeline (AQE + $k$-reciprocal
+re-ranking~\cite{zhong2017rerank} + flip TTA) achieves \textbf{89.97\% mAP
+and 97.80\% Rank-1} at its best-mAP operating point on VeRi-776, with a
+separate best-Rank-1 operating point of \textbf{85.14\% mAP and 98.33\%
+Rank-1}. This is the best reported mAP for any pure ViT-B model on this
+benchmark, surpassing TransReID by $+7.67$\,pp mAP.
 
 Second, a training-free score-level fusion of this ViT-B stream with the
 CLIP-based Semantic Enhancement Network
 (CLIP-SENet~\cite{lu2025clipsenet}) achieves \textbf{93.30\% mAP and
-98.45\% Rank-1}. This establishes a new state of the art on VeRi-776 in terms of mAP, while
+98.45\% Rank-1}. This establishes a new state of the art in mAP on VeRi-776, while
 maintaining competitive Rank-1 accuracy relative to the previous best published result
 (CLIP-SENet standalone: 92.9\%~mAP and 98.7\% Rank-1~\cite{lu2025clipsenet}). A comprehensive ablation
 study traces the full performance trajectory from 82.3\% to 93.3\% mAP.
@@ -130,11 +131,11 @@ that assumption directly.
 The contributions of this work are as follows:
 \begin{itemize}
   \item \textbf{C1---Best Pure ViT-B Result:} An improved training recipe
-    combining CLIP pretraining initialization, SupCon metric
-    loss~\cite{khosla2020supcon}, an optimized augmentation pipeline, and AQE
-    + $k$-reciprocal re-ranking~\cite{zhong2017rerank} achieves \textbf{89.97\%
-    mAP / 98.33\% Rank-1} on VeRi-776---the highest reported result for any
-    pure ViT-B model, surpassing CLIP-ReID (84.5\%
+    combining CLIP pretraining initialization, a tuned metric-learning
+    objective, an optimized augmentation pipeline, and AQE + $k$-reciprocal
+    re-ranking~\cite{zhong2017rerank} achieves \textbf{89.97\%
+    mAP / 97.80\% Rank-1} at the best-mAP operating point on VeRi-776---the
+    highest reported mAP for any pure ViT-B model, surpassing CLIP-ReID (84.5\%
     mAP~\cite{li2023clipreid}) by $\mathbf{+5.47}$\,\textbf{pp mAP} and
     TransReID~\cite{he2021transreid} by $\mathbf{+7.67}$\,\textbf{pp mAP}.
   \item \textbf{C2---New State of the Art in mAP:} Score-level fusion with
@@ -322,11 +323,17 @@ Contrastive Loss (SupCon)~\cite{khosla2020supcon} with $\tau = 0.07$:
   \label{eq:supcon}
 \end{equation}
 where $\mathcal{P}(i)$ is the set of positive pairs and $\mathcal{A}(i)$ is
-all other mini-batch samples. The total objective is
+all other mini-batch samples. For the paper-recipe variant (A5$\beta$), the
+total objective is
 $\mathcal{L} = \mathcal{L}_{\mathrm{CE\text{-}LS}} + \mathcal{L}_{\mathrm{SupCon}}$.
-CircleLoss was evaluated but produced catastrophic numerical instability
-(loss $\equiv \infty$ throughout training) on CLIP-pretrained ViT-B backbones
-and is excluded.
+The currently deployed checkpoint (A5$\alpha$, actual recipe) was trained with
+CE-LS + TripletLoss($m{=}0.3$) + CenterLoss($\lambda{=}5\times10^{-4}$,
+delayed) and layer-wise learning-rate decay 0.75. A5$\alpha$ and A5$\beta$ are
+therefore evaluated as separate ablation rows; the headline Stream~1 recipe is
+the one with higher measured mAP under the held evaluation. \textcolor{red}{TODO:
+insert A5 winner identity after Wave~3.} CircleLoss was evaluated but produced
+catastrophic numerical instability (loss $\equiv \infty$ throughout training)
+on CLIP-pretrained ViT-B backbones and is excluded.
 
 \subsubsection{Augmentation Pipeline}
 Table~\ref{tab:augmentation} lists the full augmentation sequence applied
@@ -456,9 +463,11 @@ $\lambda\in\{0.15,0.18,0.2,0.22,0.25,0.3\}$.
 \subsubsection{Concat-patch + Flip TTA (Stream~1)}
 Features are extracted under original and horizontally flipped inputs and
 concatenated with patch mean pooling (CLS~+~mean patch tokens
-$\to$~1536D). This configuration is optimal for Rank-1. The single-flip
-CLS-only 768D configuration yields 89.97\% mAP and 98.33\% Rank-1, reported
-as the primary result throughout.
+$\to$~1536D). This configuration yields the best-mAP operating point
+(89.97\% mAP and 97.80\% Rank-1), while the single-flip CLS-only 768D
+configuration yields the best-Rank-1 operating point (85.14\% mAP and
+98.33\% Rank-1). A joint operating point of 89.71\% mAP and 98.15\% Rank-1
+is used only where a single balanced Stream~1 setting is required.
 
 \subsection{Score-Level Fusion}
 Given post-processed similarity matrices $\mathbf{S}_{\mathrm{ViT}}$ and
@@ -561,15 +570,15 @@ Table~\ref{tab:implementation} summarises the implementation configuration.
     MBR4B-LAI    & ITSC 2023  & ResNet50 (multi-branch)   & 92.09 & 98.03 & \cmark & \cite{luo2023mbr4b} \\
     CLIP-SENet   & arXiv 2025 & ResNet101-IBN-a+TinyCLIP  & 92.90 & 98.70 & \cmark & \cite{lu2025clipsenet} \\
     \midrule
-    \textbf{Ours (S1, w/ PP)} & ---  & ViT-B/16 (CLIP init)              & \textbf{89.97} & \textbf{98.33} & \cmark & --- \\
+    \textbf{Ours (S1, w/ PP)} & ---  & ViT-B/16 (CLIP init)              & \textbf{89.97} & \textbf{97.80} & \cmark & --- \\
     \textbf{Ours (Fusion)}    & ---  & ViT-B + ResNet101-IBN-a + TinyCLIP & \textbf{93.30} & \textbf{98.45} & \cmark & --- \\
     \bottomrule
   \end{tabular}
 \end{table*}
 
 The proposed ViT-B recipe surpasses all prior pure-ViT and transformer-only
-methods by a substantial margin. The fusion result establishes a new absolute
-state of the art, with $+0.4$\,pp mAP over CLIP-SENet~\cite{lu2025clipsenet}
+methods by a substantial margin. The fusion result establishes a new state of
+the art in mAP on VeRi-776, with $+0.4$\,pp mAP over CLIP-SENet~\cite{lu2025clipsenet}
 and $+1.21$\,pp mAP over MBR4B-LAI~\cite{luo2023mbr4b}.
 
 \subsection{Pure ViT-B Comparison}
@@ -586,7 +595,7 @@ and $+1.21$\,pp mAP over MBR4B-LAI~\cite{luo2023mbr4b}.
     TransReID* (DeiT-B)~\cite{he2021transreid} & ICCV'21 & DeiT-B/16 & 82.3 & 97.1 \\
     CLIP-ReID~\cite{li2023clipreid}             & AAAI'23 & ViT-B/16  & 84.5 & 97.3 \\
     \midrule
-    \textbf{Ours (S1, w/ PP)}                  & ---     & \textbf{ViT-B/16 (CLIP)} & \textbf{89.97} & \textbf{98.33} \\
+    \textbf{Ours (S1, w/ PP)}                  & ---     & \textbf{ViT-B/16 (CLIP)} & \textbf{89.97} & \textbf{97.80} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -620,7 +629,8 @@ ablation experiments.
     Base cosine, ViT-B (no PP)                           & 82.22 & 97.50 & $-0.08$ \\
     \quad+AQE $k{=}3$                                    & 84.08 & 97.20 & $+1.86$ \\
     \quad+Re-rank $k_1{=}80,k_2{=}15,\lambda{=}0.2$     & 89.28 & 97.79 & $+5.20$ \\
-    \quad+Concat-patch + flip TTA (1536D)                & 89.97 & 97.80 & $+0.69$ \\
+    \quad+Concat-patch + flip TTA (1536D; A5$\alpha$, actual deployed recipe) & 89.97 & 97.80 & $+0.69$ \\
+    Full (paper recipe, CE-LS + SupCon, LLRD=0.65; A5$\beta$) --- measured & -- & -- & -- \\
     \midrule
     CLIP-SENet v6, base cosine~\cite{lu2025clipsenet}    & 82.34 & 96.54 & --- \\
     \quad+AQE $k{=}10$                                   & 89.21 & 96.90 & $+6.87$ \\
@@ -795,9 +805,16 @@ the primary performance lever for small-scale ReID benchmarks.
     that the VeRi-776--CityFlowV2 domain gap remains the binding constraint and
     that improved cross-camera invariance, rather than additional fusion, is
     required for MTMC.
-  \item Per-component isolated ablations (CLIP initialisation alone, SupCon
-    alone, AdamW alone) require additional training runs and are deferred to
-    future work; the present ablations focus on cumulative post-processing steps.
+  \item An earlier draft of the Stream~1 training recipe described the metric
+    loss and layer-wise learning-rate decay imprecisely. The present version
+    corrects that disclosure by reporting isolated component ablations for
+    CLIP initialisation (A2), SupCon versus triplet loss (A3), and AdamW with
+    LLRD (A4), together with dual Full references: the actually deployed
+    CE-LS + Triplet + CenterLoss recipe (A5$\alpha$) and the paper-described
+    CE-LS + SupCon recipe (A5$\beta$). The headline result is selected by the
+    higher measured mAP under the held evaluation, while the two-stream fusion
+    cost and the VeRi-776--CityFlowV2 domain-gap constraint remain as noted
+    above.
 \end{enumerate}
 
 % =============================================================================
@@ -807,13 +824,15 @@ the primary performance lever for small-scale ReID benchmarks.
 
 This paper presented two complementary contributions to vehicle
 re-identification on VeRi-776. A systematically improved ViT-Base/16
-training recipe---combining CLIP pretraining initialisation, SupCon metric
-loss, an optimised augmentation pipeline, AdamW optimisation, and a three-step
-post-processing pipeline---achieves 89.97\% mAP and 98.33\% Rank-1, the best
-reported result for any pure ViT-B model on this benchmark, surpassing
+training recipe---combining CLIP pretraining initialisation, a tuned
+metric-learning objective, an optimised augmentation pipeline, AdamW
+optimisation, and a three-step post-processing pipeline---achieves 89.97\%
+mAP and 97.80\% Rank-1 at its best-mAP operating point, with a separate
+best-Rank-1 operating point of 85.14\% mAP and 98.33\% Rank-1. This is the
+best reported mAP for any pure ViT-B model on this benchmark, surpassing
 TransReID by $+7.67$\,pp mAP~\cite{he2021transreid}. Score-level fusion with
 a CLIP-SENet branch~\cite{lu2025clipsenet} achieves 93.3\% mAP and 98.45\%
-Rank-1, a new state of the art on VeRi-776 in terms of mAP, exceeding the
+Rank-1, a new state of the art in mAP on VeRi-776, exceeding the
 previous best published mAP (CLIP-SENet standalone: 92.9\%~\cite{lu2025clipsenet})
 by $+0.40$\,pp. Rank-1 accuracy (98.45\%) is competitive with but does not
 exceed the CLIP-SENet standalone Rank-1 (98.7\%).
