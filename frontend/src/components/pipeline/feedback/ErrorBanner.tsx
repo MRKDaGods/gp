@@ -18,19 +18,19 @@ const SEVERITY_STYLES = {
     icon: AlertCircle,
     badgeStatus: "error" as const,
     badgeLabel: "Error",
-    alertClassName: "",
+    alertClassName: "border-destructive/40 bg-destructive/10 text-destructive [&>svg]:text-destructive",
   },
   warning: {
     icon: AlertTriangle,
     badgeStatus: "stale" as const,
     badgeLabel: "Warning",
-    alertClassName: "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200 [&>svg]:text-amber-600",
+    alertClassName: "border-warning/40 bg-warning/10 text-warning [&>svg]:text-warning",
   },
   info: {
     icon: Info,
     badgeStatus: "idle" as const,
     badgeLabel: "Info",
-    alertClassName: "border-sky-500/30 bg-sky-500/10 text-sky-800 dark:text-sky-200 [&>svg]:text-sky-600",
+    alertClassName: "border-info/40 bg-info/10 text-info [&>svg]:text-info",
   },
 };
 
@@ -40,7 +40,7 @@ export function ErrorBanner({ title = "Something went wrong", message, severity 
   const Icon = style.icon;
 
   return (
-    <Alert variant={severity === "error" ? "destructive" : "default"} className={cn("items-start", style.alertClassName, className)}>
+    <Alert variant="default" className={cn("items-start", style.alertClassName, className)}>
       <Icon className="h-4 w-4" />
       <AlertTitle className="flex flex-wrap items-center gap-2">
         <StageStatusBadge status={style.badgeStatus} label={style.badgeLabel} />

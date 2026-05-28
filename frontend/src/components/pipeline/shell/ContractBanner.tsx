@@ -56,8 +56,8 @@ function ContractChipList({ label, chips }: { label: string; chips: ContractChip
             variant="outline"
             className={cn(
               "max-w-[220px] truncate",
-              chip.missing && "border-rose-500/30 bg-rose-500/10 text-rose-600",
-              chip.stale && "border-amber-500/30 bg-amber-500/10 text-amber-600"
+              chip.missing && "border-status-error/40 bg-status-error/10 text-status-error",
+              chip.stale && "border-status-stale/40 bg-status-stale/10 text-status-stale"
             )}
           >
             {chip.label}
@@ -80,7 +80,7 @@ export function ContractBanner({
   className,
 }: ContractBannerProps) {
   return (
-    <div className={cn("sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6", className)}>
+    <div className={cn("sticky top-0 z-20 border-b border-border/60 bg-card px-4 py-3 sm:px-6", className)}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -91,7 +91,7 @@ export function ContractBanner({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-7 border-zinc-500/30 bg-zinc-500/10 px-2 text-xs text-zinc-600"
+                className="h-7 border-status-blocked/40 bg-status-blocked/10 px-2 text-xs text-status-blocked hover:bg-status-blocked/15 hover:text-status-blocked"
                 onClick={() => onNavigateToStage?.(blockedBy.stage)}
               >
                 Blocked: needs {blockedBy.label}

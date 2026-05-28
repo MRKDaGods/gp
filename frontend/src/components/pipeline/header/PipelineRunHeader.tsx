@@ -102,7 +102,7 @@ export function PipelineRunHeader({
   };
 
   return (
-    <div className={cn("flex h-10 shrink-0 items-center gap-3 border-b bg-card px-4 text-sm sm:px-6", className)}>
+    <div className={cn("flex h-10 shrink-0 items-center gap-3 border-b border-border/60 bg-background/80 px-4 text-sm backdrop-blur sm:px-6", className)}>
       <Button
         type="button"
         variant="outline"
@@ -133,7 +133,7 @@ export function PipelineRunHeader({
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 gap-1 border-rose-500/30 bg-rose-500/10 px-2 text-xs text-rose-600 hover:bg-rose-500/15 hover:text-rose-700"
+              className="h-7 gap-1 border-status-error/40 bg-status-error/10 px-2 text-xs text-status-error hover:bg-status-error/15 hover:text-status-error"
             >
               <AlertTriangle className="h-3.5 w-3.5" />
               {errorStages.length} {errorStages.length === 1 ? "error" : "errors"}
@@ -146,7 +146,7 @@ export function PipelineRunHeader({
                 <button
                   key={`${stageError.stage}-${stageError.message}`}
                   type="button"
-                  className="w-full rounded-md border bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:border-rose-500/40 hover:bg-rose-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="w-full rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:border-status-error/40 hover:bg-status-error/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => onSelectErrorStage?.(stageError.stage)}
                 >
                   <div className="font-medium">Stage {stageError.stage} · {stageError.label}</div>

@@ -33,7 +33,7 @@ export function StageStatusDot({ status = "idle", size = "md", withCloudOverlay 
         <Icon className={cn(iconSize, status === "running" && "motion-safe:animate-spin", status === "stale" && "-rotate-45")} />
       </span>
       {withCloudOverlay ? (
-        <Cloud className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-card text-sky-500 ring-1 ring-card" />
+        <Cloud className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-card text-accent-strong ring-1 ring-card" />
       ) : null}
     </span>
   );
