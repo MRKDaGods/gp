@@ -47,26 +47,14 @@ CSV_COLUMNS = [
     "rerank",
     "tta",
     "fusion",
+    "mAP_single_flip",
+    "mAP_aqe_k3",
+    "mAP_aqe_rerank",
     "mAP",
     "rank1",
     "notes",
 ]
-REQUIRED_EVAL_KEYS = {
-    "exp_id",
-    "seed",
-    "stream1_clip_init",
-    "stream1_supcon",
-    "stream1_adamw",
-    "stream2_fixed",
-    "aqe",
-    "rerank",
-    "tta",
-    "fusion",
-    "mAP",
-    "rank1",
-    "notes",
-    "recipe_signature",
-}
+RERANK_KEY = "aqe_k3_rerank_k1_80_k2_15_lambda_0_2"
 DATASET_SPLIT = "VeRi-776 standard split (37781/576 train, 1678 query, 11579 gallery / 200 test IDs)"
 SEED_VARIANCE_RECIPE = "A5alpha (CE-LS + Triplet + CenterLoss, LLRD=0.75)"
 NO_RESULTS_MESSAGE = "No eval_results.json files found yet — Wave 3 not ready to aggregate. Re-run after kernel outputs are downloaded."
@@ -114,32 +102,50 @@ def require_number(value: Any, key: str) -> float:
     return float(value)
 
 
-def validate_eval_payload(payload: Any) -> dict[str, Any]:
+def nested_metric(stream1: dict[str, Any], operating_point: str, metric: str) -> float:
+    payload = stream1.get(operating_point)
+    if not isinstance(payload, dict):
+        raise ValueError(f"stream1_standalone.{operating_point} must be an object")
+    return require_number(payload.get(metric), f"stream1_standalone.{operating_point}.{metric}") * 100.0
+
+
+def recipe_signature(recipe: dict[str, Any] | None) -> str:
+    if not recipe:
+        return "unknown"
+    fields = ["init", "optimizer", "loss", "llrd", "aug", "epochs"]
+    return ", ".join(f"{field}={recipe.get(field)}" for field in fields)
+
+
+def validate_eval_payload(payload: Any, exp_id: str, recipe: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("eval_results.json root must be an object")
-    missing = sorted(REQUIRED_EVAL_KEYS - set(payload))
-    if missing:
-        raise ValueError(f"missing required keys: {', '.join(missing)}")
 
-    validated = dict(payload)
-    for key in (
-        "stream1_clip_init",
-        "stream1_supcon",
-        "stream1_adamw",
-        "stream2_fixed",
-        "aqe",
-        "rerank",
-        "tta",
-        "fusion",
-    ):
-        if not isinstance(validated[key], bool):
-            raise ValueError(f"{key} must be boolean")
-    validated["mAP"] = require_number(validated["mAP"], "mAP")
-    validated["rank1"] = require_number(validated["rank1"], "rank1")
-    if not isinstance(validated["notes"], str):
-        raise ValueError("notes must be a string")
-    if not isinstance(validated["recipe_signature"], str):
-        raise ValueError("recipe_signature must be a string")
+    stream1 = payload.get("stream1_standalone")
+    if not isinstance(stream1, dict):
+        raise ValueError("stream1_standalone must be an object")
+
+    recipe_payload = recipe or {}
+    loss = str(recipe_payload.get("loss", "")).lower()
+    optimizer = str(recipe_payload.get("optimizer", "")).lower()
+    validated = {
+        "exp_id": str(payload.get("exp_id") or exp_id),
+        "seed": payload.get("seed", recipe_payload.get("seed", "")),
+        "stream1_clip_init": recipe_payload.get("init") == "clip",
+        "stream1_supcon": loss in {"supcon", "supcon_ce"},
+        "stream1_adamw": optimizer == "adamw",
+        "stream2_fixed": True,
+        "aqe": True,
+        "rerank": True,
+        "tta": False,
+        "fusion": False,
+        "mAP_single_flip": nested_metric(stream1, "single_flip", "mAP"),
+        "mAP_aqe_k3": nested_metric(stream1, "aqe_k3", "mAP"),
+        "mAP_aqe_rerank": nested_metric(stream1, RERANK_KEY, "mAP"),
+        "mAP": nested_metric(stream1, RERANK_KEY, "mAP"),
+        "rank1": nested_metric(stream1, RERANK_KEY, "R1"),
+        "notes": str(recipe_payload.get("purpose") or payload.get("notes") or ""),
+        "recipe_signature": recipe_signature(recipe),
+    }
     return validated
 
 
@@ -218,7 +224,7 @@ def collect_records(exp_dir: Path) -> list[ExperimentRecord]:
             )
             continue
         try:
-            data = validate_eval_payload(load_json(eval_path))
+            data = validate_eval_payload(load_json(eval_path), exp_id, recipe)
             records.append(
                 ExperimentRecord(
                     exp_id=exp_id,
@@ -274,6 +280,9 @@ def csv_row(record: ExperimentRecord) -> dict[str, str]:
         "rerank": bool_cell(data.get("rerank")),
         "tta": bool_cell(data.get("tta")),
         "fusion": bool_cell(data.get("fusion")),
+        "mAP_single_flip": metric_cell(data.get("mAP_single_flip")),
+        "mAP_aqe_k3": metric_cell(data.get("mAP_aqe_k3")),
+        "mAP_aqe_rerank": metric_cell(data.get("mAP_aqe_rerank")),
         "mAP": metric_cell(data.get("mAP")),
         "rank1": metric_cell(data.get("rank1")),
         "notes": str(data.get("notes", "")),
