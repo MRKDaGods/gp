@@ -1,0 +1,19 @@
+{
+  "id": "gumfreddy/paper-features-a5alpha",
+  "title": "paper-features-a5alpha",
+  "code_file": "paper_features_a5alpha.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "gumfreddy/paper-a5weights",
+    "gumfreddy/paper-clipv7",
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
