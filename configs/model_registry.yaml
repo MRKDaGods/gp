@@ -61,8 +61,10 @@ models:
         hosted:
           - kaggle_dataset: yahiaakhalafallah/09s-dinov2-large-cityflowv2
             member: vehicle_transreid_dinov2_large_cityflowv2_final.pth
+          - kaggle_dataset: mrkdagods/dinov2-large-cityflowv2-mrk
+            member: vehicle_transreid_dinov2_large_cityflowv2_final.pth
         source_training_kernel: yahiaakhalafallah/09s-dinov2-large-cityflowv2
-        size_bytes: null
+        size_bytes: 1217428513
         on_disk: false
     architecture:
       arch: transreid
@@ -199,8 +201,10 @@ models:
         hosted:
           - kaggle_dataset: yahiaakhalafallah/09s-dinov2-large-cityflowv2
             member: vehicle_transreid_dinov2_large_cityflowv2_final.pth
+          - kaggle_dataset: mrkdagods/dinov2-large-cityflowv2-mrk
+            member: vehicle_transreid_dinov2_large_cityflowv2_final.pth
         source_training_kernel: yahiaakhalafallah/09s-dinov2-large-cityflowv2
-        size_bytes: null
+        size_bytes: 1217428513
         on_disk: false
       - role: quaternary_reid
         local_path: models/reid/fastreid_r50_ibn_cityflowv2_final.pth
