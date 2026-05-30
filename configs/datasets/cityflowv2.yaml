@@ -90,6 +90,19 @@ stage1:
     max_time_gap: 25.0   # v4: raised 10→25 s — vehicles at intersections can stop for a full light cycle
                          # before the fragment from the same vehicle re-enters the detection zone.
     max_iou_distance: 0.7
+  ssa:
+    enabled: false
+    window: 10
+    disp_thresh: 8.0
+    freeze_lookback: 15
+    inherit_conf: false
+  bidirectional:
+    enabled: false
+    min_shared_frames: 3
+    iou_thresh: 0.5
+    cos_thresh: 0.5
+    keep_unmatched_backward: true
+    pool: mean
 
 stage2:
   reid:
@@ -201,6 +214,11 @@ stage4:
     multi_query:
       enabled: false  # 14e B1 baseline
       weight: 0.0  # 14e B1 baseline
+    occlusion_aware:
+      enabled: false
+      occ_box_thresh: 0.6
+      occ_frac_thresh: 0.3
+      penalty: 0.909
     reranking:
       enabled: false
       k1: 20

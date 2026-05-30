@@ -63,6 +63,20 @@ stage1:
     enabled: true
     max_time_gap: 25.0       # raised: vehicles at intersections stop for full light cycles
     max_iou_distance: 0.7    # max 1-IoU distance for merging
+  # --- SSA: Stationary Sensitive Association (CityTrack) ---
+  ssa:
+    enabled: false
+    window: 10
+    disp_thresh: 8.0
+    freeze_lookback: 15
+    inherit_conf: false
+  bidirectional:
+    enabled: false
+    min_shared_frames: 3
+    iou_thresh: 0.5
+    cos_thresh: 0.5
+    keep_unmatched_backward: true
+    pool: mean
 
 stage2:
   reid:
@@ -189,6 +203,12 @@ stage4:
       enabled: false
       weight: 0.5
       dir: ""       # empty = auto-detect sibling stage2 output
+    # --- Occlusion-Aware Distance (CityTrack) ---
+    occlusion_aware:
+      enabled: false
+      occ_box_thresh: 0.6
+      occ_frac_thresh: 0.3
+      penalty: 0.909
     # --- FIC: per-camera feature whitening (AIC21 1st-place technique) ---
     fic:
       enabled: true

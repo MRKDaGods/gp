@@ -726,8 +726,52 @@ def run_stage2(
                 axis=0,
             ).astype(np.float32)
 
+    hsv_matrix: Optional[np.ndarray] = None
+    bt_cfg = OmegaConf.select(cfg, "stage1.bidirectional", default={}) or {}
+    if bt_cfg.get("enabled", False):
+        from src.stage1_tracking.bidirectional_merge import merge_bidirectional
+
+        hsv_matrix = np.stack([f.hsv_histogram for f in all_features], axis=0)
+        if sec_matrix is not None:
+            if sec_matrix.shape[0] == len(all_features):
+                sec_matrix = l2_normalize(sec_matrix)
+            else:
+                logger.warning(
+                    f"BT merge disabled secondary collapse: row mismatch "
+                    f"{sec_matrix.shape[0]} vs {len(all_features)}"
+                )
+                sec_matrix = None
+        if tert_matrix is not None:
+            if tert_matrix.shape[0] == len(all_features):
+                tert_matrix = l2_normalize(tert_matrix)
+            else:
+                logger.warning(
+                    f"BT merge disabled tertiary collapse: row mismatch "
+                    f"{tert_matrix.shape[0]} vs {len(all_features)}"
+                )
+                tert_matrix = None
+
+        aligned = {
+            "primary": embeddings,
+            "hsv": hsv_matrix,
+            "secondary": sec_matrix,
+            "tertiary": tert_matrix,
+        }
+        all_features, tracklets_by_camera, aligned, index_map = merge_bidirectional(
+            all_features,
+            tracklets_by_camera,
+            aligned,
+            index_map,
+            bt_cfg,
+        )
+        embeddings = aligned["primary"]
+        hsv_matrix = aligned["hsv"]
+        sec_matrix = aligned["secondary"]
+        tert_matrix = aligned["tertiary"]
+
     # Save outputs
-    hsv_matrix = np.stack([f.hsv_histogram for f in all_features], axis=0)
+    if hsv_matrix is None:
+        hsv_matrix = np.stack([f.hsv_histogram for f in all_features], axis=0)
     save_embeddings(embeddings, index_map, output_dir)
     save_hsv_features(hsv_matrix, output_dir)
     if multi_query_k > 0:

@@ -17,6 +17,7 @@ from omegaconf import DictConfig
 from src.core.data_models import FrameInfo, Tracklet
 from src.core.io_utils import save_tracklets_by_camera
 from src.stage1_tracking.detector import Detector
+from src.stage1_tracking.ssa import apply_ssa
 from src.stage1_tracking.tracker import TrackerWrapper
 from src.stage1_tracking.tracklet_builder import TrackletBuilder
 
@@ -172,6 +173,28 @@ def run_stage1(
 
         # Finalize tracklets
         tracklets = builder.finalize()
+        bt_cfg = stage_cfg.get("bidirectional", {})
+        if bt_cfg.get("enabled", False):
+            from src.stage1_tracking.bidirectional import run_backward_pass
+
+            backward_tracklets = run_backward_pass(
+                cam_frames,
+                detector,
+                stage_cfg,
+                camera_id,
+                min_tracklet_length=min_tracklet_length,
+                min_tracklet_area=min_tracklet_area,
+                interpolate=interpolate,
+                interpolation_max_gap=interpolation_max_gap,
+                intra_merge=intra_merge,
+                merge_max_time_gap=merge_max_time_gap,
+                merge_max_iou_distance=merge_max_iou_distance,
+                roi_mask=roi_mask,
+            )
+            tracklets = tracklets + backward_tracklets
+        ssa_cfg = stage_cfg.get("ssa", {})
+        if ssa_cfg.get("enabled", False):
+            tracklets = apply_ssa(tracklets, ssa_cfg)
         all_tracklets[camera_id] = tracklets
         logger.info(f"  Camera {camera_id}: {len(tracklets)} tracklets")
 

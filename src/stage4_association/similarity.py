@@ -105,6 +105,8 @@ def compute_combined_similarity(
     weights: dict,
     num_frames: Optional[List[int]] = None,
     temporal_overlap_cfg: Optional[dict] = None,
+    occluded_flags: Optional[List[bool]] = None,
+    occ_penalty: float = 1.0,
 ) -> Dict[Tuple[int, int], float]:
     """Compute weighted combined similarity with class-adaptive weights.
 
@@ -130,6 +132,9 @@ def compute_combined_similarity(
         weights: Dict with keys 'appearance', 'hsv', 'spatiotemporal',
                  and optionally 'person' / 'vehicle' sub-dicts.
         num_frames: Optional frame count per tracklet for length weighting.
+        temporal_overlap_cfg: Optional config for overlapping-FOV bonus/filtering.
+        occluded_flags: Optional per-tracklet occlusion flags aligned to features.
+        occ_penalty: Similarity multiplier for pairs involving occluded tracklets.
 
     Returns:
         Dict[(i, j)] -> combined similarity score.
@@ -248,6 +253,9 @@ def compute_combined_similarity(
             confidence = min_len / (min_len + 10.0)  # saturates: 5f→0.33, 10f→0.5, 20f→0.67, 50f→0.83
             length_w = math.pow(confidence, length_power)
             score *= 0.5 + 0.5 * length_w  # penalty range [0.5, 1.0]
+
+        if occluded_flags is not None and (occluded_flags[i] or occluded_flags[j]):
+            score *= occ_penalty
 
         combined[(i, j)] = score
 

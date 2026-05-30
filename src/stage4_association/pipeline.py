@@ -154,6 +154,17 @@ def run_stage4(
     camera_ids = [f.camera_id for f in features]
     class_ids = [f.class_id for f in features]
 
+    occ_cfg = stage_cfg.get("occlusion_aware", {})
+    occluded_flags: Optional[List[bool]] = None
+    if occ_cfg.get("enabled", False):
+        from src.stage4_association.occlusion import compute_tracklet_occlusion
+
+        occ_map = compute_tracklet_occlusion(tracklets_by_camera, occ_cfg)
+        occluded_flags = [occ_map.get((f.camera_id, f.track_id), False) for f in features]
+        logger.info(
+            f"Occlusion-aware association: {sum(occluded_flags)}/{n} tracklets flagged"
+        )
+
     # FIC config (used by both primary and secondary embeddings)
     fic_cfg = stage_cfg.get("fic", {})
 
@@ -521,6 +532,8 @@ def run_stage4(
         class_ids=class_ids,
         num_frames=num_frames,
         temporal_overlap_cfg=stage_cfg.get("temporal_overlap"),
+        occluded_flags=occluded_flags,
+        occ_penalty=float(occ_cfg.get("penalty", 1.0)),
     )
 
     logger.info(f"Combined similarity pairs: {len(combined_sim)}")
