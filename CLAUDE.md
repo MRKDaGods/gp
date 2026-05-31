@@ -20,7 +20,7 @@ The project is **converged and in the paper-writing phase** (as of 2026-05-31). 
 - Local Python MUST use `.venv` (Python 3.11.9), NOT system Python 3.13. Activate: `.\.venv\Scripts\activate`. `start.py` auto-selects `.venv\Scripts\python.exe` if present.
 
 ### 3. Notebook (`.ipynb`) editing
-- **NEVER** edit `.ipynb` via raw text find/replace — it may not round-trip to disk. Edit via `json.load() → modify → json.dump()` in a Python script (see the many `_build_*.py` / `_patch_*.py` helpers in the repo root) or the NotebookEdit tool.
+- **NEVER** edit `.ipynb` via raw text find/replace — it may not round-trip to disk. Edit via `json.load() → modify → json.dump()` in a one-off Python script or the NotebookEdit tool.
 - After any edit, verify on-disk with `python -c "import json; json.load(open(...))"`.
 - Each line in a `source` array MUST end with `\n` EXCEPT the last line.
 - On Windows use `ensure_ascii=True` in `json.dump` to avoid charmap codec errors.
