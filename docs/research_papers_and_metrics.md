@@ -469,14 +469,13 @@ Key fixes that got us here: norm_pre for CLIP ViTs, BNNeck routing fix (pre-BN f
 
 ### 6.3 MTMC Pipeline — WILDTRACK
 
+> ⚠️ **STALE — superseded.** The numbers below predate the MVDeTr ground-plane fast-path. Current WILDTRACK ground-plane **IDF1 ≈ 0.947** (12b), not 16.8%. See [performance-state.md](performance-state.md) and [pipeline-person.md](pipeline-person.md) for authoritative person-tracking metrics.
+
 | Config | IDF1 (%) | MOTA (%) | Trajectories | Status |
 |--------|----------|----------|-------------|--------|
-| **Ours (tuned)** | **16.8** | **1.8** | **824** | **Best** |
-| Ours (PCA + rerank) | 15.6 | 1.7 | 950 | Improved |
-| Ours (baseline) | 13.4 | 1.8 | 208 | Baseline |
-| Single-camera ceiling | ~33 | — | — | Ceiling |
-
-**+25% IDF1 improvement** (13.4 -> 16.8) via PCA whitening fix, k-reciprocal re-ranking, and weight rebalancing (0.9/0.05/0.05). Ceiling limited by single-camera tracking quality (~33% per-camera IDF1 avg, 2.29 ID switches per GT person).
+| Ours (early pre-MVDeTr) | 16.8 | 1.8 | 824 | Historical |
+| Ours (PCA + rerank) | 15.6 | 1.7 | 950 | Historical |
+| Ours (baseline) | 13.4 | 1.8 | 208 | Historical |
 
 ### 6.4 MTMC Pipeline — EPFL Lab 6-Person
 

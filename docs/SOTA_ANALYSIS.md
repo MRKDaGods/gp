@@ -1,5 +1,7 @@
 # SOTA Analysis & Implementation Plan
 
+> ⚠️ **HISTORICAL — superseded.** This is an early-project SOTA/ROI planning document. Its premises are now wrong: the deployed primary ReID is **TransReID ViT-B/16 CLIP** (not ResNet50-IBN-a), GPU work runs on **Kaggle** (not the local GTX 1050 Ti), and the current vehicle MTMC baseline is **0.77936 IDF1** vs AIC22 SOTA **0.8486** (gap 6.93pp). For current truth see [performance-state.md](performance-state.md), [findings.md](findings.md), and `CLAUDE.md`. Kept only for prior ROI context.
+
 ## Target Datasets & SOTA Benchmarks
 
 ### 1. Market-1501 (Person ReID)

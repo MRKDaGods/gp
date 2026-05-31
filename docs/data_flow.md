@@ -2,7 +2,7 @@
 
 ## Overview
 
-The MTMC Tracker is a multi-camera multi-target tracking system with a **Python/FastAPI backend** (port 8004) and **Next.js frontend** (port 3001). The backend runs a 7-stage offline pipeline and serves results via REST APIs. The frontend provides a dashboard UI for video upload, pipeline execution, timeline querying, and result visualization.
+The MTMC Tracker is a multi-camera multi-target tracking system with a **Python/FastAPI backend** (port 8000) and **Next.js frontend** (port 3001). The backend runs a 7-stage offline pipeline and serves results via REST APIs. The frontend provides a dashboard UI for video upload, pipeline execution, timeline querying, and result visualization.
 
 ---
 
@@ -12,8 +12,8 @@ The MTMC Tracker is a multi-camera multi-target tracking system with a **Python/
 
 ```
 start.py
-├── Kill any existing processes on ports 8004 (backend) and 3001 (frontend)
-├── Start backend: python -m uvicorn backend_api:app --host 0.0.0.0 --port 8004
+├── Kill any existing processes on ports 8000 (backend) and 3001 (frontend)
+├── Start backend: python -m uvicorn backend_api:app --host 0.0.0.0 --port 8000
 │   └── Wait for GET /api/health → 200 (60s timeout)
 ├── Start frontend: npm run dev --port 3001 (in frontend/ directory)
 │   └── Wait for HTTP 200 on localhost:3001 (90s timeout)

@@ -6,7 +6,7 @@ Multi-camera multi-target (MTMC) tracking pipeline for vehicles and humans acros
 
 **Primary dataset:** CityFlowV2 (AI City Challenge 2022 Track 1) — 46 physical cameras, 880 globally-consistent vehicle IDs, real urban intersections.
 
-**Key achievement:** TransReID ViT-Base/16 (CLIP) trained on Kaggle achieves **mAP=78.32%, R1=92.63%** on CityFlowV2, then fine-tuned end-to-end tracking system reaches **IDF1 ≈ 70-84%** across all cameras.
+**Key achievement:** TransReID ViT-Base/16 (CLIP) trained on Kaggle achieves **mAP=81.53%, R1=92.41%** on CityFlowV2 (deployed checkpoint), and the end-to-end MTMC system reaches **0.77936 cross-camera IDF1** (14e B1). See [performance-state.md](performance-state.md) for the authoritative current metrics and headline config.
 
 ## Architecture Diagram (Mermaid)
 

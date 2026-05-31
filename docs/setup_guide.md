@@ -109,7 +109,7 @@ make run-pipeline  # Full pipeline run
 ```
 
 ## Kaggle Setup
-See `docs/kaggle_training_guide.md` for how to run training notebooks on Kaggle.
+See [`docs/kaggle-workflow.md`](kaggle-workflow.md) for the current Kaggle workflow (kernel push, log polling, account rotation, GPU-session safety).
 
 ## Troubleshooting
 

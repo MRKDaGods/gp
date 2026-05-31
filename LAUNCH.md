@@ -33,7 +33,7 @@ python scripts/verify_assets.py
 python -m uvicorn backend_api:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-**Terminal 2 — Frontend (Next.js on port 3000):**
+**Terminal 2 — Frontend (Next.js on port 3001):**
 ```powershell
 cd frontend
 npm run dev
@@ -41,11 +41,11 @@ npm run dev
 
 ## Use the app
 
-Open browser → http://127.0.0.1:3000
+Open browser → http://127.0.0.1:3001
 
 | Page | What you can do |
 |---|---|
-| `/` (hub) | Landing page with links + dataset switcher in header |
+| `/` (hub) | Landing page with project links (dataset is chosen in the upload stage) |
 | `/reid` | Upload query + gallery images, pick any ReID model, see ranked matches with similarity scores. Supports rerank+AQE. |
 | `/fusion` | Pick 2+ ReID models, set weights (sum-to-1), upload images, see fused ranking compared to each model alone |
 | `/eval` | Submit a standalone eval, watch status, view results JSON |
@@ -84,7 +84,7 @@ python scripts/test_phase2_e2e.py
 - `503 checkpoint_missing` → `python scripts/download_assets.py --all`
 - `503 dataset_missing` for evals → check `data/raw/veri776/` exists
 - CityFlowV2 dataset → manual download from [AIC22 official](https://www.aicitychallenge.org/), see SETUP.md
-- Port 8000 / 3000 already in use → change `--port` in commands above
+- Port 8000 / 3001 already in use → change `--port` in commands above
 
 ## More documentation
 
