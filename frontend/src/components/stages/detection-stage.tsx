@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type Ref,
   type SyntheticEvent,
 } from "react";
@@ -17,6 +18,12 @@ import {
   Bus,
   AlertCircle,
   X,
+  Square,
+  Clock,
+  Cpu,
+  Server,
+  Cloud,
+  ScanLine,
 } from "lucide-react";
 import { cn, bboxToStyle } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -24,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { DisclosurePanel, ErrorBanner, ExecutionTargetToggle, PlaybackControls, RunStageWidget, toStageStatus } from "@/components/pipeline";
+import type { StageStatus } from "@/components/pipeline/status/types";
 import {
   useVideoStore,
   useDetectionStore,
@@ -248,6 +256,166 @@ const DetectionStreamVideo = memo(function DetectionStreamVideo({
   );
 });
 
+function formatElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m > 0 ? `${m}m ${r.toString().padStart(2, "0")}s` : `${r}s`;
+}
+
+function ProgressStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5">
+      <span className="text-muted-foreground">{icon}</span>
+      <span className="flex min-w-0 flex-col leading-tight">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+        <span className="truncate text-xs font-medium">{value}</span>
+      </span>
+    </div>
+  );
+}
+
+/** Verbose Stage 1 progress panel — shows live telemetry and a Cancel control. */
+function DetectionProgressPanel({
+  status,
+  progress,
+  message,
+  target,
+  elapsedMs,
+  videoName,
+  stageLabel,
+  completedStages,
+  totalStages,
+  camera,
+  camerasProcessed,
+  frame,
+  frameTotal,
+  onCancel,
+  className,
+}: {
+  status: StageStatus;
+  progress: number;
+  message?: string;
+  target: "local" | "kaggle";
+  elapsedMs: number;
+  videoName?: string;
+  stageLabel?: string;
+  completedStages?: number;
+  totalStages?: number;
+  camera?: string;
+  camerasProcessed?: number;
+  frame?: number;
+  frameTotal?: number;
+  onCancel: () => void;
+  className?: string;
+}) {
+  const running = status === "running";
+  const pct = Math.max(0, Math.min(100, Math.round(progress)));
+  const stageValue =
+    completedStages && totalStages
+      ? `${stageLabel ?? "Stage"} · ${Math.min(completedStages, totalStages)}/${totalStages}`
+      : stageLabel ?? "—";
+  return (
+    <div
+      className={cn(
+        "rounded-lg border bg-card shadow-sm",
+        running ? "border-primary/40" : "border-border",
+        className
+      )}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          {running ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+          ) : (
+            <ScanLine className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="truncate text-sm font-semibold">
+            {running ? "Detecting & tracking…" : "Stage 1 — Detection & Tracking"}
+          </span>
+        </div>
+        {running ? (
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            className="h-7 shrink-0 gap-1.5 px-2.5"
+            onClick={onCancel}
+            aria-label="Cancel detection"
+          >
+            <Square className="h-3 w-3 fill-current" />
+            Cancel
+          </Button>
+        ) : null}
+      </div>
+      <div className="space-y-3 px-4 py-3">
+        <div>
+          <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+            <span className="truncate text-muted-foreground">{message ?? "Working…"}</span>
+            <span className="shrink-0 font-mono text-muted-foreground">{pct}%</span>
+          </div>
+          {/* Backend reports coarse per-stage milestones, not per-frame progress.
+              While running we show the milestone fill PLUS a sliding indeterminate
+              sweep so a long step reads as "actively working", not "frozen". */}
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary/70 transition-[width] duration-500"
+              style={{ width: `${pct}%` }}
+            />
+            {running ? (
+              <div className="absolute inset-y-0 left-0 w-1/3 animate-indeterminate rounded-full bg-primary" />
+            ) : null}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <ProgressStat
+            icon={<Cpu className="h-3.5 w-3.5" />}
+            label="Model"
+            value="YOLOv26 + Deep OC-SORT"
+          />
+          <ProgressStat
+            icon={target === "kaggle" ? <Cloud className="h-3.5 w-3.5" /> : <Server className="h-3.5 w-3.5" />}
+            label="Compute"
+            value={target === "kaggle" ? "Kaggle GPU" : "Local"}
+          />
+          <ProgressStat
+            icon={<Clock className="h-3.5 w-3.5" />}
+            label="Elapsed"
+            value={formatElapsed(elapsedMs)}
+          />
+          <ProgressStat
+            icon={<ScanLine className="h-3.5 w-3.5" />}
+            label="Pipeline step"
+            value={stageValue}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+          <span className="truncate">Source: {videoName ?? "—"}</span>
+          {camera ? (
+            <span className="font-mono">
+              Camera {camera}
+              {camerasProcessed ? ` · ${camerasProcessed} processed` : ""}
+            </span>
+          ) : null}
+          {frame && frameTotal ? (
+            <span className="font-mono">
+              Frame {frame.toLocaleString()}/{frameTotal.toLocaleString()}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DetectionStage() {
   const { currentVideo, currentFrame, setCurrentFrame, isPlaying, setIsPlaying } =
     useVideoStore();
@@ -271,6 +439,16 @@ export function DetectionStage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   /** JPEG frame-by-frame path when /videos/stream fails or unsupported. */
   const [useFrameFallback, setUseFrameFallback] = useState(false);
+  /** Live run telemetry parsed from the backend status (stage milestones + camera). */
+  const [runTelemetry, setRunTelemetry] = useState<{
+    stageLabel?: string;
+    completedStages?: number;
+    totalStages?: number;
+    camera?: string;
+    camerasProcessed?: number;
+    frame?: number;
+    frameTotal?: number;
+  }>({});
 
   const playbackFps = useMemo(() => effectivePlaybackFps(currentVideo), [currentVideo]);
 
@@ -401,6 +579,16 @@ export function DetectionStage() {
           const progress = Number(statusData?.progress ?? 0);
           const message = String(statusData?.message ?? "Running Stage 1...");
 
+          setRunTelemetry({
+            stageLabel: statusData?.currentStageName ? String(statusData.currentStageName) : undefined,
+            completedStages: statusData?.completedStages != null ? Number(statusData.completedStages) : undefined,
+            totalStages: statusData?.totalStages != null ? Number(statusData.totalStages) : undefined,
+            camera: statusData?.currentCamera ? String(statusData.currentCamera) : undefined,
+            camerasProcessed: statusData?.camerasProcessed != null ? Number(statusData.camerasProcessed) : undefined,
+            frame: statusData?.currentFrame != null ? Number(statusData.currentFrame) : undefined,
+            frameTotal: statusData?.totalFrames != null ? Number(statusData.totalFrames) : undefined,
+          });
+
           if (status === "completed") {
             if (interval) clearInterval(interval);
             await fetchAllDetections();
@@ -410,6 +598,7 @@ export function DetectionStage() {
               progress: 100,
               message,
             });
+            setRunTelemetry({});
             setIsRunning(false);
             setIsLoading(false);
             return;
@@ -432,6 +621,7 @@ export function DetectionStage() {
               progress: 100,
               message: errMsg,
             });
+            setRunTelemetry({});
             setIsRunning(false);
             setIsLoading(false);
             return;
@@ -623,31 +813,64 @@ export function DetectionStage() {
   const hasVideo = Boolean(currentVideo);
   const stage1Progress = stages.find((stage) => stage.stage === 1);
   const stage1Status = toStageStatus(stage1Progress);
+  const executionTarget = useStageExecutionStore((s) => s.getStageExecutionTarget)(1);
+
+  // Live elapsed timer while Stage 1 is running.
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const runStartRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (stage1Status === "running") {
+      if (runStartRef.current == null) runStartRef.current = Date.now();
+      const id = setInterval(
+        () => setElapsedMs(Date.now() - (runStartRef.current ?? Date.now())),
+        1000
+      );
+      return () => clearInterval(id);
+    }
+    runStartRef.current = null;
+    setElapsedMs(0);
+  }, [stage1Status]);
+
+  const handleCancelRun = useCallback(async () => {
+    if (!runId) return;
+    try {
+      await cancelPipeline(runId);
+    } finally {
+      setIsRunning(false);
+      updateStageProgress(1, { status: "idle", progress: 0, message: "Stage 1 cancelled" });
+    }
+  }, [runId, setIsRunning, updateStageProgress]);
 
   const countByClassId = (classId: number) =>
     detections.filter((d) => d.classId === classId).length;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <ErrorBanner title="Detection failed" message={videoError} className="mx-4 mt-4 shrink-0 sm:mx-6" />
-      {stage1Status === "running" ? (
-        <RunStageWidget
-          stage={1}
-          title="Stage 1 Detection"
-          runId={runId}
-          status={stage1Status}
-          progress={stage1Progress?.progress ?? 0}
-          message={stage1Progress?.message}
-          isRunning
-          className="mx-4 mt-4 shrink-0 sm:mx-6"
-        />
-      ) : null}
-
       {/* Main content */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Video area */}
         <div className="flex min-h-[200px] min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:min-h-0">
-          {/* Video container - CityFlow camera view */}
+          <ErrorBanner title="Detection failed" message={videoError} className="mb-3 shrink-0 sm:mb-4" />
+          {stage1Status === "running" ? (
+            <DetectionProgressPanel
+              status={stage1Status}
+              progress={stage1Progress?.progress ?? 0}
+              message={stage1Progress?.message}
+              target={executionTarget === "kaggle" ? "kaggle" : "local"}
+              elapsedMs={elapsedMs}
+              videoName={currentVideo?.name}
+              stageLabel={runTelemetry.stageLabel}
+              completedStages={runTelemetry.completedStages}
+              totalStages={runTelemetry.totalStages}
+              camera={runTelemetry.camera}
+              camerasProcessed={runTelemetry.camerasProcessed}
+              frame={runTelemetry.frame}
+              frameTotal={runTelemetry.frameTotal}
+              onCancel={() => void handleCancelRun()}
+              className="mb-3 shrink-0 sm:mb-4"
+            />
+          ) : null}
+          {/* Video container - camera view */}
           <div
             ref={containerRef}
             className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-black"
@@ -658,7 +881,7 @@ export function DetectionStage() {
                   <AlertCircle className="h-12 w-12 mx-auto mb-3 text-warning" />
                   <p className="font-medium">No video selected</p>
                   <p className="text-sm text-white/60 mt-2">
-                    Go back to Upload and pick a CityFlowV2 video. The stage will run YOLOv26 detection with Deep OC-SORT tracking.
+                    Go to the input stage and load a dataset. This stage runs YOLOv26 detection with Deep OC-SORT tracking.
                   </p>
                   <Button className="mt-4" variant="secondary" onClick={() => setCurrentStage(0)}>
                     Go To Upload
@@ -667,11 +890,19 @@ export function DetectionStage() {
               </div>
             ) : isLoading ? (
               <div className="absolute inset-0 flex items-center justify-center bg-background">
-                <div className="flex flex-col items-center gap-4">
+                <div className="flex max-w-sm flex-col items-center gap-4 px-6 text-center">
                   <Loader2 className="h-14 w-14 text-primary animate-spin" />
-                  <div className="text-center">
-                    <p className="text-white font-medium">Processing Video</p>
-                    <p className="text-white/60 text-sm">Running YOLOv26 + Deep OC-SORT...</p>
+                  <div>
+                    {stage1Status === "running" ? (
+                      <>
+                        <p className="font-medium text-white">Detection in progress</p>
+                        <p className="mt-1 text-sm text-white/60">
+                          The annotated preview appears here once tracking finishes. Live status is shown above.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="font-medium text-white">Loading detections…</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -980,12 +1211,18 @@ export function DetectionStageActions() {
   const { currentVideo } = useVideoStore();
   const { selectedTrackIds } = useDetectionStore();
   const { setCurrentStage } = useSessionStore();
-  const { runId, stages, isRunning, setIsRunning, updateStageProgress } = usePipelineStore();
+  const { runId, stages, setIsRunning, updateStageProgress } = usePipelineStore();
   const getStageExecutionTarget = useStageExecutionStore((state) => state.getStageExecutionTarget);
   const startStage1 = useStartStage1();
   const stageProgress = stages.find((stage) => stage.stage === 1);
   const status = toStageStatus(stageProgress);
   const executionTarget = getStageExecutionTarget(1);
+
+  // Drive controls off the stage STATUS, not the `isRunning` store flag: runs
+  // launched from Stage 0 (runDatasetInput) never set that flag, which is why
+  // the "Run Stage 1" button stayed clickable during an active run.
+  const running = status === "running";
+  const done = status === "done";
 
   const handleRun = async () => {
     await startStage1();
@@ -1003,25 +1240,40 @@ export function DetectionStageActions() {
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <ExecutionTargetToggle stage={1} variant="compact" />
-      {isRunning && status === "running" ? (
-        <Button type="button" variant="outline" onClick={() => void handleCancel()} aria-label="Cancel Stage 1 run">
-          Cancel
-        </Button>
-      ) : null}
-      <RunStageWidget
-        target={executionTarget}
-        runId={runId}
-        status={status}
-        progress={stageProgress?.progress ?? 0}
-        message={stageProgress?.message}
-        isRunning={isRunning && status === "running"}
-        disabled={!currentVideo}
-        runLabel="Run Stage 1"
-        mode="button-only"
-        onRun={() => void handleRun()}
-      />
-      <Button type="button" onClick={() => setCurrentStage(2)} disabled={selectedTrackIds.size === 0} aria-label="Continue to Stage 2 selection">
+      {running ? (
+        <>
+          <span className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            Detection running…
+          </span>
+          <Button type="button" variant="destructive" onClick={() => void handleCancel()} aria-label="Cancel Stage 1 run">
+            <Square className="mr-2 h-3 w-3 fill-current" />
+            Cancel
+          </Button>
+        </>
+      ) : (
+        <>
+          <ExecutionTargetToggle stage={1} variant="compact" />
+          <RunStageWidget
+            target={executionTarget}
+            runId={runId}
+            status={status}
+            progress={stageProgress?.progress ?? 0}
+            message={stageProgress?.message}
+            isRunning={false}
+            disabled={!currentVideo}
+            runLabel={done ? "Re-run Stage 1" : "Run Stage 1"}
+            mode="button-only"
+            onRun={() => void handleRun()}
+          />
+        </>
+      )}
+      <Button
+        type="button"
+        onClick={() => setCurrentStage(2)}
+        disabled={running || selectedTrackIds.size === 0}
+        aria-label="Continue to Stage 2 selection"
+      >
         Continue to Stage 2
       </Button>
     </div>

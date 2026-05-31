@@ -1,17 +1,27 @@
 import json
+import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
 
-from backend.config import DATASET_DIR, OUTPUT_DIR, VIDEO_EXTENSIONS
+from backend.config import (
+    DATASET_BROWSE_ROOT,
+    DATASET_CONFIG_DIR,
+    DATASET_DIR,
+    OUTPUT_DIR,
+    VIDEO_EXTENSIONS,
+)
 from backend.dependencies import get_app_state
 from backend.services.pipeline_service import (
     _execute_dataset_pipeline,
+    _execute_input_dir_pipeline,
     _resolve_run_id,
     _write_run_context,
 )
+from backend.services.video_service import _probe_video_metadata, _register_video_path
 from backend.state import AppState
 
 router = APIRouter()
@@ -51,6 +61,273 @@ def _load_camera_coordinates(dataset_path: Path) -> Dict[str, Any]:
     except Exception:
         return {}
     return _parse_coordinate_payload(data)
+
+
+def _scan_input_dir_cameras(input_dir: Path) -> Tuple[str, List[Dict[str, Any]]]:
+    """Inspect a folder and report its layout + cameras.
+
+    Returns (layout, cameras) where layout is one of:
+      - "per_camera": subfolders each containing a video (CityFlow: <cam>/vdo.avi)
+      - "flat":       video files directly inside (WILDTRACK: C1.mp4, C2.mp4, ...)
+      - "empty":      a real folder with no videos
+      - "missing":    the folder does not exist
+    cameras: [{id, hasVideo, file}]
+    """
+    if not input_dir.exists() or not input_dir.is_dir():
+        return ("missing", [])
+
+    per_camera: List[Dict[str, Any]] = []
+    for child in sorted(input_dir.iterdir()):
+        if child.is_dir():
+            vids = [
+                p for p in sorted(child.iterdir())
+                if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS
+            ]
+            if vids:
+                per_camera.append({"id": child.name, "hasVideo": True, "file": vids[0].name})
+    if per_camera:
+        return ("per_camera", per_camera)
+
+    flat = [
+        p for p in sorted(input_dir.iterdir())
+        if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS
+    ]
+    if flat:
+        return ("flat", [{"id": p.stem, "hasVideo": True, "file": p.name} for p in flat])
+
+    return ("empty", [])
+
+
+def _norm(p: Path) -> str:
+    return str(p).replace("\\", "/")
+
+
+def _first_video_path(
+    input_dir: Path, layout: str, cameras: List[Dict[str, Any]]
+) -> Optional[Path]:
+    """Path to the first camera's video file, for cheap metadata probing."""
+    if not cameras:
+        return None
+    cam = cameras[0]
+    if layout == "flat":
+        return input_dir / cam["file"]
+    if layout == "per_camera":
+        return input_dir / cam["id"] / cam["file"]
+    return None
+
+
+@router.get("/api/datasets/available")
+async def available_datasets():
+    """List selectable tracking datasets, read from configs/datasets/*.yaml.
+
+    Each dataset's `stage0.input_dir` is resolved and scanned so the UI can show
+    its cameras and whether the footage is actually present on disk.
+    """
+    out: List[Dict[str, Any]] = []
+    if not DATASET_CONFIG_DIR.exists():
+        return {"success": True, "data": out}
+
+    for cfg_file in sorted(DATASET_CONFIG_DIR.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(cfg_file.read_text(encoding="utf-8")) or {}
+        except (yaml.YAMLError, OSError):
+            continue
+        stage0 = data.get("stage0") or {}
+        input_dir = stage0.get("input_dir")
+        if not input_dir:
+            continue  # ReID-only configs (no video ingestion) are not selectable here
+
+        p = Path(input_dir)
+        layout, cameras = _scan_input_dir_cameras(p)
+        dataset_meta = data.get("dataset") or {}
+
+        # Probe the first camera for the *real* source fps/resolution so the UI
+        # can distinguish native fps from the pipeline's frame-sampling rate.
+        source_fps = None
+        source_width = None
+        source_height = None
+        first = _first_video_path(p, layout, cameras)
+        if first is not None and first.exists():
+            meta = _probe_video_metadata(first)
+            source_fps = meta.get("fps")
+            source_width = meta.get("width")
+            source_height = meta.get("height")
+
+        out.append(
+            {
+                "name": cfg_file.stem,
+                "configFile": _norm(cfg_file),
+                "inputDir": _norm(p),
+                "taskType": dataset_meta.get("task_type") or data.get("task_type"),
+                "layout": layout,
+                "available": layout in ("per_camera", "flat"),
+                "cameraCount": len(cameras),
+                "videosFound": sum(1 for c in cameras if c["hasVideo"]),
+                "sourceFps": source_fps,          # native video fps (probed)
+                "sampleFps": stage0.get("output_fps"),  # rate Stage 0 extracts at
+                "width": source_width,
+                "height": source_height,
+                "cameras": cameras,
+            }
+        )
+    return {"success": True, "data": out}
+
+
+def _resolve_browse_target(rel: str) -> Path:
+    """Resolve a browse path under DATASET_BROWSE_ROOT, rejecting escapes."""
+    root = DATASET_BROWSE_ROOT.resolve()
+    target = (DATASET_BROWSE_ROOT / (rel or "")).resolve()
+    if target != root and root not in target.parents:
+        raise HTTPException(status_code=400, detail="path escapes browse root")
+    return target
+
+
+@router.get("/api/datasets/browse")
+async def browse_datasets(path: str = ""):
+    """Sandboxed folder browser rooted at data/raw/ for custom dataset selection."""
+    root = DATASET_BROWSE_ROOT
+    if not root.exists():
+        return {
+            "success": True,
+            "data": {
+                "root": _norm(root), "path": "", "parent": None, "entries": [],
+                "datasetLike": False, "layout": "missing", "cameras": [],
+                "inputDir": _norm(root),
+            },
+        }
+
+    target = _resolve_browse_target(path)
+    if not target.exists() or not target.is_dir():
+        raise HTTPException(status_code=404, detail="folder not found")
+
+    root_resolved = root.resolve()
+    rel_path = "" if target == root_resolved else _norm(target.relative_to(root_resolved))
+    parent: Optional[str] = None
+    if target != root_resolved:
+        parent = (
+            "" if target.parent == root_resolved
+            else _norm(target.parent.relative_to(root_resolved))
+        )
+
+    entries: List[Dict[str, Any]] = []
+    for child in sorted(target.iterdir()):
+        if child.is_dir():
+            entries.append({"name": child.name, "type": "dir",
+                            "path": _norm(child.relative_to(root_resolved))})
+        elif child.is_file() and child.suffix.lower() in VIDEO_EXTENSIONS:
+            entries.append({"name": child.name, "type": "video",
+                            "path": _norm(child.relative_to(root_resolved))})
+
+    layout, cameras = _scan_input_dir_cameras(target)
+    return {
+        "success": True,
+        "data": {
+            "root": _norm(root_resolved),
+            "path": rel_path,
+            "parent": parent,
+            "entries": entries,
+            "datasetLike": layout in ("per_camera", "flat"),
+            "layout": layout,
+            "cameras": cameras,
+            "inputDir": _norm(target),
+        },
+    }
+
+
+@router.get("/api/datasets/videos")
+async def dataset_videos(inputDir: str, state: AppState = Depends(get_app_state)):
+    """Return the camera videos inside a chosen dataset/folder as gallery records.
+
+    Each video is registered into the in-memory catalogue (stable id) so it is
+    immediately streamable and usable by the Stage 1 flow. This lets the gallery
+    reflect the *selected* dataset instead of a fixed startup scan.
+    """
+    resolved = Path(inputDir).resolve()
+    root = DATASET_BROWSE_ROOT.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise HTTPException(status_code=400, detail="inputDir must be under data/raw/")
+    if not resolved.exists() or not resolved.is_dir():
+        raise HTTPException(status_code=404, detail=f"inputDir not found: {inputDir}")
+
+    layout, cameras = _scan_input_dir_cameras(resolved)
+    if layout not in ("per_camera", "flat"):
+        return {"success": True, "data": []}
+
+    videos: List[Dict[str, Any]] = []
+    for cam in cameras:
+        if layout == "flat":
+            vpath = resolved / cam["file"]
+        else:
+            vpath = resolved / cam["id"] / cam["file"]
+        if not vpath.exists():
+            continue
+        _register_video_path(vpath)
+        vid_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(vpath.resolve())))
+        rec = state.uploaded_videos.get(vid_id)
+        if rec:
+            payload = dict(rec)
+            payload["cameraId"] = cam["id"]
+            payload["latestRunId"] = state.video_to_latest_run.get(vid_id)
+            videos.append(payload)
+    return {"success": True, "data": videos}
+
+
+@router.post("/api/datasets/run")
+async def run_dataset_input(
+    background_tasks: BackgroundTasks,
+    payload: Dict[str, Any] = Body(...),
+    state: AppState = Depends(get_app_state),
+):
+    """Start a pipeline run against a chosen input folder (dataset or custom).
+
+    Body: { inputDir: str, name?: str, stages?: str (default "0"), smoke?: bool }
+    The folder must resolve under the browse root or an existing dataset input.
+    """
+    input_dir = str(payload.get("inputDir") or "").strip()
+    if not input_dir:
+        raise HTTPException(status_code=422, detail="inputDir is required")
+
+    resolved = Path(input_dir).resolve()
+    root = DATASET_BROWSE_ROOT.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise HTTPException(status_code=400, detail="inputDir must be under data/raw/")
+    if not resolved.exists() or not resolved.is_dir():
+        raise HTTPException(status_code=404, detail=f"inputDir not found: {input_dir}")
+
+    layout, cameras = _scan_input_dir_cameras(resolved)
+    if layout not in ("per_camera", "flat"):
+        raise HTTPException(status_code=400, detail="no videos found in the selected folder")
+
+    name = str(payload.get("name") or resolved.name)
+    stages = str(payload.get("stages") or "0")
+    smoke = bool(payload.get("smoke") or False)
+
+    # Optional subset of cameras to track. Validate against what's on disk.
+    requested = payload.get("cameras") or []
+    available_ids = {c["id"] for c in cameras}
+    selected = [str(c) for c in requested if str(c) in available_ids]
+    if requested and not selected:
+        raise HTTPException(status_code=400, detail="none of the requested cameras exist")
+
+    run_id = _resolve_run_id(None)
+    state.active_runs[run_id] = {
+        "id": run_id,
+        "runId": run_id,
+        "status": "running",
+        "progress": 0,
+        "message": f"Starting pipeline on {name}...",
+        "startedAt": datetime.now().isoformat(),
+        "datasetFolder": name,
+        "inputDir": _norm(resolved),
+        "cameraCount": len(selected) if selected else len(cameras),
+        "selectedCameras": selected or None,
+        "stages": stages,
+    }
+    background_tasks.add_task(
+        _execute_input_dir_pipeline,
+        run_id, _norm(resolved), stages, smoke, name, selected or None,
+    )
+    return {"success": True, "data": state.active_runs[run_id]}
 
 
 @router.get("/api/datasets")

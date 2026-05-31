@@ -10,7 +10,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from backend.config import ENABLE_KAGGLE_IMPORT, OUTPUT_DIR
+from backend.config import ENABLE_KAGGLE_IMPORT, OUTPUT_DIR, list_run_dirs
 from backend.dependencies import get_app_state
 from backend.services.clip_service import _export_tracklet_clip, _transcode_to_mp4
 from backend.services.pipeline_service import (
@@ -31,6 +31,39 @@ from backend.services.video_service import (
 from backend.state import AppState
 
 router = APIRouter()
+
+
+@router.get("/api/runs")
+async def list_runs():
+    """List all discoverable pipeline runs across output roots.
+
+    For each run, report which stages produced artifacts and (when present)
+    the number of global trajectories from stage 4. This lets the UI enumerate
+    completed offline / Kaggle-imported runs, not just app-created ones.
+    """
+    runs: List[Dict[str, Any]] = []
+    for d in list_run_dirs():
+        stages = {f"stage{i}": (d / f"stage{i}").exists() for i in range(7)}
+        traj_path = d / "stage4" / "global_trajectories.json"
+        trajectory_count: Optional[int] = None
+        if traj_path.exists():
+            try:
+                data = json.loads(traj_path.read_text())
+                trajectory_count = (
+                    len(data) if isinstance(data, list)
+                    else len(data.get("trajectories", []))
+                )
+            except (ValueError, OSError):
+                trajectory_count = None
+        runs.append(
+            {
+                "runId": d.name,
+                "root": str(d.parent).replace("\\", "/"),
+                "stages": stages,
+                "trajectoryCount": trajectory_count,
+            }
+        )
+    return {"success": True, "data": runs}
 
 
 @router.get("/api/runs/{run_id}/matched_summary")

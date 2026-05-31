@@ -115,6 +115,8 @@ export interface VideoFile {
   height: number;
   thumbnail?: string;
   uploadedAt: string;
+  /** Camera id when this video came from a multi-camera dataset. */
+  cameraId?: string | null;
   /** Latest pipeline run linked to this video (from API; survives page reload). */
   latestRunId?: string | null;
 }

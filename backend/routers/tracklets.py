@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend.config import OUTPUT_DIR
+from backend.config import resolve_run_dir
 from backend.dependencies import get_app_state
 from backend.services.tracklet_service import (
     _load_all_stage1_tracklets,
@@ -82,8 +82,15 @@ async def get_tracklets(cameraId: Optional[str] = None, videoId: Optional[str] =
 
 @router.get("/api/trajectories/{run_id}")
 async def get_trajectories(run_id: str):
-    """Get global trajectories from stage4 artifact if available."""
-    traj_path = OUTPUT_DIR / run_id / "stage4" / "global_trajectories.json"
+    """Get global trajectories from stage4 artifact if available.
+
+    Resolves the run across all output roots (`outputs/` and `data/outputs/`)
+    so completed offline / Kaggle-imported runs are visible to the UI.
+    """
+    run_dir = resolve_run_dir(run_id)
+    if run_dir is None:
+        return {"success": True, "data": []}
+    traj_path = run_dir / "stage4" / "global_trajectories.json"
     if not traj_path.exists():
         return {"success": True, "data": []}
 

@@ -4,36 +4,36 @@
 
 \begin{verbatim}
 gp/
-├── configs/
-│   ├── default.yaml          # Master config (OmegaConf)
-│   └── datasets/             # Dataset-specific config overrides
-├── src/
-│   ├── core/                 # Shared data models, config loader, IO utils
-│   ├── stage0_ingestion/     # Frame extraction, preprocessing
-│   ├── stage1_tracking/      # YOLO26m detection + Deep-OC-SORT
-│   ├── stage2_features/      # TransReID ReID + HSV + PCA whitening
-│   ├── stage3_indexing/      # FAISS IndexFlatIP + SQLite
-│   ├── stage4_association/   # Similarity graph + conflict_free_cc
-│   ├── stage5_evaluation/    # TrackEval HOTA/IDF1/MOTA
-│   └── stage6_visualization/ # Annotated video, BEV, timeline export
-├── backend/
-│   ├── app.py                # FastAPI application factory + routers
-│   ├── config.py             # Path and server config
-│   ├── routers/              # 15 router modules
-│   └── services/             # Business logic (pipeline, video, search)
-├── frontend/
-│   ├── src/
-│   │   ├── app/              # Next.js App Router pages
-│   │   ├── components/       # React UI components (shadcn/ui based)
-│   │   └── store/            # Zustand state stores
-│   ├── package.json
-│   └── tailwind.config.ts
-├── scripts/
-│   ├── run_pipeline.py       # Full or partial pipeline CLI entry point
-│   ├── run_stage.py          # Single-stage CLI entry point
-│   └── download_models.py    # Download YOLO26m + BoxMOT weights
-├── tests/                    # pytest test suite (per-stage)
-└── notebooks/kaggle/         # Kaggle training notebooks (10a/10b/10c)
++-- configs/
+|   +-- default.yaml          # Master config (OmegaConf)
+|   `-- datasets/             # Dataset-specific config overrides
++-- src/
+|   +-- core/                 # Shared data models, config loader, IO utils
+|   +-- stage0_ingestion/     # Frame extraction, preprocessing
+|   +-- stage1_tracking/      # YOLO26m detection + Deep-OC-SORT
+|   +-- stage2_features/      # TransReID ReID + HSV + PCA whitening
+|   +-- stage3_indexing/      # FAISS IndexFlatIP + SQLite
+|   +-- stage4_association/   # Similarity graph + conflict_free_cc
+|   +-- stage5_evaluation/    # TrackEval HOTA/IDF1/MOTA
+|   `-- stage6_visualization/ # Annotated video, BEV, timeline export
++-- backend/
+|   +-- app.py                # FastAPI application factory + routers
+|   +-- config.py             # Path and server config
+|   +-- routers/              # 15 router modules
+|   `-- services/             # Business logic (pipeline, video, search)
++-- frontend/
+|   +-- src/
+|   |   +-- app/              # Next.js App Router pages
+|   |   +-- components/       # React UI components (shadcn/ui based)
+|   |   `-- store/            # Zustand state stores
+|   +-- package.json
+|   `-- tailwind.config.ts
++-- scripts/
+|   +-- run_pipeline.py       # Full or partial pipeline CLI entry point
+|   +-- run_stage.py          # Single-stage CLI entry point
+|   `-- download_models.py    # Download YOLO26m + BoxMOT weights
++-- tests/                    # pytest test suite (per-stage)
+`-- notebooks/kaggle/         # Kaggle training notebooks (10a/10b/10c)
 \end{verbatim}
 
 \begin{figure}[htbp]

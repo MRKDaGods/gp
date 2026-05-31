@@ -20,6 +20,7 @@ The 0.77936 plateau is confirmed across:
 3. **14h** robust tracklet aggregation (8 modes tried)
 4. **14i** track-quality pre-filter (`L_min × τ_c` grid)
 5. **14k** R50-IBN 4-way score fusion (`w_q × thr` sweep, peak 0.78079 K7, MARGINAL)
+6. **CityTrack 7-component audit (2026-05-31)**: 4/7 components already covered; 3 missing ones (SSA, BT, occlusion) added default-off behind flags. S02-subset ablation: SSA neutral, BT +5.10pp (IDsw tripled, unconfirmed), occlusion −1.03pp fair. No feature-fair full-pipeline gain; gap remains ensemble-vs-single-model feature-quality-limited. Baseline 0.77936 unchanged.
 
 All cheap CPU-only axes are now exhausted. Plateau is **feature-diversity-limited**, not aggregation/filter/tuning-limited.
 

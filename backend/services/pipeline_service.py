@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional
 
 from backend.config import (
     _CAMERA_LINE_RE,
+    _CAMERAS_TOTAL_RE,
+    _FRAME_LINE_RE,
     _HAS_CV2,
     _PIPELINE_PYTHON,
     _PROJECT_ROOT,
@@ -509,31 +511,55 @@ async def _run_pipeline_streaming(
 ) -> Dict[str, Any]:
     """Run a pipeline subprocess using threads so it works on any asyncio event loop."""
     total_stages = max(len(stage_nums), 1)
-    completed_stages = 0
+    # Progress model: each stage owns an equal slice of the 0–95% bar. A stage
+    # starts at its base and fills its slice as work streams in (per-frame for the
+    # detection stage), so the bar advances smoothly instead of jumping milestones.
+    span = 95.0 / total_stages
+    stages_started = 0
+    stage_base = 0.0
+    cameras_total = 0
     cameras_seen: list = []
     log_lines: list = []
 
     loop = asyncio.get_event_loop()
     line_queue: asyncio.Queue = asyncio.Queue()
 
+    def _set_progress(value: float) -> None:
+        """Clamp + monotonically advance the run's progress (never moves backward)."""
+        if run_id not in app_state.active_runs:
+            return
+        run = app_state.active_runs[run_id]
+        prev = float(run.get("progress", 0) or 0)
+        run["progress"] = int(max(prev, min(value, 95.0)))
+
     def _handle_line(line: str) -> None:
-        nonlocal completed_stages
+        nonlocal stages_started, stage_base, cameras_total
         log_lines.append(line)
 
         m = _STAGE_LINE_RE.search(line)
         if m:
             stage_num = int(m.group(1))
             stage_label = _STAGE_NAMES.get(stage_num, f"Stage {stage_num}")
-            completed_stages += 1
-            pct = min(int((completed_stages / total_stages) * 95), 95)
+            stage_base = stages_started * span
+            stages_started += 1
             cameras_seen.clear()
+            cameras_total = 0
             if run_id in app_state.active_runs:
-                app_state.active_runs[run_id]["progress"] = pct
-                app_state.active_runs[run_id]["message"] = f"Running {stage_label}..."
-                app_state.active_runs[run_id]["currentStageName"] = stage_label
-                app_state.active_runs[run_id]["currentStageNum"] = stage_num
-                app_state.active_runs[run_id]["completedStages"] = completed_stages
-                app_state.active_runs[run_id]["totalStages"] = total_stages
+                run = app_state.active_runs[run_id]
+                run["message"] = f"Running {stage_label}..."
+                run["currentStageName"] = stage_label
+                run["currentStageNum"] = stage_num
+                run["completedStages"] = stages_started
+                run["totalStages"] = total_stages
+                run["currentFrame"] = 0
+                run["totalFrames"] = 0
+            _set_progress(stage_base)
+
+        ctm = _CAMERAS_TOTAL_RE.search(line)
+        if ctm:
+            cameras_total = int(ctm.group(1))
+            if run_id in app_state.active_runs:
+                app_state.active_runs[run_id]["camerasTotal"] = cameras_total
 
         cm = _CAMERA_LINE_RE.search(line)
         if cm and run_id in app_state.active_runs:
@@ -541,12 +567,28 @@ async def _run_pipeline_streaming(
             if cam_id not in cameras_seen:
                 cameras_seen.append(cam_id)
             cam_index = cameras_seen.index(cam_id) + 1
-            app_state.active_runs[run_id]["currentCamera"] = cam_id
-            app_state.active_runs[run_id]["camerasProcessed"] = cam_index
-            stage_name = app_state.active_runs[run_id].get("currentStageName", "Processing")
-            app_state.active_runs[run_id]["message"] = (
+            run = app_state.active_runs[run_id]
+            run["currentCamera"] = cam_id
+            run["camerasProcessed"] = cam_index
+            stage_name = run.get("currentStageName", "Processing")
+            run["message"] = (
                 f"{stage_name} — camera {cam_id} ({cam_index} processed)"
             )
+
+        fm = _FRAME_LINE_RE.search(line)
+        if fm and run_id in app_state.active_runs:
+            cur_frame = int(fm.group(2))
+            cam_frames_total = max(int(fm.group(3)), 1)
+            run = app_state.active_runs[run_id]
+            run["currentFrame"] = cur_frame
+            run["totalFrames"] = cam_frames_total
+            # Interpolate within the active stage: completed cameras + the current
+            # camera's frame fraction, divided by the known camera total.
+            cam_index = max(int(run.get("camerasProcessed", 1)), 1)
+            cam_denom = max(cameras_total, cam_index, 1)
+            cam_frac = cur_frame / cam_frames_total
+            within = ((cam_index - 1) + cam_frac) / cam_denom
+            _set_progress(stage_base + within * span)
 
     def _drain_stream(stream) -> None:
         try:
@@ -957,6 +999,54 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
         app_state.active_runs[run_id]["status"] = "completed"
         app_state.active_runs[run_id]["progress"] = 100
         app_state.active_runs[run_id]["message"] = f"Pipeline complete for {folder_name}"
+        app_state.active_runs[run_id]["runDir"] = run_meta["runDir"]
+        app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
+
+    except Exception as e:
+        if run_id in app_state.active_runs:
+            app_state.active_runs[run_id]["status"] = "error"
+            app_state.active_runs[run_id]["error"] = str(e)
+            app_state.active_runs[run_id]["message"] = f"Error: {str(e)[:200]}"
+
+
+async def _execute_input_dir_pipeline(
+    run_id: str,
+    input_dir: str,
+    stages: str,
+    smoke_test: bool,
+    label: str,
+    cameras: Optional[List[str]] = None,
+):
+    """Background task: run the selected stages directly against a source folder.
+
+    Unlike `_execute_dataset_pipeline`, this does NOT copy videos into the run
+    dir — it points `stage0.input_dir` at the chosen folder. Stage 0's own video
+    discovery handles both the per-camera (`<cam>/vdo.avi`) and flat
+    (`C1.mp4`, `C2.mp4`, ...) layouts, so this works for every dataset.
+
+    If `cameras` is given, only those cameras are processed (via a
+    `stage0.cameras=[...]` override), enabling multi-camera subset selection.
+    """
+    try:
+        stage_nums = [int(s) for s in stages.split(",") if s.strip().isdigit()]
+        app_state.active_runs[run_id]["message"] = f"Running ingestion on {label}..."
+        app_state.active_runs[run_id]["progress"] = 2
+
+        cmd = _build_pipeline_cmd(
+            stages=stages,
+            run_id=run_id,
+            input_dir=Path(input_dir).as_posix(),
+            smoke_test=smoke_test,
+        )
+        if cameras:
+            cam_list = ",".join(cameras)
+            cmd.extend(["--override", f"stage0.cameras=[{cam_list}]"])
+
+        run_meta = await _run_pipeline_streaming(run_id, cmd, stage_nums)
+
+        app_state.active_runs[run_id]["status"] = "completed"
+        app_state.active_runs[run_id]["progress"] = 100
+        app_state.active_runs[run_id]["message"] = f"Pipeline complete for {label}"
         app_state.active_runs[run_id]["runDir"] = run_meta["runDir"]
         app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
 

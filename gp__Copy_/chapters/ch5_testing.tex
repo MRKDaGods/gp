@@ -139,3 +139,85 @@ The association stage (Stage~4) was subjected to an extensive ablation study wit
 \caption{Ablation study: IDF1 sensitivity to key Stage~4 hyperparameters.}
 \label{fig:ablation}
 \end{figure}
+
+\subsection{Comparison to the AIC22 Winner: Method Completeness and Component Ablation}
+
+The AI~City Challenge 2022 Track~1 winner (CityTrack, Team~28~\cite{yang2022citytrack})
+reports 84.86\% IDF1 using a five-model ensemble and seven engineering components.
+Our single-model system reaches 77.94\% IDF1, a gap of 6.93~percentage points.
+To understand whether this gap is closable through association engineering or is
+fundamentally feature-quality-limited, we audited all seven CityTrack components
+against our pipeline and re-implemented the three that were genuinely absent.
+Table~\ref{tab:citytrack_audit} summarises the audit.
+
+\begin{table}[htbp]
+\centering
+\caption{Audit of our pipeline against the seven components of the AIC22 Track~1
+winner (CityTrack). ``Enabled'' = active in the production configuration;
+``Implemented (off)'' = present but disabled because it was found neutral or harmful;
+``Added (off)'' = newly implemented for this study behind a default-off flag.}
+\label{tab:citytrack_audit}
+\begin{tabular}{p{0.32\textwidth}p{0.22\textwidth}p{0.34\textwidth}}
+\hline
+\textbf{CityTrack component} & \textbf{Status in our system} & \textbf{Notes} \\ \hline
+1. Zone-based search-space reduction & Implemented (off) & Soft $\pm0.03$ similarity bonus, not hard pruning; $-0.4$~pp when enabled. \\
+2. Spatio-temporal time window & Enabled & Stronger variant: hard gate outside window $+$ Gaussian score inside, vs.\ their $\times 2$ penalty. \\
+3. Stationary Sensitive Association (SSA) & Added (off) & Freezes stationary boxes to recent high-confidence detections. \\
+4. Trajectory Re-Link (TRL) & Partial (intra on) & Intra-camera ReID-cosine relink enabled; cross-camera motion relink disabled ($-3.8$ to $-13.2$~pp). \\
+5. Bidirectional tracking (BT) & Added (off) & Forward $+$ backward passes merged by IoU$+$ReID gating. \\
+6. Occlusion-aware distance matrix & Added (off) & Per-tracklet occlusion flag applies a similarity penalty to occluded pairs. \\
+7. Box-grained matching $+$ $k$-reciprocal & Implemented (off) & Mean-pooled embeddings $+$ conflict-free connected components by default; $k$-reciprocal and box-grained multi-query both hurt our 280D-PCA features. \\ \hline
+\end{tabular}
+\end{table}
+
+Four of the seven components were already present (two enabled, two implemented but
+disabled after being found harmful with our current features). The three genuinely
+missing components --- SSA, bidirectional tracking, and the occlusion-aware distance
+matrix --- were re-implemented behind default-off configuration flags and validated
+with 84 unit tests, then ablated on a three-camera CityFlowV2 subset (scene S02:
+cameras c006/c007/c008). Table~\ref{tab:citytrack_ablation} reports this ablation.
+We stress that the S02-subset IDF1 is \emph{not} comparable to the full-dataset
+77.94\% headline; it is an internal diagnostic on a hard scene used only to rank the
+new components against one another.
+
+\begin{table}[htbp]
+\centering
+\caption{Component ablation on the CityFlowV2 S02 three-camera subset
+(c006/c007/c008). Metric is subset MTMC IDF1; deltas are relative to the
+fresh-feature baseline. ID switches (IDsw) are reported as a reliability check.
+The standalone occlusion row is shown struck through because it was measured on
+\emph{cached} Stage-2 features and is not comparable; the fair occlusion estimate
+is (all~$-$~BT) $= -1.03$~pp.}
+\label{tab:citytrack_ablation}
+\begin{tabular}{lccc}
+\hline
+\textbf{Configuration} & \textbf{S02 IDF1 (\%)} & \textbf{$\Delta$ (pp)} & \textbf{IDsw} \\ \hline
+Baseline (no new components) & 61.79 & ---    & 43  \\
+SSA only                     & 61.97 & $+0.18$ & 43  \\
+Bidirectional only           & 66.89 & $+5.10$ & 149 \\
+SSA $+$ BT $+$ Occlusion     & 65.87 & $+4.08$ & 142 \\
+Occlusion only (cached feats) & \textit{68.29} & \textit{($+6.50$)} & \textit{100} \\ \hline
+\end{tabular}
+\end{table}
+
+The ablation yields three honest verdicts. \textbf{SSA is neutral}: $+0.18$~pp is
+within run-to-run noise and the ID-switch count is unchanged (43). \textbf{Bidirectional
+tracking is the only component with a sizeable subset gain} ($+5.10$~pp), but it
+triples local ID switches (43~$\rightarrow$~149), which means the apparent IDF1 gain
+is partly recovered detections offset by new identity fragmentation; it therefore
+requires full-dataset confirmation before it can be trusted, and remains default-off.
+\textbf{The occlusion-aware matrix is neutral-to-negative under a fair comparison}:
+its eye-catching standalone $+6.50$~pp was a measurement artifact --- that run reused
+cached Stage-2 features (its ID switches jumped 43~$\rightarrow$~100 even though
+occlusion is a pure Stage-4 operation that cannot change upstream tracking), whereas
+the baseline recomputed features fresh. On an equal-footing comparison the occlusion
+contribution is (all~$-$~BT)~$=65.87-66.89=-1.03$~pp. We deliberately do not claim the
+$+6.50$~pp as a result.
+
+Taken together, the audit supports our central finding: the 6.93~pp gap to the AIC22
+winner is \emph{not} attributable to missing association machinery. Six of seven
+components are present or were added, and none of the three additions produces a
+confirmed, feature-fair full-pipeline improvement. The dominant remaining lever is
+feature quality --- specifically the gap between our single TransReID ViT-B/16 model
+and CityTrack's five-model ensemble --- consistent with the five-axis association
+plateau established in the preceding ablation.

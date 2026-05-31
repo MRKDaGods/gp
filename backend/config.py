@@ -9,6 +9,7 @@ import re
 import shutil as _shutil
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 try:
     import cv2
@@ -30,9 +31,19 @@ _FFPROBE = _shutil.which("ffprobe")
 # ── Directory constants ────────────────────────────────────────────────────
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
+# Runs are read from more than one root: app-created runs land in `outputs/`,
+# while Kaggle-imported / offline-pipeline runs land in `data/outputs/`. Reads
+# must look in both, otherwise completed runs become invisible to the UI.
+OUTPUT_DIRS = [OUTPUT_DIR, Path("data/outputs")]
 TIMELINE_DEBUG_LOG = OUTPUT_DIR / "timeline_query_debug.log"
 CITYFLOW_DIR = Path("data/raw/cityflowv2")
 DATASET_DIR = Path("dataset")
+# Source-of-truth for selectable tracking datasets: each YAML carries a
+# `stage0.input_dir` plus dataset-appropriate ingestion settings.
+DATASET_CONFIG_DIR = Path("configs/datasets")
+# Sandbox root for the custom "browse folder" picker. The browser cannot
+# escape this directory (path-traversal guarded).
+DATASET_BROWSE_ROOT = Path("data/raw")
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mkv", ".mov", ".m4v"}
 DEMO_VIDEO_FALLBACK = Path("S02_c008.avi")
 
@@ -60,6 +71,10 @@ _STAGE_NAMES = {
 _STAGE_LINE_RE = re.compile(r"Stage\s+(\d)")
 # Regex to detect per-camera processing lines
 _CAMERA_LINE_RE = re.compile(r"Processing camera\s+([\w_]+)")
+# Structured per-frame progress emitted by stage 1: "[PROGRESS] camera=X frame=i total=N"
+_FRAME_LINE_RE = re.compile(r"\[PROGRESS\]\s+camera=([\w_]+)\s+frame=(\d+)\s+total=(\d+)")
+# Total camera count emitted once before the stage-1 loop: "[PROGRESS] cameras_total=N"
+_CAMERAS_TOTAL_RE = re.compile(r"\[PROGRESS\]\s+cameras_total=(\d+)")
 
 # ── Timeline / ReID similarity thresholds ─────────────────────────────────
 # Applied in TimelineService._score_trajectories(); both conditions must hold
@@ -71,3 +86,38 @@ SIMILARITY_THRESHOLD_P25: float = 0.60
 
 # PCA model used to project probe embeddings when probe_dim > gallery_dim
 PCA_MODEL_PATH = Path("models/reid/pca_transform.pkl")
+
+
+# ── Run discovery across output roots ──────────────────────────────────────
+def _is_safe_run_id(run_id: str) -> bool:
+    """Reject run_ids that could escape an output root via path traversal."""
+    return bool(run_id) and "/" not in run_id and "\\" not in run_id and ".." not in run_id
+
+
+def resolve_run_dir(run_id: str) -> Optional[Path]:
+    """Locate a run directory across known output roots.
+
+    Returns the first existing match (preferring `outputs/`), or None.
+    """
+    if not _is_safe_run_id(run_id):
+        return None
+    for root in OUTPUT_DIRS:
+        candidate = root / run_id
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def list_run_dirs() -> List[Path]:
+    """All run directories across known output roots, deduped by name.
+
+    A directory counts as a run if it contains at least a `stage1/` folder.
+    """
+    seen: dict[str, Path] = {}
+    for root in OUTPUT_DIRS:
+        if not root.exists():
+            continue
+        for d in sorted(root.iterdir()):
+            if d.is_dir() and d.name not in seen and (d / "stage1").exists():
+                seen[d.name] = d
+    return list(seen.values())

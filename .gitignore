@@ -108,7 +108,23 @@ tmp_09v2_output/
 
 .pytest_cache/
 tmp_*/
+tmp_ablation/
 
 # Local dataset and upload directories
 /dataset
 /uploads
+
+# LaTeX build artifacts (generated; source is .tex/.bib)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.toc
+*.out
+*.synctex.gz
+# Compiled paper PDFs (regenerable from .tex); figure PDFs under */figures/ are kept
+/main.pdf
+gp__Copy_/main.pdf

@@ -6,17 +6,28 @@ import { AlertCircle, CheckCircle2, ExternalLink, FileArchive, FileVideo, Folder
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DisclosurePanel, ErrorBanner } from "@/components/pipeline";
+import { DisclosurePanel, ErrorBanner, toStageStatus } from "@/components/pipeline";
+import { DatasetPicker } from "@/components/stages/dataset-picker";
+import { Lock, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useStartStage1 } from "@/hooks/use-start-stage1";
-import { getVideos, importKaggleRunArtifacts, uploadVideo } from "@/lib/api";
-import { flushPipelineFromStage } from "@/lib/pipeline-flush";
+import { getFrameUrl, getVideos, importKaggleRunArtifacts, runDatasetInput, uploadVideo } from "@/lib/api";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
+import { type AppDataset, useDatasetStore } from "@/lib/store";
 import { usePipelineStore, useSessionStore, useVideoStore } from "@/store";
 import type { VideoFile } from "@/types";
+
+/** Map a loaded dataset/folder name to the vehicle/person model family so the
+ *  inference-stage model picker stays consistent with what was loaded. */
+function inferAppDataset(name: string): AppDataset | null {
+  const n = name.toLowerCase();
+  if (/cityflow|aic|veri/.test(n)) return "cityflowv2";
+  if (/wildtrack|epfl|person/.test(n)) return "wildtrack";
+  return null;
+}
 
 function inferCameraId(video: VideoFile): string {
   const candidate = `${video.name} ${video.path}`;
@@ -26,11 +37,31 @@ function inferCameraId(video: VideoFile): string {
 
 export function UploadStage() {
   const { videos, setVideos, addVideo, setCurrentVideo, currentVideo } = useVideoStore();
-  const { setCurrentStage, setDemoMode } = useSessionStore();
+  const { setCurrentStage } = useSessionStore();
   const { setRunId, setCurrentStage: setPipelineCurrentStage, updateStageProgress } = usePipelineStore();
+  const runId = usePipelineStore((s) => s.runId);
+  const pipelineStages = usePipelineStore((s) => s.stages);
+  const resetPipeline = usePipelineStore((s) => s.reset);
+  const setSelectedDataset = useDatasetStore((s) => s.setSelectedDataset);
   const { toast } = useToast();
 
+  // Once detection has actually run (or is running) on this input, lock the input
+  // so the user can't silently swap videos out from under downstream stages.
+  // Gate on an active runId: a "done" status with no runId just means the
+  // detection stage auto-loaded existing artifacts (or a stale rehydrated state),
+  // which must NOT lock the picker — otherwise Reset can never unlock it because
+  // the still-mounted DetectionStage re-loads artifacts and flips stage 1 back to
+  // "done" the moment runId clears.
+  const stage1Status = toStageStatus(pipelineStages.find((s) => s.stage === 1));
+  const inputLocked =
+    Boolean(runId) && (stage1Status === "running" || stage1Status === "done");
+
   const [isDragging, setIsDragging] = useState(false);
+  const [activeDataset, setActiveDataset] = useState<string | null>(null);
+  const [activeInputDir, setActiveInputDir] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [smokeRun, setSmokeRun] = useState(true);
+  const [isStartingMtmc, setIsStartingMtmc] = useState(false);
   const [isLoadingVideos, setIsLoadingVideos] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -47,7 +78,15 @@ export function UploadStage() {
       setLoadError(null);
       try {
         const response = await getVideos();
-        if (response.success && response.data) setVideos(response.data);
+        if (response.success && response.data) {
+          // Show only genuine user uploads on mount. Dataset footage is loaded
+          // on demand via the dataset picker so the gallery reflects the user's
+          // selection rather than an unrelated startup scan.
+          const uploadsOnly = response.data.filter((v) =>
+            v.path.replace(/\\/g, "/").includes("/uploads/")
+          );
+          setVideos(uploadsOnly);
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setLoadError(`Could not fetch videos from backend: ${msg}`);
@@ -162,45 +201,125 @@ export function UploadStage() {
     [currentVideo, setCurrentVideo, setRunId, toast, updateStageProgress, videos]
   );
 
-  const handleDemoMode = () => {
-    const candidate = videos[0];
-    if (!candidate) {
-      toast({ title: "No videos available", description: "Upload a video first or add CityFlowV2 videos to the uploads folder.", variant: "destructive" });
-      return;
-    }
+  const handleResetInput = useCallback(() => {
+    resetPipeline();
+    // Clear the current video too: DetectionStage stays mounted and will
+    // auto-load on-disk artifacts (and re-mark stage 1 "done") for whatever
+    // video is still selected. Dropping it keeps the input genuinely unlocked.
+    setCurrentVideo(null);
+    setActiveDataset(null);
+    setActiveInputDir(null);
+    setSelectedIds(new Set());
+    toast({
+      title: "Input unlocked",
+      description: "Pipeline reset — you can choose a different dataset or videos now.",
+    });
+  }, [resetPipeline, setCurrentVideo, toast]);
 
-    flushPipelineFromStage(1);
-    setRunId(null);
-    setCurrentVideo(candidate);
-    setDemoMode(true);
-    setCurrentStage(1);
-    setPipelineCurrentStage(1);
-    toast({ title: "Demo loaded", description: `Loaded ${candidate.name} without starting a backend pipeline run.`, variant: "success" });
-  };
+  const datasetCameraVideos = videos.filter((v) => Boolean(v.cameraId));
+  const allSelected =
+    datasetCameraVideos.length > 0 && selectedIds.size === datasetCameraVideos.length;
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) =>
+      prev.size === datasetCameraVideos.length
+        ? new Set()
+        : new Set(datasetCameraVideos.map((v) => v.id))
+    );
+  }, [datasetCameraVideos]);
+
+  const handleRunMtmc = useCallback(async () => {
+    if (!activeInputDir) return;
+    const chosen = datasetCameraVideos.filter((v) => selectedIds.has(v.id));
+    const cameras = chosen.map((v) => v.cameraId).filter(Boolean) as string[];
+    if (cameras.length < 1) return;
+
+    setIsStartingMtmc(true);
+    try {
+      const res = await runDatasetInput({
+        inputDir: activeInputDir,
+        name: activeDataset ?? "dataset",
+        stages: "0,1,2,3,4,5",
+        smoke: smokeRun,
+        cameras,
+      });
+      const runId: string | null = res.data?.runId ?? res.data?.id ?? null;
+      if (runId) {
+        setRunId(runId);
+        toast({
+          title: "MTMC run started",
+          description: `Tracking ${cameras.length} cameras (${cameras.join(", ")})${smokeRun ? " — smoke" : ""}. Run ${runId}.`,
+          variant: "success",
+        });
+        setCurrentStage(1);
+        setPipelineCurrentStage(1);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "Failed to start MTMC", description: msg, variant: "destructive" });
+    } finally {
+      setIsStartingMtmc(false);
+    }
+  }, [
+    activeInputDir,
+    activeDataset,
+    datasetCameraVideos,
+    selectedIds,
+    smokeRun,
+    setRunId,
+    setCurrentStage,
+    setPipelineCurrentStage,
+    toast,
+  ]);
 
   return (
     <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
-      <div className="mb-4 flex justify-end">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              className="border-accent-strong/40 text-accent-strong hover:bg-accent-strong/10 hover:text-accent-strong"
-              onClick={handleDemoMode}
-              aria-label="Try demo with the first loaded local video"
-            >
-              <Play className="mr-2 h-4 w-4" />
-              Try Demo
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent align="end" className="max-w-xs">
-            Loads the first local video and opens detection setup. No backend pipeline run starts, and you can exit any time.
-          </TooltipContent>
-        </Tooltip>
+      <ErrorBanner title="Upload issue" message={loadError ?? uploadError} />
+
+      {inputLocked ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
+          <div className="flex items-center gap-2 text-sm">
+            <Lock className="h-4 w-4 shrink-0 text-warning" />
+            <span className="text-foreground">
+              Input locked — detection has run on {activeDataset ? <strong>{activeDataset}</strong> : "this input"}.
+              {" "}Reset the pipeline to choose different videos.
+            </span>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={handleResetInput} className="gap-1.5">
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset &amp; change input
+          </Button>
+        </div>
+      ) : null}
+
+      <div className={cn(inputLocked && "pointer-events-none select-none opacity-60")}>
+      <div className="mt-4">
+        <DatasetPicker
+          onLoaded={(name, count, inputDir) => {
+            setActiveDataset(count > 0 ? name : null);
+            setActiveInputDir(count > 0 ? inputDir : null);
+            setSelectedIds(new Set());
+            // Keep the vehicle/person model family in sync with the loaded data.
+            const app = inferAppDataset(name);
+            if (count > 0 && app) setSelectedDataset(app);
+          }}
+        />
       </div>
 
-      <ErrorBanner title="Upload issue" message={loadError ?? uploadError} />
+      <div className="mt-4 flex items-center gap-3">
+        <div className="h-px flex-1 bg-border" />
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">or upload your own</span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
 
       <div className="mt-4 grid gap-6 lg:grid-cols-2">
         <Card>
@@ -262,35 +381,74 @@ export function UploadStage() {
             <CardTitle className="flex items-center justify-between gap-3 text-base">
               <span className="flex items-center gap-2">
                 <FileVideo className="h-5 w-5" />
-                Video Gallery
+                {activeDataset ? `Video Gallery — ${activeDataset}` : "Video Gallery"}
               </span>
               <Badge variant="secondary">{videos.length} videos</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {datasetCameraVideos.length > 0 ? (
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/30 p-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} />
+                  Select cameras ({selectedIds.size}/{datasetCameraVideos.length})
+                </label>
+                <div className="flex items-center gap-3">
+                  <label
+                    className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+                    title="Process only the first 10 frames per camera — a fast sanity check that runs without a GPU."
+                  >
+                    <Checkbox checked={smokeRun} onCheckedChange={(v) => setSmokeRun(Boolean(v))} />
+                    Quick test (10 frames)
+                  </label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={selectedIds.size < 1 || isStartingMtmc}
+                    onClick={() => void handleRunMtmc()}
+                    aria-label={`Run MTMC on ${selectedIds.size} selected cameras`}
+                  >
+                    {isStartingMtmc ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="mr-2 h-4 w-4" />
+                    )}
+                    Run MTMC on {selectedIds.size} {selectedIds.size === 1 ? "camera" : "cameras"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             <ScrollArea className="h-[400px]">
               {isLoadingVideos ? (
                 <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-muted-foreground">
                   <Loader2 className="h-8 w-8 animate-spin" />
-                  <p>Loading local videos...</p>
-                  <p className="text-sm">Scanning uploads and CityFlow directories</p>
+                  <p>Loading your uploaded videos...</p>
                 </div>
               ) : videos.length === 0 ? (
-                <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-muted-foreground">
+                <div className="flex h-[300px] flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
                   <AlertCircle className="h-8 w-8" />
-                  <p>No videos uploaded yet</p>
-                  <p className="text-sm">Upload videos to start tracking</p>
+                  <p>No videos loaded</p>
+                  <p className="text-sm">Pick a dataset with “Load videos” above, or upload your own.</p>
                 </div>
               ) : (
                 <div className="grid gap-3">
                   {videos.map((video) => (
-                    <VideoCard key={video.id} video={video} isSelected={currentVideo?.id === video.id} onSelect={() => setCurrentVideo(video)} />
+                    <VideoCard
+                      key={video.id}
+                      video={video}
+                      isSelected={currentVideo?.id === video.id}
+                      onSelect={() => setCurrentVideo(video)}
+                      selectable={Boolean(video.cameraId)}
+                      checked={selectedIds.has(video.id)}
+                      onToggle={() => toggleSelect(video.id)}
+                    />
                   ))}
                 </div>
               )}
             </ScrollArea>
           </CardContent>
         </Card>
+      </div>
       </div>
 
       <div className="mt-6 space-y-4">
@@ -371,36 +529,85 @@ export function UploadStageActions() {
   );
 }
 
-function VideoCard({ video, isSelected, onSelect }: { video: VideoFile; isSelected: boolean; onSelect: () => void }) {
+function VideoThumbnail({ video }: { video: VideoFile }) {
+  const [failed, setFailed] = useState(false);
+  const src = video.thumbnail ?? getFrameUrl(video.id, 0);
+  if (failed || !src) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <FileVideo className="h-6 w-6 text-muted-foreground" />
+      </div>
+    );
+  }
   return (
-    <button
-      type="button"
+    <img
+      src={src}
+      alt={video.name}
+      loading="lazy"
+      className="h-full w-full object-cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function VideoCard({
+  video,
+  isSelected,
+  onSelect,
+  selectable = false,
+  checked = false,
+  onToggle,
+}: {
+  video: VideoFile;
+  isSelected: boolean;
+  onSelect: () => void;
+  selectable?: boolean;
+  checked?: boolean;
+  onToggle?: () => void;
+}) {
+  return (
+    <div
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        isSelected && "border-primary bg-primary/5"
+        "flex w-full items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent",
+        isSelected && "border-primary bg-primary/5",
+        checked && "border-primary/60 bg-primary/5"
       )}
-      onClick={onSelect}
-      aria-label={`Select ${video.name}`}
-      aria-pressed={isSelected}
     >
-      <div className="relative h-16 w-24 flex-shrink-0 overflow-hidden rounded-md bg-muted">
-        {video.thumbnail ? (
-          <img src={video.thumbnail} alt={video.name} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <FileVideo className="h-6 w-6 text-muted-foreground" />
+      {selectable ? (
+        <Checkbox
+          checked={checked}
+          onCheckedChange={() => onToggle?.()}
+          aria-label={`Select camera ${video.cameraId ?? video.name}`}
+          className="flex-shrink-0"
+        />
+      ) : null}
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none"
+        onClick={onSelect}
+        aria-label={`Preview ${video.name}`}
+        aria-pressed={isSelected}
+      >
+        <div className="relative h-16 w-24 flex-shrink-0 overflow-hidden rounded-md bg-muted">
+          <VideoThumbnail video={video} />
+          <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] text-white">{formatDuration(video.duration)}</div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate font-medium">{video.name}</p>
+            {video.cameraId ? (
+              <Badge variant="secondary" className="flex-shrink-0 text-[10px]">
+                {video.cameraId}
+              </Badge>
+            ) : null}
           </div>
-        )}
-        <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] text-white">{formatDuration(video.duration)}</div>
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{video.name}</p>
-        <p className="text-sm text-muted-foreground">
-          {video.width}x{video.height} @ {video.fps}fps
-        </p>
-        <p className="text-xs text-muted-foreground">{formatBytes(video.size)}</p>
-      </div>
-      {isSelected ? <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-primary" /> : null}
-    </button>
+          <p className="text-sm text-muted-foreground">
+            {video.width}x{video.height} @ {video.fps}fps
+          </p>
+          <p className="text-xs text-muted-foreground">{formatBytes(video.size)}</p>
+        </div>
+        {isSelected ? <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-primary" /> : null}
+      </button>
+    </div>
   );
 }

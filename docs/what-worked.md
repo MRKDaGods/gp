@@ -14,6 +14,7 @@ Positive deltas only. Use this as a sanity check before proposing reinventions. 
 
 ## Tracking / Stage 1
 - **min_hits=2**: +0.2pp
+- **Bidirectional tracking (BT)**: +5.10pp on S02 3-cam SUBSET only, but tripled local ID switches (43→149) — NOT a confirmed win; default-off pending full-dataset confirmation.
 
 ## Person Pipeline
 - **Kalman tuning**: +1.9pp IDF1

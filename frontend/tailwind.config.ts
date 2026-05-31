@@ -119,6 +119,11 @@ const config: Config = {
           from: { transform: "scale(0.95)", opacity: "0" },
           to: { transform: "scale(1)", opacity: "1" },
         },
+        "indeterminate": {
+          "0%": { transform: "translateX(-100%) scaleX(0.4)" },
+          "50%": { transform: "translateX(60%) scaleX(0.7)" },
+          "100%": { transform: "translateX(220%) scaleX(0.4)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -127,6 +132,7 @@ const config: Config = {
         "slide-in": "slide-in 0.3s ease-out",
         "fade-in": "fade-in 0.3s ease-out",
         "scale-in": "scale-in 0.2s ease-out",
+        "indeterminate": "indeterminate 1.6s ease-in-out infinite",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],

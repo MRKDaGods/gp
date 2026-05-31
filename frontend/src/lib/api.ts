@@ -47,6 +47,8 @@ function normalizeVideoFile(raw: any): VideoFile {
     height: Number(raw.height ?? 0),
     thumbnail: typeof raw.thumbnail === 'string' ? raw.thumbnail : undefined,
     uploadedAt: String(raw.uploadedAt ?? new Date().toISOString()),
+    cameraId:
+      raw.cameraId != null && raw.cameraId !== '' ? String(raw.cameraId) : undefined,
     latestRunId:
       raw.latestRunId != null && raw.latestRunId !== ''
         ? String(raw.latestRunId)
@@ -883,6 +885,85 @@ export async function processDataset(
 ): Promise<ApiResponse<any>> {
   return fetchApi<ApiResponse<any>>(`/datasets/${encodeURIComponent(folder)}/process`, {
     method: 'POST',
+  });
+}
+
+/** A camera discovered inside a dataset/folder input dir. */
+export interface DatasetCamera {
+  id: string;
+  hasVideo: boolean;
+  file?: string;
+}
+
+/** A selectable tracking dataset, read from configs/datasets/*.yaml. */
+export interface AvailableDataset {
+  name: string;
+  configFile: string;
+  inputDir: string;
+  taskType?: string | null;
+  layout: 'per_camera' | 'flat' | 'empty' | 'missing';
+  available: boolean;
+  cameraCount: number;
+  videosFound: number;
+  /** Native fps of the source video (probed). */
+  sourceFps?: number | null;
+  /** Rate Stage 0 samples frames at (from the dataset config). */
+  sampleFps?: number | null;
+  width?: number | null;
+  height?: number | null;
+  cameras: DatasetCamera[];
+}
+
+/** One entry (subfolder or video file) in the folder browser. */
+export interface BrowseEntry {
+  name: string;
+  type: 'dir' | 'video';
+  path: string;
+}
+
+export interface BrowseResult {
+  root: string;
+  path: string;
+  parent: string | null;
+  entries: BrowseEntry[];
+  datasetLike: boolean;
+  layout: AvailableDataset['layout'];
+  cameras: DatasetCamera[];
+  inputDir: string;
+}
+
+/** Curated tracking datasets (CityFlow, WILDTRACK, EPFL, ...) with availability. */
+export async function getAvailableDatasets(): Promise<ApiResponse<AvailableDataset[]>> {
+  return fetchApi<ApiResponse<AvailableDataset[]>>('/datasets/available');
+}
+
+/** Sandboxed folder browser under data/raw/ for ad-hoc dataset selection. */
+export async function browseDatasetFolder(path = ''): Promise<ApiResponse<BrowseResult>> {
+  const q = path ? `?path=${encodeURIComponent(path)}` : '';
+  return fetchApi<ApiResponse<BrowseResult>>(`/datasets/browse${q}`);
+}
+
+/** Camera videos inside a chosen dataset/folder, shaped for the gallery. */
+export async function getDatasetVideos(inputDir: string): Promise<ApiResponse<VideoFile[]>> {
+  const res = await fetchApi<ApiResponse<any[]>>(
+    `/datasets/videos?inputDir=${encodeURIComponent(inputDir)}`
+  );
+  return { ...res, data: (res.data ?? []).map(normalizeVideoFile) };
+}
+
+/** Start a pipeline run against a chosen input folder (dataset or custom). */
+export async function runDatasetInput(payload: {
+  inputDir: string;
+  name?: string;
+  stages?: string;
+  smoke?: boolean;
+  /** Optional subset of camera ids to process (multi-camera selection). */
+  cameras?: string[];
+}): Promise<ApiResponse<any>> {
+  return fetchApi<ApiResponse<any>>('/datasets/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 }
 

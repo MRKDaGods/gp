@@ -4,7 +4,7 @@
   "description": "City-Wide Camera Vehicle Tracking System - Next.js Frontend",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

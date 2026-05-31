@@ -16,6 +16,11 @@ Cross-references: [findings.md](findings.md) (strategic analysis), [experiment-l
 - **Reranking**: Always hurts (k-reciprocal sets contain false positives with current features)
 - **Feature concatenation**: -1.6pp (mixes uncalibrated feature spaces)
 - **Network flow solver**: -0.24pp MTMC IDF1, increased conflation 27→30 instead of reducing it
+- **Occlusion-aware distance matrix (CityTrack #6)**: fair full-pipeline delta = (all−BT) = −1.03pp on S02 subset; standalone +6.50pp was a cached-feature measurement artifact (IDsw 43→100 from a pure Stage-4 op = upstream feature mismatch). Neutral-to-negative; default-off.
+
+## Tracking / Stage 1
+
+- **SSA / Stationary Sensitive Association (CityTrack #3)**: +0.18pp on S02 subset = within noise, IDsw unchanged (43). Neutral; default-off. (Our Stage-5 stationary FILTER is the opposite operation and stays enabled.)
 
 ## Features / Stage 2
 

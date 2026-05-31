@@ -1,5 +1,5 @@
 """
-GP Pipeline Launcher — starts backend (port 8004) and frontend (port 3001).
+GP Pipeline Launcher — starts backend (port 8000) and frontend (port 3001).
 
 Usage:  python start.py
 Stop:   Ctrl+C
@@ -19,7 +19,7 @@ ROOT          = Path(__file__).resolve().parent
 FRONTEND_DIR  = ROOT / "frontend"
 VENV_PY       = ROOT / ".venv" / "Scripts" / "python.exe"
 BACKEND_PY    = str(VENV_PY) if VENV_PY.exists() else sys.executable
-BACKEND_PORT  = 8004
+BACKEND_PORT  = 8000
 FRONTEND_PORT = 3001
 IS_WIN        = os.name == "nt"
 NPM_CMD       = "npm.cmd" if IS_WIN else "npm"

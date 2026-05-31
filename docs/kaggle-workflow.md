@@ -23,13 +23,20 @@ python scripts/kaggle_logs.py <kernel_slug> --tail N
 ```
 
 ### Auth tokens (`~/.kaggle/`)
-| Account | Token file | Owner |
-|---------|-----------|-------|
-| abdo | `gumfreddy_access_token` | gumfreddy |
-| mrk | (slot present) | mrkdagods |
-| ali369 | (slot present) | lolo |
+Per-account token files live in `~/.kaggle/` (never committed). The canonical account→token-file
+map is `ACCOUNT_TOKENS` in `scripts/dump_kaggle_kernel_summaries.py`. Tooling selects an account by
+copying its token file over `~/.kaggle/kaggle.json` before each CLI call (hot-swap).
 
-Current active account: **gumfreddy**. `ali369` / `mrkdagods` tokens may be missing from `~/.kaggle/`.
+| Account | Token file(s) (first match wins) | Owner |
+|---------|----------------------------------|-------|
+| gumfreddy | `gumfreddy_access_token` | abdo |
+| mrkdagods | `mrkdagods_access_token`, `MRKDaGods__access_token` | mrk |
+| ali369 | `ali369_access_token`, `ali_369_access_token` | lolo |
+| yahiaakhalafallah | `yahiaakhalafallah_access_token` | yahia |
+
+Current default active account: **gumfreddy**. As of 2026-05-31 all four token files are present
+in `~/.kaggle/`. Max **2 concurrent GPU sessions per account** — the multiple accounts parallelize
+GPU work across slots.
 
 ---
 

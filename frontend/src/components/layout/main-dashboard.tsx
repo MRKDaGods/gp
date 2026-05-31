@@ -25,7 +25,10 @@ import {
   Cpu,
   Settings,
   Cloud,
-  Server,
+  Radar,
+  Check,
+  Loader2,
+  X,
 } from "lucide-react";
 import { useSessionStore, useUIStore, usePipelineStore, useVideoStore, useDetectionStore, useTrackletStore, useTimelineStore } from "@/store";
 import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials-modal";
@@ -42,9 +45,9 @@ import { TimelineStage, TimelineStageActions } from "@/components/stages/timelin
 import { RefinementStage, RefinementStageActions } from "@/components/stages/refinement-stage";
 import { OutputStage, OutputStageActions } from "@/components/stages/output-stage";
 import { DatasetProcessing } from "@/components/stages/dataset-processing";
-import { PipelineRunHeader, StageShell, StageStatusDot, StalenessChip, stageContract, statusMeta, type StageStatus } from "@/components/pipeline";
+import { PipelineRunHeader, StageShell, StalenessChip, stageContract, statusMeta, type StageStatus } from "@/components/pipeline";
 import { useStageState } from "@/hooks/useStageState";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 const stages = [
   { id: 0 as StageNumber, label: "Upload", icon: Upload },
@@ -125,6 +128,67 @@ function sidebarStatusSentence(
   return `${stageLabel} is ${statusMeta(status).label.toLowerCase()} · ${executionTarget} execution`;
 }
 
+/** Clean stepper indicator for the sidebar — no loud dashed/amber states. */
+function StageStepDot({
+  status,
+  isActive,
+  withCloudOverlay = false,
+}: {
+  status: StageStatus;
+  isActive: boolean;
+  withCloudOverlay?: boolean;
+}) {
+  const base =
+    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors";
+  let body: ReactNode;
+  if (status === "done") {
+    body = (
+      <span className={cn(base, "border-success bg-success text-success-foreground")}>
+        <Check className="h-3.5 w-3.5" strokeWidth={3} />
+      </span>
+    );
+  } else if (status === "running") {
+    body = (
+      <span className={cn(base, "border-accent-strong bg-accent-strong/15 text-accent-strong")}>
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      </span>
+    );
+  } else if (status === "error") {
+    body = (
+      <span className={cn(base, "border-destructive bg-destructive/10 text-destructive")}>
+        <X className="h-3.5 w-3.5" strokeWidth={3} />
+      </span>
+    );
+  } else if (status === "stale") {
+    body = (
+      <span className={cn(base, "border-warning/60 bg-warning/10 text-warning")}>
+        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      </span>
+    );
+  } else if (isActive) {
+    body = (
+      <span className={cn(base, "border-accent-strong bg-accent-strong/20 text-accent-strong")}>
+        <span className="h-2 w-2 rounded-full bg-current" />
+      </span>
+    );
+  } else {
+    // idle / blocked — quiet, neutral
+    body = (
+      <span className={cn(base, "border-border/70 bg-transparent text-muted-foreground/50")}>
+        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      </span>
+    );
+  }
+  return (
+    <span className="relative inline-flex">
+      {body}
+      {withCloudOverlay ? (
+        <Cloud className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-card text-accent-strong ring-1 ring-card" />
+      ) : null}
+    </span>
+  );
+}
+
 function SidebarStageRow({
   stage,
   isActive,
@@ -148,40 +212,39 @@ function SidebarStageRow({
         <button
           onClick={onSelect}
           className={cn(
-            "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            "group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             isActive
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              ? "bg-muted/70 text-foreground"
+              : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
             !sidebarOpen && "justify-center px-0"
           )}
         >
+          {isActive && sidebarOpen && (
+            <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-accent-strong" aria-hidden />
+          )}
           <div className="flex shrink-0 items-center gap-1.5">
-            <StageStatusDot
+            <StageStepDot
               status={stageState.status}
+              isActive={isActive}
               withCloudOverlay={!sidebarOpen && showExecutionTarget && isKaggleStage}
-              className={cn(isActive && "ring-2 ring-primary-foreground/40")}
             />
-            {sidebarOpen && showExecutionTarget && (
+            {sidebarOpen && showExecutionTarget && isKaggleStage && (
               <span
                 className="flex h-4 w-4 items-center justify-center"
-                title={isKaggleStage ? "Kaggle execution" : "Local execution"}
-                aria-label={isKaggleStage ? "Kaggle execution" : "Local execution"}
+                title="Runs on Kaggle GPU"
+                aria-label="Runs on Kaggle GPU"
               >
-                {isKaggleStage ? (
-                  <Cloud className="h-3 w-3 text-accent-strong" />
-                ) : (
-                  <Server className="h-3 w-3 text-muted-foreground" />
-                )}
+                <Cloud className="h-3 w-3 text-accent-strong" />
               </span>
             )}
           </div>
           {sidebarOpen && (
             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-              <span className="truncate">{stage.label}</span>
+              <span className={cn("truncate", isActive ? "font-semibold" : "font-medium")}>{stage.label}</span>
               {stageState.status === "stale" ? (
                 <StalenessChip label="Stale" />
               ) : (
-                <span className="max-w-full truncate text-[11px] font-normal opacity-80">
+                <span className="max-w-full truncate text-[11px] font-normal opacity-70">
                   {stageState.status === "blocked" ? `needs Stage ${stage.id - 1}` : `${statusMeta(stageState.status).label.toLowerCase()}${stageState.status === "running" ? ` · ${Math.round(progress)}%` : ""}`}
                 </span>
               )}
@@ -301,8 +364,14 @@ export function MainDashboard() {
           sidebarOpen ? "w-56" : "w-14"
         )}
       >
-        {/* Toggle at the top */}
-        <div className={cn("flex shrink-0 items-center border-b border-border/60", sidebarOpen ? "justify-end px-2 py-2" : "justify-center py-2")}>
+        {/* Brand + collapse toggle */}
+        <div className={cn("flex h-12 shrink-0 items-center border-b border-border/60 px-2", sidebarOpen ? "justify-between" : "justify-center")}>
+          {sidebarOpen && (
+            <div className="flex items-center gap-2 pl-1">
+              <Radar className="h-5 w-5 text-primary" />
+              <span className="text-sm font-semibold tracking-tight">ATHAR</span>
+            </div>
+          )}
           <Button
             variant="ghost"
             size="icon"

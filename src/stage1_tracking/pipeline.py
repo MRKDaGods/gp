@@ -108,6 +108,10 @@ def run_stage1(
     failed_frames = 0
     total_frames = 0
 
+    # Emit total camera count so consumers (e.g. the serving backend) can render
+    # accurate cross-camera progress before any camera has finished.
+    logger.info(f"[PROGRESS] cameras_total={len(frames_by_camera)}")
+
     for camera_id, cam_frames in frames_by_camera.items():
         logger.info(f"Processing camera {camera_id}: {len(cam_frames)} frames")
         total_frames += len(cam_frames)
@@ -142,8 +146,17 @@ def run_stage1(
             merge_max_iou_distance=merge_max_iou_distance,
         )
 
-        for frame_info in cam_frames:
+        cam_total = len(cam_frames)
+        # Throttle progress logs to ~every 1% (min 1 frame) to keep stdout light
+        # while still giving the backend a smooth per-frame signal to interpolate.
+        progress_every = max(1, cam_total // 100)
+        for frame_pos, frame_info in enumerate(cam_frames):
             import cv2
+
+            if frame_pos % progress_every == 0 or frame_pos == cam_total - 1:
+                logger.info(
+                    f"[PROGRESS] camera={camera_id} frame={frame_pos + 1} total={cam_total}"
+                )
 
             frame = cv2.imread(frame_info.frame_path)
             if frame is None:
