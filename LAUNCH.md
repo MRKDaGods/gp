@@ -30,7 +30,7 @@ python scripts/verify_assets.py
 **Terminal 1 — Backend (FastAPI on port 8000):**
 ```powershell
 .\.venv\Scripts\activate
-python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn backend_api:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 **Terminal 2 — Frontend (Next.js on port 3000):**

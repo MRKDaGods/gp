@@ -6,7 +6,6 @@ import subprocess
 import sys
 import threading
 import traceback as _traceback
-import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +23,6 @@ from backend.config import (
     DATASET_DIR,
     OUTPUT_DIR,
     PRECOMPUTE_RUN_ID,
-    UPLOAD_DIR,
     VIDEO_EXTENSIONS,
 )
 from backend.models.requests import FusionConfig
