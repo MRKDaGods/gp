@@ -111,3 +111,14 @@ tmp_*/
 # Local dataset and upload directories
 /dataset
 /uploads
+gp__Copy_/main.toc
+gp__Copy_/main.synctex.gz
+gp__Copy_/main.pdf
+gp__Copy_/main.out
+gp__Copy_/main.lot
+gp__Copy_/main.aux
+gp__Copy_/main.bbl
+gp__Copy_/main.blg
+gp__Copy_/main.fdb_latexmk
+gp__Copy_/main.fls
+gp__Copy_/main.lof

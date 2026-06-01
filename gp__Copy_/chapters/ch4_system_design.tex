@@ -12,16 +12,14 @@ The pipeline is composed of seven sequentially executed stages. Each stage reads
 
 \begin{figure}[htbp]
 \centering
-\framebox[0.95\textwidth]{\parbox{0.93\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Full 7-stage system block diagram\\(cameras $\rightarrow$ Stage~0--6 $\rightarrow$ web application)}\vspace{2.5cm}}}
-% TODO: insert figure — full 7-stage block diagram: cameras → Stage 0-6 → web application
+\includegraphics[width=1\linewidth]{7-stage system.png}
 \caption{Full system block diagram showing the seven processing stages and the web application layer.}
 \label{fig:system_block}
 \end{figure}
 
 \begin{figure}[htbp]
 \centering
-\framebox[0.95\textwidth]{\parbox{0.93\textwidth}{\centering\vspace{2.5cm}\textit{Figure placeholder: Data flow diagram\\(file formats between pipeline stages)}\vspace{2.5cm}}}
-% TODO: insert figure — data flow diagram showing file formats between stages (video → frames manifest → tracklet JSON → .npy embeddings → FAISS .bin + SQLite → global trajectories JSON)
+\includegraphics[width=1\linewidth]{"chapters/Figures/Video Processing Pipeline.png"}
 \caption{Data flow between pipeline stages showing file formats at each stage boundary.}
 \label{fig:data_flow}
 \end{figure}
