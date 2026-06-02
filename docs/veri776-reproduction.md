@@ -66,6 +66,24 @@ Eval kernels (single config per row, **no sweep**, deterministic given frozen ch
 `gumfreddy/veri-paper-table-verify-s1alt` (exact-table S1, above) and `…-verify-v6` (a5alpha S1 → 93.32).
 Fork either to build paper experiments.
 
+### Best reproducible fusion — S2 flip-TTA (eval-only, kernel `gumfreddy/veri-s2-improve`)
+
+Adding **horizontal-flip TTA to Stream-2 at 320px** (frozen v6, no retrain) is the best reproducible
+config found:
+
+| S2 variant (frozen v6) | S2 standalone mAP/R1 | Fusion mAP/R1 |
+|------------------------|----------------------|---------------|
+| 320px no-TTA (baseline) | 91.44 / 97.08 | 93.21 / 98.15 |
+| **320px flip-TTA** | 91.15 / 96.78 | **93.31 / 98.21** |
+| 384px no-TTA | 90.28 / 96.01 | 92.83 / 98.21 |
+| 384px flip-TTA | 90.62 / 96.13 | 92.91 / 98.15 |
+
+**93.31** is +0.10pp over the no-TTA fusion and +0.01pp over the published 93.30 (a tie within noise,
+not a real improvement). Note flip-TTA *lowers* S2 standalone but *raises* the fusion (complementarity),
+and **384px hurts** (v6 trained @256 → 320 is the sweet spot). **Eval-side S2 tuning is saturated at
+~93.3; a genuine beat requires a stronger Stream-2 checkpoint (retrain) or a third stream** — the
+documented feature-quality lever.
+
 > **Note on the from-scratch retrain (§5 below):** our clean-room *retrained* streams
 > (`gumfreddy/veri776-canonical-weights`) fuse to **91.96** — ~1.3 pp under 93.30. That residual is
 > genuine training variance of the *new* Stream-2 run (it landed ~1 pp under the v6 it reproduces),
