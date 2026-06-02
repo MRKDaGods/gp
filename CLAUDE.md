@@ -186,6 +186,21 @@ There are **two separate LaTeX documents**:
 - **`veri776`** = the VeRi-776 ReID paper/ablation campaign. **`citytrack`** = the AIC22-winner completeness audit for the thesis. Spec docs live in `docs/subagent-specs/` (`veri776-wave3-paper-sync.md`, `citytrack-paper-section.md`). Collector: `scripts/collect_citytrack_ablation.py`. Aggregator: `scripts/paper/aggregate_paper_results.py`.
 - LaTeX build artifacts (`gp__Copy_/main.pdf`, `.aux`, `.fls`, etc.) are generated — don't hand-edit; they're not the source.
 
+### VeRi-776 fusion reproduction — VERIFIED (2026-06-02) — see [docs/veri776-reproduction.md](docs/veri776-reproduction.md)
+The headline **93.30% mAP / 98.45% R1** is **reproducible** and was re-verified end-to-end on Kaggle (**93.32% / 98.21%**, +0.02pp). The full ablation table reproduces from the **exact original deployed weights** below. Authoritative doc: [docs/veri776-reproduction.md](docs/veri776-reproduction.md).
+- **Exact weights that reproduce 93.30 (SHA-256 pinned):**
+  - Stream 1 (TransReID ViT-B/16 CLIP): **`vehicle_transreid_vit_base_veri776.pth`** on ds `mrkdagods/mtmc-weights` (`reid/`) — sha `8d32334a…` (reproduces the S1 table rows 82.22/84.08/89.97 **exactly**). The near-twin `a5alpha_checkpoint.pth` (`gumfreddy/paper-a5weights`, sha `8203af2f…`) is ~0.4pp lower standalone (89.55) but fuses to 93.32.
+  - Stream 2 (CLIP-SENet **v6**): `clipsenet_v6_veri776.pth` on ds `gumfreddy/veri776-clipsenet-v6` — sha `d24bd3cd…20a1c` (extracted from local `models/reid/clipsenet_v6_veri776_best.pth`).
+  - Fusion reproduces at **93.21** (exact-table S1) – **93.32** (a5alpha S1 twin), bracketing the published **93.30** within ~0.1pp.
+- **CRITICAL provenance trap (v6 vs v7):** the published Stream-2 number (91.54) is from **CLIP-SENet v6**, NOT the **v7** export in `gumfreddy/paper-clipv7` (`vehicle_clip_senet_veri776.pth`, sha `b43b…`/different). The v7 file scores only **88.35** and drags fusion to 91.88. **Always use the v6 checkpoint to reproduce the paper.** This v6/v7 mix-up was the entire ~1.4pp "irreproducible gap".
+- **Exact fusion recipe (deployed, A5alpha notebook cell 26):** per-stream AQE **k=3** → score fuse **`0.3·S_transreid + 0.7·S_clipsenet`** → k-reciprocal rerank **k1=80,k2=15,λ=0.2** → Market-1501/VeRi junk filter. (Stream-2's standalone milestone 91.54 uses AQE **k=10** + rerank **50/10/0.1** — that's standalone only, NOT the fusion.)
+- **Reproduction kernels (Kaggle, account `gumfreddy`, self-contained, no repo clone):**
+  - `gumfreddy/veri-paper-table-verify-s1alt` — **the canonical verification** (exact-table S1 + v6; one config per table row, NO sweep; reproduces every standalone row to ≤0.1pp and fusion 93.21). `…-verify-v6` is the a5alpha-S1 variant (fusion 93.32). Fork either for paper ablations.
+  - `gumfreddy/veri-canon-{stream1-train, stream2-train, fusion-eval}` — clean-room **from-scratch retrain** path → fuses to **91.96** (genuine training variance of the new run, NOT a recipe error; weights in ds `gumfreddy/veri776-canonical-weights`).
+- **Two regimes:** reproduce *published* numbers → use the **original v6/a5alpha weights** (93.32); fully *from-scratch* pipeline → canonical retrained weights (91.96, within variance band).
+- **Determinism:** the hard guarantee is **frozen checkpoint SHA-256 + deterministic eval kernel** (inference is deterministic). GPU *training* is not bit-reproducible (cuDNN autotune, atomics) even with fixed seeds (S1=0, S2=3407).
+- **Kaggle helper:** `scripts/kaggle_ctl.py <account> <kaggle args…>` hot-selects the account token (`KAGGLE_API_TOKEN` env). Pin `torch==2.4.1+cu124` in any VeRi kernel — Kaggle's stock torch 2.10+cu128 dropped sm_60 and crashes on the P100 it sometimes assigns. VeRi-776 has **576** train IDs via dir-glob / **575** via `name_train.txt` (classifier head is discarded at inference, so it doesn't affect features).
+
 ---
 
 ## Multi-Agent Delegation

@@ -1,0 +1,18 @@
+{
+  "id": "gumfreddy/veri-canon-fusion-eval",
+  "title": "Veri Canon Fusion Eval",
+  "code_file": "veri_canon_fusion_eval.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset",
+    "gumfreddy/veri776-canonical-weights"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
