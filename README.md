@@ -75,12 +75,21 @@ models/           Local model checkpoints, gitignored
 ## Setup
 
 Use Python 3.10 or newer. On this project, the local virtual environment is
-`.venv`. Install dependencies, configure Kaggle credentials, download public
-checkpoints and optional datasets, and verify the local asset layout with the
-setup scripts. See `SETUP.md` for asset download details and `LAUNCH.md` for
-backend and frontend launch commands. CityFlowV2 must be downloaded manually
-from the AI City Challenge site because the complete dataset is not available
-as a public Kaggle dataset.
+`.venv`. After cloning and configuring a Kaggle API token (`~/.kaggle/kaggle.json`):
+
+```bash
+pip install -r requirements.txt
+python scripts/download_weights.py     # interactive: pick a model set, or "all"
+python scripts/verify_assets.py
+```
+
+All pipeline and paper checkpoints are consolidated into one public Kaggle
+dataset (`mrkdagods/mtmc-veri776-pipeline-weights`, CC BY 4.0) and are SHA-256
+pinned in `configs/weights_manifest.yaml`. `download_weights.py` lets you fetch a
+single model set — `vehicle-mtmc-14e`, `vehicle-mtmc-14k`, `person-mtmc`, `veri`
+— or `all`. See `SETUP.md` for the full table and `LAUNCH.md` for launch
+commands. CityFlowV2 must be downloaded manually from the AI City Challenge site
+because the complete dataset is not available as a public Kaggle dataset.
 
 ## Datasets
 

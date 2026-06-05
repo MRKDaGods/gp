@@ -36,7 +36,7 @@ models:
     checkpoint_refs:
       - role: detector
         local_path: models/detection/yolo26m.pt
-        expected_sha256: null
+        expected_sha256: 401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7
         hosted:
           - kaggle_dataset: yahiaakhalafallah/mtmc-weights
             member: yolo26m.pt
@@ -49,7 +49,7 @@ models:
         on_disk: false
       - role: primary_reid
         local_path: models/reid/transreid_cityflowv2_best.pth
-        expected_sha256: null
+        expected_sha256: 3d477e2530dd53f9e303cdef9ab78609d7d5c5a500258c2478e7b50eee44378f
         hosted:
           - kaggle_dataset: yahiaakhalafallah/mtmc-weights
             member: reid/transreid_cityflowv2_best.pth
@@ -62,7 +62,7 @@ models:
         on_disk: false
       - role: tertiary_reid
         local_path: models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth
-        expected_sha256: null
+        expected_sha256: 579643e0bd474f71e1955939305311d271f9ac18e5cdf61afe944dfbeabd348d
         hosted:
           - kaggle_dataset: yahiaakhalafallah/09s-dinov2-large-cityflowv2
             member: vehicle_transreid_dinov2_large_cityflowv2_final.pth
@@ -120,7 +120,7 @@ models:
     checkpoint_refs:
       - role: primary_reid
         local_path: models/reid/transreid_cityflowv2_best.pth
-        expected_sha256: null
+        expected_sha256: 3d477e2530dd53f9e303cdef9ab78609d7d5c5a500258c2478e7b50eee44378f
         hosted:
           - kaggle_dataset: yahiaakhalafallah/mtmc-weights
             member: reid/transreid_cityflowv2_best.pth
@@ -180,7 +180,7 @@ models:
     checkpoint_refs:
       - role: detector
         local_path: models/detection/yolo26m.pt
-        expected_sha256: null
+        expected_sha256: 401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7
         hosted:
           - kaggle_dataset: yahiaakhalafallah/mtmc-weights
             member: yolo26m.pt
@@ -193,7 +193,7 @@ models:
         on_disk: false
       - role: primary_reid
         local_path: models/reid/transreid_cityflowv2_best.pth
-        expected_sha256: null
+        expected_sha256: 3d477e2530dd53f9e303cdef9ab78609d7d5c5a500258c2478e7b50eee44378f
         hosted:
           - kaggle_dataset: yahiaakhalafallah/mtmc-weights
             member: reid/transreid_cityflowv2_best.pth
@@ -206,7 +206,7 @@ models:
         on_disk: false
       - role: tertiary_reid
         local_path: models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth
-        expected_sha256: null
+        expected_sha256: 579643e0bd474f71e1955939305311d271f9ac18e5cdf61afe944dfbeabd348d
         hosted:
           - kaggle_dataset: yahiaakhalafallah/09s-dinov2-large-cityflowv2
             member: vehicle_transreid_dinov2_large_cityflowv2_final.pth
@@ -217,7 +217,7 @@ models:
         on_disk: false
       - role: quaternary_reid
         local_path: models/reid/fastreid_r50_ibn_cityflowv2_final.pth
-        expected_sha256: null
+        expected_sha256: c2d50ab895dd374e29c5de9811794cf588428c9bf85278de253f168bab410e88
         hosted:
           - kaggle_dataset: gumfreddy/09p-fastreid-r50-extended-cityflowv2
             member: final_model.pth
@@ -279,7 +279,7 @@ models:
     checkpoint_refs:
       - role: detector
         local_path: models/person_detection/MultiviewDetector.pth
-        expected_sha256: null
+        expected_sha256: ca6fcf69cfbbcb5b8d2d0528bc5de58ba6564cf5d8ffb4ab15733bbabde06a53
         hosted:
           - kaggle_dataset: gumfreddy/12a-wildtrack-mvdetr-training
             member: MultiviewDetector.pth
@@ -338,7 +338,7 @@ models:
     checkpoint_refs:
       - role: detector
         local_path: models/person_detection/MultiviewDetector.pth
-        expected_sha256: null
+        expected_sha256: ca6fcf69cfbbcb5b8d2d0528bc5de58ba6564cf5d8ffb4ab15733bbabde06a53
         hosted:
           - kaggle_dataset: gumfreddy/12a-wildtrack-mvdetr-training
             member: MultiviewDetector.pth
@@ -388,7 +388,7 @@ models:
     checkpoint_refs:
       - role: primary_reid
         local_path: models/reid/vehicle_transreid_vit_base_veri776.pth
-        expected_sha256: null
+        expected_sha256: 8d32334a41933cbf0514fbc72e462124f8785a8057d02b475aca8abf65dbe5e9
         hosted:
           - kaggle_dataset: mrkdagods/mtmc-weights
             member: reid/vehicle_transreid_vit_base_veri776.pth
@@ -399,7 +399,7 @@ models:
         on_disk: false
       - role: secondary_reid
         local_path: models/reid/clipsenet_v6_veri776_best.pth
-        expected_sha256: null
+        expected_sha256: d24bd3cd42cc4e90c7da71e4b955d7b7e3274614e53fc686153b02c116d20a1c
         hosted:
           - kaggle_dataset: yahiaakhalafallah/13-clip-senet-train
             member: best.pth
@@ -449,7 +449,7 @@ models:
     checkpoint_refs:
       - role: primary_reid
         local_path: models/reid/vehicle_transreid_vit_base_veri776.pth
-        expected_sha256: null
+        expected_sha256: 8d32334a41933cbf0514fbc72e462124f8785a8057d02b475aca8abf65dbe5e9
         hosted:
           - kaggle_dataset: mrkdagods/mtmc-weights
             member: reid/vehicle_transreid_vit_base_veri776.pth
@@ -507,7 +507,7 @@ models:
     checkpoint_refs:
       - role: primary_reid
         local_path: models/reid/clipsenet_v6_veri776_best.pth
-        expected_sha256: null
+        expected_sha256: d24bd3cd42cc4e90c7da71e4b955d7b7e3274614e53fc686153b02c116d20a1c
         hosted:
           - kaggle_dataset: yahiaakhalafallah/13-clip-senet-train
             member: best.pth

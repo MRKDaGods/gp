@@ -1,8 +1,17 @@
-"""Download and verify external checkpoints and datasets for local setup.
+"""Download and verify external datasets for local setup, and fetch model weights.
 
-The repo intentionally does not store model weights or raw datasets. This script
-pulls the known public Kaggle artifacts into the local paths used by configs and
-verification scripts.
+The repo intentionally does not store model weights or raw datasets.
+
+Model weights now live in ONE consolidated public Kaggle dataset and are fetched
+by ``scripts/download_weights.py`` (set-aware, SHA-256 verified). This script
+delegates all model-weight downloads to it and additionally handles the optional
+public *datasets* (VeRi-776 eval data; CityFlowV2 is manual).
+
+  python scripts/download_assets.py --all          # weights (all sets) + datasets
+  python scripts/download_assets.py --datasets      # only the public datasets
+  python scripts/download_weights.py                # granular model-set picker
+
+See ``configs/weights_manifest.yaml`` for the weight manifest and model sets.
 """
 
 from __future__ import annotations
@@ -50,16 +59,20 @@ class AssetSpec:
 
 
 ASSETS: tuple[AssetSpec, ...] = (
+    # Model-weight specs are retained for local verification (verify_assets.py).
+    # Downloads are delegated to download_weights.py, which pulls flat members from
+    # the consolidated public dataset below; these `source`/`member` fields mirror
+    # that single source.
     AssetSpec(
         id="clipsenet_v6",
         label="CLIP-SENet v6 VeRi-776 checkpoint",
         group="reid",
         final_path=Path("models/reid/clipsenet_v6_veri776_best.pth"),
-        source_kind="kernel",
-        source="yahiaakhalafallah/13-clip-senet-train",
-        member="checkpoints/best.pth",
-        expected_size_bytes=1_111_738_778,
-        expected_md5="a55f55f60d404c7df5cb62690d7213dc",
+        source_kind="dataset",
+        source="mrkdagods/mtmc-veri776-pipeline-weights",
+        member="clipsenet_v6_veri776.pth",
+        expected_size_bytes=370_932_705,
+        expected_md5="9054174240a981112756c24f46107ea2",
     ),
     AssetSpec(
         id="transreid_veri776_09v",
@@ -67,8 +80,8 @@ ASSETS: tuple[AssetSpec, ...] = (
         group="reid",
         final_path=Path("models/reid/vehicle_transreid_vit_base_veri776.pth"),
         source_kind="dataset",
-        source="mrkdagods/mtmc-weights",
-        member="reid/vehicle_transreid_vit_base_veri776.pth",
+        source="mrkdagods/mtmc-veri776-pipeline-weights",
+        member="vehicle_transreid_vit_base_veri776.pth",
         expected_size_bytes=346_889_637,
         expected_md5="1ddd5b60cf6071a7794be169b41f63e1",
     ),
@@ -78,8 +91,8 @@ ASSETS: tuple[AssetSpec, ...] = (
         group="reid",
         final_path=Path("models/reid/transreid_cityflowv2_best.pth"),
         source_kind="dataset",
-        source="gumfreddy/mtmc-weights",
-        member="reid/transreid_cityflowv2_best.pth",
+        source="mrkdagods/mtmc-veri776-pipeline-weights",
+        member="transreid_cityflowv2_best.pth",
         expected_size_bytes=346_518_635,
         expected_md5="bee2e2bc7e733d8eb3574abcc10ef5ed",
     ),
@@ -89,7 +102,7 @@ ASSETS: tuple[AssetSpec, ...] = (
         group="detection",
         final_path=Path("models/person_detection/MultiviewDetector.pth"),
         source_kind="dataset",
-        source="gumfreddy/12a-wildtrack-mvdetr-checkpoint",
+        source="mrkdagods/mtmc-veri776-pipeline-weights",
         member="MultiviewDetector.pth",
         expected_size_bytes=49_745_811,
         expected_md5="18658027791f44357f07db6b9406b120",
@@ -219,18 +232,31 @@ def markdown_table(results: Sequence[VerificationResult]) -> str:
 
 
 def selected_assets(args: argparse.Namespace) -> list[AssetSpec]:
+    """Datasets handled by the AssetSpec flow. Model weights are delegated to
+    ``download_weights.py`` (see ``wants_model_weights`` / ``delegate_weights``)."""
     groups: set[str] = set()
-    if args.all:
-        groups.update({"reid", "detection", "dataset", "manual"})
-    if args.reid_only:
-        groups.add("reid")
-    if args.detection_only:
-        groups.add("detection")
-    if args.datasets:
+    if args.all or args.datasets:
         groups.update({"dataset", "manual"})
-    if not groups:
-        groups.update({"reid", "detection"})
     return [asset for asset in ASSETS if asset.group in groups]
+
+
+def wants_model_weights(args: argparse.Namespace) -> bool:
+    no_flags = not (args.all or args.reid_only or args.detection_only or args.datasets)
+    return bool(args.all or args.reid_only or args.detection_only or no_flags)
+
+
+def delegate_weights(dry_run: bool, force: bool) -> int:
+    """Fetch model weights via the consolidated, set-aware download_weights.py."""
+    script = REPO_ROOT / "scripts" / "download_weights.py"
+    cmd = [sys.executable, str(script), "--set", "all"]
+    if dry_run:
+        cmd.append("--dry-run")
+    if force:
+        cmd.append("--force")
+    print("\n=== Model weights (delegating to download_weights.py, set=all) ===")
+    print("  For a single model set instead, run: python scripts/download_weights.py")
+    completed = subprocess.run(cmd, cwd=REPO_ROOT)
+    return completed.returncode
 
 
 def command_for(asset: AssetSpec, temp_dir: Path) -> list[str] | None:
@@ -387,6 +413,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     assets = selected_assets(args)
     TEMP_ROOT.mkdir(parents=True, exist_ok=True)
 
+    weights_rc = 0
+    if wants_model_weights(args):
+        weights_rc = delegate_weights(dry_run=args.dry_run, force=args.force)
+
+    if not assets:
+        cleanup_temp_root()
+        return weights_rc
+
     if args.dry_run:
         print("Dry run: no files will be downloaded or changed.")
     elif any(not asset.is_manual for asset in assets) and not ensure_kaggle_cli():
@@ -416,9 +450,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not result.ok and not result.asset.optional and not result.asset.is_manual
     ]
     if failed_required:
-        print("\nSome required model assets failed. Re-run after fixing the errors above.")
+        print("\nSome required dataset assets failed. Re-run after fixing the errors above.")
         return 1
-    return 0
+    return weights_rc
 
 
 if __name__ == "__main__":

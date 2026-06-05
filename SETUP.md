@@ -1,50 +1,82 @@
 # Setup
 
-First-time setup is three commands after cloning the repo and configuring Kaggle credentials:
+First-time setup after cloning the repo and configuring Kaggle credentials:
 
 ```bash
 pip install -r requirements.txt
-python scripts/download_assets.py --all
+python scripts/download_weights.py          # pick a model set, or choose "all"
 python scripts/verify_assets.py
 ```
+
+`download_weights.py` is interactive: it lists the available model sets and lets
+you fetch just what you need (or everything). To grab everything plus the public
+eval datasets in one shot, use `python scripts/download_assets.py --all`.
 
 ## Prerequisites
 
 - Python 3.10 or newer. The local project venv is recommended.
-- A Kaggle account and API token at `~/.kaggle/kaggle.json`. See Kaggle's API docs: <https://www.kaggle.com/docs/api>.
-- Enough disk space for checkpoints and datasets. ReID checkpoints plus VeRi-776 need roughly 3 GB; keeping CityFlowV2 locally as well needs roughly 5 GB or more depending on the extracted layout.
+- A (free) Kaggle account and API token at `~/.kaggle/kaggle.json`. See Kaggle's
+  API docs: <https://www.kaggle.com/docs/api>. The weights dataset is public, but
+  the Kaggle API still requires an authenticated token.
+- Disk space: the full weight bundle is ~2.3 GB; individual sets are smaller (see
+  the table). Keeping CityFlowV2 locally as well needs roughly 5 GB or more.
 
-## What The Downloader Fetches
+## Model Weights
 
-`scripts/download_assets.py --all` pulls the public assets that can be automated:
+All pipeline and paper checkpoints live in ONE public Kaggle dataset,
+**`mrkdagods/mtmc-veri776-pipeline-weights`** (license CC BY 4.0). Each file is
+SHA-256 pinned in `configs/weights_manifest.yaml`; the downloader verifies every
+file after fetching.
+
+```bash
+python scripts/download_weights.py                 # interactive set picker
+python scripts/download_weights.py --list          # list sets + files, no download
+python scripts/download_weights.py --set all       # download everything (~2.3 GB)
+python scripts/download_weights.py --set veri      # just the VeRi-776 paper streams
+python scripts/download_weights.py --set veri --set person-mtmc   # combine sets
+python scripts/download_weights.py --set all --dry-run            # preview only
+python scripts/download_weights.py --set veri --force             # re-download
+```
+
+| Model set | Size | What it runs |
+| --- | ---: | --- |
+| `vehicle-mtmc-14e` | ~1.5 GB | Vehicle MTMC 14e B1 production (CityFlowV2): YOLO26m + OSNet tracker + TransReID-CLIP primary + DINOv2 tertiary |
+| `vehicle-mtmc-14k` | ~1.6 GB | Vehicle MTMC 14k v1 K7 research: 14e set + FastReID R50-IBN quaternary |
+| `person-mtmc` | ~47 MB | Person MTMC 12b (WILDTRACK): MVDeTr ground-plane detector |
+| `veri` | ~685 MB | VeRi-776 paper two-stream fusion (93.32% mAP): TransReID-CLIP + CLIP-SENet v6 |
+| `all` | ~2.3 GB | Everything above (8 files) |
+
+The two `veri` checkpoints are the exact SHA-256-pinned files reported in the
+paper (`tab:repro`): Stream 1 `8d32334a…`, Stream 2 (CLIP-SENet v6)
+`d24bd3cd…`. Evaluating them reproduces the 89.97% standalone and 93.32% fusion
+mAP results.
+
+## Datasets
+
+`scripts/download_assets.py` handles the public datasets and also delegates the
+model-weight download to `download_weights.py`:
+
+```bash
+python scripts/download_assets.py --all           # all weights + public datasets
+python scripts/download_assets.py --datasets      # only the public datasets
+python scripts/download_assets.py --all --dry-run # preview
+```
 
 | Asset | Destination | Source |
 | --- | --- | --- |
-| CLIP-SENet v6 VeRi-776 checkpoint | `models/reid/clipsenet_v6_veri776_best.pth` | Kaggle kernel `yahiaakhalafallah/13-clip-senet-train`, `checkpoints/best.pth` |
-| 09v TransReID VeRi-776 checkpoint | `models/reid/vehicle_transreid_vit_base_veri776.pth` | Kaggle dataset `mrkdagods/mtmc-weights`, `reid/vehicle_transreid_vit_base_veri776.pth` |
-| CityFlowV2 TransReID checkpoint | `models/reid/transreid_cityflowv2_best.pth` | Kaggle dataset `gumfreddy/mtmc-weights`, `reid/transreid_cityflowv2_best.pth` |
-| MVDeTr WILDTRACK checkpoint | `models/person_detection/MultiviewDetector.pth` | Kaggle dataset `gumfreddy/12a-wildtrack-mvdetr-checkpoint`, `MultiviewDetector.pth` |
-
-The verified MVDeTr checkpoint is 49,745,811 bytes with MD5 `18658027791f44357f07db6b9406b120`.
 | VeRi-776 eval dataset | `data/raw/veri776/` | Kaggle dataset `abhyudaya12/veri-vehicle-re-identification-dataset` |
+| CityFlowV2 dataset | `data/raw/cityflowv2/` | Manual — see below |
 
-CityFlowV2 is not available as a complete public Kaggle dataset. Download AI City Challenge 2022 Track 1 manually from the official site, then place it under `data/raw/cityflowv2/`: <https://www.aicitychallenge.org/2022-data-and-evaluation/>.
+CityFlowV2 is not available as a complete public Kaggle dataset. Download AI City
+Challenge 2022 Track 1 manually from the official site, then place it under
+`data/raw/cityflowv2/`: <https://www.aicitychallenge.org/2022-data-and-evaluation/>.
 
-## Useful Commands
+## Verify
 
 ```bash
-# Show actions without downloading.
-python scripts/download_assets.py --all --dry-run
-
-# Fetch only model checkpoints.
-python scripts/download_assets.py --reid-only
-python scripts/download_assets.py --detection-only
-
-# Re-download and replace existing files.
-python scripts/download_assets.py --detection-only --force
-
-# Verify required models, optional VeRi-776 data, and manual CityFlowV2 placement.
 python scripts/verify_assets.py
 ```
 
-The downloader skips files that already match the known size or MD5. If one asset fails, the remaining selected assets still run and the script prints a Markdown summary at the end.
+`verify_assets.py` checks the local checkpoints (size + MD5) and the optional
+VeRi-776 data / manual CityFlowV2 placement. The downloaders skip files that
+already match their pinned checksum; if one file fails, the rest still run.
