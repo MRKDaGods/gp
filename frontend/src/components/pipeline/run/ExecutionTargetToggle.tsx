@@ -10,13 +10,21 @@ import { useStageExecutionStore } from "@/store";
 
 export interface ExecutionTargetToggleProps {
   stage: number;
+  /** Optionally drive several pipeline stages from one switch (e.g. [2, 3] for
+   *  the inference page, which runs Features + Index together). The displayed
+   *  state reflects the first stage; toggling applies to all of them. */
+  stages?: number[];
   variant?: "full" | "compact";
   className?: string;
 }
 
-export function ExecutionTargetToggle({ stage, variant = "full", className }: ExecutionTargetToggleProps) {
-  const target = useStageExecutionStore((state) => state.getStageExecutionTarget(stage));
+export function ExecutionTargetToggle({ stage, stages, variant = "full", className }: ExecutionTargetToggleProps) {
+  const targetStages = stages && stages.length > 0 ? stages : [stage];
+  const primaryStage = targetStages[0];
+  const target = useStageExecutionStore((state) => state.getStageExecutionTarget(primaryStage));
   const setStageExecutionTarget = useStageExecutionStore((state) => state.setStageExecutionTarget);
+  const applyTarget = (next: "local" | "kaggle") =>
+    targetStages.forEach((s) => setStageExecutionTarget(s, next));
   const credentials = useKaggleCredentialsStore((state) => state.credentials);
   const modalOpen = useKaggleCredentialsStore((state) => state.modalOpen);
   const setModalOpen = useKaggleCredentialsStore((state) => state.setModalOpen);
@@ -26,14 +34,14 @@ export function ExecutionTargetToggle({ stage, variant = "full", className }: Ex
   if (variant === "compact") {
     return (
       <div className={cn("flex flex-wrap items-center gap-2", className)}>
-        <div className="inline-flex items-center rounded-md border bg-muted/20 p-0.5" role="group" aria-label={`Stage ${stage} execution target`}>
+        <div className="inline-flex items-center rounded-md border bg-muted/20 p-0.5" role="group" aria-label="Compute target">
           <button
             type="button"
             className={cn(
               "inline-flex h-8 items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               !isKaggle ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             )}
-            onClick={() => setStageExecutionTarget(stage, "local")}
+            onClick={() => applyTarget("local")}
             aria-pressed={!isKaggle}
           >
             <Server className="h-3.5 w-3.5" />
@@ -45,7 +53,7 @@ export function ExecutionTargetToggle({ stage, variant = "full", className }: Ex
               "inline-flex h-8 items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               isKaggle ? "bg-background text-accent-strong shadow-sm" : "text-muted-foreground hover:text-foreground"
             )}
-            onClick={() => setStageExecutionTarget(stage, "kaggle")}
+            onClick={() => applyTarget("kaggle")}
             aria-pressed={isKaggle}
           >
             <Cloud className="h-3.5 w-3.5" />
@@ -89,8 +97,8 @@ export function ExecutionTargetToggle({ stage, variant = "full", className }: Ex
           type="button"
           role="switch"
           aria-checked={isKaggle}
-          aria-label={`Run stage ${stage} on Kaggle`}
-          onClick={() => setStageExecutionTarget(stage, isKaggle ? "local" : "kaggle")}
+          aria-label="Run on Kaggle"
+          onClick={() => applyTarget(isKaggle ? "local" : "kaggle")}
           className={cn(
             "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             isKaggle ? "border-accent-strong bg-accent-strong" : "border-input bg-muted"

@@ -19,6 +19,8 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 
 import torchvision.transforms as T
 
+from src.training.seed import seed_worker, make_generator
+
 
 # ─── Dataset parsers ──────────────────────────────────────────────────────
 
@@ -176,11 +178,100 @@ def parse_cityflowv2(root: str) -> Tuple[List, List, List]:
     return train, query, gallery
 
 
+def parse_cityflowv2_synth(root: str) -> Tuple[List, List, List]:
+    """Parse CityFlowV2 real crops + VehicleX synthetic data for combined training.
+
+    This is the AIC-winner recipe lever: the winning teams trained their ReID
+    backbones on real CityFlow crops PLUS ~1,362 synthetic VehicleX identities
+    (85% of their training images were synthetic). Our prior IBN-a attempts used
+    real-only data and capped at ~52.77% mAP; the synthetic identities add the
+    viewpoint/lighting diversity that teaches cross-camera invariance.
+
+    Expected structure:
+        root/
+          train/      real CityFlow crops   XXXX_SCENE_cNNN_fFFFFFF.jpg
+          query/      real CityFlow query crops
+          gallery/    real CityFlow gallery crops
+          synthetic/  VehicleX synthetic crops  <id>_<...>.jpg  (id = leading int token)
+
+    Synthetic identities are appended to the TRAIN split only, in an offset id
+    space so they never collide with real CityFlow ids. Query/gallery (evaluation)
+    stay REAL-only — we always measure CityFlow mAP, never synthetic. Synthetic
+    images map to a single sentinel camera id (their "camera" is a render viewpoint,
+    not a physical camera). If `synthetic/` is absent this behaves like
+    `parse_cityflowv2` (real-only), so the same dataset name works either way.
+    """
+    train, query, gallery = [], [], []
+
+    for split_name, split_list in [
+        ("train", train),
+        ("query", query),
+        ("gallery", gallery),
+    ]:
+        split_dir = os.path.join(root, split_name)
+        if not os.path.isdir(split_dir):
+            raise FileNotFoundError(f"CityFlowV2 ReID split not found: {split_dir}")
+        for fname in sorted(os.listdir(split_dir)):
+            if not fname.endswith(".jpg"):
+                continue
+            parts = fname.split("_")
+            if len(parts) < 4:
+                continue
+            pid = int(parts[0])
+            cam_name = parts[1] + "_" + parts[2]  # e.g. S01_c001
+            split_list.append((os.path.join(split_dir, fname), pid, cam_name))
+
+    # Map real camera names to integer ids
+    all_cams = sorted({cam for _, _, cam in train + query + gallery})
+    cam2id = {c: i for i, c in enumerate(all_cams)}
+    train = [(p, pid, cam2id[c]) for p, pid, c in train]
+    query = [(p, pid, cam2id[c]) for p, pid, c in query]
+    gallery = [(p, pid, cam2id[c]) for p, pid, c in gallery]
+
+    # Append synthetic images to TRAIN with an offset id space.
+    synth_dir = os.path.join(root, "synthetic")
+    n_synth = 0
+    if os.path.isdir(synth_dir):
+        real_max_pid = max((pid for _, pid, _ in train), default=-1)
+        synth_cam = len(all_cams)  # single sentinel synthetic "camera"
+        synth = []
+        for dirpath, _, fnames in os.walk(synth_dir):
+            for fname in sorted(fnames):
+                if not fname.lower().endswith((".jpg", ".jpeg", ".png")):
+                    continue
+                token = fname.split("_")[0].split(".")[0]
+                try:
+                    sid = int(token)
+                except ValueError:
+                    continue
+                synth.append(
+                    (os.path.join(dirpath, fname), real_max_pid + 1 + sid, synth_cam)
+                )
+        train = train + synth
+        n_synth = len(synth)
+
+    # Re-label combined train pids to 0..N-1 (real + synthetic share one head).
+    train_pids = sorted(set(pid for _, pid, _ in train))
+    pid2label = {pid: label for label, pid in enumerate(train_pids)}
+    train = [(path, pid2label[pid], cam) for path, pid, cam in train]
+
+    if n_synth:
+        from loguru import logger as _logger
+
+        _logger.info(
+            f"cityflowv2_synth: {len(train) - n_synth} real + {n_synth} synthetic "
+            f"= {len(train)} train imgs, {len(train_pids)} combined ids"
+        )
+
+    return train, query, gallery
+
+
 DATASET_PARSERS = {
     "market1501": parse_market1501,
     "veri776": parse_veri776,
     "msmt17": parse_msmt17,
     "cityflowv2": parse_cityflowv2,
+    "cityflowv2_synth": parse_cityflowv2_synth,
 }
 
 
@@ -266,10 +357,14 @@ class PKSampler(Sampler):
         data_source: List[Tuple[str, int, int]],
         p: int = 16,
         k: int = 4,
+        seed: Optional[int] = None,
     ):
         self.data_source = data_source
         self.p = p
         self.k = k
+        # Dedicated RNG so identity sampling is reproducible (and independent of
+        # the global numpy state). When seed is None, falls back to fresh entropy.
+        self.rng = np.random.default_rng(seed)
 
         # Build pid -> indices mapping
         self.pid_to_indices: Dict[int, List[int]] = defaultdict(list)
@@ -281,15 +376,15 @@ class PKSampler(Sampler):
 
     def __iter__(self):
         """Yield indices for PK-balanced batches."""
-        np.random.shuffle(self.pids)
+        self.rng.shuffle(self.pids)
         batch = []
         for pid in self.pids:
             indices = self.pid_to_indices[pid]
             if len(indices) < self.k:
                 # Over-sample if not enough instances
-                selected = np.random.choice(indices, size=self.k, replace=True).tolist()
+                selected = self.rng.choice(indices, size=self.k, replace=True).tolist()
             else:
-                selected = np.random.choice(indices, size=self.k, replace=False).tolist()
+                selected = self.rng.choice(indices, size=self.k, replace=False).tolist()
             batch.extend(selected)
 
             if len(batch) >= self.batch_size:
@@ -314,6 +409,7 @@ def build_dataloader(
     num_workers: int = 4,
     random_erasing_prob: float = 0.5,
     color_jitter: bool = False,
+    seed: Optional[int] = None,
 ) -> Tuple[DataLoader, DataLoader, DataLoader, int, int]:
     """Build train/query/gallery dataloaders.
 
@@ -345,7 +441,11 @@ def build_dataloader(
     gallery_dataset = ReIDDataset(gallery_data, test_transform)
 
     p = batch_size // num_instances
-    sampler = PKSampler(train_data, p=p, k=num_instances)
+    sampler = PKSampler(train_data, p=p, k=num_instances, seed=seed)
+
+    # Reproducible worker RNG + generator (only meaningful when a seed is given).
+    worker_init = seed_worker if seed is not None else None
+    generator = make_generator(seed) if seed is not None else None
 
     train_loader = DataLoader(
         train_dataset,
@@ -354,6 +454,8 @@ def build_dataloader(
         num_workers=num_workers,
         pin_memory=True,
         drop_last=True,
+        worker_init_fn=worker_init,
+        generator=generator,
     )
     query_loader = DataLoader(
         query_dataset,
@@ -361,6 +463,7 @@ def build_dataloader(
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
+        worker_init_fn=worker_init,
     )
     gallery_loader = DataLoader(
         gallery_dataset,
@@ -368,6 +471,7 @@ def build_dataloader(
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
+        worker_init_fn=worker_init,
     )
 
     return train_loader, query_loader, gallery_loader, num_classes, num_cameras

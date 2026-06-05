@@ -17,9 +17,19 @@ router = APIRouter()
 
 
 @router.get("/api/tracklets")
-async def get_tracklets(cameraId: Optional[str] = None, videoId: Optional[str] = None, state: AppState = Depends(get_app_state)):
-    """Get tracklets from latest real stage1 output."""
-    print(f"\n[UI Request] Get Tracklets: cameraId={cameraId}, videoId={videoId}")
+async def get_tracklets(
+    cameraId: Optional[str] = None,
+    videoId: Optional[str] = None,
+    allCameras: bool = False,
+    state: AppState = Depends(get_app_state),
+):
+    """Get tracklets from latest real stage1 output.
+
+    When ``allCameras`` is set, return tracklets for EVERY camera in the run
+    (each item carries its own ``cameraId``) so the selection UI can show and
+    filter the whole run, not just the currently-viewed camera.
+    """
+    print(f"\n[UI Request] Get Tracklets: cameraId={cameraId}, videoId={videoId}, allCameras={allCameras}")
     if not videoId:
         return {"success": True, "data": []}
     if videoId not in state.uploaded_videos:
@@ -29,11 +39,14 @@ async def get_tracklets(cameraId: Optional[str] = None, videoId: Optional[str] =
     if run_dir is None:
         return {"success": True, "data": []}
 
-    resolved_camera_id = cameraId or _detect_camera_for_video(state.uploaded_videos[videoId], None)
-    tracklets = _load_tracklets(resolved_camera_id, run_dir)
-
-    if not tracklets:
+    if allCameras:
         tracklets = _load_all_stage1_tracklets(run_dir)
+    else:
+        resolved_camera_id = cameraId or _detect_camera_for_video(state.uploaded_videos[videoId], None)
+        tracklets = _load_tracklets(resolved_camera_id, run_dir)
+
+        if not tracklets:
+            tracklets = _load_all_stage1_tracklets(run_dir)
 
     summary = []
     for t in tracklets:

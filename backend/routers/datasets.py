@@ -102,6 +102,37 @@ def _norm(p: Path) -> str:
     return str(p).replace("\\", "/")
 
 
+def _dataset_video_records(
+    input_dir: Path,
+    layout: str,
+    cameras: List[Dict[str, Any]],
+    selected: Optional[List[str]],
+) -> List[Dict[str, Any]]:
+    """Build {id, cameraId, path, name} for each (selected) camera video. Ids are
+    the same deterministic uuid5(path) used everywhere, so a run rebuilt from
+    these records resolves to the same videos."""
+    selected_set = set(selected) if selected else None
+    records: List[Dict[str, Any]] = []
+    for cam in cameras:
+        if selected_set is not None and cam["id"] not in selected_set:
+            continue
+        vpath = (
+            input_dir / cam["file"]
+            if layout == "flat"
+            else input_dir / cam["id"] / cam["file"]
+        )
+        if not vpath.exists():
+            continue
+        vid_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(vpath.resolve())))
+        records.append({
+            "id": vid_id,
+            "cameraId": cam["id"],
+            "path": str(vpath),
+            "name": cam["id"],
+        })
+    return records
+
+
 def _first_video_path(
     input_dir: Path, layout: str, cameras: List[Dict[str, Any]]
 ) -> Optional[Path]:
@@ -309,7 +340,17 @@ async def run_dataset_input(
     if requested and not selected:
         raise HTTPException(status_code=400, detail="none of the requested cameras exist")
 
-    run_id = _resolve_run_id(None)
+    # Reuse an explicit runId so the per-stage flow runs each pipeline stage
+    # incrementally against the SAME run dir (stages read prior stages' outputs
+    # from outputs/<run_id>/stageN). Omitting runId allocates a fresh run.
+    requested_run_id = payload.get("runId")
+    if requested_run_id is not None and not str(requested_run_id).strip():
+        requested_run_id = None
+    run_id = _resolve_run_id(str(requested_run_id) if requested_run_id is not None else None)
+
+    # Camera video records for this run (deterministic ids) — persisted in
+    # run_context.json so the run can be fully rebuilt from disk after a restart.
+    video_records = _dataset_video_records(resolved, layout, cameras, selected)
     state.active_runs[run_id] = {
         "id": run_id,
         "runId": run_id,
@@ -323,6 +364,18 @@ async def run_dataset_input(
         "selectedCameras": selected or None,
         "stages": stages,
     }
+    _write_run_context(
+        run_id,
+        {
+            "source": "dataset-input",
+            "datasetName": name,
+            "inputDir": _norm(resolved),
+            "layout": layout,
+            "selectedCameras": selected or None,
+            "smoke": smoke,
+            "videos": video_records,
+        },
+    )
     background_tasks.add_task(
         _execute_input_dir_pipeline,
         run_id, _norm(resolved), stages, smoke, name, selected or None,

@@ -17,20 +17,19 @@ import {
   Truck,
   Bus,
   AlertCircle,
-  X,
   Square,
   Clock,
   Cpu,
   Server,
   Cloud,
   ScanLine,
+  Video,
+  Terminal,
 } from "lucide-react";
 import { cn, bboxToStyle } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { DisclosurePanel, ErrorBanner, ExecutionTargetToggle, PlaybackControls, RunStageWidget, toStageStatus } from "@/components/pipeline";
+import { DisclosurePanel, ErrorBanner, PlaybackControls, toStageStatus } from "@/components/pipeline";
 import type { StageStatus } from "@/components/pipeline/status/types";
 import {
   useVideoStore,
@@ -40,12 +39,11 @@ import {
   useStageExecutionStore,
 } from "@/store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
-import { useStartStage1 } from "@/hooks/use-start-stage1";
+import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
+import { MultiCameraView } from "@/components/stages/multi-camera-view";
 import {
   cancelPipeline,
-  getDetections,
   getAllDetections,
-  getPipelineStatus,
   getFrameUrl,
   getVideoStreamUrl,
   apiUrl,
@@ -62,6 +60,61 @@ function detectionCropUrl(
 ): string {
   const { x1, y1, x2, y2 } = bbox;
   return apiUrl(`/crops/${encodeURIComponent(videoId)}?frameId=${frameId}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&quality=${quality}&minEdge=${minEdge}&pad=0.12`);
+}
+
+/** Frames per camera a quick-test run ingests/processes — mirrors the pipeline's
+ *  smoke-test cap (stage0 max_frames / stage1 cam_frames[:10]). */
+const SMOKE_FRAME_LIMIT = 10;
+
+/** A whole tracked vehicle across the run (aggregated from per-frame detections). */
+interface TrackSummary {
+  trackId: number;
+  className: string;
+  classId: number;
+  firstFrame: number;
+  lastFrame: number;
+  frameCount: number;
+  thumbFrameId: number;
+  thumbBbox: BoundingBox;
+  confidence: number;
+}
+
+/** Aggregate per-frame detections into one entry per track id. */
+function summariseTracks(
+  byFrame: Map<number, Detection[]>
+): TrackSummary[] {
+  const map = new Map<number, TrackSummary>();
+  for (const [frameId, dets] of byFrame) {
+    for (const d of dets) {
+      if (d.trackId == null) continue;
+      const cur = map.get(d.trackId);
+      if (!cur) {
+        map.set(d.trackId, {
+          trackId: d.trackId,
+          className: d.className,
+          classId: d.classId,
+          firstFrame: frameId,
+          lastFrame: frameId,
+          frameCount: 1,
+          thumbFrameId: frameId,
+          thumbBbox: d.bbox,
+          confidence: d.confidence,
+        });
+      } else {
+        if (frameId < cur.firstFrame) {
+          cur.firstFrame = frameId;
+          cur.thumbFrameId = frameId;
+          cur.thumbBbox = d.bbox;
+        }
+        cur.lastFrame = Math.max(cur.lastFrame, frameId);
+        cur.frameCount += 1;
+        cur.confidence = Math.max(cur.confidence, d.confidence);
+      }
+    }
+  }
+  return [...map.values()].sort(
+    (a, b) => a.firstFrame - b.firstFrame || a.trackId - b.trackId
+  );
 }
 
 /**
@@ -107,6 +160,49 @@ function detectionCropThumbPropsEqual(
     prev.cropBbox.y1 === next.cropBbox.y1 &&
     prev.cropBbox.x2 === next.cropBbox.x2 &&
     prev.cropBbox.y2 === next.cropBbox.y2
+  );
+}
+
+/** Short display label for a COCO vehicle class id. */
+const CLASS_LABEL: Record<number, string> = { 2: "Car", 7: "Truck", 5: "Bus" };
+
+/** Small class glyph for captions/filters. */
+function ClassGlyph({ classId, className }: { classId: number; className?: string }) {
+  if (classId === 7) return <Truck className={className} />;
+  if (classId === 5) return <Bus className={className} />;
+  return <Car className={className} />;
+}
+
+/** Pill toggle for the Tracked-Vehicles class filter. */
+function FilterChip({
+  active,
+  onClick,
+  label,
+  count,
+  icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+  icon?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-accent-strong bg-accent-strong/15 text-foreground"
+          : "border-border/60 bg-background/40 text-muted-foreground hover:text-foreground"
+      )}
+      aria-pressed={active}
+    >
+      {icon}
+      {label}
+      <span className="opacity-60">{count}</span>
+    </button>
   );
 }
 
@@ -168,10 +264,7 @@ const DetectionCropThumb = memo(function DetectionCropThumb({
   return (
     <div
       ref={rootRef}
-      className={cn(
-        "relative h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-muted",
-        isSelected ? "border-success/70 ring-1 ring-success/40" : "border-border"
-      )}
+      className="relative h-full w-full overflow-hidden bg-muted"
     >
       {!visible ? (
         <div className="h-full w-full animate-pulse bg-muted-foreground/15" aria-hidden />
@@ -298,6 +391,9 @@ function DetectionProgressPanel({
   camerasProcessed,
   frame,
   frameTotal,
+  liveMessage,
+  logTail,
+  errorMessage,
   onCancel,
   className,
 }: {
@@ -314,10 +410,14 @@ function DetectionProgressPanel({
   camerasProcessed?: number;
   frame?: number;
   frameTotal?: number;
+  liveMessage?: string;
+  logTail?: string;
+  errorMessage?: string;
   onCancel: () => void;
   className?: string;
 }) {
   const running = status === "running";
+  const failed = status === "error";
   const pct = Math.max(0, Math.min(100, Math.round(progress)));
   const stageValue =
     completedStages && totalStages
@@ -327,19 +427,25 @@ function DetectionProgressPanel({
     <div
       className={cn(
         "rounded-lg border bg-card shadow-sm",
-        running ? "border-primary/40" : "border-border",
+        failed ? "border-destructive/50" : running ? "border-primary/40" : "border-border",
         className
       )}
     >
       <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          {running ? (
+          {failed ? (
+            <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+          ) : running ? (
             <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
           ) : (
             <ScanLine className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}
           <span className="truncate text-sm font-semibold">
-            {running ? "Detecting & tracking…" : "Stage 1 — Detection & Tracking"}
+            {failed
+              ? "Detection failed"
+              : running
+                ? "Detecting & tracking…"
+                : "Stage 1 — Detection & Tracking"}
           </span>
         </div>
         {running ? (
@@ -411,22 +517,113 @@ function DetectionProgressPanel({
             </span>
           ) : null}
         </div>
+        {/* What the pipeline is doing right now (more human than the % bar). */}
+        {running && liveMessage ? (
+          <p className="truncate text-xs text-foreground/80">{liveMessage}</p>
+        ) : null}
+        {/* Error detail — show WHY a run failed instead of silently reverting. */}
+        {failed && errorMessage ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <p className="font-medium">The detection run did not complete.</p>
+            <p className="mt-0.5 break-words font-mono text-[11px] opacity-90">{errorMessage}</p>
+          </div>
+        ) : null}
+        {/* Live, verbose pipeline log — the raw subprocess output, tailing. */}
+        {(running || failed) && logTail ? (
+          <div className="overflow-hidden rounded-md border border-border/60 bg-background/60">
+            <div className="flex items-center gap-1.5 border-b border-border/40 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <Terminal className="h-3 w-3" />
+              Live log
+            </div>
+            <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words px-2.5 py-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+              {logTail}
+            </pre>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Camera tab bar — switch which camera's footage + detections are displayed.
+ *  Only rendered for multi-camera runs (a single-camera run has nothing to switch). */
+function CameraSwitcher({
+  videos,
+  currentId,
+  onSelect,
+}: {
+  videos: VideoFile[];
+  currentId: string | undefined;
+  onSelect: (video: VideoFile) => void;
+}) {
+  if (videos.length <= 1) return null;
+  return (
+    <div className="mb-3 flex shrink-0 items-center gap-2 overflow-x-auto pb-1">
+      <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        Cameras
+      </span>
+      <div className="flex gap-1.5">
+        {videos.map((v) => {
+          const active = v.id === currentId;
+          const label = v.cameraId || v.name;
+          return (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => onSelect(v)}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                active
+                  ? "border-accent-strong bg-accent-strong/15 text-foreground"
+                  : "border-border bg-background/40 text-muted-foreground hover:bg-background hover:text-foreground"
+              )}
+              aria-pressed={active}
+              title={v.name}
+            >
+              <Video className="h-3.5 w-3.5 shrink-0" />
+              <span className="max-w-[10rem] truncate">{label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 export function DetectionStage() {
-  const { currentVideo, currentFrame, setCurrentFrame, isPlaying, setIsPlaying } =
+  const { currentVideo, currentFrame, setCurrentFrame, isPlaying, setIsPlaying, videos, setCurrentVideo } =
     useVideoStore();
-   const {detections,setDetections,selectedTrackIds,toggleTrackSelection,selectAll,deselectAll,multiSelectMode,setMultiSelectMode,hoveredId,setHoveredId,}
+   const {detections,setDetections,selectedTrackIds,toggleTrackSelection,selectTrackIds,deselectAll,hoveredId,setHoveredId,}
     = useDetectionStore();
+  // Filter the tracked-vehicle list by class (All / Car / Truck / Bus).
+  const [classFilter, setClassFilter] = useState<number | "all">("all");
   const { runId, stages, updateStageProgress, setIsRunning } = usePipelineStore();
   const { setCurrentStage } = useSessionStore();
+  // Live run telemetry is published to the store by the shared stage runner.
+  const runTelemetry = usePipelineStore((s) => s.runTelemetry) ?? {};
+  const runInput = usePipelineStore((s) => s.runInput);
+  const stage1Progress = stages.find((stage) => stage.stage === 1);
+  const stage1Status = toStageStatus(stage1Progress);
 
+  // Single (one big camera) vs Grid (synced multi-camera wall). Grid is only
+  // offered when the run has more than one camera.
+  const [viewMode, setViewMode] = useState<"single" | "grid">("single");
+  // Seek request handed to the multi-view so "jump to vehicle" works in the grid
+  // without leaving it. The token forces a re-seek even for the same frame.
+  const [multiSeekRequest, setMultiSeekRequest] = useState<
+    { videoId: string; frame: number; token: number } | null
+  >(null);
+  const seekTokenRef = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
   const [videoSize, setVideoSize] = useState({ width: 1920, height: 1080 });
+  // Full source-video frame count (used for accurate frame↔time mapping).
   const [totalFrames, setTotalFrames] = useState(100);
+  // Highest frame id that actually has detections — i.e. how far detection was
+  // run. For a quick-test (10-frame) run this is ~9, so the scrubber/playback are
+  // bounded to the processed range instead of spanning the whole source video.
+  const [detectedMaxFrame, setDetectedMaxFrame] = useState<number | null>(null);
+  // All tracked vehicles across the run (not just the current frame).
+  const [tracks, setTracks] = useState<TrackSummary[]>([]);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -439,18 +636,32 @@ export function DetectionStage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   /** JPEG frame-by-frame path when /videos/stream fails or unsupported. */
   const [useFrameFallback, setUseFrameFallback] = useState(false);
-  /** Live run telemetry parsed from the backend status (stage milestones + camera). */
-  const [runTelemetry, setRunTelemetry] = useState<{
-    stageLabel?: string;
-    completedStages?: number;
-    totalStages?: number;
-    camera?: string;
-    camerasProcessed?: number;
-    frame?: number;
-    frameTotal?: number;
-  }>({});
 
   const playbackFps = useMemo(() => effectivePlaybackFps(currentVideo), [currentVideo]);
+
+  // Cameras in this run, scoped to the run's SELECTED cameras and ordered by
+  // camera id. Scoping defends against a store that still holds other dataset
+  // cameras, so detection only ever shows what's actually being processed.
+  const runCameraKey = (runInput?.cameras ?? []).join(",");
+  const sortedVideos = useMemo(() => {
+    const cams = runCameraKey ? runCameraKey.split(",").filter(Boolean) : [];
+    const camSet = cams.length > 0 ? new Set(cams.map((c) => c.toLowerCase())) : null;
+    const scoped = camSet
+      ? videos.filter((v) => v.cameraId && camSet.has(v.cameraId.toLowerCase()))
+      : videos;
+    return [...scoped].sort((a, b) =>
+      (a.cameraId || a.name).localeCompare(b.cameraId || b.name, undefined, { numeric: true })
+    );
+  }, [videos, runCameraKey]);
+
+  // If the selected video isn't one of the run's cameras (e.g. a stale value
+  // persisted from before), snap to the first in-scope camera so the viewer
+  // never shows footage outside the run.
+  useEffect(() => {
+    if (!runInput || sortedVideos.length === 0) return;
+    if (currentVideo && sortedVideos.some((v) => v.id === currentVideo.id)) return;
+    setCurrentVideo(sortedVideos[0]);
+  }, [runInput, sortedVideos, currentVideo, setCurrentVideo]);
 
   const handleStreamMeta = useCallback(
     (e: SyntheticEvent<HTMLVideoElement>) => {
@@ -466,6 +677,24 @@ export function DetectionStage() {
 
   const handleStreamError = useCallback(() => setUseFrameFallback(true), []);
 
+  // Navigable frame count. The <video> element always streams the FULL source
+  // file, but for a quick-test run only the first SMOKE_FRAME_LIMIT frames are
+  // ingested/processed, so we cap the scrubber to that scope — both before
+  // detection runs (via runInput.smoke) and after (via the detected range).
+  // frame↔time mapping always uses the full `totalFrames` so seeks stay accurate.
+  const navTotalFrames = (() => {
+    let cap = totalFrames;
+    if (detectedMaxFrame != null) cap = Math.min(cap, detectedMaxFrame + 1);
+    if (runInput?.smoke) cap = Math.min(cap, SMOKE_FRAME_LIMIT);
+    return Math.max(1, cap);
+  })();
+
+  // Track ids visible in the current frame (for the "live" badge in the list).
+  const inFrameTrackIds = useMemo(
+    () => new Set(detections.map((d) => d.trackId)),
+    [detections]
+  );
+
   const frameSyncRef = useRef(currentFrame);
   frameSyncRef.current = currentFrame;
 
@@ -478,187 +707,84 @@ export function DetectionStage() {
     }
     if (prevDetectionVideoIdRef.current !== id) {
       prevDetectionVideoIdRef.current = id;
-      flushPipelineFromStage(id ? 2 : 1);
+      // In a multi-camera dataset run every camera belongs to ONE run, so
+      // switching the *viewed* camera is just a view change — it must not flush
+      // downstream stage progress. Only flush in the single-upload flow where a
+      // different video genuinely means a different source.
+      if (!usePipelineStore.getState().runInput) {
+        flushPipelineFromStage(id ? 2 : 1);
+      }
     }
   }, [currentVideo?.id]);
 
-  // Wait for active stage1 run (if any), then load detections.
+  // DISPLAY ONLY. Show detection artifacts for the current video, but ONLY once
+  // detection has actually finished for this run (stage 1 === "done"). This never
+  // starts a run and never changes the stage status. Gating on "done" prevents
+  // surfacing stale detections from a PRIOR run before the user runs detection.
   useEffect(() => {
     let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
 
-    const fetchAllDetections = async () => {
-      if (!currentVideo) return;
-
-      try {
-        const allDets = await getAllDetections(currentVideo.id);
-        if (cancelled) return;
-        detectionCacheRef.current = allDets;
-        trackThumbByTrackRef.current = buildTrackThumbnailSources(allDets);
-        // Show detections for current frame
-        setDetections(allDets.get(currentFrame) ?? []);
-      } catch {
-        if (cancelled) return;
-        // Fallback: fetch single frame
-        const response = await getDetections(currentVideo.id, currentFrame);
-        if (cancelled) return;
-        const dets = response.data ?? [];
-        trackThumbByTrackRef.current = buildTrackThumbnailSources(
-          new Map([[currentFrame, dets]])
-        );
-        setDetections(dets);
-      }
-    };
-
-    const loadInitialDetections = async () => {
+    const loadForDisplay = async () => {
       if (!currentVideo) {
         trackThumbByTrackRef.current = new Map();
+        detectionCacheRef.current = new Map();
+        setTracks([]);
         setDetections([]);
         setIsLoading(false);
-        updateStageProgress(1, {
-          status: "idle",
-          progress: 0,
-          message: "Waiting for video selection",
-        });
         return;
       }
 
       setVideoError(null);
       setErrorDetail(null);
-      setIsLoading(true);
       setIsPlaying(false);
 
       // Set totalFrames from metadata immediately (refined from <video> metadata when stream loads)
-      if (currentVideo) {
-        const fps = effectivePlaybackFps(currentVideo);
-        setTotalFrames(Math.max(Math.floor(currentVideo.duration * fps), 1));
-        setVideoSize({ width: currentVideo.width || 1920, height: currentVideo.height || 1080 });
-      }
+      const fps = effectivePlaybackFps(currentVideo);
+      setTotalFrames(Math.max(Math.floor(currentVideo.duration * fps), 1));
+      setVideoSize({ width: currentVideo.width || 1920, height: currentVideo.height || 1080 });
 
-      if (!runId) {
-        try {
-          await fetchAllDetections();
-          if (cancelled) return;
-          updateStageProgress(1, {
-            status: "completed",
-            progress: 100,
-            message: "Stage 1 artifacts loaded",
-          });
-        } catch (err) {
-          if (cancelled) return;
-          const msg = err instanceof Error ? err.message : String(err);
-          setVideoError(`Failed to load detections: ${msg}`);
-          trackThumbByTrackRef.current = new Map();
-          setDetections([]);
-          updateStageProgress(1, {
-            status: "error",
-            progress: 100,
-            message: `Stage 1 failed: ${msg}`,
-          });
-        } finally {
-          if (!cancelled) {
-            setIsLoading(false);
-          }
-        }
+      // Only show detections once THIS run's detection has completed. Before that
+      // (idle / running / error) the viewer stays empty — we never display stale
+      // artifacts left over from a previous run on the same source video.
+      if (stage1Status !== "done") {
+        detectionCacheRef.current = new Map();
+        trackThumbByTrackRef.current = new Map();
+        setDetectedMaxFrame(null);
+        setTracks([]);
+        setDetections([]);
+        setIsLoading(false);
         return;
       }
 
-      updateStageProgress(1, {
-        status: "running",
-        progress: 5,
-        message: "Running Stage 1 (YOLOv26 + Deep OC-SORT)...",
-      });
-
-      const pollStatus = async () => {
-        try {
-          const statusResponse = await getPipelineStatus(runId);
-          if (cancelled) return;
-
-          const statusData: any = statusResponse.data;
-          const status = statusData?.status;
-          const progress = Number(statusData?.progress ?? 0);
-          const message = String(statusData?.message ?? "Running Stage 1...");
-
-          setRunTelemetry({
-            stageLabel: statusData?.currentStageName ? String(statusData.currentStageName) : undefined,
-            completedStages: statusData?.completedStages != null ? Number(statusData.completedStages) : undefined,
-            totalStages: statusData?.totalStages != null ? Number(statusData.totalStages) : undefined,
-            camera: statusData?.currentCamera ? String(statusData.currentCamera) : undefined,
-            camerasProcessed: statusData?.camerasProcessed != null ? Number(statusData.camerasProcessed) : undefined,
-            frame: statusData?.currentFrame != null ? Number(statusData.currentFrame) : undefined,
-            frameTotal: statusData?.totalFrames != null ? Number(statusData.totalFrames) : undefined,
-          });
-
-          if (status === "completed") {
-            if (interval) clearInterval(interval);
-            await fetchAllDetections();
-            if (cancelled) return;
-            updateStageProgress(1, {
-              status: "completed",
-              progress: 100,
-              message,
-            });
-            setRunTelemetry({});
-            setIsRunning(false);
-            setIsLoading(false);
-            return;
-          }
-
-          if (status === "error") {
-            if (interval) clearInterval(interval);
-            const errMsg = statusData?.error
-              ? String(statusData.error)
-              : statusData?.message
-              ? String(statusData.message)
-              : "Stage 1 failed — unknown error";
-            const detail = statusData?.errorDetail ? String(statusData.errorDetail) : null;
-            setVideoError(errMsg);
-            setErrorDetail(detail);
-            trackThumbByTrackRef.current = new Map();
-            setDetections([]);
-            updateStageProgress(1, {
-              status: "error",
-              progress: 100,
-              message: errMsg,
-            });
-            setRunTelemetry({});
-            setIsRunning(false);
-            setIsLoading(false);
-            return;
-          }
-
-          updateStageProgress(1, {
-            status: "running",
-            progress,
-            message,
-          });
-        } catch (err) {
-          if (cancelled) return;
-          const msg = err instanceof Error ? err.message : String(err);
-          setVideoError(`Failed to poll Stage 1 status: ${msg}`);
-          setErrorDetail(null);
-          if (interval) clearInterval(interval);
-          setIsLoading(false);
-        }
-      };
-
-      await pollStatus();
-      if (!cancelled) {
-        interval = setInterval(() => {
-          void pollStatus();
-        }, 1200);
+      setIsLoading(true);
+      try {
+        const allDets = await getAllDetections(currentVideo.id);
+        if (cancelled) return;
+        detectionCacheRef.current = allDets;
+        trackThumbByTrackRef.current = buildTrackThumbnailSources(allDets);
+        // Bound the scrubber to the frames detection actually produced.
+        const frameKeys = [...allDets.keys()];
+        setDetectedMaxFrame(frameKeys.length ? Math.max(...frameKeys) : null);
+        setTracks(summariseTracks(allDets));
+        setDetections(allDets.get(frameSyncRef.current) ?? []);
+      } catch {
+        if (cancelled) return;
+        detectionCacheRef.current = new Map();
+        trackThumbByTrackRef.current = new Map();
+        setDetectedMaxFrame(null);
+        setTracks([]);
+        setDetections([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
     };
 
-    loadInitialDetections();
+    void loadForDisplay();
 
     return () => {
       cancelled = true;
-      if (interval) {
-        clearInterval(interval);
-      }
     };
-  }, [currentVideo, runId, setDetections, setIsPlaying, setIsRunning, updateStageProgress]);
+  }, [currentVideo, stage1Status, setDetections, setIsPlaying]);
 
   // Container size tracking — use clientWidth/clientHeight (excludes border)
   // and ResizeObserver for reliable layout tracking.
@@ -694,11 +820,11 @@ export function DetectionStage() {
   }, [currentVideo?.id]);
 
   useEffect(() => {
-    const max = Math.max(0, totalFrames - 1);
+    const max = Math.max(0, navTotalFrames - 1);
     if (currentFrame > max) {
       setCurrentFrame(max);
     }
-  }, [totalFrames, currentFrame, setCurrentFrame]);
+  }, [navTotalFrames, currentFrame, setCurrentFrame]);
 
   // Play/pause native video when not using JPEG fallback
   useEffect(() => {
@@ -718,13 +844,21 @@ export function DetectionStage() {
     let lastEmitted = -1;
     let vfcId = 0;
 
+    const navMax = Math.max(0, navTotalFrames - 1);
+    const navMaxTime = frameIndexToTimeSec(navMax, v.duration, totalFrames, playbackFps);
     const tick = (timeSec?: number) => {
       const t = timeSec ?? v.currentTime;
       const dur = v.duration;
-      const maxF = Math.max(0, totalFrames - 1);
+      // Loop playback within the processed range — a quick-test run only has the
+      // first few frames, so don't keep playing the rest of the source video.
+      if (Number.isFinite(navMaxTime) && navMaxTime > 0 && t > navMaxTime + 1e-3) {
+        v.currentTime = 0;
+        return;
+      }
+      const maxF = navMax;
       const f =
         dur > 0 && Number.isFinite(dur)
-          ? timeToFrameIndex(t, dur, totalFrames)
+          ? Math.min(maxF, timeToFrameIndex(t, dur, totalFrames))
           : Math.min(maxF, Math.max(0, Math.floor(t * playbackFps + 1e-6)));
       if (f !== lastEmitted) {
         lastEmitted = f;
@@ -753,7 +887,7 @@ export function DetectionStage() {
     };
     raf = requestAnimationFrame(onRaf);
     return () => cancelAnimationFrame(raf);
-  }, [isPlaying, currentVideo, useFrameFallback, playbackFps, totalFrames, setCurrentFrame]);
+  }, [isPlaying, currentVideo, useFrameFallback, playbackFps, totalFrames, navTotalFrames, setCurrentFrame]);
 
   // JPEG fallback: advance frames with rAF + accumulated time (smoother than setInterval)
   useEffect(() => {
@@ -770,7 +904,7 @@ export function DetectionStage() {
       let advanced = false;
       while (acc >= frameMs) {
         acc -= frameMs;
-        idx = idx + 1 >= totalFrames ? 0 : idx + 1;
+        idx = idx + 1 >= navTotalFrames ? 0 : idx + 1;
         advanced = true;
       }
       if (advanced) {
@@ -780,7 +914,7 @@ export function DetectionStage() {
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [isPlaying, currentVideo, useFrameFallback, totalFrames, playbackFps, setCurrentFrame]);
+  }, [isPlaying, currentVideo, useFrameFallback, totalFrames, navTotalFrames, playbackFps, setCurrentFrame]);
 
   // When paused, keep the hidden video aligned with the current frame (scrubber / step)
   useEffect(() => {
@@ -795,14 +929,31 @@ export function DetectionStage() {
 
   const seekToFrame = useCallback(
     (frame: number) => {
-      const boundedFrame = Math.min(Math.max(frame, 0), Math.max(totalFrames - 1, 0));
+      const boundedFrame = Math.min(Math.max(frame, 0), Math.max(navTotalFrames - 1, 0));
       setCurrentFrame(boundedFrame);
       const v = videoRef.current;
       if (v && !useFrameFallback) {
         v.currentTime = frameIndexToTimeSec(boundedFrame, v.duration, totalFrames, playbackFps);
       }
     },
-    [totalFrames, playbackFps, useFrameFallback, setCurrentFrame]
+    [navTotalFrames, totalFrames, playbackFps, useFrameFallback, setCurrentFrame]
+  );
+
+  // Jump to a tracked vehicle's frame. In multi-view we seek the grid's shared
+  // clock (staying in the wall); in single view we pause + seek the player. The
+  // sidebar tracks belong to the currently-viewed camera (currentVideo).
+  const jumpToVehicle = useCallback(
+    (frame: number) => {
+      if (viewMode === "grid" && sortedVideos.length > 1 && currentVideo) {
+        seekTokenRef.current += 1;
+        setMultiSeekRequest({ videoId: currentVideo.id, frame, token: seekTokenRef.current });
+        return;
+      }
+      setViewMode("single");
+      setIsPlaying(false);
+      seekToFrame(frame);
+    },
+    [viewMode, sortedVideos.length, currentVideo, seekToFrame, setIsPlaying]
   );
 
   const togglePlayback = () => {
@@ -811,8 +962,6 @@ export function DetectionStage() {
   };
 
   const hasVideo = Boolean(currentVideo);
-  const stage1Progress = stages.find((stage) => stage.stage === 1);
-  const stage1Status = toStageStatus(stage1Progress);
   const executionTarget = useStageExecutionStore((s) => s.getStageExecutionTarget)(1);
 
   // Live elapsed timer while Stage 1 is running.
@@ -844,6 +993,27 @@ export function DetectionStage() {
   const countByClassId = (classId: number) =>
     detections.filter((d) => d.classId === classId).length;
 
+  // Class breakdown + filtered list for the Tracked Vehicles panel.
+  const classCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const t of tracks) counts[t.classId] = (counts[t.classId] ?? 0) + 1;
+    return counts;
+  }, [tracks]);
+  const presentClasses = useMemo(
+    () => Object.keys(classCounts).map(Number).sort((a, b) => a - b),
+    [classCounts]
+  );
+  const filteredTracks = useMemo(
+    () => (classFilter === "all" ? tracks : tracks.filter((t) => t.classId === classFilter)),
+    [tracks, classFilter]
+  );
+  // If the active class filter no longer matches anything, fall back to All.
+  useEffect(() => {
+    if (classFilter !== "all" && !presentClasses.includes(classFilter)) {
+      setClassFilter("all");
+    }
+  }, [classFilter, presentClasses]);
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Main content */}
@@ -851,7 +1021,40 @@ export function DetectionStage() {
         {/* Video area */}
         <div className="flex min-h-[200px] min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:min-h-0">
           <ErrorBanner title="Detection failed" message={videoError} className="mb-3 shrink-0 sm:mb-4" />
-          {stage1Status === "running" ? (
+          {sortedVideos.length > 1 ? (
+            <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
+                {(["single", "grid"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    className={cn(
+                      "rounded px-2.5 py-1 text-xs font-medium capitalize transition-colors",
+                      viewMode === mode
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    aria-pressed={viewMode === mode}
+                  >
+                    {mode === "grid" ? "Multi-view" : "Single"}
+                  </button>
+                ))}
+              </div>
+              {viewMode === "single" ? (
+                <CameraSwitcher
+                  videos={sortedVideos}
+                  currentId={currentVideo?.id}
+                  onSelect={setCurrentVideo}
+                />
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  One scrubber drives all tiles · nudge a camera’s offset to align it
+                </span>
+              )}
+            </div>
+          ) : null}
+          {stage1Status === "running" || stage1Status === "error" ? (
             <DetectionProgressPanel
               status={stage1Status}
               progress={stage1Progress?.progress ?? 0}
@@ -866,10 +1069,21 @@ export function DetectionStage() {
               camerasProcessed={runTelemetry.camerasProcessed}
               frame={runTelemetry.frame}
               frameTotal={runTelemetry.frameTotal}
+              liveMessage={runTelemetry.message}
+              logTail={runTelemetry.logTail}
+              errorMessage={stage1Status === "error" ? stage1Progress?.message : undefined}
               onCancel={() => void handleCancelRun()}
               className="mb-3 shrink-0 sm:mb-4"
             />
           ) : null}
+          {viewMode === "grid" && sortedVideos.length > 1 && hasVideo ? (
+            <MultiCameraView
+              videos={sortedVideos}
+              detectionsReady={stage1Status === "done"}
+              seekRequest={multiSeekRequest}
+            />
+          ) : (
+          <>
           {/* Video container - camera view */}
           <div
             ref={containerRef}
@@ -1014,14 +1228,18 @@ export function DetectionStage() {
                         onMouseEnter={() => setHoveredId(detection.id)}
                         onMouseLeave={() => setHoveredId(null)}
                       >
-                        {/* Label */}
+                        {/* Label — leads with the track ID so vehicles are identifiable */}
                         <div
                           className={cn(
-                            "absolute -top-6 left-0 px-2 py-0.5 text-xs font-medium text-white rounded-sm whitespace-nowrap",
+                            "absolute -top-6 left-0 flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-white whitespace-nowrap",
                             isSelected ? "bg-success" : "bg-destructive"
                           )}
                         >
-                          {detection.className} {(detection.confidence * 100).toFixed(0)}%
+                          {detection.trackId != null && detection.trackId >= 0 && (
+                            <span className="font-mono font-bold">#{detection.trackId}</span>
+                          )}
+                          <span className="font-medium capitalize">{detection.className}</span>
+                          <span className="opacity-80">{(detection.confidence * 100).toFixed(0)}%</span>
                         </div>
 
                         {/* Selection checkmark */}
@@ -1045,154 +1263,205 @@ export function DetectionStage() {
             className="mt-4 shrink-0"
             isPlaying={isPlaying}
             currentFrame={currentFrame}
-            totalFrames={totalFrames}
+            totalFrames={navTotalFrames}
             speedOptions={[]}
             onPlayPause={togglePlayback}
             onFrameChange={seekToFrame}
             onStepBack={() => seekToFrame(0)}
-            onStepForward={() => seekToFrame(Math.max(totalFrames - 1, 0))}
+            onStepForward={() => seekToFrame(Math.max(navTotalFrames - 1, 0))}
           />
+          </>
+          )}
         </div>
 
         {/* Sidebar - Detection list */}
         <aside className="flex max-h-[42vh] min-h-0 w-full shrink-0 flex-col border-t border-border bg-muted/20 lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
-          <div className="shrink-0 border-b bg-muted/30 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="font-semibold">Detected Vehicles</h3>
-                <p className="text-sm text-muted-foreground">Click boxes or list items to select</p>
+          <div className="shrink-0 border-b bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <h3 className="font-semibold">Tracked Vehicles</h3>
+                {currentVideo?.cameraId && (
+                  <Badge variant="outline" className="shrink-0 gap-1 font-mono text-[10px]">
+                    <Video className="h-3 w-3" />
+                    {currentVideo.cameraId}
+                  </Badge>
+                )}
               </div>
-              <Badge variant="secondary" className="shrink-0">{detections.length}</Badge>
+              <Badge variant="secondary" className="shrink-0">
+                {classFilter === "all" ? tracks.length : `${filteredTracks.length} / ${tracks.length}`}
+              </Badge>
             </div>
-          </div>
-          <div className="shrink-0 space-y-3 border-b p-3">
-            <DisclosurePanel title="Advanced" description="Selection controls for the current detection set.">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Checkbox id="stage1-multi-select" checked={multiSelectMode} onCheckedChange={(checked) => setMultiSelectMode(checked === true)} />
-                  <Label htmlFor="stage1-multi-select" className="text-sm">Multi-select mode</Label>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={selectAll} disabled={detections.length === 0} aria-label="Select all visible detections">
-                    Select All
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={deselectAll} disabled={selectedTrackIds.size === 0} aria-label="Deselect all selected detections">
-                    Deselect All
-                  </Button>
-                </div>
+            {presentClasses.length > 0 && (
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                <FilterChip active={classFilter === "all"} onClick={() => setClassFilter("all")} label="All" count={tracks.length} />
+                {presentClasses.map((cid) => (
+                  <FilterChip
+                    key={cid}
+                    active={classFilter === cid}
+                    onClick={() => setClassFilter(cid)}
+                    label={CLASS_LABEL[cid] ?? "Other"}
+                    count={classCounts[cid]}
+                    icon={<ClassGlyph classId={cid} className="h-3 w-3" />}
+                  />
+                ))}
               </div>
-            </DisclosurePanel>
+            )}
+            <div className="mt-2.5 flex items-center justify-between gap-2">
+              <span className="text-[11px] text-muted-foreground">Tap to view · tick to follow across cameras</span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  className="text-[11px] font-medium text-accent-strong hover:underline disabled:opacity-40"
+                  disabled={filteredTracks.length === 0}
+                  onClick={() => selectTrackIds(Array.from(new Set([...selectedTrackIds, ...filteredTracks.map((t) => t.trackId)])))}
+                >
+                  Select all
+                </button>
+                <span className="text-muted-foreground/40">·</span>
+                <button
+                  type="button"
+                  className="text-[11px] font-medium text-muted-foreground hover:text-destructive disabled:opacity-40"
+                  disabled={selectedTrackIds.size === 0}
+                  onClick={deselectAll}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
-            <div className="space-y-2">
-              {detections.map((detection) => {
-              const isSelected = selectedTrackIds.has(detection.trackId); 
-              const isHovered = hoveredId === detection.id;
-              const thumbSrc =
-                trackThumbByTrackRef.current.get(detection.trackId) ?? null;
-              const cropFrameId = thumbSrc?.frameId ?? detection.frameId;
-              const cropBbox = thumbSrc?.bbox ?? detection.bbox;
-                return (
-                  <div
-                    key={`track-${detection.trackId}`}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
-                      isSelected
-                        ? "border-success bg-success/10"
-                        : "border-transparent bg-background/50 hover:bg-background",
-                      isHovered && "ring-1 ring-primary"
-                    )}
-                    onClick={() => toggleTrackSelection(detection.trackId)}
-                    onMouseEnter={() => setHoveredId(detection.id)}
-                    onMouseLeave={() => setHoveredId(null)}
-                  >
-                    {currentVideo ? (
-                      <DetectionCropThumb
-                        videoId={currentVideo.id}
-                        classId={detection.classId}
-                        isSelected={isSelected}
-                        cropFrameId={cropFrameId}
-                        cropBbox={cropBbox}
-                      />
-                    ) : (
-                      <div
+            {filteredTracks.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
+                <Car className="h-8 w-8 opacity-40" />
+                {tracks.length === 0 ? (
+                  <>
+                    <p className="text-sm font-medium">No tracked vehicles yet</p>
+                    <p className="text-xs">
+                      {stage1Status === "done" ? "Detection produced no vehicles for this camera." : "Run detection to populate this list."}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm">No {(CLASS_LABEL[classFilter as number] ?? "matching").toLowerCase()} vehicles.</p>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5">
+                {filteredTracks.map((track) => {
+                  const isSelected = selectedTrackIds.has(track.trackId);
+                  const inView = inFrameTrackIds.has(track.trackId);
+                  const rangeLabel =
+                    track.firstFrame === track.lastFrame
+                      ? `frame ${track.firstFrame}`
+                      : `${track.firstFrame}–${track.lastFrame}`;
+                  return (
+                    <div
+                      key={`track-${track.trackId}`}
+                      className={cn(
+                        "group relative overflow-hidden rounded-lg border transition-colors",
+                        isSelected
+                          ? "border-accent-strong ring-1 ring-accent-strong/50"
+                          : inView
+                            ? "border-emerald-500/50"
+                            : "border-border/60 hover:border-border"
+                      )}
+                      onMouseEnter={() => setHoveredId(`track-${track.trackId}`)}
+                      onMouseLeave={() => setHoveredId(null)}
+                    >
+                      {/* Thumbnail — click to jump to this vehicle */}
+                      <button
+                        type="button"
+                        onClick={() => jumpToVehicle(track.thumbFrameId)}
+                        className="relative block aspect-square w-full bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        title={`Show #${track.trackId} in the viewer (frame ${track.thumbFrameId})`}
+                        aria-label={`Show ${track.className} #${track.trackId} in the viewer`}
+                      >
+                        {currentVideo ? (
+                          <DetectionCropThumb
+                            videoId={currentVideo.id}
+                            classId={track.classId}
+                            isSelected={isSelected}
+                            cropFrameId={track.thumbFrameId}
+                            cropBbox={track.thumbBbox}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center">
+                            <ClassGlyph classId={track.classId} className="h-7 w-7 text-muted-foreground" />
+                          </div>
+                        )}
+                        {/* legibility gradient */}
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-black/75 to-transparent" />
+                        {/* id + live — badge turns green when the vehicle is on screen now */}
+                        <span
+                          className={cn(
+                            "pointer-events-none absolute left-1 top-1 flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-bold text-white",
+                            inView ? "bg-emerald-600/90" : "bg-black/70"
+                          )}
+                          title={inView ? "On screen in the current frame" : undefined}
+                        >
+                          {inView && (
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-200" />
+                          )}
+                          #{track.trackId}
+                        </span>
+                        {/* class + confidence */}
+                        <div className="pointer-events-none absolute inset-x-1.5 bottom-1 flex items-center justify-between text-white">
+                          <span className="flex items-center gap-1 text-[11px] font-medium capitalize">
+                            <ClassGlyph classId={track.classId} className="h-3 w-3" />
+                            {track.className}
+                          </span>
+                          <span className="text-[10px] tabular-nums text-white/85">{(track.confidence * 100).toFixed(0)}%</span>
+                        </div>
+                      </button>
+                      {/* Selection toggle */}
+                      <button
+                        type="button"
+                        onClick={() => toggleTrackSelection(track.trackId)}
+                        aria-pressed={isSelected}
+                        aria-label={isSelected ? `Deselect #${track.trackId}` : `Select #${track.trackId}`}
                         className={cn(
-                          "flex h-16 w-16 shrink-0 items-center justify-center rounded-md",
-                          isSelected ? "bg-success/20" : "bg-muted"
+                          "absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors",
+                          isSelected
+                            ? "border-accent-strong bg-accent-strong text-white"
+                            : "border-white/70 bg-black/40 text-transparent hover:border-white hover:text-white/70"
                         )}
                       >
-                        {detection.classId === 2 && (
-                          <Car className={cn("h-6 w-6", isSelected ? "text-success" : "text-muted-foreground")} />
-                        )}
-                        {detection.classId === 7 && (
-                          <Truck className={cn("h-6 w-6", isSelected ? "text-success" : "text-muted-foreground")} />
-                        )}
-                        {detection.classId === 5 && (
-                          <Bus className={cn("h-6 w-6", isSelected ? "text-success" : "text-muted-foreground")} />
-                        )}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium capitalize">{detection.className}</span>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {(detection.confidence * 100).toFixed(0)}%
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        ID: {detection.id}
-                      </p>
-                    </div>
-                    <div className={cn(
-                      "h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                      isSelected ? "bg-success border-success" : "border-muted-foreground/30"
-                    )}>
-                      {isSelected && (
-                        <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                         </svg>
-                      )}
+                      </button>
+                      {/* caption — frame coverage */}
+                      <div className="flex items-center justify-between gap-1 px-1.5 py-1 text-[10px] text-muted-foreground">
+                        <span className="truncate" title={`Frames ${track.firstFrame}–${track.lastFrame}`}>{rangeLabel}</span>
+                        <span className="shrink-0">{track.frameCount}f</span>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          <div className="shrink-0 space-y-3 border-t bg-muted/30 p-4">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-muted-foreground">Selected</span>
+          <div className="shrink-0 space-y-3 border-t bg-muted/30 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Selected for tracking</span>
               <div className="flex items-center gap-2">
                 <Badge variant={selectedTrackIds.size > 0 ? "default" : "secondary"}>
-                  {selectedTrackIds.size} / {detections.length}
+                  {selectedTrackIds.size} / {tracks.length}
                 </Badge>
                 {selectedTrackIds.size > 0 && (
                   <button
                     onClick={deselectAll}
-                    className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+                    className="text-[11px] text-muted-foreground transition-colors hover:text-destructive"
                   >
                     Clear
                   </button>
                 )}
               </div>
             </div>
-            {selectedTrackIds.size > 0 && (
-              <div className="mb-3 flex flex-wrap gap-1">
-                {Array.from(selectedTrackIds).sort((a, b) => a - b).map((id) => (
-                  <button
-                    key={id}
-                    onClick={() => toggleTrackSelection(id)}
-                    className="group flex items-center gap-0.5 rounded-full border bg-muted/50 px-2 py-0.5 text-[10px] font-mono transition-colors hover:bg-destructive/10 hover:border-destructive/30"
-                  >
-                    #{id}
-                    <X className="h-2.5 w-2.5 text-muted-foreground group-hover:text-destructive" />
-                  </button>
-                ))}
-              </div>
-            )}
             <DisclosurePanel title="Debug" tier="debug" description="Frame and request telemetry.">
               <div className="space-y-2 text-xs text-muted-foreground">
-                <div className="flex justify-between gap-3"><span>Frame</span><span className="font-mono">{currentFrame}/{Math.max(totalFrames - 1, 0)}</span></div>
+                <div className="flex justify-between gap-3"><span>Frame</span><span className="font-mono">{currentFrame}/{Math.max(navTotalFrames - 1, 0)}</span></div>
+                <div className="flex justify-between gap-3"><span>Detected frames</span><span className="font-mono">{detectedMaxFrame != null ? detectedMaxFrame + 1 : 0}</span></div>
                 <div className="flex justify-between gap-3"><span>Raw detections</span><span className="font-mono">{detections.length}</span></div>
                 <div className="flex justify-between gap-3"><span>Selected tracks</span><span className="font-mono">{selectedTrackIds.size}</span></div>
                 <div className="flex justify-between gap-3"><span>Model</span><span className="font-mono">YOLOv26 + Deep OC-SORT</span></div>
@@ -1208,34 +1477,27 @@ export function DetectionStage() {
 }
 
 export function DetectionStageActions() {
-  const { currentVideo } = useVideoStore();
   const { selectedTrackIds } = useDetectionStore();
   const { setCurrentStage } = useSessionStore();
-  const { runId, stages, setIsRunning, updateStageProgress } = usePipelineStore();
-  const getStageExecutionTarget = useStageExecutionStore((state) => state.getStageExecutionTarget);
-  const startStage1 = useStartStage1();
+  const { runId, stages } = usePipelineStore();
+  const runInput = usePipelineStore((s) => s.runInput);
+  const runPipelineStage = useRunPipelineStage();
   const stageProgress = stages.find((stage) => stage.stage === 1);
   const status = toStageStatus(stageProgress);
-  const executionTarget = getStageExecutionTarget(1);
+  // Detection runs pipeline stage 1 against the same run; gated on ingestion.
+  const ingestDone = toStageStatus(stages.find((s) => s.stage === 0)) === "done";
 
-  // Drive controls off the stage STATUS, not the `isRunning` store flag: runs
-  // launched from Stage 0 (runDatasetInput) never set that flag, which is why
-  // the "Run Stage 1" button stayed clickable during an active run.
   const running = status === "running";
   const done = status === "done";
+  const canRun = Boolean(runInput) && ingestDone && !running;
 
   const handleRun = async () => {
-    await startStage1();
+    await runPipelineStage({ pipelineStage: 1, uiStage: 1, label: "detection" });
   };
 
   const handleCancel = async () => {
     if (!runId) return;
-    try {
-      await cancelPipeline(runId);
-    } finally {
-      setIsRunning(false);
-      updateStageProgress(1, { status: "idle", progress: 0, message: "Stage 1 cancelled" });
-    }
+    await cancelPipeline(runId);
   };
 
   return (
@@ -1246,27 +1508,21 @@ export function DetectionStageActions() {
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
             Detection running…
           </span>
-          <Button type="button" variant="destructive" onClick={() => void handleCancel()} aria-label="Cancel Stage 1 run">
+          <Button type="button" variant="destructive" onClick={() => void handleCancel()} aria-label="Cancel detection run">
             <Square className="mr-2 h-3 w-3 fill-current" />
             Cancel
           </Button>
         </>
       ) : (
-        <>
-          <ExecutionTargetToggle stage={1} variant="compact" />
-          <RunStageWidget
-            target={executionTarget}
-            runId={runId}
-            status={status}
-            progress={stageProgress?.progress ?? 0}
-            message={stageProgress?.message}
-            isRunning={false}
-            disabled={!currentVideo}
-            runLabel={done ? "Re-run Stage 1" : "Run Stage 1"}
-            mode="button-only"
-            onRun={() => void handleRun()}
-          />
-        </>
+        <Button
+          type="button"
+          onClick={() => void handleRun()}
+          disabled={!canRun}
+          title={!runInput ? "Start a run from the Upload stage first" : !ingestDone ? "Waiting for ingestion to finish" : undefined}
+          aria-label="Run detection & tracking"
+        >
+          {done ? "Re-run detection" : "Run detection"}
+        </Button>
       )}
       <Button
         type="button"

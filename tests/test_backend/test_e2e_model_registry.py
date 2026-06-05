@@ -96,7 +96,21 @@ def test_pipeline_run_respects_registry_runnable_policy(client: TestClient, entr
         data = response.json()["data"]
         assert data["model_id"] == entry.id
         assert data["resolved_config"] == entry.pipeline_config
-        assert data["applied_overrides"] == entry.model_overrides
+        # The registry's bare model_overrides are always preserved as a prefix.
+        # Bundled-fusion models (those declaring stage4 *_embeddings.weight streams)
+        # additionally APPEND run-scoped ensemble path/enable + Stage-2 overrides,
+        # so applied_overrides is a superset for them rather than an exact match.
+        applied = data["applied_overrides"]
+        assert applied[: len(entry.model_overrides)] == list(entry.model_overrides)
+        declares_fusion_stream = any(
+            "_embeddings.weight=" in o for o in entry.model_overrides
+        )
+        if declares_fusion_stream:
+            assert len(applied) > len(entry.model_overrides)
+            assert data["fusion_resolved"] is not None
+        else:
+            assert applied == list(entry.model_overrides)
+            assert data["fusion_resolved"] is None
         assert client.full_pipeline_calls
         return
 

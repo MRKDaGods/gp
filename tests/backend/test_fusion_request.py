@@ -216,7 +216,12 @@ def test_duplicate_model_ids_return_validation_error(client: TestClient) -> None
     assert "Fusion model IDs must be unique" in response.text
 
 
-def test_single_mode_request_without_fusion_keeps_existing_resolution(client: TestClient) -> None:
+def test_single_mode_request_wires_bundled_fusion_streams(client: TestClient) -> None:
+    # vehicle_mtmc_14e_b1 BUNDLES a DINOv2 tertiary ensemble in its
+    # model_overrides. Selecting it by a single model_id (no FusionConfig) must
+    # still wire that stream: keep the base resolution AND add the dynamic
+    # Stage-4 tertiary path + populate fusion_resolved (no longer effectively
+    # single / silently degraded to primary-only).
     response = client.post(
         "/api/pipeline/run-stage/4",
         json={"runId": "test-single-mode", "model_id": "vehicle_mtmc_14e_b1"},
@@ -229,4 +234,16 @@ def test_single_mode_request_without_fusion_keeps_existing_resolution(client: Te
     assert data["resolved_config"] == "configs/datasets/cityflowv2.yaml"
     assert "stage4.association.query_expansion.k=2" in data["applied_overrides"]
     assert data["warnings"] == []
-    assert data["fusion_resolved"] is None
+
+    # The fix: bundled streams are wired even for a single-model selection.
+    assert data["fusion_resolved"] is not None
+    assert data["fusion_resolved"]["mode"] == "bundled"
+    overrides = data["applied_overrides"]
+    assert (
+        "stage4.association.tertiary_embeddings.path="
+        "${project.output_dir}/${project.run_name}/stage2/embeddings_tertiary.npy"
+        in overrides
+    )
+    assert "stage4.association.tertiary_embeddings.enabled=true" in overrides
+    # The stale, never-existing run_latest path must be gone.
+    assert not any("run_latest" in o for o in overrides)

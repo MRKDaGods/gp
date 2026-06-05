@@ -1,0 +1,21 @@
+{
+  "id": "yahiaakhalafallah/13k-clip-senet-fusion",
+  "title": "13k CLIP-SENet Fusion",
+  "code_file": "13k_clip_senet_fusion.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/14h-robust-tracklet-pooling",
+    "yahiaakhalafallah/14j-r50-ibn-features",
+    "yahiaakhalafallah/13j-clip-senet-features"
+  ],
+  "model_sources": []
+}

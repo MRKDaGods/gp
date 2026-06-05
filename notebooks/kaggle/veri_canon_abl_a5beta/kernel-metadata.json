@@ -1,0 +1,17 @@
+{
+  "id": "ali369/veri-canon-abl-a5beta",
+  "title": "Veri Canon Abl A5beta",
+  "code_file": "veri_canon_abl_a5beta.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4x2",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

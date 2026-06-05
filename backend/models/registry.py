@@ -54,6 +54,14 @@ class HostedCheckpoint(StrictBaseModel):
     member: str
 
 
+class ModelArchitecture(StrictBaseModel):
+    arch: ArchitectureName
+    vit_model: Optional[str] = None
+    embedding_dim: int
+    input_size: List[int]
+    clip_normalization: bool
+
+
 class CheckpointRef(StrictBaseModel):
     role: CheckpointRole
     local_path: str
@@ -62,14 +70,12 @@ class CheckpointRef(StrictBaseModel):
     source_training_kernel: Optional[str] = None
     size_bytes: Optional[int] = None
     on_disk: bool = False
-
-
-class ModelArchitecture(StrictBaseModel):
-    arch: ArchitectureName
-    vit_model: Optional[str] = None
-    embedding_dim: int
-    input_size: List[int]
-    clip_normalization: bool
+    # Optional per-stream architecture metadata. Lets a bundled fusion model
+    # (one model_id whose model_overrides wire extra Stage-4 ensemble streams)
+    # describe how each non-primary stream's Stage-2 extractor should be built.
+    # When absent, the pipeline_config is assumed to already wire that Stage-2
+    # slot (e.g. cityflowv2.yaml enables vehicle3/DINOv2 itself).
+    architecture: Optional[ModelArchitecture] = None
 
 
 class Requirements(StrictBaseModel):

@@ -24,6 +24,7 @@ import {
   useStageExecutionStore,
 } from "@/store";
 import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
+import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
 import {
   getTracklets,
   getTrajectories,
@@ -88,6 +89,8 @@ export function TimelineStage() {
     stages,
     downstreamInvalidateGeneration,
   } = usePipelineStore();
+  const runInput = usePipelineStore((s) => s.runInput);
+  const runDatasetStage = useRunPipelineStage();
   const { currentStage } = useSessionStore();
   const { currentVideo } = useVideoStore();
   const { selectedTrackIds: selectedTrackIdSet } = useDetectionStore();
@@ -696,167 +699,22 @@ export function TimelineStage() {
             } catch (_) { /* summary not available, continue */ }
           }
 
-          // If stage4 artifacts are missing for this run, execute stage4 then query again.
+          // Stage-4 artifacts missing for this run: do NOT auto-run association.
+          // Leave the stage idle so the user starts it from "Run Association".
           if (!q1Data.stage4Available) {
-            updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
-            const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
-            if (cancelled) return;
-            const stage4RunId = String(stageResp.data?.runId ?? runId);
-
-            let done = false;
-            while (!done && !cancelled) {
-              await new Promise((r) => setTimeout(r, 1500));
-              if (cancelled) return;
-              const statusResp = await getPipelineStatus(stage4RunId);
-              if (cancelled) return;
-              const statusData: any = statusResp.data;
-              const status = statusData?.status;
-              const progress = Number(statusData?.progress ?? 0);
-              const message = String(statusData?.message ?? "Running...");
-              updateStageProgress(4, { progress, message });
-              if (status === "completed" || status === "error") done = true;
-              if (status === "error") {
-                const errMsg = String(statusData?.error ?? "Stage 4 association failed");
-                updateStageProgress(4, { status: "error", message: errMsg });
-                break;
-              }
-            }
-
-            if (!cancelled) {
-              const q2 = await callQueryTimeline(stage4RunId);
-              if (cancelled || seq !== loadTracksSeqRef.current) return;
-              const q2Data: any = q2.data ?? {};
-              const pr2 = applyTimelineResolvedProbe(q2Data.diagnostics);
-              if (pr2) pendingRunIdFromDiagnostics = pr2;
-              const q2Traj = Array.isArray(q2Data.trajectories) ? q2Data.trajectories : [];
-              const q2Selected = Array.isArray(q2Data.selectedTracklets) ? q2Data.selectedTracklets : [];
-
-              console.info("queryTimeline#2", {
-                mode: q2Data.mode,
-                message: q2Data.message,
-                stage4Available: q2Data.stage4Available,
-                diagnostics: q2Data.diagnostics,
-                trajectories: q2Traj.length,
-                selectedTracklets: q2Selected.length,
-              });
-
-              if (q2Traj.length > 0) {
-                const rows = buildTracksFromTrajectories(q2Traj);
-                finalTracksSet = true;
-                if (seq !== loadTracksSeqRef.current) return;
-                applyTracksReplaceKeepingMeta(rows);
-                updateStageProgress(4, { status: "completed", progress: 100, message: String(q2Data.message ?? "Association complete (query-matched)") });
-                console.info("decision", "matched trajectories rendered after stage4", { rows: rows.length });
-                console.groupEnd();
-                return;
-              }
-
-              if (q2Selected.length > 0) {
-                const fallbackTracks = buildTracksFromSummary(q2Selected);
-                finalTracksSet = true;
-                if (seq !== loadTracksSeqRef.current) return;
-                applyTracksReplaceKeepingMeta(fallbackTracks);
-                updateStageProgress(4, {
-                  status: "completed",
-                  progress: 100,
-                  message: String(q2Data.message ?? "No cross-camera match found; showing selected single-camera tracklets"),
-                });
-                console.info("decision", "selected single-camera fallback rendered after stage4", {
-                  rows: fallbackTracks.length,
-                });
-                console.groupEnd();
-                return;
-              }
-            }
-          }
-
-          // Stage-4 artifacts exist (`stage4Available`) but matcher returned nothing — often stale vs current probe/embeddings.
-          // Run association once automatically (same as pressing "Rerun association") so the first Timeline visit succeeds.
-          if (
-            q1Data.stage4Available &&
-            q1Traj.length === 0 &&
-            q1Selected.length === 0 &&
-            autoAssociationRefreshForVideoRef.current !== currentVideo.id
-          ) {
-            autoAssociationRefreshForVideoRef.current = currentVideo.id;
             updateStageProgress(4, {
-              status: "running",
-              progress: 5,
-              message: "Refreshing cross-camera association…",
+              status: "idle",
+              progress: 0,
+              message: "Cross-camera association hasn't run yet — press Run Association.",
             });
-            const stageResp = await runStage(4, { runId: effectiveGalleryRunId, videoId: currentVideo.id, ...stage4KaggleRequest() });
-            if (cancelled || seq !== loadTracksSeqRef.current) return;
-            const refreshStage4RunId = String(stageResp.data?.runId ?? runId);
-
-            let refreshDone = false;
-            while (!refreshDone && !cancelled) {
-              await new Promise((r) => setTimeout(r, 1500));
-              if (cancelled || seq !== loadTracksSeqRef.current) return;
-              const refreshStatusResp = await getPipelineStatus(refreshStage4RunId);
-              if (cancelled || seq !== loadTracksSeqRef.current) return;
-              const refreshStatusData: any = refreshStatusResp.data;
-              const refreshStatus = refreshStatusData?.status;
-              const refreshProgress = Number(refreshStatusData?.progress ?? 0);
-              const refreshMessage = String(refreshStatusData?.message ?? "Running...");
-              updateStageProgress(4, { progress: refreshProgress, message: refreshMessage });
-              if (refreshStatus === "completed" || refreshStatus === "error") refreshDone = true;
-              if (refreshStatus === "error") {
-                const errMsg = String(refreshStatusData?.error ?? "Stage 4 association failed");
-                updateStageProgress(4, { status: "error", message: errMsg });
-                break;
-              }
-            }
-
-            if (!cancelled && seq === loadTracksSeqRef.current) {
-              const qRefresh = await callQueryTimeline(refreshStage4RunId);
-              if (cancelled || seq !== loadTracksSeqRef.current) return;
-              const qRefreshData: any = qRefresh.data ?? {};
-              const prR = applyTimelineResolvedProbe(qRefreshData.diagnostics);
-              if (prR) pendingRunIdFromDiagnostics = prR;
-              const qRefreshTraj = Array.isArray(qRefreshData.trajectories) ? qRefreshData.trajectories : [];
-              const qRefreshSelected = Array.isArray(qRefreshData.selectedTracklets)
-                ? qRefreshData.selectedTracklets
-                : [];
-
-              if (qRefreshTraj.length > 0) {
-                const refreshRows = buildTracksFromTrajectories(qRefreshTraj);
-                if (refreshRows.length > 0) {
-                  setMatchedFallbackActive(false);
-                  finalTracksSet = true;
-                  if (seq !== loadTracksSeqRef.current) return;
-                  applyTracksReplaceKeepingMeta(refreshRows);
-                  updateStageProgress(4, {
-                    status: "completed",
-                    progress: 100,
-                    message: String(qRefreshData.message ?? "Association loaded (query-matched)"),
-                  });
-                  console.info("decision", "matched trajectories after auto association refresh", {
-                    rows: refreshRows.length,
-                  });
-                  console.groupEnd();
-                  return;
-                }
-              }
-              if (qRefreshSelected.length > 0) {
-                const refreshFallback = buildTracksFromSummary(qRefreshSelected);
-                finalTracksSet = true;
-                if (seq !== loadTracksSeqRef.current) return;
-                applyTracksReplaceKeepingMeta(refreshFallback);
-                updateStageProgress(4, {
-                  status: "completed",
-                  progress: 100,
-                  message: String(
-                    qRefreshData.message ?? "No cross-camera match found; showing selected single-camera tracklets"
-                  ),
-                });
-                console.info("decision", "selected single-camera fallback after auto association refresh", {
-                  rows: refreshFallback.length,
-                });
-                console.groupEnd();
-                return;
-              }
-            }
+            // Fall through to render single-camera tracklets below, if any.
           }
+
+          // NOTE: association is NEVER re-run automatically here. Cross-camera
+          // association runs only when the user presses "Run Association" on this
+          // page. If stage-4 artifacts are stale/empty, we fall through to showing
+          // whatever single-camera tracklets exist (below) and leave the stage
+          // status as-is so the user can choose to re-run.
 
           // stage4 exists but no match; show selected single-camera tracklets if available.
           if (q1Selected.length > 0) {
@@ -1319,6 +1177,21 @@ export function TimelineStage() {
   };
 
   const handleRerunAssociation = async () => {
+    // Per-stage dataset flow: run pipeline stage 4 incrementally against the run.
+    if (runInput) {
+      timelineHandledStampRef.current = null;
+      lastExportedQueryKeyRef.current = null;
+      setTracks([]);
+      setTracksLoading(true);
+      try {
+        await runDatasetStage({ pipelineStage: 4, uiStage: 4, label: "cross-camera association" });
+        setTriggerReload((n) => n + 1);
+      } finally {
+        setTracksLoading(false);
+      }
+      return;
+    }
+
     if (!currentVideo) return;
     const associationRunId = galleryRunId ?? runId;
     if (!associationRunId) return;
@@ -1677,10 +1550,14 @@ export function TimelineStage() {
 
 export function TimelineStageActions() {
   const { runId, galleryRunId, stages, updateStageProgress } = usePipelineStore();
+  const runInput = usePipelineStore((s) => s.runInput);
   const { setCurrentStage } = useSessionStore();
   const stage4Progress = stages.find((stage) => stage.stage === 4);
   const isRunning = stage4Progress?.status === "running";
   const cancelRunId = galleryRunId ?? runId;
+  // Dataset per-stage flow: association needs indexing (stage 3) done first.
+  const indexingDone = toStageStatus(stages.find((s) => s.stage === 3)) === "done";
+  const runDisabled = isRunning || (Boolean(runInput) && !indexingDone);
 
   const dispatchTimelineEvent = (eventName: string) => {
     window.dispatchEvent(new Event(eventName));
@@ -1710,7 +1587,8 @@ export function TimelineStageActions() {
       <Button
         type="button"
         variant="outline"
-        disabled={isRunning}
+        disabled={runDisabled}
+        title={Boolean(runInput) && !indexingDone ? "Run indexing (Inference stage) first" : undefined}
         aria-label="Run Stage 4 association"
         onClick={() => dispatchTimelineEvent(TIMELINE_RERUN_ASSOCIATION_EVENT)}
       >

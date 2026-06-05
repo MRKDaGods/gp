@@ -507,11 +507,13 @@ export async function getFrameWithDetections(
 
 export async function getTracklets(
   cameraId?: string,
-  videoId?: string
+  videoId?: string,
+  opts?: { allCameras?: boolean }
 ): Promise<ApiResponse<TrackletSummary[]>> {
   const query = new URLSearchParams();
   if (cameraId) query.set('cameraId', cameraId);
   if (videoId) query.set('videoId', videoId);
+  if (opts?.allCameras) query.set('allCameras', 'true');
   const params = query.toString() ? `?${query.toString()}` : '';
   return fetchApi(`/tracklets${params}`);
 }
@@ -959,11 +961,82 @@ export async function runDatasetInput(payload: {
   smoke?: boolean;
   /** Optional subset of camera ids to process (multi-camera selection). */
   cameras?: string[];
+  /** Reuse an existing run so a single pipeline stage runs incrementally
+   *  against the same run dir. Omit to allocate a fresh run. */
+  runId?: string | null;
 }): Promise<ApiResponse<any>> {
   return fetchApi<ApiResponse<any>>('/datasets/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  });
+}
+
+export interface RunStageMap {
+  stage0: boolean;
+  stage1: boolean;
+  stage2: boolean;
+  stage3: boolean;
+  stage4: boolean;
+  stage5: boolean;
+  stage6: boolean;
+}
+
+export type RunStageState = "idle" | "running" | "done" | "error";
+
+/** Per-stage status that merges disk artifacts with the in-flight run's live
+ *  stage — so a running/failed stage shows even before it writes output. */
+export type RunStageStatusMap = Record<keyof RunStageMap, RunStageState>;
+
+export interface RunVideoRecord {
+  id: string;
+  cameraId: string;
+  path: string;
+  name: string;
+}
+
+export interface RunSummary {
+  runId: string;
+  root?: string;
+  name?: string | null;
+  source?: string | null;
+  inputDir?: string | null;
+  cameras: string[];
+  smoke: boolean;
+  videos: RunVideoRecord[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  stages: RunStageMap;
+  /** Live per-stage status (merges disk presence with the running stage). */
+  stageStatus?: RunStageStatusMap | null;
+  /** Pipeline stage number currently executing (when running). */
+  activeStage?: number | null;
+  /** Human label of the stage currently executing (e.g. "Detection & Tracking"). */
+  currentStageName?: string | null;
+  /** Latest status/progress message from the running pipeline. */
+  message?: string | null;
+  /** Error summary when the run failed. */
+  error?: string | null;
+  trajectoryCount?: number | null;
+  status?: string | null;
+  progress?: number | null;
+  sizeBytes?: number | null;
+}
+
+/** List all runs on disk (newest first). */
+export async function getRuns(): Promise<ApiResponse<RunSummary[]>> {
+  return fetchApi<ApiResponse<RunSummary[]>>('/runs');
+}
+
+/** Full detail for one run (for re-opening it). */
+export async function getRunDetail(runId: string): Promise<ApiResponse<RunSummary>> {
+  return fetchApi<ApiResponse<RunSummary>>(`/runs/${encodeURIComponent(runId)}`);
+}
+
+/** Delete a run — removes its directory from disk and clears server state. */
+export async function deleteRun(runId: string): Promise<ApiResponse<{ runId: string; removed: boolean }>> {
+  return fetchApi<ApiResponse<{ runId: string; removed: boolean }>>(`/runs/${encodeURIComponent(runId)}`, {
+    method: 'DELETE',
   });
 }
 

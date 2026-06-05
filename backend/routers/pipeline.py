@@ -343,10 +343,23 @@ async def cancel_kaggle(run_id: str):
 
 @router.post("/api/pipeline/cancel/{run_id}")
 async def cancel_pipeline(run_id: str, state: AppState = Depends(get_app_state)):
-    """Cancel pipeline execution"""
+    """Cancel pipeline execution and terminate the running subprocess (if any)."""
     if run_id not in state.active_runs:
         raise HTTPException(status_code=404, detail="Run not found")
+    # Flag first so the streaming runner classifies the kill as a cancel, not an error.
     state.active_runs[run_id]["status"] = "cancelled"
+    state.active_runs[run_id]["message"] = "Run cancelled by user"
+
+    proc = state.run_processes.get(run_id)
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                proc.kill()
+        except Exception:
+            pass
     return {"success": True, "data": None}
 
 

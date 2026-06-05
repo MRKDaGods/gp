@@ -37,6 +37,7 @@ from src.training.losses import (
 )
 from src.training.datasets import build_dataloader
 from src.training.evaluate_reid import evaluate_reid, compute_reranking
+from src.training.seed import set_seed
 
 
 def build_optimizer(
@@ -265,7 +266,20 @@ def main():
                         help="Path to pre-trained ReID weights to init from")
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--seed", type=int, default=3407,
+                        help="Global RNG seed for reproducible training")
+    parser.add_argument("--no-deterministic", action="store_false", dest="deterministic",
+                        default=True,
+                        help="Disable cuDNN deterministic mode (faster, nondeterministic)")
     args = parser.parse_args()
+
+    # Reproducibility: seed all RNGs + (optionally) force cuDNN deterministic.
+    # MUST run before building dataloaders and model (weight init uses the torch RNG).
+    set_seed(args.seed, deterministic=args.deterministic)
+    logger.info(
+        f"Seed={args.seed}, deterministic={args.deterministic} "
+        f"(cudnn.benchmark={'False' if args.deterministic else 'True'})"
+    )
 
     # Setup
     output_dir = Path(args.output_dir)
@@ -286,6 +300,7 @@ def main():
             num_workers=args.num_workers,
             random_erasing_prob=args.random_erasing,
             color_jitter=args.color_jitter,
+            seed=args.seed,
         )
     )
     logger.info(

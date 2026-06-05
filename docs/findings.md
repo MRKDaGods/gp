@@ -2,6 +2,32 @@
 
 > **IMPORTANT**: This is a living document. Update it whenever new experiments are run, new dead ends are discovered, or performance numbers change. Keep the "Current Performance" and "Dead Ends" sections current.
 
+## Synthetic-Augmented ReID — Synthetic RAISES the Feature Ceiling (2026-06-05) — BREAKTHROUGH (backbone-level)
+
+**Headline: VehicleX synthetic data lifts CityFlowV2 ReID backbone mAP by +5.68pp at convergence — even with WRONG-domain (VehicleID-adapted) synthetic — directly contradicting the long-documented "cross-domain synthetic doesn't transfer" dead end.** This is the first clear crack in the feature-quality wall in 225+ experiments.
+
+Matched ablation, ResNeXt101-IBN-a (GeM + BNNeck, ID + hard-triplet, **CenterLoss OFF**, identical 30% held-out CityFlow eval split, 384px, fp16):
+
+| Config | Epochs | mAP | rank1 |
+|---|---:|---:|---:|
+| Real-only (control) | 40 | 35.31% | 56.0% |
+| Synth co-train (VehicleID-adapted VehicleX, 1362 ids / 113k imgs) | 40 | 38.29% | 61.4% |
+| Synth pretrain → real finetune | 40 | 38.47% | 58.4% |
+| Real-only | 80 | 41.86% | 62.8% |
+| **Synth co-train** | **80** | **47.54%** | **68.9%** |
+
+- The synthetic advantage **grows** with training (40ep +2.98pp → 80ep **+5.68pp**) → it raises the *ceiling*, not just convergence speed.
+- Synth pretrain→finetune ≈ plain co-train (the 2-stage rescue added nothing).
+- The synthetic is the *wrong* domain (VehicleID-adapted, not CityFlow-adapted). The **in-domain** version the AIC22 winners used (AIC Track-2 registration) should do at least as well — this strongly motivates acquiring it.
+- **CenterLoss NaN trap:** the 09h recipe's CenterLoss (center_lr=0.5) overflows to NaN at ~1828 classes under fp16; the first synth run only worked after disabling it (ID+triplet only). Real-only 09h survived only because it had ~280 classes.
+- Kernels: `mrkdagods/09w-control` (real40), `mrkdagods/09w-resnext101ibn-synth` (synth40), `yahiaakhalafallah/09w-ptft` (ptft), `ali369/09w-real80` (real80), `yahiaakhalafallah/09w-synth80` (synth80). Synthetic fetched inside Kaggle via gdown probe; mixing parser = `cityflowv2_synth` in `src/training/datasets.py`.
+
+**CAVEAT — confirmed: the mAP gain does NOT translate to MTMC IDF1.** MTMC fusion test DONE (14p extract → 14q sweep, `yahiaakhalafallah/14p-synth80-features` + `14q-synth80-fusion`, 2026-06-05). Drift gate K0 reproduced 0.77936/154 (valid test). **Best synth80 fusion = 0.77950 (K2: w_quaternary=0.10, thr=0.48) = +0.014pp = MARGINAL/within-noise**; higher synth80 weights (w≥0.25) actively HURT (0.770–0.774); synth80 even fused slightly BELOW the old R50-IBN stream (0.78079, 14k K7). So the +5.68pp single-camera mAP gain buys **nothing** at the cross-camera goal metric — textbook mAP↔MTMC paradox (cf. DINOv2 +6.65pp mAP / −3pp MTMC). **Conclusion: a single stronger backbone, even a synthetic-boosted +5.68pp one, does NOT break the 0.779 MTMC plateau — its cross-camera signal is redundant with the TransReID+DINOv2 pair.** Closing the gap requires the winner's FULL stack (5-model architecturally-diverse native ensemble + in-domain CityFlow-adapted synthetic [AIC Track-2 registration] + box-grained matching), not one strong stream — and the measured ensemble saturation makes even that uncertain.
+
+## Bidirectional Tracking (CityTrack location-aware) — Full-Set Confirmation: DEAD END (2026-06-05)
+
+Ran the full `10a→10b→10c` chain with `stage1.bidirectional.enabled=true` (the previously-unconfirmed full-set test). Result: **MTMC IDF1 = 0.76657 (id_switches 209) vs baseline 0.77936 (154) = −1.28pp.** The +5.10pp S02-3-camera-subset lift did NOT generalize; on the full 6-camera set BT creates false cross-camera merges. This **closes the "needs full-dataset confirm" question** the docs left open — BT stays default-off, now confirmed harmful at scale, not just on a subset.
+
 ## Canonical VeRi-776 Reproducibility Reference
 
 - **14t fusion WIN**: mAP=0.9330 / R1=0.9845 (`kaggle://yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid`); requires `mrkdagods/mtmc-weights` + `yahiaakhalafallah/13-clip-senet-train` outputs; score fusion `w_clipsenet=0.7`, `w_transreid=0.3`, `transreid_768`, AQE k=3, rerank `k1=80,k2=15,lambda=0.2`.

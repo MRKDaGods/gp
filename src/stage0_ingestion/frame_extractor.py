@@ -58,10 +58,26 @@ def extract_frames_from_video(
         f"{info.total_frames} frames, {info.duration:.1f}s"
     )
 
+    # Estimate how many frames we'll extract so we can emit per-frame progress.
+    # The backend parses "[PROGRESS] camera=X frame=i total=N" (same protocol as
+    # stage 1) to drive a smooth ingestion progress bar instead of a frozen one.
+    native_fps = info.fps if info.fps and info.fps > 0 else 30.0
+    if target_fps and 0 < target_fps < native_fps:
+        sample_interval = max(1, round(native_fps / target_fps))
+    else:
+        sample_interval = 1
+    expected_total = info.total_frames // sample_interval if info.total_frames > 0 else 0
+    if max_frames is not None:
+        expected_total = min(expected_total, max_frames) if expected_total > 0 else max_frames
+    expected_total = max(expected_total, 1)
+    # Throttle to ~1% steps so stdout stays light while the bar still moves.
+    progress_every = max(1, expected_total // 100)
+
     frames: List[FrameInfo] = []
 
-    for frame_idx, timestamp, frame in read_video_frames(
-        video_path, target_fps=target_fps, max_frames=max_frames
+    for extracted_count, (frame_idx, timestamp, frame) in enumerate(
+        read_video_frames(video_path, target_fps=target_fps, max_frames=max_frames),
+        start=1,
     ):
         # Apply preprocessing
         frame = preprocess_frame(
@@ -98,5 +114,17 @@ def extract_frames_from_video(
                 height=h,
             )
         )
+
+        # Emit throttled per-frame progress (consumed by the serving backend).
+        if extracted_count % progress_every == 0 or extracted_count >= expected_total:
+            logger.info(
+                f"[PROGRESS] camera={camera_id} frame={extracted_count} "
+                f"total={max(expected_total, extracted_count)}"
+            )
+
+    # Final marker so the camera reads as fully complete even if the estimate was off.
+    actual = len(frames)
+    if actual:
+        logger.info(f"[PROGRESS] camera={camera_id} frame={actual} total={actual}")
 
     return frames

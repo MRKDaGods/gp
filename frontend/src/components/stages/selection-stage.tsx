@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Layers, Loader2, MousePointer2, RefreshCw, X, XCircle } from "lucide-react";
+import { CheckCircle2, Layers, Loader2, MousePointer2, RefreshCw, Search, Video, XCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DisclosurePanel, ErrorBanner } from "@/components/pipeline";
@@ -14,6 +15,41 @@ import { apiUrl, getTracklets } from "@/lib/api";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import { cn, getClassColor } from "@/lib/utils";
 import { useDetectionStore, useSessionStore, useVideoStore } from "@/store";
+
+const CLASS_LABEL: Record<number, string> = { 2: "Car", 7: "Truck", 5: "Bus" };
+
+/** Pill toggle for the selection filters (camera / class). */
+function FilterPill({
+  active,
+  onClick,
+  label,
+  count,
+  icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count?: number;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+        active
+          ? "border-accent-strong bg-accent-strong/15 text-foreground"
+          : "border-border/60 bg-background/40 text-muted-foreground hover:text-foreground"
+      )}
+      aria-pressed={active}
+    >
+      {icon}
+      {label}
+      {count != null && <span className="opacity-60">{count}</span>}
+    </button>
+  );
+}
 
 function uploadVideoCropUrl(
   videoId: string,
@@ -57,11 +93,15 @@ export function SelectionStage() {
     multiSelectMode,
     setMultiSelectMode,
   } = useDetectionStore();
-  const { currentVideo } = useVideoStore();
+  const { currentVideo, videos, setCurrentVideo } = useVideoStore();
 
   const [tracklets, setTracklets] = useState<TrackletSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Filters
+  const [cameraFilter, setCameraFilter] = useState<string>("all");
+  const [classFilter, setClassFilter] = useState<number | "all">("all");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     setMultiSelectMode(true);
@@ -77,7 +117,9 @@ export function SelectionStage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const resp = await getTracklets(undefined, currentVideo.id);
+      // Load tracklets for EVERY camera in the run so they can be searched and
+      // filtered by camera, not just the currently-viewed one.
+      const resp = await getTracklets(undefined, currentVideo.id, { allCameras: true });
       setTracklets(Array.isArray(resp.data) ? resp.data : []);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -91,6 +133,47 @@ export function SelectionStage() {
   useEffect(() => {
     void fetchTracklets();
   }, [fetchTracklets]);
+
+  // Camera + class breakdown and the filtered, searched tracklet list.
+  const cameras = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of tracklets) {
+      if (!t.cameraId) continue;
+      counts.set(t.cameraId, (counts.get(t.cameraId) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+  }, [tracklets]);
+  const classCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const t of tracklets) counts[t.classId] = (counts[t.classId] ?? 0) + 1;
+    return counts;
+  }, [tracklets]);
+  const presentClasses = useMemo(
+    () => Object.keys(classCounts).map(Number).sort((a, b) => a - b),
+    [classCounts]
+  );
+  const filteredTracklets = useMemo(() => {
+    const q = search.trim().replace(/^#/, "");
+    return tracklets.filter((t) => {
+      if (cameraFilter !== "all" && t.cameraId !== cameraFilter) return false;
+      if (classFilter !== "all" && t.classId !== classFilter) return false;
+      if (q && !String(t.id).includes(q)) return false;
+      return true;
+    });
+  }, [tracklets, cameraFilter, classFilter, search]);
+
+  // Picking a camera also focuses that camera's video so the downstream timeline
+  // query (which is scoped to currentVideo) targets the right camera.
+  const pickCamera = useCallback(
+    (cam: string) => {
+      setCameraFilter(cam);
+      if (cam !== "all") {
+        const match = videos.find((v) => v.cameraId === cam);
+        if (match && match.id !== currentVideo?.id) setCurrentVideo(match);
+      }
+    },
+    [videos, currentVideo?.id, setCurrentVideo]
+  );
 
   const selectionSig = useMemo(
     () => Array.from(selectedTrackIds).sort((a, b) => a - b).join(","),
@@ -117,31 +200,66 @@ export function SelectionStage() {
   }, {} as Record<string, TrackletSummary[]>);
 
   const selectAllTracklets = () => {
-    tracklets.forEach((tracklet) => {
+    filteredTracklets.forEach((tracklet) => {
       if (!selectedTrackIds.has(tracklet.id)) toggleTrackSelection(tracklet.id);
     });
   };
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="shrink-0 space-y-3 border-b px-4 py-3 sm:px-6">
+      <div className="shrink-0 space-y-2.5 border-b px-4 py-3 sm:px-6">
         <ErrorBanner title="Tracklet loading failed" message={loadError} />
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">{selectedTrackIds.size} of {tracklets.length} selected</Badge>
-          {Array.from(selectedTrackIds).sort((a, b) => a - b).slice(0, 18).map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => toggleTrackSelection(id)}
-              className="group flex items-center gap-1 rounded-full border bg-muted/50 px-2 py-1 text-[11px] font-mono transition-colors hover:border-destructive/30 hover:bg-destructive/10"
-              aria-label={`Remove tracklet ${id} from selection`}
-            >
-              #{id}
-              <X className="h-3 w-3 text-muted-foreground group-hover:text-destructive" />
-            </button>
-          ))}
-          {selectedTrackIds.size > 18 ? <Badge variant="secondary">+{selectedTrackIds.size - 18}</Badge> : null}
+          <div className="relative w-full max-w-[220px]">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by #id…"
+              className="h-8 pl-8 text-sm"
+              aria-label="Search tracklets by id"
+            />
+          </div>
+          <Badge variant="outline" className="ml-auto shrink-0">
+            {selectedTrackIds.size} selected · {filteredTracklets.length} shown
+          </Badge>
+          {selectedTrackIds.size > 0 && (
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={deselectAll}>
+              Clear
+            </Button>
+          )}
         </div>
+        {cameras.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Camera</span>
+            <FilterPill active={cameraFilter === "all"} onClick={() => pickCamera("all")} label="All" count={tracklets.length} />
+            {cameras.map(([cam, n]) => (
+              <FilterPill
+                key={cam}
+                active={cameraFilter === cam}
+                onClick={() => pickCamera(cam)}
+                label={cam}
+                count={n}
+                icon={<Video className="h-3 w-3" />}
+              />
+            ))}
+          </div>
+        )}
+        {presentClasses.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Type</span>
+            <FilterPill active={classFilter === "all"} onClick={() => setClassFilter("all")} label="All" count={tracklets.length} />
+            {presentClasses.map((cid) => (
+              <FilterPill
+                key={cid}
+                active={classFilter === cid}
+                onClick={() => setClassFilter(cid)}
+                label={CLASS_LABEL[cid] ?? "Other"}
+                count={classCounts[cid]}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -152,17 +270,26 @@ export function SelectionStage() {
       ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden xl:flex-row">
           <div className="min-h-[200px] min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 xl:min-h-0">
-            {tracklets.length === 0 ? (
+            {filteredTracklets.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                 <MousePointer2 className="mb-4 h-12 w-12 opacity-50" />
-                <p className="text-lg font-medium">No tracklets found</p>
-                <p className="text-sm">Run detection first to generate tracklets.</p>
+                {tracklets.length === 0 ? (
+                  <>
+                    <p className="text-lg font-medium">No tracklets found</p>
+                    <p className="text-sm">Run detection first to generate tracklets.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-lg font-medium">No matches</p>
+                    <p className="text-sm">No tracklets match the current filters.</p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {tracklets.map((tracklet) => (
+                {filteredTracklets.map((tracklet) => (
                   <TrackletCard
-                    key={tracklet.id}
+                    key={`${tracklet.cameraId}-${tracklet.id}`}
                     tracklet={tracklet}
                     videoId={currentVideo?.id}
                     isSelected={selectedTrackIds.has(tracklet.id)}
@@ -372,6 +499,13 @@ function TrackletCard({
           <Badge className="absolute bottom-2 left-2" style={{ backgroundColor: getClassColor(tracklet.classId ?? 2) }}>
             {tracklet.className ?? "vehicle"}
           </Badge>
+
+          {tracklet.cameraId ? (
+            <Badge variant="secondary" className="absolute left-2 top-2 gap-1 border-white/20 bg-black/70 font-mono text-[10px] text-white">
+              <Video className="h-2.5 w-2.5" />
+              {tracklet.cameraId}
+            </Badge>
+          ) : null}
         </div>
 
         <div className="space-y-1 p-3">

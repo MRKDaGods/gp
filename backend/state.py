@@ -26,6 +26,9 @@ class AppState:
     def __init__(self) -> None:
         # Active pipeline runs keyed by run_id
         self.active_runs: Dict[str, Dict[str, Any]] = {}
+        # Live subprocess handles keyed by run_id, so a cancel request can
+        # actually terminate the running pipeline (not just flip a status flag).
+        self.run_processes: Dict[str, Any] = {}
         # Registered video records keyed by video_id
         self.uploaded_videos: Dict[str, Dict[str, Any]] = {}
         # Latest run_id that processed each video_id
@@ -40,6 +43,7 @@ class AppState:
         thread holds it would cause a deadlock.
         """
         self.active_runs.clear()
+        self.run_processes.clear()
         self.uploaded_videos.clear()
         self.video_to_latest_run.clear()
 

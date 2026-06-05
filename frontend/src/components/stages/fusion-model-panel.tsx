@@ -160,9 +160,14 @@ export function FusionModelPanel() {
         </Button>
       </div>
 
+      {/* Fusion is a score-level fusion of single-camera ReID streams, so only
+          offer single_cam_reid models. The MTMC presets (14e B1, 14k, …) are
+          complete multi-stream pipelines — they belong in the Single tab and
+          fusing them would silently use only their primary ReID checkpoint. */}
       <ModelPicker
         selectedId={null}
         onSelect={() => undefined}
+        taskType="single_cam_reid"
         multiSelect
         selectedIds={selectedIds}
         onMultiSelect={handleSelectedIds}

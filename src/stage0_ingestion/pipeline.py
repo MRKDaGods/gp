@@ -77,6 +77,10 @@ def run_stage0(
     # Load per-camera time offsets for synchronization
     time_offsets = dict(stage_cfg.get("time_offsets", {}))
 
+    # Emit total camera count so the backend can render cross-camera ingestion
+    # progress before any camera finishes (mirrors stage 1's progress protocol).
+    logger.info(f"[PROGRESS] cameras_total={len(video_paths)}")
+
     for video_path in video_paths:
         camera_id = _camera_id_from_path(video_path, input_dir)
         frames_dir = output_dir / camera_id

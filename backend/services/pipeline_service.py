@@ -24,14 +24,17 @@ from backend.config import (
     OUTPUT_DIR,
     PRECOMPUTE_RUN_ID,
     VIDEO_EXTENSIONS,
+    list_run_dirs,
+    resolve_run_dir,
 )
 from backend.models.requests import FusionConfig
-from backend.models.registry import ModelArchitecture, ModelEntry
-from backend.services.model_registry import get_model
+from backend.models.registry import CheckpointRef, ModelArchitecture, ModelEntry
+from backend.services.model_registry import _merged_pipeline_config, get_model
 from backend.services.tracklet_service import _persist_probe_link
 from backend.services.video_service import (
     _detect_camera_for_video,
     _extract_camera_id,
+    _normalize_camera_id,
     _safe_reid_batch_size,
 )
 from backend.state import app_state
@@ -47,6 +50,35 @@ DATASET_TASK_BY_NAME = {
     "wildtrack": "mtmc_person",
     "veri776": "single_cam_reid",
 }
+
+
+class RunCancelled(RuntimeError):
+    """Raised when a pipeline run is cancelled by the user mid-execution."""
+
+
+def _is_run_cancelled(run_id: str) -> bool:
+    return app_state.active_runs.get(run_id, {}).get("status") == "cancelled"
+
+
+def _finalize_run_failure(run_id: str, exc: BaseException, tb: str, label: str) -> None:
+    """Mark a run as cancelled (user-initiated) or errored. Keeps a cancel from
+    being mislabelled as an error when the subprocess was killed on purpose."""
+    run = app_state.active_runs.get(run_id)
+    if run is None:
+        return
+    if isinstance(exc, RunCancelled) or run.get("status") == "cancelled":
+        run["status"] = "cancelled"
+        run["message"] = "Run cancelled by user"
+        run.pop("error", None)
+        run.pop("errorDetail", None)
+        return
+    err_type = type(exc).__name__
+    err_msg = str(exc) or f"({err_type} with no message)"
+    full_error = f"{err_type}: {err_msg}"
+    run["status"] = "error"
+    run["error"] = full_error
+    run["errorDetail"] = tb[-3000:]
+    run["message"] = f"{label} — {full_error[:300]}"
 
 
 @dataclass(frozen=True)
@@ -166,6 +198,203 @@ def _append_stage2_fusion_overrides(
     }
 
 
+# ---------------------------------------------------------------------------
+# Bundled-fusion stream wiring (single model_id whose model_overrides declare
+# extra Stage-4 ensemble streams). Distinct from _resolve_fusion_pipeline_model,
+# which wires a user-supplied FusionConfig of separate model_ids.
+# ---------------------------------------------------------------------------
+
+# Stage-4 ensemble slot -> (Stage-2 vehicle slot that produces it,
+#                           Stage-2 output filename, checkpoint_ref role).
+# NOTE: there is no `vehicle4` Stage-2 slot and no `embeddings_quaternary.npy`
+# producer (src/stage2_features/pipeline.py only writes embeddings_secondary.npy
+# from vehicle2 and embeddings_tertiary.npy from vehicle3). The quaternary
+# ensemble stream therefore REUSES the vehicle2 Stage-2 slot (-> _secondary.npy);
+# this is only sound when the secondary slot itself is unused (weight 0), which
+# holds for the K7 model.
+_BUNDLED_SLOT_TABLE: Dict[str, Dict[str, str]] = {
+    "secondary": {
+        "stage2_slot": "vehicle2",
+        "stage2_file": "embeddings_secondary.npy",
+        "checkpoint_role": "secondary_reid",
+    },
+    "tertiary": {
+        "stage2_slot": "vehicle3",
+        "stage2_file": "embeddings_tertiary.npy",
+        "checkpoint_role": "tertiary_reid",
+    },
+    "quaternary": {
+        "stage2_slot": "vehicle2",
+        "stage2_file": "embeddings_secondary.npy",
+        "checkpoint_role": "quaternary_reid",
+    },
+}
+
+# Registry ArchitectureName -> the model_name string that
+# src/stage2_features/reid_model.py actually knows how to build. Most names are
+# passed through unchanged (transreid/dinov2 go through the TransReID+timm path);
+# FastReID R50-IBN is registered as arch `resnet50_ibn` but the builder keys on
+# `fastreid_sbs_r50_ibn` (see ReIDModel._build_model / _build_fastreid_sbs_r50_ibn).
+_ARCH_TO_STAGE2_MODEL_NAME: Dict[str, str] = {
+    "resnet50_ibn": "fastreid_sbs_r50_ibn",
+}
+
+
+def _append_stage2_checkpoint_overrides(
+    overrides: List[str],
+    stage2_slot: str,
+    checkpoint: CheckpointRef,
+    architecture: ModelArchitecture,
+) -> Dict[str, Any]:
+    """Emit the Stage-2 enable overrides for a bundled stream described by a
+    per-checkpoint architecture block. Mirrors _append_stage2_fusion_overrides
+    but sources the weights from the checkpoint_ref (not the primary checkpoint)
+    and translates the registry arch name to the Stage-2 builder's model_name."""
+    model_name = _ARCH_TO_STAGE2_MODEL_NAME.get(architecture.arch, architecture.arch)
+    slot_config: Dict[str, Any] = {
+        "enabled": True,
+        "save_separate": True,
+        "model_name": model_name,
+        "weights_path": checkpoint.local_path,
+        "embedding_dim": architecture.embedding_dim,
+        "input_size": architecture.input_size,
+        "clip_normalization": architecture.clip_normalization,
+    }
+    if architecture.arch == "transreid" and architecture.vit_model:
+        slot_config["vit_model"] = architecture.vit_model
+    for key, value in slot_config.items():
+        overrides.append(f"stage2.reid.{stage2_slot}.{key}={_format_override_value(value)}")
+    return {
+        "arch": architecture.arch,
+        "model_name": model_name,
+        "checkpoint": checkpoint.local_path,
+        "stage2_slot": stage2_slot,
+        "stage2_config": slot_config,
+    }
+
+
+def _parse_ensemble_slot_weights(model_overrides: List[str]) -> Dict[str, float]:
+    """Extract `stage4.association.<slot>_embeddings.weight=W` (slot in
+    secondary/tertiary/quaternary) from a model's bare overrides."""
+    weights: Dict[str, float] = {}
+    for override in model_overrides:
+        key, _, raw_value = str(override).partition("=")
+        key = key.strip()
+        for slot in _BUNDLED_SLOT_TABLE:
+            if key == f"stage4.association.{slot}_embeddings.weight":
+                try:
+                    weights[slot] = float(raw_value.strip())
+                except ValueError:
+                    weights[slot] = 0.0
+    return weights
+
+
+def _stage2_slot_enabled_in_config(model: ModelEntry, stage2_slot: str) -> bool:
+    """Whether the model's pipeline_config already enables a Stage-2 reid slot
+    (e.g. cityflowv2.yaml enables vehicle3/DINOv2 itself)."""
+    if not model.pipeline_config:
+        return False
+    try:
+        merged = _merged_pipeline_config(model.pipeline_config)
+    except Exception:
+        return False
+    slot_cfg = (
+        merged.get("stage2", {}).get("reid", {}).get(stage2_slot, {})
+        if isinstance(merged, dict)
+        else {}
+    )
+    return bool(isinstance(slot_cfg, dict) and slot_cfg.get("enabled", False))
+
+
+def _checkpoint_for_role(model: ModelEntry, role: str) -> Optional[CheckpointRef]:
+    for checkpoint in model.checkpoint_refs:
+        if checkpoint.role == role:
+            return checkpoint
+    return None
+
+
+def _wire_bundled_fusion_streams(
+    model: ModelEntry,
+    overrides: List[str],
+) -> Optional[Dict[str, Any]]:
+    """Wire the Stage-4 ensemble streams that a single bundled model declares via
+    `stage4.association.<slot>_embeddings.weight=W` overrides.
+
+    For each slot with W>0 this appends a DYNAMIC, run-scoped Stage-4 embedding
+    path (so the stream actually loads — the YAML default `run_latest` path never
+    exists) and, when the stream needs its own Stage-2 extractor, the Stage-2
+    enable overrides. A weight>0 stream that is neither wireable (no checkpoint
+    architecture) nor already enabled in the pipeline_config raises rather than
+    silently degrading to primary-only.
+
+    Returns a fusion_resolved dict (so callers no longer report these as single),
+    or None when the model declares no ensemble streams.
+    """
+    slot_weights = _parse_ensemble_slot_weights(list(model.model_overrides))
+    active = {slot: w for slot, w in slot_weights.items() if w > 0.0}
+    if not active:
+        return None
+
+    dyn_root = "${project.output_dir}/${project.run_name}/stage2"
+    wired_streams: List[Dict[str, Any]] = []
+
+    # Deterministic order: secondary, tertiary, quaternary.
+    for slot in ("secondary", "tertiary", "quaternary"):
+        if slot not in active:
+            continue
+        weight = active[slot]
+        table = _BUNDLED_SLOT_TABLE[slot]
+        stage2_slot = table["stage2_slot"]
+        stage2_file = table["stage2_file"]
+        role = table["checkpoint_role"]
+
+        checkpoint = _checkpoint_for_role(model, role)
+        stream: Dict[str, Any] = {
+            "slot": slot,
+            "weight": weight,
+            "stage2_slot": stage2_slot,
+            "stage2_file": stage2_file,
+        }
+
+        if checkpoint is not None and checkpoint.architecture is not None:
+            # The stream brings its own extractor -> emit Stage-2 enable overrides.
+            stage2_info = _append_stage2_checkpoint_overrides(
+                overrides, stage2_slot, checkpoint, checkpoint.architecture
+            )
+            stream.update(stage2_info)
+            stream["wired_via"] = "checkpoint_architecture"
+        elif _stage2_slot_enabled_in_config(model, stage2_slot):
+            # The pipeline_config already enables the producing Stage-2 slot
+            # (e.g. cityflowv2.yaml vehicle3/DINOv2). Only the dynamic Stage-4
+            # path needs fixing; no Stage-2 overrides required.
+            stream["wired_via"] = "pipeline_config"
+        else:
+            raise PipelineModelValidationError(
+                f"Model '{model.id}' sets {slot}_embeddings.weight={weight} but its "
+                f"stream is not wired: no '{role}' checkpoint_ref with an architecture "
+                f"block, and pipeline_config '{model.pipeline_config}' does not enable "
+                f"stage2.reid.{stage2_slot}. Refusing to silently degrade to "
+                "primary-only — add the checkpoint architecture or enable the Stage-2 "
+                "slot in the pipeline_config."
+            )
+
+        # DYNAMIC, run-scoped Stage-4 embedding path + enable flag. The YAML
+        # default (e.g. data/outputs/run_latest/...) points at a directory that
+        # never exists, so without this the stream's .path fails to load and the
+        # ensemble silently collapses to primary-only.
+        overrides.append(
+            f"stage4.association.{slot}_embeddings.path={dyn_root}/{stage2_file}"
+        )
+        overrides.append(f"stage4.association.{slot}_embeddings.enabled=true")
+        wired_streams.append(stream)
+
+    return {
+        "mode": "bundled",
+        "primary_model_id": model.id,
+        "streams": wired_streams,
+    }
+
+
 def _resolve_fusion_pipeline_model(
     fusion: FusionConfig,
     dataset: Optional[str] = None,
@@ -183,6 +412,7 @@ def _resolve_fusion_pipeline_model(
             model_id=primary_entry.model_id,
             dataset=dataset,
             fusion=None,
+            _wire_bundled_streams=False,
         )
     except PipelineModelValidationError:
         base_resolution = PipelineModelResolution(
@@ -272,8 +502,15 @@ def resolve_pipeline_model(
     model_id: Optional[str] = None,
     dataset: Optional[str] = None,
     fusion: Optional[FusionConfig] = None,
+    *,
+    _wire_bundled_streams: bool = True,
 ) -> PipelineModelResolution:
-    """Resolve an optional registry model selection into pipeline run settings."""
+    """Resolve an optional registry model selection into pipeline run settings.
+
+    `_wire_bundled_streams` is an internal flag: the FusionConfig path reuses this
+    function to build the primary's base resolution and re-wires the ensemble
+    itself, so it disables the bundled-stream wiring to avoid double-wiring.
+    """
     requested_dataset = _normalise_dataset(dataset)
 
     if fusion is not None:
@@ -320,12 +557,25 @@ def resolve_pipeline_model(
             f"Model '{model.id}' does not define a pipeline_config for MTMC pipeline runs."
         )
 
+    applied_overrides = list(model.model_overrides)
+    # A registered model can BUNDLE a multi-stream fusion ensemble in its
+    # model_overrides (declaring stage4.association.<slot>_embeddings.weight=W
+    # without a usable path). Wire those streams now: add run-scoped Stage-4
+    # embedding paths + any Stage-2 enable overrides, or fail loud if a weighted
+    # stream is unwireable. Returns None for ordinary single-model selections.
+    fusion_resolved = (
+        _wire_bundled_fusion_streams(model, applied_overrides)
+        if _wire_bundled_streams
+        else None
+    )
+
     return PipelineModelResolution(
         model_id=model.id,
         resolved_config=model.pipeline_config,
-        applied_overrides=list(model.model_overrides),
+        applied_overrides=applied_overrides,
         warnings=warnings,
         dataset=effective_dataset,
+        fusion_resolved=fusion_resolved,
     )
 
 
@@ -361,18 +611,266 @@ def _resolve_run_id(requested_run_id: Optional[str]) -> str:
 
 
 def _write_run_context(run_id: str, payload: Dict[str, Any]) -> None:
-    """Persist lightweight run metadata to help auditing and dataset discovery."""
+    """Persist lightweight run metadata to help auditing and dataset discovery.
+
+    Merges into any existing context so per-stage runs don't drop fields written
+    at run creation (videos, inputDir, etc.)."""
     try:
         run_dir = OUTPUT_DIR / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
+        ctx_path = run_dir / "run_context.json"
+        existing: Dict[str, Any] = {}
+        if ctx_path.exists():
+            try:
+                existing = json.loads(ctx_path.read_text(encoding="utf-8"))
+            except Exception:
+                existing = {}
         context = {
+            **existing,
             "runId": run_id,
-            "createdAt": datetime.now().isoformat(),
+            "createdAt": existing.get("createdAt") or datetime.now().isoformat(),
+            "updatedAt": datetime.now().isoformat(),
             **payload,
         }
-        (run_dir / "run_context.json").write_text(json.dumps(context, indent=2), encoding="utf-8")
+        ctx_path.write_text(json.dumps(context, indent=2), encoding="utf-8")
     except Exception as exc:
         print(f"[WARN] Failed to write run_context.json for run {run_id}: {exc}", flush=True)
+
+
+def read_run_context(run_dir: Path) -> Dict[str, Any]:
+    """Read run_context.json for a run dir (empty dict if missing/unreadable)."""
+    ctx_path = run_dir / "run_context.json"
+    if ctx_path.exists():
+        try:
+            return json.loads(ctx_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def stages_present(run_dir: Path) -> Dict[str, bool]:
+    """Which pipeline stages produced (non-empty) output for a run."""
+    out: Dict[str, bool] = {}
+    for i in range(7):
+        d = run_dir / f"stage{i}"
+        present = False
+        if d.is_dir():
+            try:
+                present = any(d.iterdir())
+            except Exception:
+                present = False
+        out[f"stage{i}"] = present
+    return out
+
+
+def _input_dir_from_config(run_dir: Path) -> Optional[str]:
+    """Recover stage0.input_dir from a run's merged config.yaml (normalised to
+    posix). Lets runs created before run_context stored inputDir be re-opened."""
+    cfg_path = run_dir / "config.yaml"
+    if not cfg_path.exists():
+        return None
+    try:
+        import yaml
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+        raw = (cfg.get("stage0") or {}).get("input_dir")
+        return str(raw).replace("\\", "/") if raw else None
+    except Exception:
+        return None
+
+
+def _cameras_from_disk(run_dir: Path) -> List[str]:
+    """Recover camera ids from output artifacts (stage1 tracklets, else stage0
+    camera folders) for runs whose run_context lacks them."""
+    cams: List[str] = []
+    s1 = run_dir / "stage1"
+    if s1.is_dir():
+        for f in sorted(s1.glob("tracklets_*.json")):
+            cams.append(f.stem[len("tracklets_"):])
+    if not cams:
+        s0 = run_dir / "stage0"
+        if s0.is_dir():
+            try:
+                cams = sorted(d.name for d in s0.iterdir() if d.is_dir())
+            except Exception:
+                cams = []
+    return cams
+
+
+def describe_run(run_dir: Path) -> Dict[str, Any]:
+    """A summary record for a run on disk (for listing / loading in the UI)."""
+    ctx = read_run_context(run_dir)
+    present = stages_present(run_dir)
+    traj_path = run_dir / "stage4" / "global_trajectories.json"
+    trajectory_count: Optional[int] = None
+    if traj_path.exists():
+        try:
+            data = json.loads(traj_path.read_text(encoding="utf-8"))
+            trajectory_count = (
+                len(data) if isinstance(data, list) else len(data.get("trajectories", []))
+            )
+        except Exception:
+            trajectory_count = None
+    videos = ctx.get("videos") or []
+    cameras = (
+        ctx.get("selectedCameras")
+        or [v.get("cameraId") for v in videos if v.get("cameraId")]
+        or _cameras_from_disk(run_dir)
+    )
+    # Recover the source folder from the run's merged config when run_context
+    # predates the inputDir field — so old runs can still restore their footage.
+    input_dir = ctx.get("inputDir") or _input_dir_from_config(run_dir)
+    # Fall back to the directory's modified time when no context timestamps exist.
+    try:
+        dir_mtime = datetime.fromtimestamp(run_dir.stat().st_mtime).isoformat()
+    except Exception:
+        dir_mtime = None
+    created_at = ctx.get("createdAt") or dir_mtime
+    updated_at = ctx.get("updatedAt") or dir_mtime
+    live = app_state.active_runs.get(run_dir.name, {})
+    status = live.get("status")
+    if status not in ("running", "queued", "error", "cancelled"):
+        status = "ready" if any(present.values()) else "empty"
+    # Per-stage status: a stage that wrote output is "done"; the in-flight stage
+    # of a running/errored run is marked "running"/"error" even though it hasn't
+    # written artifacts yet — so the UI shows "Detect: running" instead of
+    # misreporting the run as ingestion-only while detection is still working.
+    active_stage = live.get("currentStageNum")
+    stage_status: Dict[str, str] = {}
+    for i in range(7):
+        key = f"stage{i}"
+        if present.get(key):
+            stage_status[key] = "done"
+        elif status == "running" and active_stage == i:
+            stage_status[key] = "running"
+        elif status == "error" and active_stage == i:
+            stage_status[key] = "error"
+        else:
+            stage_status[key] = "idle"
+    try:
+        size_bytes = sum(f.stat().st_size for f in run_dir.rglob("*") if f.is_file())
+    except Exception:
+        size_bytes = 0
+    return {
+        "runId": run_dir.name,
+        "root": str(run_dir.parent).replace("\\", "/"),
+        "name": ctx.get("datasetName") or ctx.get("name"),
+        "source": ctx.get("source"),
+        "inputDir": input_dir,
+        "cameras": cameras,
+        "smoke": bool(ctx.get("smoke", False)),
+        "videos": videos,
+        "createdAt": created_at,
+        "updatedAt": updated_at,
+        "stages": present,
+        "stageStatus": stage_status,
+        "activeStage": active_stage,
+        "currentStageName": live.get("currentStageName"),
+        "message": live.get("message"),
+        "error": live.get("error"),
+        "trajectoryCount": trajectory_count,
+        "status": status,
+        "progress": live.get("progress"),
+        "sizeBytes": size_bytes,
+    }
+
+
+def _cleanup_empty_run_dirs() -> int:
+    """Remove orphan numeric run dirs that are completely empty — leftovers from a
+    run id that was allocated (the allocator pre-creates the dir) but never wrote
+    config/context (e.g. a request that failed validation after allocation). They
+    don't show in the runs list but would otherwise accumulate as phantom ids."""
+    removed = 0
+    try:
+        for child in OUTPUT_DIR.iterdir():
+            if not (child.is_dir() and child.name.isdigit()):
+                continue
+            try:
+                if any(child.iterdir()):
+                    continue  # has content — a real run
+                child.rmdir()
+                removed += 1
+            except OSError:
+                pass
+    except Exception:
+        pass
+    return removed
+
+
+def rehydrate_runs_from_disk() -> int:
+    """Rebuild in-memory run state from disk on startup so runs survive a backend
+    restart. Registers light video records + video→run mapping (no video probing)
+    and a placeholder active_runs entry per run. Existing in-memory state wins."""
+    _cleanup_empty_run_dirs()
+    count = 0
+    # Process in id order so the most recent run wins the video→run mapping.
+    def _sort_key(d: Path):
+        return (0, int(d.name)) if d.name.isdigit() else (1, d.name)
+
+    for run_dir in sorted(list_run_dirs(), key=_sort_key):
+        run_id = run_dir.name
+        ctx = read_run_context(run_dir)
+        present = stages_present(run_dir)
+        if run_id not in app_state.active_runs:
+            app_state.active_runs[run_id] = {
+                "id": run_id,
+                "runId": run_id,
+                "status": "completed" if any(present.values()) else "idle",
+                "progress": 100 if present.get("stage4") else 0,
+                "message": "Loaded from disk",
+                "datasetFolder": ctx.get("datasetName"),
+                "inputDir": ctx.get("inputDir"),
+                "selectedCameras": ctx.get("selectedCameras"),
+                "source": ctx.get("source", "disk"),
+                "runDir": str(run_dir),
+                "rehydrated": True,
+            }
+        for v in ctx.get("videos") or []:
+            vid_id = v.get("id")
+            vpath = v.get("path")
+            if not vid_id or not vpath:
+                continue
+            if vid_id not in app_state.uploaded_videos:
+                # Light record (no probing): enough for streaming / detections.
+                app_state.uploaded_videos[vid_id] = {
+                    "id": vid_id,
+                    "name": v.get("name") or vid_id,
+                    "filename": Path(vpath).name,
+                    "path": vpath,
+                }
+            app_state.video_to_latest_run[vid_id] = run_id
+        # Legacy fallback for runs without a videos[] block.
+        link = run_dir / "probe_video_id.txt"
+        if link.exists():
+            try:
+                vid = link.read_text(encoding="utf-8").strip()
+                if vid:
+                    app_state.video_to_latest_run.setdefault(vid, run_id)
+            except Exception:
+                pass
+        count += 1
+    return count
+
+
+def delete_run(run_id: str) -> bool:
+    """Delete a run's directory from disk and purge its in-memory state. Returns
+    True if a directory was removed."""
+    run_dir = resolve_run_dir(run_id)
+    removed = False
+    if run_dir is not None and run_dir.exists():
+        # Terminate a still-running subprocess for this run before deleting.
+        proc = app_state.run_processes.get(run_id)
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        shutil.rmtree(run_dir, ignore_errors=True)
+        removed = not run_dir.exists()
+    app_state.active_runs.pop(run_id, None)
+    app_state.run_processes.pop(run_id, None)
+    for vid_id in [v for v, r in app_state.video_to_latest_run.items() if r == run_id]:
+        app_state.video_to_latest_run.pop(vid_id, None)
+    return removed
 
 
 def _prepare_input_for_run(run_id: str, source_video_path: Path, camera_id: str) -> Path:
@@ -533,6 +1031,10 @@ async def _run_pipeline_streaming(
     def _handle_line(line: str) -> None:
         nonlocal stages_started, stage_base, cameras_total
         log_lines.append(line)
+        # Publish a rolling tail of the subprocess output so the UI can show
+        # live, verbose progress (what the pipeline is actually doing right now).
+        if run_id in app_state.active_runs:
+            app_state.active_runs[run_id]["logTail"] = "\n".join(log_lines[-40:])
 
         m = _STAGE_LINE_RE.search(line)
         if m:
@@ -609,6 +1111,8 @@ async def _run_pipeline_streaming(
             errors="replace",
             bufsize=0,
         )
+        # Publish the handle so cancel_pipeline() can terminate this run.
+        app_state.run_processes[run_id] = proc
         t_out = threading.Thread(target=_drain_stream, args=(proc.stdout,), daemon=True)
         t_err = threading.Thread(target=_drain_stream, args=(proc.stderr,), daemon=True)
         t_out.start()
@@ -624,6 +1128,7 @@ async def _run_pipeline_streaming(
             pass
         t_out.join(timeout=30)
         t_err.join(timeout=30)
+        app_state.run_processes.pop(run_id, None)
         return proc.returncode
 
     future = loop.run_in_executor(None, _run_blocking)
@@ -638,6 +1143,11 @@ async def _run_pipeline_streaming(
 
     returncode = await future
     run_dir = OUTPUT_DIR / run_id
+
+    # A user cancel terminates the subprocess (non-zero return). Treat that as a
+    # cancellation, not a pipeline error, so the UI can show a clean cancelled state.
+    if _is_run_cancelled(run_id):
+        raise RunCancelled(f"Run {run_id} cancelled by user")
 
     if returncode != 0:
         stderr_tail = "\n".join(log_lines[-80:])[-4000:]
@@ -897,15 +1407,8 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
 
     except BaseException as e:
         tb = _traceback.format_exc()
-        err_type = type(e).__name__
-        err_msg = str(e) or f"({err_type} with no message)"
-        full_error = f"{err_type}: {err_msg}"
         print(f"[PIPELINE ERROR] run={run_id} stage={stage}\n{tb}", flush=True)
-        if run_id in app_state.active_runs:
-            app_state.active_runs[run_id]["status"] = "error"
-            app_state.active_runs[run_id]["error"] = full_error
-            app_state.active_runs[run_id]["errorDetail"] = tb[-3000:]
-            app_state.active_runs[run_id]["message"] = f"Stage {stage} failed — {full_error[:300]}"
+        _finalize_run_failure(run_id, e, tb, f"Stage {stage} failed")
         if isinstance(e, (asyncio.CancelledError, KeyboardInterrupt)):
             raise
 
@@ -956,15 +1459,8 @@ async def execute_full_pipeline(run_id: str, config: Dict[str, Any]):
 
     except BaseException as e:
         tb = _traceback.format_exc()
-        err_type = type(e).__name__
-        err_msg = str(e) or f"({err_type} with no message)"
-        full_error = f"{err_type}: {err_msg}"
         print(f"[PIPELINE ERROR] full-pipeline run={run_id}\n{tb}", flush=True)
-        if run_id in app_state.active_runs:
-            app_state.active_runs[run_id]["status"] = "error"
-            app_state.active_runs[run_id]["error"] = full_error
-            app_state.active_runs[run_id]["errorDetail"] = tb[-3000:]
-            app_state.active_runs[run_id]["message"] = f"Pipeline failed — {full_error[:300]}"
+        _finalize_run_failure(run_id, e, tb, "Pipeline failed")
         if isinstance(e, (asyncio.CancelledError, KeyboardInterrupt)):
             raise
 
@@ -1001,10 +1497,37 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
         app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
 
     except Exception as e:
-        if run_id in app_state.active_runs:
-            app_state.active_runs[run_id]["status"] = "error"
-            app_state.active_runs[run_id]["error"] = str(e)
-            app_state.active_runs[run_id]["message"] = f"Error: {str(e)[:200]}"
+        _finalize_run_failure(run_id, e, _traceback.format_exc(), "Error")
+
+
+def _link_input_dir_videos_to_run(
+    run_id: str, input_dir: str, cameras: Optional[List[str]]
+) -> None:
+    """Map registered camera videos under `input_dir` to `run_id` so the detections
+    endpoint can resolve each camera's stage-1 tracklets for this run."""
+    try:
+        root = Path(input_dir).resolve()
+    except Exception:
+        return
+    selected_norm = (
+        {_normalize_camera_id(c) for c in cameras} if cameras else None
+    )
+    for vid_id, vid_meta in list(app_state.uploaded_videos.items()):
+        vpath = str(vid_meta.get("path", ""))
+        if not vpath:
+            continue
+        try:
+            resolved = Path(vpath).resolve()
+        except Exception:
+            continue
+        if resolved != root and root not in resolved.parents:
+            continue
+        if selected_norm is not None:
+            cam = _extract_camera_id(vpath) or _extract_camera_id(str(vid_meta.get("name", "")))
+            if cam is None or _normalize_camera_id(cam) not in selected_norm:
+                continue
+        app_state.video_to_latest_run[vid_id] = run_id
+        _persist_probe_link(vid_id, run_id)
 
 
 async def _execute_input_dir_pipeline(
@@ -1042,6 +1565,12 @@ async def _execute_input_dir_pipeline(
 
         run_meta = await _run_pipeline_streaming(run_id, cmd, stage_nums)
 
+        # Link this run to every registered camera video under the input folder so
+        # the detections viewer can resolve outputs/<run_id>/stage1/tracklets_*.json
+        # for the selected camera. Without this, the per-camera detection display
+        # finds no run for the video and shows nothing.
+        _link_input_dir_videos_to_run(run_id, input_dir, cameras)
+
         app_state.active_runs[run_id]["status"] = "completed"
         app_state.active_runs[run_id]["progress"] = 100
         app_state.active_runs[run_id]["message"] = f"Pipeline complete for {label}"
@@ -1049,7 +1578,4 @@ async def _execute_input_dir_pipeline(
         app_state.active_runs[run_id]["completedAt"] = datetime.now().isoformat()
 
     except Exception as e:
-        if run_id in app_state.active_runs:
-            app_state.active_runs[run_id]["status"] = "error"
-            app_state.active_runs[run_id]["error"] = str(e)
-            app_state.active_runs[run_id]["message"] = f"Error: {str(e)[:200]}"
+        _finalize_run_failure(run_id, e, _traceback.format_exc(), "Error")

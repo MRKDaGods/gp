@@ -119,7 +119,7 @@ stage2:
     device: "cuda:0"
     half: true
     flip_augment: true
-    color_augment: true  # v11: brightness/contrast TTA for robustness
+    color_augment: false  # 14e B1 headline recipe: color_augment tested neutral-to-harmful (v27)
     multiscale_sizes: [[256, 256]]
     center_crop_scales: [0.95, 1.05]
     # Ensemble ReID: second model provides complementary features.
@@ -156,11 +156,11 @@ stage2:
     secondary_pca_model_path: "models/reid/pca_transform_secondary.pkl"
     tertiary_pca_model_path: "models/reid/pca_transform_tertiary.pkl"
   multi_query:
-    k: 24                      # 14h v3: keep top-K crop embeddings for diagnostics / robust pooling
+    k: 0                       # 14e B1 headline recipe (14h multi_query was a no-op on embeddings.npy)
   crop:
     min_area: 800
     padding_ratio: 0.05        # tighter crops for vehicles
-    samples_per_tracklet: 20
+    samples_per_tracklet: 48     # 14e B1 headline recipe (was 20)
     min_quality: 0.05
     laplacian_min_var: 30.0
   camera_bn:

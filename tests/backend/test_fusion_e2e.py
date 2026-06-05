@@ -97,6 +97,29 @@ def test_fusion_request_3_models(client: TestClient) -> None:
     assert "stage4.association.tertiary_embeddings" in overrides_str
 
 
+def test_bundled_model_resolves_fusion_via_endpoint(client: TestClient) -> None:
+    """A registered bundled-fusion model (single modelId) resolves dynamic
+    Stage-4 ensemble paths + fusion_resolved through the run-stage endpoint."""
+    resp = client.post(
+        "/api/pipeline/run-stage/4",
+        json={"runId": "test_bundled_14e", "modelId": "vehicle_mtmc_14e_b1"},
+    )
+    body = resp.json()
+    assert resp.status_code == 200, body
+    data = _data(body)
+    overrides = data["applied_overrides"]
+    overrides_str = " ".join(overrides)
+    # Dynamic, run-scoped tertiary path (NOT the stale run_latest baked in YAML).
+    assert (
+        "stage4.association.tertiary_embeddings.path="
+        "${project.output_dir}/${project.run_name}/stage2/embeddings_tertiary.npy"
+        in overrides
+    )
+    assert "run_latest" not in overrides_str
+    assert data["fusion_resolved"] is not None
+    assert data["fusion_resolved"]["mode"] == "bundled"
+
+
 def test_fusion_request_invalid_model_id(client: TestClient) -> None:
     """Unknown model_id should be rejected cleanly."""
     resp = client.post(

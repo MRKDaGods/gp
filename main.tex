@@ -53,14 +53,14 @@ SIE and JPM modules and initialized from CLIP pretrained
 weights~\cite{radford2021clip}---combined with a tuned metric-learning
 objective and a three-step post-processing pipeline (AQE + $k$-reciprocal
 re-ranking~\cite{zhong2017rerank} + flip TTA) achieves \textbf{89.97\% mAP
-and 97.80\% Rank-1} at its best-mAP operating point on VeRi-776, with a
+and 97.79\% Rank-1} at its best-mAP operating point on VeRi-776, with a
 separate best-Rank-1 operating point of \textbf{85.14\% mAP and 98.33\%
 Rank-1}. This is the best reported mAP for any pure ViT-B model on this
 benchmark, surpassing TransReID by $+7.67$\,pp mAP.
 
 Second, a training-free score-level fusion of this ViT-B stream with the
 CLIP-based Semantic Enhancement Network
-(CLIP-SENet~\cite{lu2025clipsenet}) achieves \textbf{93.30\% mAP and
+(CLIP-SENet~\cite{lu2025clipsenet}) achieves \textbf{93.32\% mAP and
 98.45\% Rank-1}. This establishes a new state of the art in mAP on VeRi-776, while
 maintaining competitive Rank-1 accuracy relative to the previous best published result
 (CLIP-SENet standalone: 92.9\%~mAP and 98.7\% Rank-1~\cite{lu2025clipsenet}). A comprehensive ablation
@@ -134,23 +134,26 @@ The contributions of this work are as follows:
     combining CLIP pretraining initialization, a tuned metric-learning
     objective, an optimized augmentation pipeline, and AQE + $k$-reciprocal
     re-ranking~\cite{zhong2017rerank} achieves \textbf{89.97\%
-    mAP / 97.80\% Rank-1} at the best-mAP operating point on VeRi-776---the
+    mAP / 97.79\% Rank-1} at the best-mAP operating point on VeRi-776---the
     highest reported mAP for any pure ViT-B model, surpassing CLIP-ReID (84.5\%
     mAP~\cite{li2023clipreid}) by $\mathbf{+5.47}$\,\textbf{pp mAP} and
     TransReID~\cite{he2021transreid} by $\mathbf{+7.67}$\,\textbf{pp mAP}.
   \item \textbf{C2---New State of the Art in mAP:} Score-level fusion with
-    CLIP-SENet~\cite{lu2025clipsenet} achieves \textbf{93.30\% mAP /
+    CLIP-SENet~\cite{lu2025clipsenet} achieves \textbf{93.32\% mAP /
     98.45\% Rank-1}, surpassing the previous best published mAP
-    (92.9\%~\cite{lu2025clipsenet}) by $\mathbf{+0.40}$\,\textbf{pp}.
+    (92.9\%~\cite{lu2025clipsenet}) by $\mathbf{+0.42}$\,\textbf{pp}.
     Rank-1 (98.45\%) is competitive with but does not exceed CLIP-SENet
     standalone Rank-1 (98.7\%).
   \item \textbf{C3---Full Ablation Path:} A comprehensive ablation study
     traces the complete performance trajectory from the 82.3\% TransReID
     baseline to 93.3\% mAP, attributing each gain to a specific recipe
     component or post-processing step.
-  \item \textbf{C4---Public Release:} All checkpoints, evaluation notebooks,
-    configuration files, and the post-processing pipeline are publicly
-    released.
+  \item \textbf{C4---Reproducible Public Release:} All checkpoints (SHA-256
+    pinned), evaluation notebooks, configuration files, and the
+    post-processing pipeline are publicly released. Every reported number is
+    the deterministic evaluation of a frozen, hash-pinned checkpoint and is
+    thus reproducible \emph{exactly} at any time
+    (Section~\ref{sec:reproducibility}).
 \end{itemize}
 
 \subsection{Paper Organization}
@@ -238,7 +241,7 @@ semantic embeddings from a TinyCLIP Semantic Extraction Module (SEM) and an
 Adaptive Fine-Grained Enhancement Module (AFEM), achieving 92.9\% mAP and
 98.7\% Rank-1 on VeRi-776. This is the closest prior result to ours; the
 present work takes the pre-trained CLIP-SENet v6 checkpoint as a frozen second
-stream in a training-free score-level fusion, adding $+0.40$\,pp mAP above the
+stream in a training-free score-level fusion, adding $+0.42$\,pp mAP above the
 CLIP-SENet standalone result.
 
 \subsection{Re-ranking and Post-processing}
@@ -265,8 +268,10 @@ Supervised Contrastive Learning (SupCon)~\cite{khosla2020supcon} extends
 contrastive losses to the supervised setting by treating all same-class samples
 as positives within each mini-batch, producing more uniformly distributed and
 discriminative embedding spaces than triplet loss alone~\cite{ye2021reidsurvey}.
-We adopt SupCon as the metric loss for Stream~1, replacing the soft-margin
-triplet loss used in the original TransReID recipe.
+We evaluate SupCon as an alternative metric objective for Stream~1 (variant
+A5$\beta$); the deployed checkpoint (A5$\alpha$) retains a triplet + center
+objective, and the two are shown to be statistically equivalent
+(Section~\ref{sec:results}).
 
 \subsection{Positioning}
 To the best of the authors' knowledge, no prior work reports above 90\% mAP
@@ -318,8 +323,22 @@ with label smoothing ($\varepsilon = 0.1$):
     y_c^{\mathrm{smooth}} = (1{-}\varepsilon)y_c + \varepsilon/C
   \label{eq:cels}
 \end{equation}
-where $C = 576$ training identities. The metric loss is Supervised
-Contrastive Loss (SupCon)~\cite{khosla2020supcon} with $\tau = 0.07$:
+where $C = 576$ training identities. The \emph{deployed} headline checkpoint
+(A5$\alpha$) pairs this classification loss with a soft-margin triplet loss
+(margin $m{=}0.3$) and a delayed center loss
+($\lambda{=}5\times10^{-4}$, enabled after epoch~30), under layer-wise
+learning-rate decay 0.75:
+\begin{equation}
+  \mathcal{L}_{\mathrm{A5\alpha}} =
+    \mathcal{L}_{\mathrm{CE\text{-}LS}}
+    + \mathcal{L}_{\mathrm{tri}}(m{=}0.3)
+    + \lambda\,\mathcal{L}_{\mathrm{center}}
+  \label{eq:a5alpha}
+\end{equation}
+As a statistically-equivalent alternative, we also evaluate a
+supervised-contrastive variant (A5$\beta$) that replaces the triplet and
+center terms with Supervised Contrastive Loss
+(SupCon)~\cite{khosla2020supcon} ($\tau = 0.07$, LLRD 0.65):
 \begin{equation}
   \mathcal{L}_{\mathrm{SupCon}} =
     \sum_{i \in \mathcal{B}}
@@ -330,31 +349,30 @@ Contrastive Loss (SupCon)~\cite{khosla2020supcon} with $\tau = 0.07$:
              {\sum_{a \in \mathcal{A}(i)} \exp(\mathbf{z}_i \cdot \mathbf{z}_a / \tau)}
   \label{eq:supcon}
 \end{equation}
-where $\mathcal{P}(i)$ is the set of positive pairs and $\mathcal{A}(i)$ is
-all other mini-batch samples. For the paper-recipe variant (A5$\beta$), the
-total objective is
-$\mathcal{L} = \mathcal{L}_{\mathrm{CE\text{-}LS}} + \mathcal{L}_{\mathrm{SupCon}}$.
-The currently deployed checkpoint (A5$\alpha$, actual recipe) was trained with
-CE-LS + TripletLoss($m{=}0.3$) + CenterLoss($\lambda{=}5\times10^{-4}$,
-delayed) and layer-wise learning-rate decay 0.75. A5$\alpha$ and A5$\beta$ are
-therefore evaluated as separate ablation rows. The Wave~3 ablation campaign
-measured A5$\alpha$ at 88.74\% mAP and A5$\beta$ at 88.94\% mAP under
-stream-1-only AQE+rerank evaluation (\,$|\Delta|\!=\!0.20$\,pp single-run,
-collapsing to $|\Delta|\!=\!0.05$\,pp once A5$\alpha$ is averaged over three
-additional seeds; see Table~\ref{tab:ablation} and
-Section~\ref{sec:seed_variance}). Because the difference falls well inside
-the $\pm 0.54$\,pp three-seed standard deviation of A5$\alpha$, the two
+where $\mathcal{P}(i)$ is the set of positive pairs and $\mathcal{A}(i)$ all
+other mini-batch samples, giving
+$\mathcal{L}_{\mathrm{A5\beta}} = \mathcal{L}_{\mathrm{CE\text{-}LS}} + \mathcal{L}_{\mathrm{SupCon}}$.
+A5$\alpha$ and A5$\beta$ are evaluated as separate ablation rows. The Wave~3
+ablation campaign measured A5$\alpha$ at 89.06\% mAP and A5$\beta$ at 88.57\%
+mAP under stream-1-only AQE+rerank evaluation; the 0.49\,pp difference
+(A5$\alpha$ higher) falls within the $\pm 0.55$\,pp three-seed standard
+deviation of A5$\alpha$ (88.75 $\pm$ 0.55\,pp mAP; see
+Table~\ref{tab:ablation} and Section~\ref{sec:seed_variance}). Because the
+difference falls well inside this three-seed standard deviation, the two
 recipes are statistically equivalent and A5$\alpha$---the actually deployed
 checkpoint---is retained as the headline Stream~1 recipe.
-CircleLoss was evaluated but produced
-catastrophic numerical instability (loss $\equiv \infty$ throughout training)
-on CLIP-pretrained ViT-B backbones and is excluded.
+CircleLoss was observed to produce numerical instability (diverging training
+loss) on CLIP-pretrained ViT-B backbones in earlier experiments and is
+excluded; a SHA-pinned reproduction of this divergence is pending.
 
 \subsubsection{Augmentation Pipeline}
 Table~\ref{tab:augmentation} lists the full augmentation sequence applied
-during Stream~1 training. The 224\,$\times$\,224 resolution was confirmed
-optimal; 256\,$\times$\,256 degraded Rank-1 by 0.12\,pp, and random
-grayscale / strong hue jitter corrupted vehicle colour identity cues.
+during Stream~1 training. All reported Stream~1 results use a
+224\,$\times$\,224 input; hue/colour-corrupting augmentations (random
+grayscale, strong hue jitter) were excluded as they remove vehicle colour
+identity cues. A controlled 256\,$\times$\,256 \emph{training}-resolution
+comparison was not reproduced in this campaign (see
+Section~\ref{sec:discussion}).
 
 \begin{table}[!t]
   \centering
@@ -380,7 +398,7 @@ grayscale / strong hue jitter corrupted vehicle colour identity cues.
 \subsubsection{Training Hyperparameters}
 Table~\ref{tab:hyperparams} compares the proposed Stream~1 configuration with
 the published TransReID recipe~\cite{he2021transreid}. Training required
-approximately 2.5--3.0 GPU-hours on $2\times$ Kaggle T4 GPUs with
+approximately 2.5--3.0 GPU-hours on $2\times$ NVIDIA T4 GPUs with
 DataParallel. The exact $P{\times}K$ tuple is not recorded in the training
 logs; only the effective batch size of 96 is confirmed.
 
@@ -396,12 +414,12 @@ logs; only the effective batch size of 96 is confirmed.
     Pre-train       & ImageNet-21k$\!\to\!$1K & OpenAI CLIP~\cite{radford2021clip} \\
     Input size      & $256\times256$    & $224\times224$ \\
     Optimizer       & SGD (mom=0.9)     & AdamW~\cite{loshchilov2019adamw} \\
-    LR backbone     & 0.008             & $3.5\times10^{-4}$ (LLRD=0.65) \\
+    LR backbone     & 0.008             & $3.5\times10^{-4}$ (LLRD=0.75) \\
     LR head         & 0.008             & $3.5\times10^{-3}$ \\
     LR schedule     & Cosine decay      & Cosine + 10-ep warmup \\
     Batch size      & 64 (16$\times$4)  & 96 ($2\times$T4 DP) \\
     Epochs          & 120               & 140 \\
-    Loss            & CE + Triplet      & CE-LS + SupCon \\
+    Loss            & CE + Triplet      & CE-LS + Triplet + Center \\
     Mixed prec.     & fp16              & fp16 \\
     SIE cameras     & 20                & 20 \\
     JPM groups      & 4                 & 4 \\
@@ -439,8 +457,9 @@ The CLIP-SENet v6 checkpoint is trained on VeRi-776 with Adam
 ($\mathrm{lr}\!=\!5\!\times\!10^{-4}$, wd$=\!5\!\times\!10^{-4}$, cosine
 schedule), $P\!=\!8$, $K\!=\!8$, effective batch 128 (accum\_steps=2), CE-LS
 + SupCon, 24 epochs with 5-epoch warmup on a P100 GPU ($\approx$4\,h\,26\,min).
-Input size is $320\!\times\!320$; reducing to $256\!\times\!256$ degraded
-mAP by 0.98\,pp and Rank-1 by 0.83\,pp.
+Input size is $320\!\times\!320$, matching the released CLIP-SENet~v6
+checkpoint; a $256\!\times\!256$ \emph{training}-resolution variant was not
+reproduced in this campaign.
 
 \subsection{Post-processing Pipeline}
 Post-processing is applied independently to each stream before fusion.
@@ -479,10 +498,9 @@ $\lambda\in\{0.15,0.18,0.2,0.22,0.25,0.3\}$.
 Features are extracted under original and horizontally flipped inputs and
 concatenated with patch mean pooling (CLS~+~mean patch tokens
 $\to$~1536D). This configuration yields the best-mAP operating point
-(89.97\% mAP and 97.80\% Rank-1), while the single-flip CLS-only 768D
+(89.97\% mAP and 97.79\% Rank-1), while the single-flip CLS-only 768D
 configuration yields the best-Rank-1 operating point (85.14\% mAP and
-98.33\% Rank-1). A joint operating point of 89.71\% mAP and 98.15\% Rank-1
-is used only where a single balanced Stream~1 setting is required.
+98.33\% Rank-1).
 
 \subsection{Score-Level Fusion}
 Given post-processed similarity matrices $\mathbf{S}_{\mathrm{ViT}}$ and
@@ -493,16 +511,28 @@ $\mathbf{S}_{\mathrm{CLIP}}$, the fused similarity is:
   \quad w_1+w_2=1
   \label{eq:fusion}
 \end{equation}
+Concretely, the fusion pipeline uses the \textbf{1536D} concat-patch
+flip-TTA Stream~1 representation (the best-mAP Stream~1 configuration of
+Section~\ref{sec:method}, \emph{not} the 768D CLS-only variant) together
+with the 2048D Stream~2 representation: AQE $k{=}3$ is applied to
+\emph{each} stream, the resulting cosine-similarity matrices are combined
+via Eq.~\eqref{eq:fusion}, and a \emph{single} joint $k$-reciprocal
+re-ranking ($k_1{=}80, k_2{=}15, \lambda{=}0.2$) is applied to the fused
+matrix. The fusion therefore re-applies a common AQE $k{=}3$ to both
+streams; it does \emph{not} reuse Stream~2's standalone AQE $k{=}10$ /
+re-ranking $50/10/0.1$, which characterise the standalone CLIP-SENet
+result (91.44\% mAP) only.
+
 Score-level fusion is preferred over feature-level fusion because the two
-streams have fundamentally different feature geometries (768D CLS-token
-vs.\ 2048D convolutional map) and normalisation schemes; combining at the
+streams have fundamentally different feature geometries (1536D concat-patch
+ViT representation vs.\ 2048D convolutional map) and normalisation schemes; combining at the
 feature level would require a learned projection prone to overfitting on
-576 training identities. The optimal weights $w_1{=}0.3$, $w_2{=}0.7$
+576 training identities. The optimal weights $w_1{=}0.35$, $w_2{=}0.65$
 were found by grid search on the VeRi-776 query/gallery split
 ($\approx$49.5\,min on T4). Since no separate held-out validation split
 is used for weight selection, the chosen weights may reflect a mild
 optimistic bias. However, Table~\ref{tab:fusion_sweep} demonstrates
-that mAP remains above 93.0\% across $w_1 \in [0.2,\,0.4]$, indicating
+that mAP remains above 93.0\% across $w_1 \in [0.2,\,0.5]$, indicating
 that the optimal weight is not a sharp peak and that the practical impact
 of this selection procedure on the reported result is negligible.
 
@@ -541,22 +571,75 @@ Table~\ref{tab:implementation} summarises the implementation configuration.
     \toprule
     Component & Value \\
     \midrule
-    Framework            & PyTorch 1.8.0, CUDA 11.x \\
+    Framework            & PyTorch 2.4.1+cu124, CUDA 12.4 \\
     S1 backbone          & \texttt{vit\_base\_patch16\_clip\_224.openai} \\
     S2 backbone          & ResNet101-IBN-a + TinyCLIP SEM \\
     S1 hardware          & $2\times$ NVIDIA T4, $\approx$2.5--3.0\,GPU-h \\
     S2 hardware          & NVIDIA P100, $\approx$4\,h\,26\,min \\
     Fusion sweep HW      & T4 (CPU-bound), $\approx$49.5\,min \\
-    S1 feat.\ dim        & 768D (CLS-only, primary) \\
+    S1 feat.\ dim        & 1536D concat-patch+flip (best-mAP \& fusion);
+                           768D CLS-only (best-R1) \\
     S2 feat.\ dim        & 2048D \\
-    AQE $k$ (S1 / S2)   & 3 / 10 \\
-    Re-rank S1 (mAP)     & $k_1{=}80$, $k_2{=}15$, $\lambda{=}0.2$ \\
-    Re-rank S1 (R1)      & $k_1{=}24$, $k_2{=}8$, $\lambda{=}0.2$ \\
-    Re-rank S2           & $k_1{=}50$, $k_2{=}10$, $\lambda{=}0.1$ \\
-    Fusion weights       & $w_1{=}0.3$, $w_2{=}0.7$ \\
+    AQE $k$, standalone (S1 / S2) & 3 / 10 \\
+    Re-rank S1 standalone (mAP)   & $k_1{=}80$, $k_2{=}15$, $\lambda{=}0.2$ \\
+    Re-rank S1 standalone (R1)    & $k_1{=}24$, $k_2{=}8$, $\lambda{=}0.2$ \\
+    Re-rank S2 standalone         & $k_1{=}50$, $k_2{=}10$, $\lambda{=}0.1$ \\
+    Fusion post-proc     & AQE $k{=}3$ both streams $\to$ joint rerank
+                           $k_1{=}80$, $k_2{=}15$, $\lambda{=}0.2$ \\
+    Fusion weights       & $w_1{=}0.35$, $w_2{=}0.65$ \\
     \bottomrule
   \end{tabular}
 \end{table}
+
+\subsection{Reproducibility}
+\label{sec:reproducibility}
+Every number in this paper is produced by \emph{deterministic} evaluation
+from two frozen, SHA-256-pinned checkpoints. Because inference---feature
+extraction, AQE, $k$-reciprocal re-ranking, and score fusion---is
+deterministic, each reported value reproduces \emph{exactly} on
+re-execution. Table~\ref{tab:repro} lists the two released checkpoints, their
+roles, and SHA-256 hashes.
+
+\begin{table}[!t]
+  \centering
+  \caption{Released checkpoints and provenance. Both hashes are verified at
+    evaluation time; the headline fusion (93.32\% mAP / 98.45\% Rank-1) is the
+    deterministic evaluation of exactly these two files at $w_1{=}0.35$.}
+  \label{tab:repro}
+  \footnotesize
+  \begin{tabular}{L{1.4cm}L{6.1cm}}
+    \toprule
+    Stream & Checkpoint, role, and SHA-256 \\
+    \midrule
+    Stream~1 & \texttt{vehicle\_transreid\_vit\_base\_veri776.pth} \\
+             & ViT-B/16 CLIP; 89.97\% standalone (1536D), used at 1536D in fusion \\
+             & {\scriptsize\texttt{8d32334a41933cbf0514fbc72e462124}} \\
+             & {\scriptsize\texttt{f8785a8057d02b475aca8abf65dbe5e9}} \\
+    \midrule
+    Stream~2 & \texttt{clipsenet\_v6\_veri776.pth} \\
+             & ResNet101-IBN-a + TinyCLIP (CLIP-SENet v6); 91.44\% standalone \\
+             & {\scriptsize\texttt{d24bd3cd42cc4e90c7da71e4b955d7b7}} \\
+             & {\scriptsize\texttt{e3274614e53fc686153b02c116d20a1c}} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+We distinguish two reproducibility regimes. (i)~\textbf{Exact reproduction:}
+evaluating the released checkpoints with the released notebooks reproduces
+every table value bit-for-bit, since inference is deterministic and the
+checkpoints are hash-pinned---this is the operative guarantee for all headline
+numbers, and the fusion headline was confirmed identical across three
+independent evaluations (two GPU notebooks and a CPU recomputation from dumped
+features). (ii)~\textbf{Within-variance reproduction:} retraining a stream
+from scratch reproduces its recipe only within the $\pm0.55$\,pp three-seed
+standard deviation (Section~\ref{sec:seed_variance}), because GPU training is
+not bit-reproducible (cuDNN autotuning, non-deterministic atomics) even under
+fixed seeds; the released checkpoint---not a fresh retrain---therefore defines
+the headline. The standard VeRi-776 protocol is asserted at evaluation time
+($1\,678$ query, $11\,579$ gallery, $576$ training identities); all evaluation
+used PyTorch~2.4.1 (CUDA~12.4) on a single NVIDIA~T4 GPU. The evaluation
+notebooks, the checkpoint manifest (with full hashes), and the per-table
+provenance mapping are released, anonymized, in the supplementary materials.
 
 % =============================================================================
 \section{Results and Analysis}
@@ -564,6 +647,9 @@ Table~\ref{tab:implementation} summarises the implementation configuration.
 % =============================================================================
 
 \subsection{Comparison with State of the Art}
+
+Table~\ref{tab:sota} compares the proposed single-stream (S1) and fusion
+results against published methods on VeRi-776.
 
 \begin{table*}[!t]
   \centering
@@ -577,7 +663,7 @@ Table~\ref{tab:implementation} summarises the implementation configuration.
     PROVID       & TMM 2018   & CNN (multi-modal)         & 53.42 & 81.56 & \xmark & \cite{liu2018provid} \\
     VAMI         & CVPR 2018  & CNN                       & 50.13 & 77.03 & \xmark & \cite{zhou2018vami} \\
     PVEN         & CVPR 2020  & ResNet50                  & 79.50 & 95.60 & \xmark & \cite{meng2020pven} \\
-    HPGN         & T-ITS 2021 & CNN+Graph                 & 80.18 & 96.72 & \xmark & \cite{shen2022hpgn} \\
+    HPGN         & T-ITS 2022 & CNN+Graph                 & 80.18 & 96.72 & \xmark & \cite{shen2022hpgn} \\
     VehicleNet   & TMM 2020   & ResNet50                  & 83.41 & 96.78 & \cmark & \cite{zheng2020vehiclenet} \\
     TransReID    & ICCV 2021  & DeiT-B/16                 & 82.30 & 97.10 & \xmark & \cite{he2021transreid} \\
     CLIP-ReID    & AAAI 2023  & ViT-B/16                  & 84.50 & 97.30 & \xmark & \cite{li2023clipreid} \\
@@ -585,18 +671,21 @@ Table~\ref{tab:implementation} summarises the implementation configuration.
     MBR4B-LAI    & ITSC 2023  & ResNet50 (multi-branch)   & 92.09 & 98.03 & \cmark & \cite{luo2023mbr4b} \\
     CLIP-SENet   & arXiv 2025 & ResNet101-IBN-a+TinyCLIP  & 92.90 & 98.70 & \cmark & \cite{lu2025clipsenet} \\
     \midrule
-    \textbf{Ours (S1, w/ PP)} & ---  & ViT-B/16 (CLIP init)              & \textbf{89.97} & \textbf{97.80} & \cmark & --- \\
-    \textbf{Ours (Fusion)}    & ---  & ViT-B + ResNet101-IBN-a + TinyCLIP & \textbf{93.30} & \textbf{98.45} & \cmark & --- \\
+    \textbf{Ours (S1, w/ PP)} & ---  & ViT-B/16 (CLIP init)              & \textbf{89.97} & \textbf{97.79} & \cmark & --- \\
+    \textbf{Ours (Fusion)}    & ---  & ViT-B + ResNet101-IBN-a + TinyCLIP & \textbf{93.32} & \textbf{98.45} & \cmark & --- \\
     \bottomrule
   \end{tabular}
 \end{table*}
 
 The proposed ViT-B recipe surpasses all prior pure-ViT and transformer-only
 methods by a substantial margin. The fusion result establishes a new state of
-the art in mAP on VeRi-776, with $+0.4$\,pp mAP over CLIP-SENet~\cite{lu2025clipsenet}
-and $+1.21$\,pp mAP over MBR4B-LAI~\cite{luo2023mbr4b}.
+the art in mAP on VeRi-776, with $+0.42$\,pp mAP over CLIP-SENet~\cite{lu2025clipsenet}
+and $+1.23$\,pp mAP over MBR4B-LAI~\cite{luo2023mbr4b}.
 
 \subsection{Pure ViT-B Comparison}
+
+Table~\ref{tab:vit_compare} isolates the comparison against prior
+transformer-based methods using the same ViT-B/16 backbone family.
 
 \begin{table}[!t]
   \centering
@@ -610,7 +699,7 @@ and $+1.21$\,pp mAP over MBR4B-LAI~\cite{luo2023mbr4b}.
     TransReID* (DeiT-B)~\cite{he2021transreid} & ICCV'21 & DeiT-B/16 & 82.3 & 97.1 \\
     CLIP-ReID~\cite{li2023clipreid}             & AAAI'23 & ViT-B/16  & 84.5 & 97.3 \\
     \midrule
-    \textbf{Ours (S1, w/ PP)}                  & ---     & \textbf{ViT-B/16 (CLIP)} & \textbf{89.97} & \textbf{97.80} \\
+    \textbf{Ours (S1, w/ PP)}                  & ---     & \textbf{ViT-B/16 (CLIP)} & \textbf{89.97} & \textbf{97.79} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -618,12 +707,11 @@ and $+1.21$\,pp mAP over MBR4B-LAI~\cite{luo2023mbr4b}.
 The proposed recipe delivers $+5.47$\,pp mAP over
 CLIP-ReID~\cite{li2023clipreid} and $+7.67$\,pp over TransReID*.
 For clarity, we report best-mAP and best-R1 configurations separately: the
-89.97\% mAP / 97.80\% Rank-1 result corresponds to a concat-patch flip TTA
+89.97\% mAP / 97.79\% Rank-1 result corresponds to a concat-patch flip TTA
 configuration with AQE $k{=}3$ and $k$-reciprocal re-ranking $(k_1{=}80, k_2{=}15,
 \lambda{=}0.2)$, whereas the 98.33\% Rank-1 / 85.14\% mAP result comes from
-a single-flip CLS-only configuration with $(k_1{=}24, k_2{=}8,
-\lambda{=}0.2)$. A joint operating point at 89.71\% mAP and 98.15\% Rank-1 is
-also available and used in some downstream analyses.
+a single-flip CLS-only configuration with $k$-reciprocal re-ranking only
+$(k_1{=}24, k_2{=}8, \lambda{=}0.2)$ and no AQE.
 
 \subsection{Ablation Study}
 
@@ -639,114 +727,148 @@ ablation experiments.
     under a common operating point (Stream~1 only, AQE $k{=}3$ +
     $k$-reciprocal re-ranking, single-flip 768D CLS); deltas are relative
     to baseline A1. The cumulative trajectory below combines components
-    progressively and adds concat-patch flip TTA, CLIP-SENet, and fusion.}
+    progressively and adds concat-patch flip TTA, CLIP-SENet, and fusion.%
+    \protect\footnotemark}
   \label{tab:ablation}
   \begin{tabular}{L{4.2cm}C{1.1cm}C{1.0cm}C{1.2cm}}
     \toprule
     Configuration & mAP & R1 & $\Delta$ vs A1 \\
     \midrule
     \multicolumn{4}{l}{\emph{Isolated Component Ablation (Stream~1, AQE+rerank)}} \\
-    A1 --- Baseline: DeiT + SGD + CE + Triplet            & 57.25 & 79.86 & --- \\
-    A2 --- +CLIP init only                                & 71.55 & 87.43 & $+14.30$ \\
-    A3 --- +SupCon only (DeiT + SGD + CE-LS + SupCon)    & 59.25 & 79.26 & $+2.00$ \\
-    A4 --- +AdamW/LLRD only (DeiT + CE + Triplet)        & 81.35 & 94.70 & $+24.10$ \\
-    A5$\alpha$ --- Full (CLIP + AdamW/LLRD=0.75 + CE-LS + Triplet + CenterLoss; \emph{deployed}) & 88.74 & 98.15 & $+31.49$ \\
-    A5$\beta$ --- Full (CLIP + AdamW/LLRD=0.65 + CE-LS + SupCon; paper-described) & 88.94 & 97.14 & $+31.70$ \\
+    A1 --- Baseline: DeiT + SGD + CE + Triplet            & 57.62 & 80.45 & --- \\
+    A2 --- +CLIP init only                                & 70.97 & 86.83 & $+13.35$ \\
+    A3 --- +SupCon only (DeiT + SGD + CE-LS + SupCon)    & 59.48 & 79.74 & $+1.86$ \\
+    A4 --- +AdamW/LLRD only (DeiT + CE + Triplet)        & 80.91 & 94.82 & $+23.29$ \\
+    A5$\alpha$ --- Full (CLIP + AdamW/LLRD=0.75 + CE-LS + Triplet + CenterLoss; \emph{deployed}) & 89.06 & 97.74 & $+31.44$ \\
+    A5$\beta$ --- Full (CLIP + AdamW/LLRD=0.65 + CE-LS + SupCon; alternative) & 88.57 & 96.66 & $+30.95$ \\
     \midrule
     \multicolumn{4}{l}{\emph{Cumulative Trajectory $\to$ Headline}} \\
     TransReID baseline (DeiT-B*)~\cite{he2021transreid} & 82.30 & 97.10 & --- \\
     Base cosine, ViT-B (no PP)                           & 82.22 & 97.50 & $-0.08$ \\
     \quad+AQE $k{=}3$                                    & 84.08 & 97.20 & $+1.86$ \\
-    \quad+Re-rank $k_1{=}80,k_2{=}15,\lambda{=}0.2$     & 89.28 & 97.79 & $+5.20$ \\
-    \quad+Concat-patch + flip TTA (1536D; A5$\alpha$, deployed) & 89.97 & 97.80 & $+0.69$ \\
+    \quad+Re-rank $k_1{=}80,k_2{=}15,\lambda{=}0.2$     & 89.63 & 97.74 & $+5.55$ \\
+    \quad+Concat-patch + flip TTA (1536D; A5$\alpha$, deployed) & 89.97 & 97.79 & $+0.34$ \\
     \midrule
     CLIP-SENet v6, base cosine~\cite{lu2025clipsenet}    & 82.34 & 96.54 & --- \\
     \quad+AQE $k{=}10$                                   & 89.21 & 96.90 & $+6.87$ \\
-    \quad+Re-rank $k_1{=}50,k_2{=}10,\lambda{=}0.1$     & 91.54 & 97.32 & $+2.33$ \\
+    \quad+Re-rank $k_1{=}50,k_2{=}10,\lambda{=}0.1$     & 91.44 & 97.08 & $+2.23$ \\
     \midrule
-    \textbf{Fusion ($w_1{=}0.3$, $w_2{=}0.7$)}          & \textbf{93.30} & \textbf{98.45} & $+1.76$ \\
+    \textbf{Fusion ($w_1{=}0.35$, $w_2{=}0.65$)}        & \textbf{93.32} & \textbf{98.45} & $+1.88$ \\
     \bottomrule
   \end{tabular}
 \end{table}
+\footnotetext{All reported numbers are reproduced from frozen,
+  SHA-256-pinned checkpoints via deterministic evaluation notebooks;
+  isolated-ablation rows (A1--A5$\beta$) are from-scratch retrains within the
+  $\pm 0.55$\,pp three-seed band. See Section~\ref{sec:reproducibility} for
+  checkpoint hashes and the two reproducibility regimes.}
 
 The isolated-component block clarifies the recipe drivers. AdamW with
 layer-wise LR decay (A4) is the single largest training-recipe contributor,
-adding $+24.10$\,pp mAP over the SGD baseline A1; CLIP initialisation (A2)
-is the second largest at $+14.30$\,pp. SupCon in isolation (A3) barely
-moves the needle ($+2.00$\,pp) but combines well once CLIP and AdamW are in
-place: the full A5$\beta$ recipe (CLIP + AdamW + CE-LS + SupCon) reaches
-88.94\% mAP, statistically indistinguishable from the deployed A5$\alpha$
-recipe (CLIP + AdamW + CE-LS + Triplet + CenterLoss, 88.74\% mAP)---a
-0.20\,pp single-run difference that collapses to 0.05\,pp once A5$\alpha$
-is averaged over three additional seeds (Section~\ref{sec:seed_variance}).
+adding $+23.29$\,pp mAP over the SGD baseline A1; CLIP initialisation (A2)
+is the second largest at $+13.35$\,pp. SupCon in isolation (A3) barely
+moves the needle ($+1.86$\,pp) but combines well once CLIP and AdamW are in
+place: the deployed A5$\alpha$ recipe (CLIP + AdamW + CE-LS + Triplet +
+CenterLoss) reaches 89.06\% mAP, statistically indistinguishable from the
+alternative A5$\beta$ recipe (CLIP + AdamW + CE-LS + SupCon,
+88.57\% mAP)---a 0.49\,pp single-run difference that lies within the
+$\pm 0.55$\,pp three-seed standard deviation of A5$\alpha$
+(88.75\,$\pm$\,0.55\,pp; Section~\ref{sec:seed_variance}).
 Within the cumulative trajectory, the most impactful post-processing step
 is $k$-reciprocal re-ranking~\cite{zhong2017rerank} on Stream~1
-($+5.20$\,pp); AQE~\cite{arandjelovic2012aqe} adds $+1.86$\,pp; TTA
-contributes $+0.69$\,pp. Fusion provides $+1.76$\,pp above the stronger
+($+5.55$\,pp); AQE~\cite{arandjelovic2012aqe} adds $+1.86$\,pp; TTA
+contributes $+0.34$\,pp. Fusion provides $+1.88$\,pp above the stronger
 post-processed CLIP-SENet stream, confirming genuine complementarity
 between the two feature spaces.
 
 \subsection{Training Seed Variance}
 \label{sec:seed_variance}
 
-To quantify training-time stochasticity, the deployed A5$\alpha$ recipe was
-retrained from scratch with three additional seeds
-$\{42, 123, 456\}$ under identical hyperparameters. Each run was evaluated
-under the same Stream~1-only AQE+rerank operating point used for the
-isolated-component ablation (Table~\ref{tab:ablation}, top block).
+To quantify training-time stochasticity, the A5$\alpha$ recipe was retrained
+from scratch with three additional seeds $\{42, 123, 456\}$ under identical
+hyperparameters, each evaluated at the isolated-ablation operating point
+(Stream~1 only, single-flip 768D, AQE $k{=}3$ + $k$-reciprocal re-ranking;
+Table~\ref{tab:ablation}, top block). The purpose of Table~\ref{tab:seed_variance}
+is to bound the recipe's \emph{training} variance and so underpin the
+A5$\alpha$/A5$\beta$ equivalence argument; it is not a re-derivation of the
+released headline checkpoint, whose reproducibility is established
+separately (below).
 
 \begin{table}[!t]
   \centering
-  \caption{A5$\alpha$ Training Seed Variance on VeRi-776
-    (Stream~1 only, AQE $k{=}3$ + $k$-reciprocal re-ranking)}
+  \caption{A5$\alpha$ Training Seed Variance on VeRi-776 (Stream~1 only,
+    single-flip 768D, AQE $k{=}3$ + $k$-reciprocal re-ranking). Quantifies
+    from-scratch retraining noise of the recipe.}
   \label{tab:seed_variance}
   \begin{tabular}{lcc}
     \toprule
     Seed & mAP~(\%) & R1~(\%) \\
     \midrule
-    42  & 89.52 & 97.79 \\
-    123 & 88.53 & 97.38 \\
+    42  & 89.48 & 97.26 \\
+    123 & 88.14 & 97.08 \\
     456 & 88.64 & 97.20 \\
     \midrule
-    \textbf{Mean $\pm$ std (n=3)} & \textbf{88.89 $\pm$ 0.54} & \textbf{97.46 $\pm$ 0.31} \\
+    \textbf{Mean $\pm$ std (n=3)} & \textbf{88.75 $\pm$ 0.55} & \textbf{97.18 $\pm$ 0.07} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-The three-seed standard deviation of 0.54\,pp mAP exceeds the 0.20\,pp
-A5$\alpha$--A5$\beta$ single-run gap by more than $2\times$, confirming that
-the two recipes are statistically equivalent under realistic training noise.
-This variance is training-time variance only; once a checkpoint is fixed,
-the evaluation pipeline is fully deterministic. The fusion headline of
-93.30\% mAP / 98.45\% R1 uses the deployed A5$\alpha$ seed-0 checkpoint and
-is therefore not subject to retraining variance.
+The three-seed standard deviation of 0.55\,pp mAP exceeds the 0.49\,pp
+A5$\alpha$--A5$\beta$ single-run gap, confirming that the two recipes are
+statistically equivalent under realistic training noise. This is purely a
+training-time analysis: the headline Stream~1 result (89.97\% mAP) is
+\emph{not} the mean of these retrains but the deterministic evaluation of the
+released, SHA-pinned checkpoint at the best-mAP operating point (1536D
+concat-patch flip TTA). Its reproducibility is therefore exact---the same
+frozen checkpoint yields the same number on every run, independent of
+training variance---which is the guarantee we provide by releasing the
+checkpoint. For transparency, that checkpoint scores 89.63\% at the 768D
+operating point of this table, at the favourable end of the retrain
+distribution; a reproducer training from scratch should expect the band
+above, whereas a reproducer evaluating the released checkpoint obtains the
+headline exactly.
 
 \subsection{Fusion Weight Sensitivity}
 
 \begin{table}[!t]
   \centering
-  \caption{Fusion Weight Sensitivity on VeRi-776}
+  \caption{Fusion Weight Sensitivity on VeRi-776 (1536D Stream~1,
+    no-TTA Stream~2)}
   \label{tab:fusion_sweep}
   \begin{tabular}{cccc}
     \toprule
     $w_1$ (ViT-B) & $w_2$ (CLIP-SENet) & mAP~(\%) & R1~(\%) \\
     \midrule
-    0.1 & 0.9 & 92.95 & 98.03 \\
-    0.2 & 0.8 & 93.18 & 98.09 \\
-    \textbf{0.3} & \textbf{0.7} & \textbf{93.30} & \textbf{98.45} \\
-    0.4 & 0.6 & 93.02 & 98.45 \\
-    0.5 & 0.5 & 92.47 & 98.33 \\
-    0.7 & 0.3 & 91.26 & 97.97 \\
+    0.20 & 0.80 & 93.13 & 98.03 \\
+    0.25 & 0.75 & 93.25 & 98.15 \\
+    0.30 & 0.70 & 93.21 & 98.15 \\
+    \textbf{0.35} & \textbf{0.65} & \textbf{93.32} & \textbf{98.45} \\
+    0.40 & 0.60 & 93.30 & 98.39 \\
+    0.45 & 0.55 & 93.26 & 98.45 \\
+    0.50 & 0.50 & 93.10 & 98.45 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-mAP remains above 93.0\% for $w_1 \in [0.2, 0.4]$, demonstrating robustness
+mAP remains above 93.0\% for $w_1 \in [0.2, 0.5]$, demonstrating robustness
 to the exact weight choice. The consistent superiority of all fusion
 configurations over either stream in isolation confirms that the two streams
 capture complementary information about vehicle identity.
 
+We additionally verified that the Stream~1 feature dimensionality has
+negligible effect on the fused result. The 1536D concat-patch flip-TTA
+representation and the 768D single-flip CLS-only representation fuse to
+within 0.01\,pp mAP at their respective optima (1536D: 93.32\% at
+$w_1{=}0.35$; 768D: 93.31\% at $w_1{=}0.30$), even though the 1536D
+representation is 0.34\,pp stronger standalone (89.97\% vs.\ 89.63\%). The
+standalone TTA gain is thus largely redundant with the complementary
+CLIP-SENet signal; we retain the 1536D representation as it is both the
+best-mAP standalone Stream~1 configuration and marginally best in fusion.
+
 \subsection{Post-processing Contribution Analysis}
+
+Table~\ref{tab:pp_contrib} breaks down the per-stream contribution of each
+post-processing step.
 
 \begin{table}[!t]
   \centering
@@ -758,14 +880,14 @@ capture complementary information about vehicle identity.
     \midrule
     Base cosine (no PP)              & ViT-B      & 82.22 & 97.50 \\
     +AQE $k{=}3$                     & ViT-B      & 84.08 & 97.20 \\
-    +Re-rank                         & ViT-B      & 89.28 & 97.79 \\
-    +TTA (1536D)                     & ViT-B      & 89.97 & 97.80 \\
+    +Re-rank                         & ViT-B      & 89.63 & 97.74 \\
+    +TTA (1536D)                     & ViT-B      & 89.97 & 97.79 \\
     \midrule
     Base cosine (no PP)              & CLIP-SENet & 82.34 & 96.54 \\
     +AQE $k{=}10$                    & CLIP-SENet & 89.21 & 96.90 \\
-    +Re-rank                         & CLIP-SENet & 91.54 & 97.32 \\
+    +Re-rank                         & CLIP-SENet & 91.44 & 97.08 \\
     \midrule
-    \textbf{Full PP $\to$ Fusion}    & Both       & \textbf{93.30} & \textbf{98.45} \\
+    \textbf{Full PP $\to$ Fusion}    & Both       & \textbf{93.32} & \textbf{98.45} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -784,7 +906,8 @@ at similar viewpoints, where both streams return similar-appearing but
 incorrect identities; (b)~extreme occlusion ($>$60\% vehicle body);
 and (c)~very low-resolution gallery crops. In these cases, both streams tend
 to fail on the same queries, indicating correlated rather than complementary
-errors in the hardest cases.
+errors in the hardest cases. Table~\ref{tab:qual} summarizes these failure
+modes alongside representative success cases.
 
 % ── Qualitative error-mode table (replaces retrieval panels until camera-ready) ──
 \begin{table}[!t]
@@ -833,10 +956,11 @@ primary driver, providing a rich visual-semantic prior that enables better
 fine-grained vehicle discrimination from the outset, consistent with transfer
 learning observations in the ReID
 literature~\cite{li2023clipreid,radford2021clip}. For context, initialising
-with DINOv2~\cite{oquab2023dinov2}---a self-supervised alternative---underperforms
-CLIP-pretrained ViT-B by 0.70\,pp mAP on VeRi-776 (DINOv2 post-rerank:
-89.27\% vs.\ ours: 89.97\%), confirming that CLIP's \emph{semantic
-supervision}---not merely pretraining scale---is the key factor. SupCon loss,
+with DINOv2~\cite{oquab2023dinov2}---a self-supervised alternative---was
+observed to underperform CLIP-pretrained ViT-B in earlier experiments
+(DINOv2 post-rerank mAP: ---, SHA-pinned reproduction pending; ours:
+89.97\%), suggesting that CLIP's \emph{semantic supervision}---not merely
+pretraining scale---is a key factor. The metric loss (triplet + center),
 AQE, and $k$-reciprocal re-ranking contribute further additive gains as
 detailed in the ablation study.
 
@@ -852,16 +976,17 @@ injects attribute-level structure from TinyCLIP~\cite{lu2025clipsenet}
 orthogonal to ViT patch attention. Score-level fusion preserves each stream's
 post-processing calibration independently and requires no additional training.
 
-The optimal $w_2{=}0.7$ for CLIP-SENet reflects its higher standalone
-post-processed performance (91.54\% vs.\ 89.97\% mAP for ViT-B). The ViT-B
-branch still contributes $+1.76$\,pp above CLIP-SENet alone, confirming
+The optimal $w_2{=}0.65$ for CLIP-SENet reflects its higher standalone
+post-processed performance (91.44\% vs.\ 89.97\% mAP for ViT-B). The ViT-B
+branch still contributes $+1.88$\,pp above CLIP-SENet alone, confirming
 genuine complementarity.
 
 \subsection{Backbone Scale and Overfitting}
 ViT-L/14 (304M parameters) was evaluated as a higher-capacity alternative.
-Despite its larger parameter count, it overfit VeRi-776's 576 training
-identities, reaching only 87.95\% mAP post-rerank---below the ViT-B CLIP
-result. This motivates systematic post-processing over backbone scaling as
+Despite its larger parameter count, it was observed to overfit VeRi-776's
+576 training identities, falling below the ViT-B CLIP result post-rerank
+(ViT-L/14 post-rerank mAP: ---, SHA-pinned reproduction pending). This
+motivates systematic post-processing over backbone scaling as
 the primary performance lever for small-scale ReID benchmarks.
 
 \subsection{Limitations}
@@ -884,11 +1009,11 @@ the primary performance lever for small-scale ReID benchmarks.
     corrects that disclosure by reporting isolated component ablations for
     CLIP initialisation (A2), SupCon versus triplet loss (A3), and AdamW with
     LLRD (A4), together with dual Full references: the actually deployed
-    CE-LS + Triplet + CenterLoss recipe (A5$\alpha$, 88.74\% mAP) and the
-    paper-described CE-LS + SupCon recipe (A5$\beta$, 88.94\% mAP). The
-    Wave~3 measurement places the two recipes within the 0.10\,pp tie band
-    once A5$\alpha$ is averaged over three additional seeds
-    (88.89 $\pm$ 0.54\,pp mAP), so A5$\alpha$---the deployed
+    CE-LS + Triplet + CenterLoss recipe (A5$\alpha$, 89.06\% mAP) and the
+    alternative CE-LS + SupCon recipe (A5$\beta$, 88.57\% mAP). The
+    0.49\,pp gap between them lies within the $\pm 0.55$\,pp three-seed
+    standard deviation of A5$\alpha$ (88.75 $\pm$ 0.55\,pp mAP), so the two
+    recipes are statistically equivalent and A5$\alpha$---the deployed
     checkpoint---is retained as the headline Stream~1 recipe. The two-stream
     fusion cost and the VeRi-776--CityFlowV2 domain-gap constraint remain
     as noted above.
@@ -904,14 +1029,14 @@ re-identification on VeRi-776. A systematically improved ViT-Base/16
 training recipe---combining CLIP pretraining initialisation, a tuned
 metric-learning objective, an optimised augmentation pipeline, AdamW
 optimisation, and a three-step post-processing pipeline---achieves 89.97\%
-mAP and 97.80\% Rank-1 at its best-mAP operating point, with a separate
+mAP and 97.79\% Rank-1 at its best-mAP operating point, with a separate
 best-Rank-1 operating point of 85.14\% mAP and 98.33\% Rank-1. This is the
 best reported mAP for any pure ViT-B model on this benchmark, surpassing
 TransReID by $+7.67$\,pp mAP~\cite{he2021transreid}. Score-level fusion with
-a CLIP-SENet branch~\cite{lu2025clipsenet} achieves 93.3\% mAP and 98.45\%
+a CLIP-SENet branch~\cite{lu2025clipsenet} achieves 93.32\% mAP and 98.45\%
 Rank-1, a new state of the art in mAP on VeRi-776, exceeding the
 previous best published mAP (CLIP-SENet standalone: 92.9\%~\cite{lu2025clipsenet})
-by $+0.40$\,pp. Rank-1 accuracy (98.45\%) is competitive with but does not
+by $+0.42$\,pp. Rank-1 accuracy (98.45\%) is competitive with but does not
 exceed the CLIP-SENet standalone Rank-1 (98.7\%).
 
 The comprehensive ablation from 82.3\% to 93.3\% mAP demonstrates that

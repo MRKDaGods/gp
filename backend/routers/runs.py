@@ -10,14 +10,17 @@ import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from backend.config import ENABLE_KAGGLE_IMPORT, OUTPUT_DIR, list_run_dirs
+from backend.config import ENABLE_KAGGLE_IMPORT, OUTPUT_DIR, list_run_dirs, resolve_run_dir
 from backend.dependencies import get_app_state
 from backend.services.clip_service import _export_tracklet_clip, _transcode_to_mp4
 from backend.services.pipeline_service import (
     _materialize_import_tree,
     _resolve_run_id,
     _write_run_context,
+    delete_run,
+    describe_run,
 )
+from backend.state import app_state
 from backend.services.tracklet_service import (
     _build_tracklet_embedding_bank,
     _build_tracklet_global_map,
@@ -35,35 +38,41 @@ router = APIRouter()
 
 @router.get("/api/runs")
 async def list_runs():
-    """List all discoverable pipeline runs across output roots.
+    """List all discoverable pipeline runs across output roots, newest first.
 
-    For each run, report which stages produced artifacts and (when present)
-    the number of global trajectories from stage 4. This lets the UI enumerate
-    completed offline / Kaggle-imported runs, not just app-created ones.
+    Each entry carries metadata (name, cameras, input dir), which stages produced
+    artifacts, status, and size — enough for the UI to list, load, or delete runs.
     """
-    runs: List[Dict[str, Any]] = []
-    for d in list_run_dirs():
-        stages = {f"stage{i}": (d / f"stage{i}").exists() for i in range(7)}
-        traj_path = d / "stage4" / "global_trajectories.json"
-        trajectory_count: Optional[int] = None
-        if traj_path.exists():
-            try:
-                data = json.loads(traj_path.read_text())
-                trajectory_count = (
-                    len(data) if isinstance(data, list)
-                    else len(data.get("trajectories", []))
-                )
-            except (ValueError, OSError):
-                trajectory_count = None
-        runs.append(
-            {
-                "runId": d.name,
-                "root": str(d.parent).replace("\\", "/"),
-                "stages": stages,
-                "trajectoryCount": trajectory_count,
-            }
-        )
+    runs = [describe_run(d) for d in list_run_dirs()]
+
+    def _sort_key(r: Dict[str, Any]):
+        rid = str(r.get("runId", ""))
+        when = r.get("updatedAt") or r.get("createdAt") or ""
+        return (when, rid.zfill(12) if rid.isdigit() else rid)
+
+    runs.sort(key=_sort_key, reverse=True)
     return {"success": True, "data": runs}
+
+
+@router.get("/api/runs/{run_id}")
+async def get_run(run_id: str):
+    """Full detail for one run (metadata + per-stage presence + camera videos)
+    so the UI can re-open it: restore run id, input, cameras, and stage status."""
+    _validate_run_id(run_id)
+    run_dir = resolve_run_dir(run_id)
+    if run_dir is None:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    return {"success": True, "data": describe_run(run_dir)}
+
+
+@router.delete("/api/runs/{run_id}")
+async def remove_run(run_id: str):
+    """Delete a run: remove its directory from disk and purge in-memory state."""
+    _validate_run_id(run_id)
+    if resolve_run_dir(run_id) is None and run_id not in app_state.active_runs:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    removed = delete_run(run_id)
+    return {"success": True, "data": {"runId": run_id, "removed": removed}}
 
 
 @router.get("/api/runs/{run_id}/matched_summary")

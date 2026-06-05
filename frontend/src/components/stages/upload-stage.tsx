@@ -13,8 +13,8 @@ import { DisclosurePanel, ErrorBanner, toStageStatus } from "@/components/pipeli
 import { DatasetPicker } from "@/components/stages/dataset-picker";
 import { Lock, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useStartStage1 } from "@/hooks/use-start-stage1";
-import { getFrameUrl, getVideos, importKaggleRunArtifacts, runDatasetInput, uploadVideo } from "@/lib/api";
+import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
+import { getDatasetVideos, getFrameUrl, getVideos, importKaggleRunArtifacts, uploadVideo } from "@/lib/api";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
 import { type AppDataset, useDatasetStore } from "@/lib/store";
 import { usePipelineStore, useSessionStore, useVideoStore } from "@/store";
@@ -37,24 +37,20 @@ function inferCameraId(video: VideoFile): string {
 
 export function UploadStage() {
   const { videos, setVideos, addVideo, setCurrentVideo, currentVideo } = useVideoStore();
-  const { setCurrentStage } = useSessionStore();
-  const { setRunId, setCurrentStage: setPipelineCurrentStage, updateStageProgress } = usePipelineStore();
+  const { setRunId, updateStageProgress } = usePipelineStore();
   const runId = usePipelineStore((s) => s.runId);
+  const setRunInput = usePipelineStore((s) => s.setRunInput);
   const pipelineStages = usePipelineStore((s) => s.stages);
   const resetPipeline = usePipelineStore((s) => s.reset);
   const setSelectedDataset = useDatasetStore((s) => s.setSelectedDataset);
+  const runPipelineStage = useRunPipelineStage();
   const { toast } = useToast();
 
-  // Once detection has actually run (or is running) on this input, lock the input
-  // so the user can't silently swap videos out from under downstream stages.
-  // Gate on an active runId: a "done" status with no runId just means the
-  // detection stage auto-loaded existing artifacts (or a stale rehydrated state),
-  // which must NOT lock the picker — otherwise Reset can never unlock it because
-  // the still-mounted DetectionStage re-loads artifacts and flips stage 1 back to
-  // "done" the moment runId clears.
-  const stage1Status = toStageStatus(pipelineStages.find((s) => s.stage === 1));
-  const inputLocked =
-    Boolean(runId) && (stage1Status === "running" || stage1Status === "done");
+  // Once a run exists (ingestion has created it), lock the input so the user
+  // can't swap the dataset/cameras out from under the downstream per-stage runs.
+  // Reset clears the run and unlocks.
+  const stage0Status = toStageStatus(pipelineStages.find((s) => s.stage === 0));
+  const inputLocked = Boolean(runId);
 
   const [isDragging, setIsDragging] = useState(false);
   const [activeDataset, setActiveDataset] = useState<string | null>(null);
@@ -79,13 +75,22 @@ export function UploadStage() {
       try {
         const response = await getVideos();
         if (response.success && response.data) {
-          // Show only genuine user uploads on mount. Dataset footage is loaded
-          // on demand via the dataset picker so the gallery reflects the user's
-          // selection rather than an unrelated startup scan.
+          // Show genuine user uploads on mount. Dataset footage is loaded on
+          // demand via the picker — BUT keep any persisted dataset cameras (from
+          // a prior run restored after reload) so re-opening a run still shows its
+          // footage. Merge uploads with the persisted dataset videos.
           const uploadsOnly = response.data.filter((v) =>
             v.path.replace(/\\/g, "/").includes("/uploads/")
           );
-          setVideos(uploadsOnly);
+          const persistedDatasetVideos = useVideoStore
+            .getState()
+            .videos.filter((v) => Boolean(v.cameraId));
+          const seen = new Set(persistedDatasetVideos.map((v) => v.id));
+          const merged = [...persistedDatasetVideos];
+          for (const u of uploadsOnly) {
+            if (!seen.has(u.id)) merged.push(u);
+          }
+          setVideos(merged);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -201,20 +206,32 @@ export function UploadStage() {
     [currentVideo, setCurrentVideo, setRunId, toast, updateStageProgress, videos]
   );
 
-  const handleResetInput = useCallback(() => {
+  const handleResetInput = useCallback(async () => {
+    const dir = activeInputDir;
     resetPipeline();
     // Clear the current video too: DetectionStage stays mounted and will
     // auto-load on-disk artifacts (and re-mark stage 1 "done") for whatever
     // video is still selected. Dropping it keeps the input genuinely unlocked.
     setCurrentVideo(null);
-    setActiveDataset(null);
-    setActiveInputDir(null);
     setSelectedIds(new Set());
+    // The run narrowed the gallery to its selected cameras; restore the dataset's
+    // FULL camera list so the user can pick a different subset without reloading.
+    if (dir) {
+      try {
+        const res = await getDatasetVideos(dir);
+        setVideos(res.data ?? []);
+      } catch {
+        /* keep whatever is in the store */
+      }
+    } else {
+      setActiveDataset(null);
+      setActiveInputDir(null);
+    }
     toast({
       title: "Input unlocked",
-      description: "Pipeline reset — you can choose a different dataset or videos now.",
+      description: "Pipeline reset — you can choose a different dataset or cameras now.",
     });
-  }, [resetPipeline, setCurrentVideo, toast]);
+  }, [activeInputDir, resetPipeline, setCurrentVideo, setVideos, toast]);
 
   const datasetCameraVideos = videos.filter((v) => Boolean(v.cameraId));
   const allSelected =
@@ -237,35 +254,46 @@ export function UploadStage() {
     );
   }, [datasetCameraVideos]);
 
-  const handleRunMtmc = useCallback(async () => {
+  // Stage 0 only: ingest the selected cameras and CREATE the run. Detection,
+  // features, indexing, and association are NOT cascaded — each runs from its
+  // own stage page against this run. Nothing downstream auto-starts.
+  const handleStartRun = useCallback(async () => {
     if (!activeInputDir) return;
     const chosen = datasetCameraVideos.filter((v) => selectedIds.has(v.id));
     const cameras = chosen.map((v) => v.cameraId).filter(Boolean) as string[];
     if (cameras.length < 1) return;
 
     setIsStartingMtmc(true);
+    // Fresh run: clear any prior run state, then capture this run's input context
+    // so every downstream stage page can run incrementally against the same run.
+    resetPipeline();
+    setRunInput({
+      inputDir: activeInputDir,
+      cameras,
+      name: activeDataset ?? "dataset",
+      smoke: smokeRun,
+    });
+    // Restrict the workspace to ONLY the selected cameras so every downstream
+    // stage (detection viewer, camera switcher, etc.) shows/uses exactly what's
+    // being processed — not every camera in the dataset folder. Mirrors what
+    // loading an existing run does (useLoadRun also scopes to the run's cameras).
+    setVideos(chosen);
+    setCurrentVideo(chosen[0] ?? null);
     try {
-      const res = await runDatasetInput({
-        inputDir: activeInputDir,
-        name: activeDataset ?? "dataset",
-        stages: "0,1,2,3,4,5",
-        smoke: smokeRun,
-        cameras,
+      const result = await runPipelineStage({
+        pipelineStage: 0,
+        uiStage: 0,
+        // Surface the mode in the live progress message so it's unambiguous
+        // whether the quick test (first 10 frames) is actually in effect.
+        label: smokeRun ? "ingestion (quick test · first 10 frames/camera)" : "ingestion (full video)",
       });
-      const runId: string | null = res.data?.runId ?? res.data?.id ?? null;
-      if (runId) {
-        setRunId(runId);
+      if (result === "completed") {
         toast({
-          title: "MTMC run started",
-          description: `Tracking ${cameras.length} cameras (${cameras.join(", ")})${smokeRun ? " — smoke" : ""}. Run ${runId}.`,
+          title: "Ingestion complete",
+          description: `${smokeRun ? "Quick test (10 frames/camera)" : "Full video"} ingested for ${cameras.length} ${cameras.length === 1 ? "camera" : "cameras"}. Open Detection to run tracking.`,
           variant: "success",
         });
-        setCurrentStage(1);
-        setPipelineCurrentStage(1);
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: "Failed to start MTMC", description: msg, variant: "destructive" });
     } finally {
       setIsStartingMtmc(false);
     }
@@ -275,10 +303,11 @@ export function UploadStage() {
     datasetCameraVideos,
     selectedIds,
     smokeRun,
-    setRunId,
-    setCurrentStage,
-    setPipelineCurrentStage,
-    toast,
+    resetPipeline,
+    setRunInput,
+    setVideos,
+    setCurrentVideo,
+    runPipelineStage,
   ]);
 
   return (
@@ -290,11 +319,11 @@ export function UploadStage() {
           <div className="flex items-center gap-2 text-sm">
             <Lock className="h-4 w-4 shrink-0 text-warning" />
             <span className="text-foreground">
-              Input locked — detection has run on {activeDataset ? <strong>{activeDataset}</strong> : "this input"}.
-              {" "}Reset the pipeline to choose different videos.
+              Run active on {activeDataset ? <strong>{activeDataset}</strong> : "this input"} (run {runId}).
+              {" "}Reset the pipeline to choose a different dataset or cameras.
             </span>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={handleResetInput} className="gap-1.5">
+          <Button type="button" variant="outline" size="sm" onClick={() => void handleResetInput()} className="gap-1.5">
             <RotateCcw className="h-3.5 w-3.5" />
             Reset &amp; change input
           </Button>
@@ -404,16 +433,18 @@ export function UploadStage() {
                   <Button
                     type="button"
                     size="sm"
-                    disabled={selectedIds.size < 1 || isStartingMtmc}
-                    onClick={() => void handleRunMtmc()}
-                    aria-label={`Run MTMC on ${selectedIds.size} selected cameras`}
+                    disabled={selectedIds.size < 1 || isStartingMtmc || stage0Status === "running"}
+                    onClick={() => void handleStartRun()}
+                    aria-label={`Start run and ingest ${selectedIds.size} selected cameras`}
                   >
-                    {isStartingMtmc ? (
+                    {isStartingMtmc || stage0Status === "running" ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Play className="mr-2 h-4 w-4" />
                     )}
-                    Run MTMC on {selectedIds.size} {selectedIds.size === 1 ? "camera" : "cameras"}
+                    {isStartingMtmc || stage0Status === "running"
+                      ? "Ingesting…"
+                      : `Start run · ingest ${selectedIds.size} ${selectedIds.size === 1 ? "camera" : "cameras"}`}
                   </Button>
                 </div>
               </div>
@@ -504,27 +535,22 @@ export function UploadStage() {
 }
 
 export function UploadStageActions() {
-  const { currentVideo } = useVideoStore();
   const { setCurrentStage } = useSessionStore();
-  const { stages, isRunning } = usePipelineStore();
-  const startStage1 = useStartStage1();
-  const stage1Progress = stages.find((stage) => stage.stage === 1);
-  const isStage1Running = isRunning && stage1Progress?.status === "running";
-
-  const handleContinue = async () => {
-    if (!currentVideo) return;
-    await startStage1({ resetRunId: true, afterStart: () => setCurrentStage(1) });
-  };
+  const stages = usePipelineStore((s) => s.stages);
+  // Navigation only — Stage 1 detection is started from the Detection page's own
+  // Run button. Stays disabled until ingestion (stage 0) has actually finished,
+  // not merely when the run id is allocated at ingestion start.
+  const ingestDone = toStageStatus(stages.find((s) => s.stage === 0)) === "done";
 
   return (
     <Button
       type="button"
-      onClick={() => void handleContinue()}
-      disabled={!currentVideo}
-      aria-label={currentVideo ? "Continue to Stage 1 detection" : "Select a video before continuing to Stage 1"}
+      onClick={() => setCurrentStage(1)}
+      disabled={!ingestDone}
+      title={!ingestDone ? "Waiting for ingestion to finish" : undefined}
+      aria-label="Go to Detection stage"
     >
-      {isStage1Running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-      {isStage1Running ? "Starting Stage 1..." : "Continue to Stage 1"}
+      Go to Detection
     </Button>
   );
 }

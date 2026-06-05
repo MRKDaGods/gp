@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ApiError, cancelPipeline, getDatasets, getPipelineStatus, runStage, type DatasetFolder, type FusionConfigRequest } from "@/lib/api";
 import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
+import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
 import type { ModelEntry } from "@/services/models";
 import { useDetectionStore, usePipelineStore, useSessionStore, useStageExecutionStore, useVideoStore } from "@/store";
 import type { RunModelMetadata, SingleStageRunStatus, StageNumber } from "@/types";
@@ -92,6 +93,11 @@ async function pollStageStatus(
 
     if (status === "completed") {
       updateStageProgress(stage, { status: "completed", progress: 100, message: `Stage ${stage} complete` });
+      return;
+    }
+
+    if (status === "cancelled") {
+      updateStageProgress(stage, { status: "idle", progress: 0, message: `Stage ${stage} cancelled` });
       return;
     }
 
@@ -205,19 +211,32 @@ export function InferenceActions() {
     fusion,
   } = usePipelineStore();
   const getStageExecutionTarget = useStageExecutionStore((state) => state.getStageExecutionTarget);
+  const runInput = usePipelineStore((state) => state.runInput);
+  const runDatasetStage = useRunPipelineStage();
   const { datasets, selectedDataset } = useInferenceDatasets();
   const setActiveStage = useInferenceRunStore((state) => state.setActiveStage);
   const setRunModelMetadata = useInferenceRunStore((state) => state.setRunModelMetadata);
   const setLastRunStageResponse = useInferenceRunStore((state) => state.setLastRunStageResponse);
   const setKagglePanelRunId = useInferenceRunStore((state) => state.setKagglePanelRunId);
   const resetRunArtifacts = useInferenceRunStore((state) => state.resetRunArtifacts);
-  const activeStage = useInferenceRunStore((state) => state.activeStage);
   const stage2Progress = stages.find((stage) => stage.stage === 2);
   const stage3Progress = stages.find((stage) => stage.stage === 3);
   const stage2Status = toStageStatus(stage2Progress);
   const stage3Status = toStageStatus(stage3Progress);
   const fusionRunDisabled = modelMode === "fusion" && (!fusion || fusion.models.length < 2);
   const isRunning = stage2Status === "running" || stage3Status === "running";
+
+  // Per-stage gating: in the dataset flow, features need detection (stage 1)
+  // done and indexing needs features (stage 2) done — each runs only on demand.
+  const datasetFlow = Boolean(runInput);
+  const detectionDone = toStageStatus(stages.find((s) => s.stage === 1)) === "done";
+  const featuresDone = stage2Status === "done";
+  const runFeaturesDisabled = datasetFlow
+    ? isRunning || fusionRunDisabled || !detectionDone
+    : isRunning || fusionRunDisabled || selectedTrackIds.size === 0;
+  const runIndexDisabled = datasetFlow
+    ? isRunning || fusionRunDisabled || !featuresDone
+    : isRunning || fusionRunDisabled || !runId;
 
   const buildStageRequest = useCallback((stage: 2 | 3) => {
     const useDataset = !selectedModelMeta && selectedDataset && selectedDataset !== "__uploaded__";
@@ -241,6 +260,35 @@ export function InferenceActions() {
   }, [datasets, fusion, getStageExecutionTarget, modelMode, selectedDataset, selectedModelId, selectedModelMeta]);
 
   const runBackendStage = useCallback(async (stage: 2 | 3) => {
+    // Per-stage dataset flow: a run was created at ingestion (Stage 0). Run this
+    // pipeline stage incrementally against the same run — nothing cascades and
+    // it only fires from this button press.
+    if (runInput) {
+      setError(null);
+      resetRunArtifacts();
+      flushPipelineFromStage(4);
+      const result = await runDatasetStage({
+        pipelineStage: stage,
+        uiStage: stage as StageNumber,
+        label: stage === 2 ? "feature extraction" : "indexing",
+      });
+      if (result === "completed" && stage === 3) {
+        // Best-effort: surface the dataset gallery + camera coords for Timeline/map.
+        try {
+          const responseDatasets: any = await getDatasets();
+          const datasetList: DatasetFolder[] = Array.isArray(responseDatasets?.data) ? responseDatasets.data : [];
+          const best = datasetList.find((d) => d.hasGallery);
+          if (best?.galleryRunId) setGalleryRunId(best.galleryRunId);
+          if (best?.cameraCoordinates && Object.keys(best.cameraCoordinates).length > 0) {
+            setMapCameraCoordinates(best.cameraCoordinates);
+          }
+        } catch {
+          // best-effort
+        }
+      }
+      return;
+    }
+
     const probeVideo = currentVideo;
     const probeRunId = runId;
     const request = buildStageRequest(stage);
@@ -345,15 +393,18 @@ export function InferenceActions() {
       setIsRunning(false);
       setActiveStage(null);
     }
-  }, [buildStageRequest, currentVideo, dateTimeRange, locationFilter, modelMode, resetRunArtifacts, runId, selectedDataset, selectedModelMeta, setActiveStage, setCurrentVideo, setError, setGalleryRunId, setIsRunning, setKagglePanelRunId, setLastRunStageResponse, setMapCameraCoordinates, setRunId, setRunModelMetadata, storeGalleryRunId, updateStageProgress]);
+  }, [buildStageRequest, currentVideo, dateTimeRange, locationFilter, modelMode, resetRunArtifacts, runId, runInput, runDatasetStage, selectedDataset, selectedModelMeta, setActiveStage, setCurrentVideo, setError, setGalleryRunId, setIsRunning, setKagglePanelRunId, setLastRunStageResponse, setMapCameraCoordinates, setRunId, setRunModelMetadata, storeGalleryRunId, updateStageProgress]);
 
-  const handleCancelLocal = async () => {
+  // Cancel a specific stage's run. The run is incremental against one run_id, so
+  // cancelling terminates the active subprocess; the poll loop then settles the
+  // stage back to idle. We also optimistically mark it idle for instant feedback.
+  const handleCancelStage = async (stage: 2 | 3) => {
     if (!runId) return;
     try {
       await cancelPipeline(runId);
     } finally {
       setIsRunning(false);
-      if (activeStage) updateStageProgress(activeStage, { status: "idle", progress: 0, message: `Stage ${activeStage} cancelled` });
+      updateStageProgress(stage, { status: "idle", progress: 0, message: `Stage ${stage} cancelled` });
       setActiveStage(null);
     }
   };
@@ -361,29 +412,29 @@ export function InferenceActions() {
   return (
     <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
       <div className="flex flex-wrap items-center gap-2">
-        <ExecutionTargetToggle stage={2} variant="compact" />
-        <ExecutionTargetToggle stage={3} variant="compact" />
+        {/* One compute switch drives both Features (2) and Index (3), which run
+            together on this page — two separate toggles were redundant. */}
+        <ExecutionTargetToggle stage={2} stages={[2, 3]} variant="compact" />
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {isRunning ? (
-          <Button type="button" variant="outline" onClick={() => void handleCancelLocal()} aria-label="Cancel local inference run">
-            Cancel
-          </Button>
-        ) : null}
         <RunStageWidget
           mode="button-only"
           runLabel="Run Features"
+          cancelLabel="Cancel Features"
           isRunning={stage2Status === "running"}
-          disabled={isRunning || fusionRunDisabled || selectedTrackIds.size === 0}
+          disabled={runFeaturesDisabled}
           onRun={() => void runBackendStage(2)}
+          onCancel={() => void handleCancelStage(2)}
           runIcon={stage2Status === "running" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
         />
         <RunStageWidget
           mode="button-only"
           runLabel="Run Index"
+          cancelLabel="Cancel Index"
           isRunning={stage3Status === "running"}
-          disabled={isRunning || fusionRunDisabled || !runId}
+          disabled={runIndexDisabled}
           onRun={() => void runBackendStage(3)}
+          onCancel={() => void handleCancelStage(3)}
           runIcon={stage3Status === "running" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
         />
         <Button type="button" onClick={() => setCurrentStage(4)} disabled={stage3Progress?.progress !== 100} aria-label="Continue to Stage 4 timeline">

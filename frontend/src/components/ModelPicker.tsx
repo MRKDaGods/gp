@@ -314,8 +314,8 @@ export function ModelPicker({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="ml-auto inline-flex">
-                                <Button type="button" size="sm" disabled>
-                                  Select
+                                <Button type="button" size="sm" variant="outline" disabled>
+                                  {disabledReason.toLowerCase().includes("weight") ? "Weights missing" : "Unavailable"}
                                 </Button>
                               </span>
                             </TooltipTrigger>

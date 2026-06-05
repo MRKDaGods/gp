@@ -1,0 +1,19 @@
+{
+  "id": "ali369/veri-fusion-s1dim",
+  "title": "Veri Fusion S1dim",
+  "code_file": "veri_fusion_s1dim.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset",
+    "mrkdagods/mtmc-weights",
+    "ali369/veri776-clipsenet-v6"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

@@ -117,8 +117,28 @@ def load_registry(registry_path: Path = DEFAULT_REGISTRY_PATH) -> Registry:
 
 
 @lru_cache(maxsize=1)
+def _validated_registry_json() -> str:
+    """Parse + validate the registry once (expensive, static), cached as JSON so
+    every caller gets a fresh, mutable copy to rescan checkpoint presence on."""
+    data = _to_plain_data(DEFAULT_REGISTRY_PATH)
+    validate_registry_data(data)
+    return json.dumps(data)
+
+
 def get_registry() -> Registry:
-    return load_registry(DEFAULT_REGISTRY_PATH)
+    # Recompute on-disk checkpoint presence on EVERY call so weights downloaded
+    # while the server is running are reflected without a restart. Previously this
+    # was @lru_cache'd, so the "Weights missing" status was frozen at startup and
+    # never noticed newly-downloaded files. Only the parse/validate step is cached
+    # (it never changes); the disk scan is cheap.
+    data = json.loads(_validated_registry_json())
+    data = _reconcile_checkpoint_presence(data)
+    return Registry.model_validate(data)
+
+
+# Keep the cache-clear entrypoint callers/tests expect. It now clears the
+# parse/validate cache; on-disk presence is always recomputed live regardless.
+get_registry.cache_clear = _validated_registry_json.cache_clear  # type: ignore[attr-defined]
 
 
 def get_model(model_id: str) -> Optional[ModelEntry]:

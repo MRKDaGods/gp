@@ -47,9 +47,42 @@ export interface PipelineFusionConfig {
   lambda: number;
 }
 
+/** Source context for the active run, captured at ingestion (Stage 0) so every
+ *  downstream stage can run incrementally against the same run dir + cameras. */
+export interface RunInputContext {
+  inputDir: string;
+  cameras: string[];
+  name: string;
+  smoke: boolean;
+}
+
+/** Live per-stage telemetry parsed from the backend status during a run. */
+export interface RunTelemetry {
+  stageLabel?: string;
+  completedStages?: number;
+  totalStages?: number;
+  camera?: string;
+  camerasProcessed?: number;
+  frame?: number;
+  frameTotal?: number;
+  /** Latest status message from the pipeline (e.g. "Detection — camera S01_c001"). */
+  message?: string;
+  /** Rolling tail of the pipeline subprocess output (verbose live log). */
+  logTail?: string;
+  /** Cameras discovered for the active stage. */
+  camerasTotal?: number;
+}
+
 interface PipelineState {
   runId: string | null;
   galleryRunId: string | null;
+  /** Source folder/cameras/smoke for the active run; set at Stage 0 ingestion. */
+  runInput: RunInputContext | null;
+  /** Pipeline stage number currently executing (0-6), or null when idle. Lets the
+   *  central poller attribute live progress to the correct UI stage. */
+  activeStage: number | null;
+  /** Live telemetry for the in-flight stage run (camera, frame counts, etc.). */
+  runTelemetry: RunTelemetry | null;
   /** Map camera id -> lat/lng for vehicle path map; from selected dataset's camera_coordinates.json */
   mapCameraCoordinates: Record<string, { lat: number; lng: number; label?: string }> | null;
   stages: StageProgress[];
@@ -65,6 +98,9 @@ interface PipelineState {
 
   // Actions
   setRunId: (id: string | null) => void;
+  setRunInput: (input: RunInputContext | null) => void;
+  setActiveStage: (stage: number | null) => void;
+  setRunTelemetry: (telemetry: RunTelemetry | null) => void;
   setGalleryRunId: (id: string | null) => void;
   setMapCameraCoordinates: (
     coords: Record<string, { lat: number; lng: number; label?: string }> | null
@@ -85,9 +121,13 @@ interface PipelineState {
 
 export const usePipelineStore = create<PipelineState>()(
   devtools(
+    persist(
     (set) => ({
       runId: null,
       galleryRunId: null,
+      runInput: null,
+      activeStage: null,
+      runTelemetry: null,
       mapCameraCoordinates: null,
       stages: PIPELINE_STAGE_DEFAULTS.map((s) => ({ ...s })),
       isRunning: false,
@@ -100,6 +140,12 @@ export const usePipelineStore = create<PipelineState>()(
       downstreamInvalidateGeneration: 0,
 
       setRunId: (id) => set({ runId: id }),
+
+      setRunInput: (input) => set({ runInput: input }),
+
+      setActiveStage: (stage) => set({ activeStage: stage }),
+
+      setRunTelemetry: (telemetry) => set({ runTelemetry: telemetry }),
 
       setGalleryRunId: (id) => set({ galleryRunId: id }),
 
@@ -225,6 +271,9 @@ export const usePipelineStore = create<PipelineState>()(
         set({
           runId: null,
           galleryRunId: null,
+          runInput: null,
+          activeStage: null,
+          runTelemetry: null,
           mapCameraCoordinates: null,
           stages: PIPELINE_STAGE_DEFAULTS.map((s) => ({ ...s })),
           isRunning: false,
@@ -233,7 +282,44 @@ export const usePipelineStore = create<PipelineState>()(
           downstreamInvalidateGeneration: 0,
         }),
     }),
-    { name: 'pipeline-store' }
+    {
+      // Persist the run identity + per-stage status so a browser reload re-opens
+      // the active run instead of dropping it. Only stable fields are saved;
+      // transient run state (polling/telemetry) is reset on rehydrate.
+      name: 'mtmc-pipeline-run',
+      partialize: (s) => ({
+        runId: s.runId,
+        galleryRunId: s.galleryRunId,
+        runInput: s.runInput,
+        mapCameraCoordinates: s.mapCameraCoordinates,
+        stages: s.stages,
+        currentStage: s.currentStage,
+        modelMode: s.modelMode,
+        selectedModelId: s.selectedModelId,
+        selectedModelMeta: s.selectedModelMeta,
+        fusion: s.fusion,
+      }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<PipelineState>;
+        // A stage left "running" when the tab was reloaded is no longer being
+        // polled — downgrade it to idle so it isn't stuck spinning forever.
+        const stages = (p.stages ?? current.stages).map((st) =>
+          st.status === 'running'
+            ? { ...st, status: 'idle' as const, progress: 0, message: 'Interrupted by reload — re-run if needed' }
+            : st
+        );
+        return {
+          ...current,
+          ...p,
+          stages,
+          activeStage: null,
+          isRunning: false,
+          runTelemetry: null,
+          error: null,
+        };
+      },
+    }
+    )
   )
 );
 
@@ -289,6 +375,7 @@ interface VideoState {
 
 export const useVideoStore = create<VideoState>()(
   devtools(
+    persist(
     (set) => ({
       videos: [],
       currentVideo: null,
@@ -316,7 +403,13 @@ export const useVideoStore = create<VideoState>()(
 
       setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
     }),
-    { name: 'video-store' }
+    {
+      // Persist the loaded camera list + current selection so a reload re-opens
+      // the run's footage. Playback position/speed are transient.
+      name: 'mtmc-video',
+      partialize: (s) => ({ videos: s.videos, currentVideo: s.currentVideo }),
+    }
+    )
   )
 );
 
@@ -340,6 +433,9 @@ interface DetectionState {
   /** Toggle selection by trackId (persistent across frames) */
   toggleTrackSelection: (trackId: number) => void;
   selectAll: () => void;
+  /** Replace the selected-track set with an explicit list (e.g. select all tracks
+   *  across the whole run, not just the current frame). */
+  selectTrackIds: (trackIds: number[]) => void;
   deselectAll: () => void;
   setMultiSelectMode: (enabled: boolean) => void;
   setHoveredId: (id: string | null) => void;
@@ -418,6 +514,8 @@ export const useDetectionStore = create<DetectionState>()(
               .filter((id): id is number => id != null)
           ),
         })),
+
+      selectTrackIds: (trackIds) => set({ selectedTrackIds: new Set(trackIds) }),
 
       deselectAll: () =>
         set({ selectedIds: new Set(), selectedTrackIds: new Set() }),
@@ -771,6 +869,11 @@ export const useSessionStore = create<SessionStore>()(
         partialize: (state) => ({
           preferences: state.preferences,
           locationFilter: state.locationFilter,
+          // Persist the active stage so a refresh keeps you where you were
+          // (e.g. a loaded run on Detection stays on Detection, instead of
+          // snapping back to Upload). Mirrors the pipeline store, which already
+          // persists its run state (runId, stages, runInput, currentVideo).
+          currentStage: state.currentStage,
         }),
       }
     ),

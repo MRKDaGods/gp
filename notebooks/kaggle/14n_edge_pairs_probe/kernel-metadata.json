@@ -1,0 +1,19 @@
+{
+  "id": "yahiaakhalafallah/14n-edge-pairs-probe",
+  "title": "14n Edge Pairs Probe",
+  "code_file": "14n_edge_pairs_probe.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/14h-robust-tracklet-pooling",
+    "yahiaakhalafallah/14j-r50-ibn-features"
+  ]
+}

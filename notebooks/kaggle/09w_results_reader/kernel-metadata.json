@@ -1,0 +1,15 @@
+{
+  "id": "mrkdagods/09w-results-reader",
+  "title": "09w Results Reader",
+  "code_file": "read_results.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "kernel_sources": [
+    "mrkdagods/09w-resnext101ibn-synth"
+  ],
+  "competition_sources": []
+}

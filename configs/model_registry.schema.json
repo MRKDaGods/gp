@@ -156,7 +156,13 @@
         },
         "source_training_kernel": { "type": ["string", "null"] },
         "size_bytes": { "type": ["integer", "null"], "minimum": 0 },
-        "on_disk": { "type": "boolean" }
+        "on_disk": { "type": "boolean" },
+        "architecture": {
+          "anyOf": [
+            { "$ref": "#/$defs/modelArchitecture" },
+            { "type": "null" }
+          ]
+        }
       }
     },
     "modelArchitecture": {

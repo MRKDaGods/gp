@@ -16,10 +16,24 @@ from backend.state import uploaded_videos, video_to_latest_run
 
 
 def _load_tracklets(camera_id: str, run_dir: Path) -> List[Dict[str, Any]]:
-    path = run_dir / "stage1" / f"tracklets_{camera_id}.json"
-    if not path.exists():
+    stage1_dir = run_dir / "stage1"
+    path = stage1_dir / f"tracklets_{camera_id}.json"
+    if path.exists():
+        return json.loads(path.read_text())
+
+    # Fallback: stage 1 writes tracklets_<camera>.json using the camera id as the
+    # pipeline discovered it (often lowercase 'c', e.g. S01_c001), while the
+    # resolved camera id here may be uppercased (S01_C001). Match case- and
+    # format-insensitively so the right file is found on any filesystem.
+    if not stage1_dir.exists():
         return []
-    return json.loads(path.read_text())
+    target_full = str(camera_id or "").lower()
+    target_norm = _normalize_camera_id(camera_id)
+    for fp in sorted(stage1_dir.glob("tracklets_*.json")):
+        cam_part = fp.stem[len("tracklets_"):]
+        if cam_part.lower() == target_full or _normalize_camera_id(cam_part) == target_norm:
+            return json.loads(fp.read_text())
+    return []
 
 
 def _load_all_stage1_tracklets(run_dir: Path) -> List[Dict[str, Any]]:

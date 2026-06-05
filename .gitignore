@@ -129,3 +129,6 @@ tmp_ablation/
 # Compiled paper PDFs (regenerable from .tex); figure PDFs under */figures/ are kept
 /main.pdf
 gp__Copy_/main.pdf
+
+# VeRi-776 reproduction artifacts (multi-GB checkpoints + feature dumps; regenerable from Kaggle kernels)
+_repro_out/

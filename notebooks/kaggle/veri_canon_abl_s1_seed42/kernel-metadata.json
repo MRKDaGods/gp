@@ -1,0 +1,17 @@
+{
+  "id": "yahiaakhalafallah/veri-canon-abl-s1-seed42",
+  "title": "Veri Canon Abl S1 seed42",
+  "code_file": "veri_canon_abl_s1_seed42.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4x2",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

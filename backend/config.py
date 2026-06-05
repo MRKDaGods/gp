@@ -111,13 +111,19 @@ def resolve_run_dir(run_id: str) -> Optional[Path]:
 def list_run_dirs() -> List[Path]:
     """All run directories across known output roots, deduped by name.
 
-    A directory counts as a run if it contains at least a `stage1/` folder.
+    A directory counts as a run if it has a `run_context.json` or any stage
+    output (so ingestion-only runs are visible too, not just stage1+ runs).
     """
+    def _is_run(d: Path) -> bool:
+        if (d / "run_context.json").exists():
+            return True
+        return any((d / f"stage{i}").exists() for i in range(7))
+
     seen: dict[str, Path] = {}
     for root in OUTPUT_DIRS:
         if not root.exists():
             continue
         for d in sorted(root.iterdir()):
-            if d.is_dir() and d.name not in seen and (d / "stage1").exists():
+            if d.is_dir() and d.name not in seen and _is_run(d):
                 seen[d.name] = d
     return list(seen.values())

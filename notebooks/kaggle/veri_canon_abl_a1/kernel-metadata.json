@@ -1,0 +1,17 @@
+{
+  "id": "gumfreddy/veri-canon-abl-a1",
+  "title": "Veri Canon Abl A1",
+  "code_file": "veri_canon_abl_a1.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4x2",
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

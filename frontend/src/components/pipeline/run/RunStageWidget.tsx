@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Square } from "lucide-react";
 
 import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials-modal";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,9 @@ export interface RunStageWidgetProps {
   runIcon?: ReactNode;
   mode?: "full" | "button-only";
   onRun?: () => void;
+  /** When provided and the stage is running, the Run button becomes a Cancel button. */
+  onCancel?: () => void;
+  cancelLabel?: string;
   children?: ReactNode;
   className?: string;
 }
@@ -45,6 +49,8 @@ export function RunStageWidget({
   runIcon,
   mode = "full",
   onRun,
+  onCancel,
+  cancelLabel = "Cancel",
   children,
   className,
 }: RunStageWidgetProps) {
@@ -63,10 +69,17 @@ export function RunStageWidget({
     return (
       <div className={cn("flex flex-wrap items-center gap-2", className)}>
         {onRun ? (
-          <Button type="button" onClick={onRun} disabled={disabled || isRunning}>
-            {runIcon}
-            {isRunning ? "Running..." : runLabel}
-          </Button>
+          isRunning && onCancel ? (
+            <Button type="button" variant="destructive" onClick={onCancel}>
+              <Square className="mr-2 h-3 w-3 fill-current" />
+              {cancelLabel}
+            </Button>
+          ) : (
+            <Button type="button" onClick={onRun} disabled={disabled || isRunning}>
+              {runIcon}
+              {isRunning ? "Running..." : runLabel}
+            </Button>
+          )
         ) : null}
         {children}
         <KaggleCredentialsModal open={modalOpen} onOpenChange={setModalOpen} />
@@ -79,10 +92,17 @@ export function RunStageWidget({
       {showControls ? (
         <div className="flex flex-wrap items-center gap-2">
           {onRun ? (
-            <Button type="button" onClick={onRun} disabled={disabled || isRunning}>
-              {runIcon}
-              {isRunning ? "Running..." : runLabel}
-            </Button>
+            isRunning && onCancel ? (
+              <Button type="button" variant="destructive" onClick={onCancel}>
+                <Square className="mr-2 h-3 w-3 fill-current" />
+                {cancelLabel}
+              </Button>
+            ) : (
+              <Button type="button" onClick={onRun} disabled={disabled || isRunning}>
+                {runIcon}
+                {isRunning ? "Running..." : runLabel}
+              </Button>
+            )
           ) : null}
           {children}
         </div>

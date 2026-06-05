@@ -13,7 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import UPLOAD_DIR, OUTPUT_DIR
 from backend.services.job_service import job_service
 from backend.services.kaggle_polling_worker import KagglePollingWorker
-from backend.services.pipeline_service import _background_precompute_dataset
+from backend.services.pipeline_service import (
+    _background_precompute_dataset,
+    rehydrate_runs_from_disk,
+)
 from backend.services.video_service import _scan_startup_videos
 
 # ── Routers ────────────────────────────────────────────────────────────────
@@ -92,6 +95,11 @@ async def _on_startup() -> None:
         asyncio.get_event_loop().set_exception_handler(_win_exc_handler)
 
     _scan_startup_videos()
+    try:
+        n_runs = rehydrate_runs_from_disk()
+        print(f"[startup] rehydrated {n_runs} run(s) from disk", flush=True)
+    except Exception as exc:
+        print(f"[startup] run rehydration failed: {exc}", flush=True)
     job_service.load_jobs()
     job_service.start_worker()
     kaggle_worker = KagglePollingWorker(

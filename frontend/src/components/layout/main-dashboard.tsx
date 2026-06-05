@@ -30,6 +30,7 @@ import {
   Loader2,
   X,
 } from "lucide-react";
+import { RunManagerDialog } from "@/components/runs/run-manager-dialog";
 import { useSessionStore, useUIStore, usePipelineStore, useVideoStore, useDetectionStore, useTrackletStore, useTimelineStore } from "@/store";
 import { KaggleCredentialsModal } from "@/components/settings/kaggle-credentials-modal";
 import { useHasKaggleCredentials } from "@/lib/kaggle-credentials-store";
@@ -46,7 +47,7 @@ import { RefinementStage, RefinementStageActions } from "@/components/stages/ref
 import { OutputStage, OutputStageActions } from "@/components/stages/output-stage";
 import { DatasetProcessing } from "@/components/stages/dataset-processing";
 import { PipelineRunHeader, StageShell, StalenessChip, stageContract, statusMeta, type StageStatus } from "@/components/pipeline";
-import { useStageState } from "@/hooks/useStageState";
+import { useStageState, prerequisiteStage } from "@/hooks/useStageState";
 import type { ComponentType, ReactNode } from "react";
 
 const stages = [
@@ -245,7 +246,7 @@ function SidebarStageRow({
                 <StalenessChip label="Stale" />
               ) : (
                 <span className="max-w-full truncate text-[11px] font-normal opacity-70">
-                  {stageState.status === "blocked" ? `needs Stage ${stage.id - 1}` : `${statusMeta(stageState.status).label.toLowerCase()}${stageState.status === "running" ? ` · ${Math.round(progress)}%` : ""}`}
+                  {stageState.status === "blocked" ? `needs Stage ${prerequisiteStage(stage.id) ?? stage.id - 1}` : `${statusMeta(stageState.status).label.toLowerCase()}${stageState.status === "running" ? ` · ${Math.round(progress)}%` : ""}`}
                 </span>
               )}
             </span>
@@ -273,8 +274,9 @@ function PipelineStagePanel({
   setCurrentStage: (stage: StageNumber) => void;
 }) {
   const stageState = useStageState(id);
-  const blockedBy = stageState.status === "blocked" && id > 0
-    ? { label: `Stage ${id - 1}`, stage: (id - 1) as StageNumber }
+  const prereq = prerequisiteStage(id);
+  const blockedBy = stageState.status === "blocked" && prereq != null
+    ? { label: `Stage ${prereq}`, stage: prereq }
     : null;
   const baseContract = stageContract(id);
   const needs = id === 3
@@ -329,6 +331,7 @@ export function MainDashboard() {
   const hasKaggleCredentials = useHasKaggleCredentials();
   const [datasetView, setDatasetView] = useState(false);
   const [kaggleSettingsOpen, setKaggleSettingsOpen] = useState(false);
+  const [runManagerOpen, setRunManagerOpen] = useState(false);
   const [visitedPipelineStages, setVisitedPipelineStages] = useState<Set<StageNumber>>(
     () => new Set([currentStage])
   );
@@ -474,6 +477,26 @@ export function MainDashboard() {
           {/* Spacer */}
           <div className="my-2 h-px bg-border" />
 
+          {/* Runs manager */}
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setRunManagerOpen(true)}
+                aria-label="Manage runs"
+                className={cn(
+                  "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  !sidebarOpen && "justify-center px-0"
+                )}
+              >
+                <Database className="h-4 w-4 shrink-0" />
+                {sidebarOpen && <span className="truncate">Runs</span>}
+              </button>
+            </TooltipTrigger>
+            {!sidebarOpen && (
+              <TooltipContent side="right">Runs</TooltipContent>
+            )}
+          </Tooltip>
+
           {/* Dataset */}
           <Tooltip delayDuration={0}>
             <TooltipTrigger asChild>
@@ -546,6 +569,7 @@ export function MainDashboard() {
         </div>
       </main>
       <KaggleCredentialsModal open={kaggleSettingsOpen} onOpenChange={setKaggleSettingsOpen} />
+      <RunManagerDialog open={runManagerOpen} onOpenChange={setRunManagerOpen} />
     </div>
   );
 }

@@ -1,0 +1,18 @@
+{
+  "id": "yahiaakhalafallah/09w-ptft",
+  "title": "09w ptft",
+  "code_file": "09w_ptft.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "enable_internet": true,
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "kernel_sources": [
+    "yahiaakhalafallah/vehiclex-probe"
+  ],
+  "competition_sources": []
+}
