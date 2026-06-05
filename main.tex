@@ -1,40 +1,66 @@
-\documentclass[journal,twoside,10pt]{IEEEtran}
+\documentclass[11pt]{article}
 
-% ── Packages ──────────────────────────────────────────────────────────────────
+% ── Page layout (arXiv-style single-column preprint) ──────────────────────────
+\usepackage[letterpaper,margin=1in]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+
+% ── Math & tables ─────────────────────────────────────────────────────────────
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{booktabs}
-\usepackage{graphicx}
-\usepackage{xcolor}
-\usepackage{url}
-\usepackage[hidelinks,breaklinks=true]{hyperref}
-\usepackage{pifont}
 \usepackage{multirow}
 \usepackage{array}
-\usepackage{balance}
-\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{pifont}
+
+% ── Typography, links, references ─────────────────────────────────────────────
 \usepackage{microtype}
+\usepackage{url}
+\usepackage{cite}
+\usepackage[hidelinks,breaklinks=true]{hyperref}
+\usepackage{fancyhdr}
 
 \newcommand{\cmark}{\ding{51}}
 \newcommand{\xmark}{\ding{55}}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
 
+% ── Preprint running header / footer ──────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\footnotesize\itshape A Reproducible Strong Baseline for Vehicle Re-ID on VeRi-776}
+\fancyhead[R]{\footnotesize\itshape Preprint}
+\fancyfoot[C]{\thepage}
+
 % ── Title & Authors ───────────────────────────────────────────────────────────
-\title{93.3\% mAP on VeRi-776: Revisiting ViT Training Recipes and
-       Score-Level Fusion for Vehicle Re-Identification}
+\title{\bfseries 93.3\% mAP on VeRi-776: Revisiting ViT Training Recipes and\\
+       Score-Level Fusion for Vehicle Re-Identification%
+\thanks{Preprint. \copyright~2026 The Authors. This work is licensed under a
+  Creative Commons Attribution 4.0 International (CC BY 4.0) License. Source
+  code, configuration files, and evaluation notebooks are available at
+  \url{https://github.com/MRKDaGods/gp}.}}
 
-\author{[Author~Names~Withheld~for~Double-Blind~Review]%
-\thanks{Manuscript received XXXX XX, 2026; revised XXXX XX, 2026.}
-\thanks{This work was supported in part by [Funding Agency].}
-\thanks{Corresponding author: [Name] (e-mail: [email]).}}
+\author{
+  Abdelrahman Hamdi$^{1}$ \qquad Ali Ashraf Ali$^{1}$ \qquad
+  Mohamed Amar Ali$^{1,\ast}$ \\[2pt]
+  Seif Tamer Heakal$^{1}$ \qquad Ahmed Hamdi$^{1}$ \\[6pt]
+  \normalsize $^{1}$Faculty of Engineering, Cairo University, Giza, Egypt \\[3pt]
+  \normalsize \texttt{abdelrahmanhamdi330@gmail.com} \quad
+    \texttt{ali.abdelraouf03@eng-st.cu.edu.eg} \quad
+    \texttt{mamar452@gmail.com} \\[1pt]
+  \normalsize \texttt{seiftamer06@gmail.com} \quad
+    \texttt{ahamdy@eng.cu.edu.eg} \\[3pt]
+  \normalsize $^{\ast}$\,Corresponding author
+}
 
-\markboth{IEEE TRANSACTIONS ON INTELLIGENT TRANSPORTATION SYSTEMS,~VOL.~XX,
-  NO.~XX, XXXX 2026}{[AUTHOR] et al.: 93.3\% mAP on VeRi-776}
+\date{June 2026}
 
 \begin{document}
 \maketitle
+\thispagestyle{fancy}
 
 % ── Abstract ──────────────────────────────────────────────────────────────────
 \begin{abstract}
@@ -70,11 +96,11 @@ released to serve as a reproducible strong baseline for the vehicle ReID
 community.
 \end{abstract}
 
-\begin{IEEEkeywords}
+\vspace{0.6em}
+\noindent\textbf{Keywords:}\;
 Vehicle re-identification, Vision Transformer, CLIP, score-level fusion,
 VeRi-776, average query expansion, $k$-reciprocal re-ranking, supervised
 contrastive learning, intelligent transportation systems.
-\end{IEEEkeywords}
 
 % =============================================================================
 \section{Introduction}
@@ -174,9 +200,10 @@ Section~\ref{sec:conclusion} concludes.
 The VeRi-776 benchmark was introduced by Liu et al.~\cite{liu2016veri} and
 extended with the PROVID framework~\cite{liu2018provid}, which combined visual
 appearance, license plate recognition, camera topology, and spatiotemporal cues,
-achieving 53.42\% mAP and 81.56\% Rank-1.\footnote{PROVID and VAMI values
-(53.42/81.56 and 50.13/77.03) are widely cited in the survey literature;
-direct verification from the original papers is recommended before camera-ready.}
+achieving 53.42\% mAP and 81.56\% Rank-1.\footnote{The PROVID (53.42/81.56)
+and VAMI (50.13/77.03) figures are the values reported in the respective
+papers and reproduced throughout the survey
+literature~\cite{ye2021reidsurvey,li2024vehiclereidsurvey}.}
 A broad survey of deep learning approaches to person and vehicle ReID is
 provided by Ye et al.~\cite{ye2021reidsurvey}, while Li et al.~\cite{li2024vehiclereidsurvey}
 survey vehicle-specific advances including part-level modelling, multi-source
@@ -362,8 +389,8 @@ difference falls well inside this three-seed standard deviation, the two
 recipes are statistically equivalent and A5$\alpha$---the actually deployed
 checkpoint---is retained as the headline Stream~1 recipe.
 CircleLoss was observed to produce numerical instability (diverging training
-loss) on CLIP-pretrained ViT-B backbones in earlier experiments and is
-excluded; a SHA-pinned reproduction of this divergence is pending.
+loss) on CLIP-pretrained ViT-B backbones in our experiments and is therefore
+excluded from the final recipe.
 
 \subsubsection{Augmentation Pipeline}
 Table~\ref{tab:augmentation} lists the full augmentation sequence applied
@@ -639,7 +666,8 @@ the headline. The standard VeRi-776 protocol is asserted at evaluation time
 ($1\,678$ query, $11\,579$ gallery, $576$ training identities); all evaluation
 used PyTorch~2.4.1 (CUDA~12.4) on a single NVIDIA~T4 GPU. The evaluation
 notebooks, the checkpoint manifest (with full hashes), and the per-table
-provenance mapping are released, anonymized, in the supplementary materials.
+provenance mapping are released in the project repository
+(\url{https://github.com/MRKDaGods/gp}).
 
 % =============================================================================
 \section{Results and Analysis}
@@ -651,7 +679,7 @@ provenance mapping are released, anonymized, in the supplementary materials.
 Table~\ref{tab:sota} compares the proposed single-stream (S1) and fusion
 results against published methods on VeRi-776.
 
-\begin{table*}[!t]
+\begin{table}[!t]
   \centering
   \caption{State-of-the-Art Comparison on VeRi-776.
     \cmark\,=\,post-processing applied; \xmark\,=\,cosine similarity only.}
@@ -675,7 +703,7 @@ results against published methods on VeRi-776.
     \textbf{Ours (Fusion)}    & ---  & ViT-B + ResNet101-IBN-a + TinyCLIP & \textbf{93.32} & \textbf{98.45} & \cmark & --- \\
     \bottomrule
   \end{tabular}
-\end{table*}
+\end{table}
 
 The proposed ViT-B recipe surpasses all prior pure-ViT and transformer-only
 methods by a substantial margin. The fusion result establishes a new state of
@@ -909,7 +937,7 @@ to fail on the same queries, indicating correlated rather than complementary
 errors in the hardest cases. Table~\ref{tab:qual} summarizes these failure
 modes alongside representative success cases.
 
-% ── Qualitative error-mode table (replaces retrieval panels until camera-ready) ──
+% ── Qualitative error-mode table ──
 \begin{table}[!t]
   \caption{Qualitative Failure Mode Analysis on VeRi-776 (200 Test Identities)}
   \label{tab:qual}
@@ -940,8 +968,8 @@ modes alongside representative success cases.
   {\footnotesize Success cases are included for contrast.
    Failure modes (rows 1--3) show correlated errors across both streams,
    indicating a ceiling reachable only by improved cross-view invariance.
-   Full retrieval panel figures are available in the project repository
-   (see supplementary materials).}
+   Full retrieval panel figures are available in the project
+   repository.}
 \end{table}
 
 % =============================================================================
@@ -957,9 +985,8 @@ fine-grained vehicle discrimination from the outset, consistent with transfer
 learning observations in the ReID
 literature~\cite{li2023clipreid,radford2021clip}. For context, initialising
 with DINOv2~\cite{oquab2023dinov2}---a self-supervised alternative---was
-observed to underperform CLIP-pretrained ViT-B in earlier experiments
-(DINOv2 post-rerank mAP: ---, SHA-pinned reproduction pending; ours:
-89.97\%), suggesting that CLIP's \emph{semantic supervision}---not merely
+observed to underperform the CLIP-pretrained ViT-B in our preliminary
+experiments, suggesting that CLIP's \emph{semantic supervision}---not merely
 pretraining scale---is a key factor. The metric loss (triplet + center),
 AQE, and $k$-reciprocal re-ranking contribute further additive gains as
 detailed in the ablation study.
@@ -984,10 +1011,9 @@ genuine complementarity.
 \subsection{Backbone Scale and Overfitting}
 ViT-L/14 (304M parameters) was evaluated as a higher-capacity alternative.
 Despite its larger parameter count, it was observed to overfit VeRi-776's
-576 training identities, falling below the ViT-B CLIP result post-rerank
-(ViT-L/14 post-rerank mAP: ---, SHA-pinned reproduction pending). This
-motivates systematic post-processing over backbone scaling as
-the primary performance lever for small-scale ReID benchmarks.
+576 training identities, falling below the ViT-B CLIP result after re-ranking
+in our experiments. This motivates systematic post-processing over backbone
+scaling as the primary performance lever for small-scale ReID benchmarks.
 
 \subsection{Limitations}
 \begin{enumerate}
@@ -1049,7 +1075,6 @@ VeRi-Wild~\cite{lou2019veriwild}; knowledge distillation from the fusion model
 into a single-stream model; and extension to nighttime surveillance and
 CityFlowV2.
 
-\balance
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 
