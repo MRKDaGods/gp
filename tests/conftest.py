@@ -143,9 +143,7 @@ def tmp_output_dir(tmp_path) -> Path:
     return d
 
 
-# ---------------------------------------------------------------------------
 # Timeline / Phase-3 fixtures
-# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def fixture_timeline_dir() -> Path:

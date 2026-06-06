@@ -179,7 +179,7 @@ def main():
         page_evaluation(run_dir)
 
 
-# ---- Page: Overview ----
+# Page: Overview
 
 def page_overview(run_dir: Path):
     st.title("System Overview")
@@ -233,7 +233,7 @@ def page_overview(run_dir: Path):
         st.plotly_chart(fig, use_container_width=True)
 
 
-# ---- Page: Search & Browse ----
+# Page: Search & Browse
 
 def page_search(run_dir: Path):
     st.title("Search & Browse Trajectories")
@@ -318,7 +318,7 @@ def page_search(run_dir: Path):
                         st.image(crop, caption=camera_id, use_container_width=True)
 
 
-# ---- Page: NL Query ----
+# Page: NL Query
 
 def page_nl_query(run_dir: Path):
     st.title("Natural Language Query")
@@ -395,7 +395,7 @@ def page_nl_query(run_dir: Path):
                             st.image(crop, caption=camera_id, use_container_width=True)
 
 
-# ---- Page: 3D Visualization ----
+# Page: 3D Visualization
 
 def page_3d_view(run_dir: Path):
     st.title("3D Trajectory Visualization")
@@ -420,7 +420,7 @@ def page_3d_view(run_dir: Path):
     st.plotly_chart(fig, use_container_width=True)
 
 
-# ---- Page: Evaluation ----
+# Page: Evaluation
 
 def page_evaluation(run_dir: Path):
     st.title("Evaluation Results")

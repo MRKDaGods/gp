@@ -256,9 +256,7 @@ def evaluate_mot(
     return _evaluate_with_motmetrics(gt_dir, pred_dir, iou_threshold=iou_threshold)
 
 
-# ---------------------------------------------------------------------------
 # TrackEval path
-# ---------------------------------------------------------------------------
 
 def _remap_class1_in_dir(src_dir: Path, dst_dir: Path, glob: str = "*.txt") -> None:
     """Copy tracking files replacing class field (col 7) with 1 (pedestrian).
@@ -472,9 +470,7 @@ def _mean_of(per_camera: Dict[str, Dict[str, float]], key: str) -> float:
     return float(np.mean(vals)) if vals else 0.0
 
 
-# ---------------------------------------------------------------------------
 # GT file resolution
-# ---------------------------------------------------------------------------
 
 def _find_gt_file(gt_dir: Path, cam_id: str) -> Optional[Path]:
     """Resolve ground truth file for a camera using multiple naming patterns.
@@ -497,9 +493,7 @@ def _find_gt_file(gt_dir: Path, cam_id: str) -> Optional[Path]:
     return None
 
 
-# ---------------------------------------------------------------------------
 # py-motmetrics path (per-camera accumulators)
-# ---------------------------------------------------------------------------
 
 def _evaluate_with_motmetrics(
     gt_dir: str,
@@ -625,9 +619,7 @@ def _evaluate_with_motmetrics(
     )
 
 
-# ---------------------------------------------------------------------------
 # MOT format loader
-# ---------------------------------------------------------------------------
 
 def _load_mot_file(path: Path) -> Dict[int, list]:
     """Load MOT format file into dict[frame_id -> list of (track_id, bbox)].

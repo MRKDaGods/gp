@@ -22,7 +22,7 @@ import torchvision.transforms as T
 from src.training.seed import seed_worker, make_generator
 
 
-# --- Dataset parsers ------------------------------------------------------
+# Dataset parsers
 
 
 def parse_market1501(root: str) -> Tuple[List, List, List]:
@@ -275,7 +275,7 @@ DATASET_PARSERS = {
 }
 
 
-# --- Transforms -----------------------------------------------------------
+# Transforms
 
 
 def build_train_transforms(
@@ -317,7 +317,7 @@ def build_test_transforms(height: int = 256, width: int = 128) -> T.Compose:
     ])
 
 
-# --- Dataset --------------------------------------------------------------
+# Dataset
 
 
 class ReIDDataset(Dataset):
@@ -342,7 +342,7 @@ class ReIDDataset(Dataset):
         return img, pid, cam, img_path
 
 
-# --- PK Sampler ----------------------------------------------------------
+# PK Sampler
 
 
 class PKSampler(Sampler):

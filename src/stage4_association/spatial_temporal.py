@@ -53,9 +53,7 @@ class SpatioTemporalValidator:
         self.max_time_gap = max_time_gap
         self.camera_transitions = camera_transitions or {}
 
-    # ------------------------------------------------------------------
     # Public API
-    # ------------------------------------------------------------------
 
     def is_valid_transition(
         self,
@@ -109,20 +107,18 @@ class SpatioTemporalValidator:
         time_diff = time_b - time_a
         abs_diff = abs(time_diff)
 
-        # ---- per-pair prior (learned from GT) ----------------------------
+        # per-pair prior (learned from GT)
         pair_prior = self._get_pair_prior(cam_a, cam_b)
         if pair_prior is not None:
             return self._score_with_prior(abs_diff, pair_prior)
 
-        # ---- global fallback ---------------------------------------------
+        # global fallback
         if abs_diff < self.min_time_gap or abs_diff > self.max_time_gap:
             return 0.0
 
         return self._global_score(abs_diff)
 
-    # ------------------------------------------------------------------
     # Internal scoring helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _score_with_prior(abs_diff: float, prior: Dict) -> float:
@@ -173,9 +169,7 @@ class SpatioTemporalValidator:
         sigma = max(sigma, 1.0)
         return math.exp(-0.5 * ((abs_diff - self.min_time_gap) / sigma) ** 2)
 
-    # ------------------------------------------------------------------
     # Lookup
-    # ------------------------------------------------------------------
 
     def _get_pair_prior(
         self, cam_a: str, cam_b: str
@@ -189,9 +183,7 @@ class SpatioTemporalValidator:
                 return self.camera_transitions[cam_b][cam_a]
         return None
 
-    # ------------------------------------------------------------------
     # Learning from ground truth
-    # ------------------------------------------------------------------
 
     def learn_transitions(
         self,

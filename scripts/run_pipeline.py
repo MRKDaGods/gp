@@ -90,7 +90,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
     # Discover video paths (needed by multiple stages)
     video_paths = _discover_video_paths(cfg)
 
-    # --- Stage 0: Ingestion ---
+    # Stage 0: Ingestion
     if 0 in stage_nums:
         console.print("\n[bold cyan]Stage 0: Ingestion & Pre-Processing[/bold cyan]")
         from src.stage0_ingestion import run_stage0
@@ -129,7 +129,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
         )
         save_tracklets_by_camera(tracklets_by_camera, output_base / "stage1")
 
-    # --- Stage 1: Detection & Tracking ---
+    # Stage 1: Detection & Tracking
     if 1 in stage_nums and not wildtrack_single_shot:
         console.print("\n[bold cyan]Stage 1: Per-Camera Detection & Tracking[/bold cyan]")
         from src.stage1_tracking import run_stage1
@@ -142,7 +142,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
             cfg, frames, output_dir=output_base / "stage1", smoke_test=smoke_test
         )
 
-    # --- Stage 2: Feature Extraction ---
+    # Stage 2: Feature Extraction
     if 2 in stage_nums and not wildtrack_single_shot:
         console.print("\n[bold cyan]Stage 2: Feature Extraction & Refinement[/bold cyan]")
         from src.stage2_features import run_stage2
@@ -157,7 +157,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
             stage0_dir=output_base / "stage0",
         )
 
-    # --- Stage 3: Indexing ---
+    # Stage 3: Indexing
     if 3 in stage_nums and not wildtrack_single_shot:
         console.print("\n[bold cyan]Stage 3: Indexing & Storage[/bold cyan]")
         from src.stage3_indexing import run_stage3
@@ -192,7 +192,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
                 cfg, features, tracklets_by_camera, output_dir=output_base / "stage3"
             )
 
-    # --- Stage 4: Cross-Camera Association ---
+    # Stage 4: Cross-Camera Association
     if 4 in stage_nums and not wildtrack_single_shot:
         console.print("\n[bold cyan]Stage 4: Multi-Camera Association[/bold cyan]")
         from src.stage4_association import run_stage4
@@ -327,7 +327,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
                 query_cameras=query_cameras
             )
 
-    # --- Stage 5: Evaluation ---
+    # Stage 5: Evaluation
     if 5 in stage_nums:
         console.print("\n[bold cyan]Stage 5: Evaluation[/bold cyan]")
         from src.stage5_evaluation import run_stage5
@@ -343,7 +343,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
         if trajectories is not None:
             run_stage5(cfg, trajectories, output_dir=output_base / "stage5")
 
-    # --- Stage 6: Visualization ---
+    # Stage 6: Visualization
     if 6 in stage_nums:
         console.print("\n[bold cyan]Stage 6: Visualization & Outputs[/bold cyan]")
         from src.stage6_visualization import run_stage6

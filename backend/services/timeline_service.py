@@ -50,9 +50,7 @@ class TimelineService:
     def __init__(self, repo: DatasetRepository) -> None:
         self._repo = repo
 
-    # ------------------------------------------------------------------
     # Public entry point
-    # ------------------------------------------------------------------
 
     def query(
         self,
@@ -234,9 +232,7 @@ class TimelineService:
         self._last_ranked_candidates = []
         return response, ranked
 
-    # ------------------------------------------------------------------
     # Embedding pair loading + PCA projection
-    # ------------------------------------------------------------------
 
     def _load_embedding_pair(
         self,
@@ -327,9 +323,7 @@ class TimelineService:
             pass
         return probe
 
-    # ------------------------------------------------------------------
     # Trajectory scoring
-    # ------------------------------------------------------------------
 
     def _score_trajectories(
         self,
@@ -491,9 +485,7 @@ class TimelineService:
         extra["all_scored_trajectories"] = all_scored
         return scored, extra
 
-    # ------------------------------------------------------------------
     # Internal helpers
-    # ------------------------------------------------------------------
 
     def _run_visual_search(
         self,

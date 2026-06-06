@@ -1089,9 +1089,7 @@ def run_stage4(
     return trajectories
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def _build_candidate_pairs(
     n: int,
@@ -1300,9 +1298,7 @@ def _assign_individual_ids(tracklets: List[Tracklet]) -> List[GlobalTrajectory]:
     ]
 
 
-# ---------------------------------------------------------------------------
 # Reciprocal best-match seeding (SOTA threshold-free matching)
-# ---------------------------------------------------------------------------
 
 def _reciprocal_best_match(
     combined_sim: Dict[Tuple[int, int], float],
@@ -1380,9 +1376,7 @@ def _reciprocal_best_match(
     return rbm_pairs
 
 
-# ---------------------------------------------------------------------------
 # Hierarchical centroid-based expansion (SOTA multi-pass matching)
-# ---------------------------------------------------------------------------
 
 def _compute_cluster_centroids(
     clusters: List[Set[int]],
@@ -1771,9 +1765,7 @@ def _hierarchical_centroid_expansion(
     return clusters
 
 
-# ---------------------------------------------------------------------------
 # Sub-cluster temporal splitting (AIC21 technique)
-# ---------------------------------------------------------------------------
 
 def _try_temporal_split(
     members: List[int],

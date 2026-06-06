@@ -243,7 +243,6 @@ def build_transreid(
             remapped[new_key] = value
         state_dict = remapped
 
-        # ------------------------------------------------------------------
         # Handle shape mismatches between checkpoint and model:
         #   - pos_embed: training resolution may differ from timm default
         #   - sie_embed: checkpoint may have fewer cameras than deployment
@@ -251,7 +250,6 @@ def build_transreid(
         # Strategy: drop mismatched keys and let `strict=False` handle them.
         # For sie_embed specifically, we zero-pad if the checkpoint has fewer
         # cameras (safe: extra cameras just get zero SIE bias).
-        # ------------------------------------------------------------------
         model_sd = model.state_dict()
         keys_to_drop = []
         for key in list(state_dict.keys()):

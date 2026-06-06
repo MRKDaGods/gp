@@ -198,11 +198,9 @@ def _append_stage2_fusion_overrides(
     }
 
 
-# ---------------------------------------------------------------------------
 # Bundled-fusion stream wiring (single model_id whose model_overrides declare
 # extra Stage-4 ensemble streams). Distinct from _resolve_fusion_pipeline_model,
 # which wires a user-supplied FusionConfig of separate model_ids.
-# ---------------------------------------------------------------------------
 
 # Stage-4 ensemble slot -> (Stage-2 vehicle slot that produces it,
 #                           Stage-2 output filename, checkpoint_ref role).

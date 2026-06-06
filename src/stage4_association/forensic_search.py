@@ -28,9 +28,7 @@ from loguru import logger
 from src.core.data_models import GlobalTrajectory
 
 
-# ---------------------------------------------------------------------------
 # Data structures
-# ---------------------------------------------------------------------------
 
 @dataclass
 class SearchResult:
@@ -92,9 +90,7 @@ class WatchlistHit:
         }
 
 
-# ---------------------------------------------------------------------------
 # Core search functions
-# ---------------------------------------------------------------------------
 
 class ForensicSearchEngine:
     """Re-ID search and watchlist engine backed by the Stage 3 FAISS index.
@@ -145,9 +141,7 @@ class ForensicSearchEngine:
             f"{len(trajectories)} trajectories"
         )
 
-    # ------------------------------------------------------------------
     # Query by embedding vector
-    # ------------------------------------------------------------------
 
     def query_by_embedding(
         self,
@@ -204,9 +198,7 @@ class ForensicSearchEngine:
         )
         return results
 
-    # ------------------------------------------------------------------
     # Query by raw image crop
-    # ------------------------------------------------------------------
 
     def query_by_image(
         self,
@@ -232,9 +224,7 @@ class ForensicSearchEngine:
             return []
         return self.query_by_embedding(embedding, top_k=top_k, min_similarity=min_similarity)
 
-    # ------------------------------------------------------------------
     # Watchlist scan
-    # ------------------------------------------------------------------
 
     def watchlist_scan(
         self,
@@ -305,9 +295,7 @@ class ForensicSearchEngine:
         )
         return hits
 
-    # ------------------------------------------------------------------
     # Export
-    # ------------------------------------------------------------------
 
     def export_forensic_report(
         self,
@@ -365,9 +353,7 @@ class ForensicSearchEngine:
         )
         return report_path
 
-    # ------------------------------------------------------------------
     # Internal helpers
-    # ------------------------------------------------------------------
 
     def _get_tracklet_times(
         self, camera_id: str, track_id: int

@@ -134,7 +134,7 @@ def run_stage2(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- Initialise extractors ---
+    # Initialise extractors
     crop_extractor = CropExtractor(
         min_area=stage_cfg.crop.min_area,
         padding_ratio=stage_cfg.crop.padding_ratio,
@@ -176,7 +176,7 @@ def run_stage2(
         class_id in PERSON_CLASSES for class_id in target_classes
     )
 
-    # --- Load ReID models (person and vehicle) ---
+    # Load ReID models (person and vehicle)
     person_reid: Optional[ReIDModel] = None
     if has_person_classes:
         person_reid = ReIDModel(
@@ -222,7 +222,7 @@ def run_stage2(
         concat_patch=stage_cfg.reid.vehicle.get("concat_patch", False),
     )
 
-    # --- Optional second vehicle ReID model for ensemble (concatenated features) ---
+    # Optional second vehicle ReID model for ensemble (concatenated features)
     # SOTA: ensemble of TransReID (domain-specific fine-tuned) + OSNet (general, fast)
     # produces complementary features -> improved recall on hard cases (occlusion, viewpoint).
     vehicle_reid2: Optional[ReIDModel] = None
@@ -288,7 +288,7 @@ def run_stage2(
                 "Falling back to up-to-2-model extraction."
             )
 
-    # --- Resolve stage0 output directory for fast disk-based frame loading ---
+    # Resolve stage0 output directory for fast disk-based frame loading
     s0_dir: Optional[Path] = None
     if stage0_dir is not None:
         s0_dir = Path(stage0_dir)
@@ -304,7 +304,7 @@ def run_stage2(
     else:
         logger.info("Reading frames from video (slow - consider keeping stage0 output)")
 
-    # --- Process all tracklets ---
+    # Process all tracklets
     all_features: List[TrackletFeatures] = []
     all_raw_embeddings: List[np.ndarray] = []
     all_secondary_embeddings: List[Optional[np.ndarray]] = []
@@ -314,12 +314,12 @@ def run_stage2(
     vehicle2_separate = vehicle2_cfg.get("save_separate", False) and vehicle_reid2 is not None
     vehicle3_separate = vehicle3_cfg.get("save_separate", True) and vehicle_reid3 is not None
 
-    # --- SIE camera ID mapping for TransReID models ---
+    # SIE camera ID mapping for TransReID models
     sie_camera_map: Dict[str, int] = stage_cfg.reid.vehicle.get("sie_camera_map", {}) or {}
     if sie_camera_map:
         logger.info(f"SIE camera map: {dict(sie_camera_map)}")
 
-    # --- Camera-specific Test-Time Adaptation (CamTTA) ---
+    # Camera-specific Test-Time Adaptation (CamTTA)
     # Adapt the BNNeck running statistics to each camera before feature extraction.
     # Requires disk frames (use_disk_frames) so we can pre-collect all crops.
     tta_cfg = stage_cfg.get("camera_tta", {})
@@ -349,7 +349,7 @@ def run_stage2(
                 f"  Loaded {len(cam_frame_images)}/{len(needed_ids)} frames from disk for {camera_id}"
             )
 
-        # --- CamTTA: pre-collect crops and warm up BNNeck for this camera ---
+        # CamTTA: pre-collect crops and warm up BNNeck for this camera
         # When enabled, extract ALL crops for this camera first to build a
         # camera-representative sample, then warm up the BNNeck, and then
         # extract the final embeddings using the adapted statistics.
@@ -504,7 +504,7 @@ def run_stage2(
         logger.warning("No features extracted from any tracklet")
         return []
 
-    # --- Global post-processing ---
+    # Global post-processing
     raw_matrix = np.stack(all_raw_embeddings, axis=0)  # (N, D)
     logger.info(f"Raw embedding matrix: {raw_matrix.shape}")
 

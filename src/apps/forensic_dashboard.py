@@ -40,9 +40,7 @@ from src.core.io_utils import (
     save_global_trajectories,
 )
 
-# ---------------------------------------------------------------------------
 # Constants & Theme
-# ---------------------------------------------------------------------------
 
 ACCENT = "#2563eb"
 DIM_FACTOR = 0.35
@@ -107,9 +105,7 @@ def ds_badge(name: str) -> str:
             f'border:1px solid {c}">{icon} {name.upper()}</span>')
 
 
-# ---------------------------------------------------------------------------
 # Dataset / Run Discovery
-# ---------------------------------------------------------------------------
 
 OUTPUTS_DIR = Path("data/outputs")
 
@@ -132,9 +128,7 @@ def discover_runs() -> Dict[str, List[Path]]:
     return by_ds
 
 
-# ---------------------------------------------------------------------------
 # Data Loading (cached)
-# ---------------------------------------------------------------------------
 
 @st.cache_data
 def load_trajectories(path: str) -> List[dict]:
@@ -201,9 +195,7 @@ def load_eval(path: str) -> Optional[dict]:
         return None
 
 
-# ---------------------------------------------------------------------------
 # Frame / Crop Helpers
-# ---------------------------------------------------------------------------
 
 @st.cache_data
 def read_frame_cached(stage0_dir: str, camera_id: str, frame_id: int) -> Optional[np.ndarray]:
@@ -258,9 +250,7 @@ def render_surveillance_frame(
     return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
 
-# ---------------------------------------------------------------------------
 # Trajectory Helpers
-# ---------------------------------------------------------------------------
 
 def build_frame_lookup(traj: dict) -> Dict[int, Dict[str, dict]]:
     result: Dict[int, Dict[str, dict]] = {}
@@ -274,9 +264,7 @@ def get_traj_by_gid(trajectories: List[dict], gid: int) -> Optional[dict]:
     return next((t for t in trajectories if t["global_id"] == gid), None)
 
 
-# ---------------------------------------------------------------------------
 # Session State (multi-dataset)
-# ---------------------------------------------------------------------------
 
 def _load_run_into_state(run_dir: Path, ds_name: str):
     """Load a single run's data into session state under ds_name key."""
@@ -309,9 +297,7 @@ def get_active_ds() -> Optional[dict]:
     return st.session_state.get(f"ds_{ds}")
 
 
-# ---------------------------------------------------------------------------
 # Pages
-# ---------------------------------------------------------------------------
 
 # +-------------------------------------------------------------------------+
 # | OVERVIEW                                                                |
@@ -935,9 +921,7 @@ def page_comparison():
             st.plotly_chart(fig, use_container_width=True)
 
 
-# ---------------------------------------------------------------------------
 # Correction Helpers (unchanged logic)
-# ---------------------------------------------------------------------------
 
 def _do_reassign(trajs: List[dict], source_gid: int, target_gid: int, tracklet: dict):
     source = get_traj_by_gid(trajs, source_gid)
@@ -1013,9 +997,7 @@ def _save_corrected(trajs: List[dict], run_dir: str):
     save_global_trajectories(gt_list, out_path)
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 def main():
     st.set_page_config(

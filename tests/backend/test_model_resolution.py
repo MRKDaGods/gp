@@ -51,9 +51,7 @@ def _override_kv(overrides, dotted_key):
     return None
 
 
-# ---------------------------------------------------------------------------
 # 14e B1 (production) - dynamic tertiary path, no stale run_latest
-# ---------------------------------------------------------------------------
 
 def test_14e_b1_wires_dynamic_tertiary_path() -> None:
     result = resolve_pipeline_model("vehicle_mtmc_14e_b1", dataset="cityflowv2")
@@ -103,9 +101,7 @@ def test_14e_b1_does_not_emit_stage2_overrides_for_config_wired_stream() -> None
     ), f"unexpected stage2 vehicle3 overrides: {result.applied_overrides}"
 
 
-# ---------------------------------------------------------------------------
 # K7 (research) - DINOv2 tertiary + R50-IBN quaternary
-# ---------------------------------------------------------------------------
 
 def test_k7_wires_quaternary_r50ibn_stream() -> None:
     result = resolve_pipeline_model("vehicle_mtmc_14k_v1_k7", dataset="cityflowv2")
@@ -151,9 +147,7 @@ def test_k7_fusion_resolved_has_both_streams() -> None:
     assert by_slot["quaternary"]["model_name"] == "fastreid_sbs_r50_ibn"
 
 
-# ---------------------------------------------------------------------------
 # Fail-loud guard - a weighted stream that cannot be wired must raise
-# ---------------------------------------------------------------------------
 
 def _synthetic_unwireable_model() -> ModelEntry:
     """A cityflowv2 model that sets quaternary weight but provides NO quaternary
@@ -218,9 +212,7 @@ def test_unwireable_stream_does_not_silently_degrade(
         resolve_pipeline_model(synthetic.id, dataset="cityflowv2")
 
 
-# ---------------------------------------------------------------------------
 # Non-fusion models are untouched
-# ---------------------------------------------------------------------------
 
 def test_person_model_has_no_bundled_fusion() -> None:
     # WILDTRACK person model declares no *_embeddings.weight streams.

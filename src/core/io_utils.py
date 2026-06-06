@@ -23,9 +23,7 @@ from src.core.data_models import (
 )
 
 
-# ---------------------------------------------------------------------------
 # JSON helpers
-# ---------------------------------------------------------------------------
 
 class _NumpyEncoder(json.JSONEncoder):
     """JSON encoder that handles numpy types."""
@@ -44,9 +42,7 @@ def _ensure_dir(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-# ---------------------------------------------------------------------------
 # FrameInfo I/O
-# ---------------------------------------------------------------------------
 
 def save_frame_manifest(frames: List[FrameInfo], path: str | Path) -> None:
     path = Path(path)
@@ -60,9 +56,7 @@ def load_frame_manifest(path: str | Path) -> List[FrameInfo]:
     return [FrameInfo(**d) for d in data]
 
 
-# ---------------------------------------------------------------------------
 # Tracklet I/O
-# ---------------------------------------------------------------------------
 
 def _tracklet_to_dict(t: Tracklet) -> dict:
     return {
@@ -135,9 +129,7 @@ def load_tracklets_by_camera(input_dir: str | Path) -> Dict[str, List[Tracklet]]
     return result
 
 
-# ---------------------------------------------------------------------------
 # Embeddings I/O
-# ---------------------------------------------------------------------------
 
 def save_embeddings(
     embeddings: np.ndarray,
@@ -238,9 +230,7 @@ def load_multi_query_embeddings(
     return result
 
 
-# ---------------------------------------------------------------------------
 # GlobalTrajectory I/O
-# ---------------------------------------------------------------------------
 
 def save_global_trajectories(
     trajectories: List[GlobalTrajectory], path: str | Path
@@ -281,9 +271,7 @@ def load_global_trajectories(path: str | Path) -> List[GlobalTrajectory]:
     return trajectories
 
 
-# ---------------------------------------------------------------------------
 # EvaluationResult I/O
-# ---------------------------------------------------------------------------
 
 def save_evaluation_result(result: EvaluationResult, path: str | Path) -> None:
     path = Path(path)

@@ -12,9 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 
-# ---------------------------------------------------------------------------
 # Stage 0 outputs
-# ---------------------------------------------------------------------------
 
 @dataclass
 class FrameInfo:
@@ -28,9 +26,7 @@ class FrameInfo:
     height: int
 
 
-# ---------------------------------------------------------------------------
 # Stage 1 outputs
-# ---------------------------------------------------------------------------
 
 @dataclass
 class Detection:
@@ -92,9 +88,7 @@ class Tracklet:
         return None
 
 
-# ---------------------------------------------------------------------------
 # Stage 2 outputs
-# ---------------------------------------------------------------------------
 
 @dataclass
 class TrackletFeatures:
@@ -109,9 +103,7 @@ class TrackletFeatures:
     multi_query_embeddings: Optional[np.ndarray] = None  # shape: (K, D) if enabled
 
 
-# ---------------------------------------------------------------------------
 # Stage 4 outputs
-# ---------------------------------------------------------------------------
 
 @dataclass
 class GlobalTrajectory:
@@ -202,9 +194,7 @@ class GlobalTrajectory:
         }
 
 
-# ---------------------------------------------------------------------------
 # Stage 5 outputs
-# ---------------------------------------------------------------------------
 
 @dataclass
 class EvaluationResult:

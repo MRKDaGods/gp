@@ -1,7 +1,5 @@
-// ============================================================================
 // MTMC Tracker Types
 // Mirrors Python data_models.py for frontend type safety
-// ============================================================================
 
 export type StageNumber = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 

@@ -18,9 +18,7 @@ from src.core.data_models import Tracklet
 from src.core.video_utils import read_single_frame
 
 
-# ---------------------------------------------------------------------------
 # Quality scoring
-# ---------------------------------------------------------------------------
 
 @dataclass
 class QualityScoredCrop:

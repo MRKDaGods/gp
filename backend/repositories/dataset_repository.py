@@ -76,9 +76,7 @@ class InMemoryDatasetRepository:
         self._latest_runs = video_to_latest_run
         self._output_dir = output_dir
 
-    # ------------------------------------------------------------------
     # Protocol implementation
-    # ------------------------------------------------------------------
 
     def get_video(self, video_id: str) -> Optional[Dict[str, Any]]:
         return self._videos.get(video_id)

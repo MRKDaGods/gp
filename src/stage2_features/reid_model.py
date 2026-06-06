@@ -722,9 +722,7 @@ class ReIDModel:
 
         return selected.astype(np.float32)
 
-    # ------------------------------------------------------------------
     # Camera-specific Test-Time Adaptation (CamTTA)
-    # ------------------------------------------------------------------
 
     def save_bn_state(self) -> dict:
         """Save BNNeck running statistics for later restoration.

@@ -14,9 +14,7 @@ import type {
   VideoFile,
 } from '@/types';
 
-// ============================================================================
 // Pipeline Store - Manages pipeline execution state
-// ============================================================================
 
 /** Canonical sidebar pipeline labels - shared by pipeline store reset + downstream flush. */
 export const PIPELINE_STAGE_DEFAULTS: StageProgress[] = [
@@ -352,9 +350,7 @@ export const useStageExecutionStore = create<StageExecutionState>()(
   )
 );
 
-// ============================================================================
 // Video Store - Manages uploaded videos and frames
-// ============================================================================
 
 interface VideoState {
   videos: VideoFile[];
@@ -413,9 +409,7 @@ export const useVideoStore = create<VideoState>()(
   )
 );
 
-// ============================================================================
 // Detection Store - Manages detections and selections
-// ============================================================================
 
 interface DetectionState {
   detections: Detection[];
@@ -565,9 +559,7 @@ export const useDetectionStore = create<DetectionState>()(
   )
 );
 
-// ============================================================================
 // Tracklet Store - Manages tracklets and trajectories
-// ============================================================================
 
 interface TrackletState {
   tracklets: Tracklet[];
@@ -624,9 +616,7 @@ export const useTrackletStore = create<TrackletState>()(
   )
 );
 
-// ============================================================================
 // Timeline Store - Manages timeline view state
-// ============================================================================
 
 interface TimelineState {
   tracks: TimelineTrack[];
@@ -810,11 +800,9 @@ export const useTimelineStore = create<TimelineState>()(
   )
 );
 
-// ============================================================================
 // Manual Stage Store - per-run completion of stages that run no pipeline
 // (Selection / Refinement). Persisted by runId so loading a run restores their
 // "done" checkmarks, which can't be inferred from disk artifacts.
-// ============================================================================
 
 interface ManualStageState {
   completedByRun: Record<string, number[]>;
@@ -855,9 +843,7 @@ export const useManualStageStore = create<ManualStageState>()(
   )
 );
 
-// ============================================================================
 // Session Store - Manages user session and preferences
-// ============================================================================
 
 interface SessionStore extends SessionState {
   preferences: UserPreferences;
@@ -988,9 +974,7 @@ export const useSessionStore = create<SessionStore>()(
   )
 );
 
-// ============================================================================
 // UI Store - Manages UI state
-// ============================================================================
 
 interface UIState {
   sidebarOpen: boolean;

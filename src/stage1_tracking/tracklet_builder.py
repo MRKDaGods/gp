@@ -15,9 +15,7 @@ from src.core.constants import CLASS_NAMES
 from src.core.data_models import Tracklet, TrackletFrame
 
 
-# ---------------------------------------------------------------------------
 # Bbox interpolation
-# ---------------------------------------------------------------------------
 
 def interpolate_tracklet_frames(
     frames: List[TrackletFrame],
@@ -70,9 +68,7 @@ def interpolate_tracklet_frames(
     return result
 
 
-# ---------------------------------------------------------------------------
 # Intra-camera track merging
-# ---------------------------------------------------------------------------
 
 def merge_intra_camera_tracklets(
     tracklets: List[Tracklet],

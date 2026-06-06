@@ -50,7 +50,7 @@ def main(run_dir, global_id, gallery, top_n, sort_by, panel_width,
     """View multi-camera grid for cross-camera tracking verification."""
     run_dir = Path(run_dir)
 
-    # --- Load data ---
+    # Load data
     traj_path = run_dir / "stage4" / "global_trajectories.json"
     if not traj_path.exists():
         console.print(f"[red]No trajectories found at {traj_path}[/red]")
@@ -60,7 +60,7 @@ def main(run_dir, global_id, gallery, top_n, sort_by, panel_width,
     trajectories = load_global_trajectories(traj_path)
     console.print(f"  {len(trajectories)} global trajectories loaded")
 
-    # --- Discover cameras from stage0 ---
+    # Discover cameras from stage0
     stage0_dir = run_dir / "stage0"
     if not stage0_dir.exists():
         console.print(f"[red]No stage0 directory at {stage0_dir}[/red]")
@@ -85,7 +85,7 @@ def main(run_dir, global_id, gallery, top_n, sort_by, panel_width,
             fps = 10.0
     console.print(f"  Output FPS: {fps}")
 
-    # --- Build layout and renderer ---
+    # Build layout and renderer
     layout = compute_grid_layout(camera_ids, source_w, source_h, panel_width)
     console.print(
         f"  Grid: {layout.cols}x{layout.rows} "
@@ -103,7 +103,7 @@ def main(run_dir, global_id, gallery, top_n, sort_by, panel_width,
 
     out_dir = run_dir / "multicam"
 
-    # --- Single trajectory mode ---
+    # Single trajectory mode
     if global_id is not None:
         traj = next((t for t in trajectories if t.global_id == global_id), None)
         if traj is None:
@@ -121,7 +121,7 @@ def main(run_dir, global_id, gallery, top_n, sort_by, panel_width,
         console.print(f"\n[green]Output: {out_path}[/green]")
         return
 
-    # --- Gallery mode ---
+    # Gallery mode
     if gallery:
         console.print(f"\n[bold]Rendering gallery: top {top_n} by {sort_by}[/bold]")
         out_path = Path(output) if output else out_dir
@@ -131,7 +131,7 @@ def main(run_dir, global_id, gallery, top_n, sort_by, panel_width,
         console.print(f"\n[green]{len(outputs)} videos saved to {out_path}[/green]")
         return
 
-    # --- Default: list available trajectories ---
+    # Default: list available trajectories
     console.print("\n[yellow]No --global-id or --gallery specified. Listing trajectories:[/yellow]")
     ranked = sorted(trajectories, key=lambda t: t.num_cameras, reverse=True)[:20]
     for t in ranked:

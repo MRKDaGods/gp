@@ -19,9 +19,7 @@ from backend.repositories.dataset_repository import DatasetRepository
 from backend.services.timeline_service import TimelineService
 
 
-# ---------------------------------------------------------------------------
 # Stub repository
-# ---------------------------------------------------------------------------
 
 class StubRepository:
     """In-memory DatasetRepository for tests.  No filesystem I/O."""
@@ -60,9 +58,7 @@ assert isinstance(StubRepository(), DatasetRepository), (
 )
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def _make_request(**kwargs):
     """Build a TimelineQueryRequest with sensible defaults."""
@@ -85,9 +81,7 @@ _NOOP_PATCHES = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Test 1 - EmbeddingArtifact.load from fixture directory
-# ---------------------------------------------------------------------------
 
 def test_embedding_artifact_load(fixture_timeline_dir):
     """EmbeddingArtifact loaded from fixture probe dir has shape (10, 384)."""
@@ -99,9 +93,7 @@ def test_embedding_artifact_load(fixture_timeline_dir):
     assert art.run_id == "probe_run"
 
 
-# ---------------------------------------------------------------------------
 # Test 2 - InMemoryDatasetRepository smoke test
-# ---------------------------------------------------------------------------
 
 def test_dataset_repository_get_video():
     """InMemoryDatasetRepository.get_video returns the expected record."""
@@ -113,9 +105,7 @@ def test_dataset_repository_get_video():
     assert repo.get_video("missing") is None
 
 
-# ---------------------------------------------------------------------------
 # Test 3 - no_selection fast path
-# ---------------------------------------------------------------------------
 
 def test_query_no_selection():
     """Empty selectedTrackIds returns mode='no_selection' without any I/O."""
@@ -132,9 +122,7 @@ def test_query_no_selection():
     assert data["selectedTracklets"] == []
 
 
-# ---------------------------------------------------------------------------
 # Test 4 - Stage 4 missing -> needs_association
-# ---------------------------------------------------------------------------
 
 def test_query_no_stage4():
     """When list_trajectories returns None the service returns mode='needs_association'."""
@@ -158,9 +146,7 @@ def test_query_no_stage4():
     assert result["data"]["stage4Available"] is False
 
 
-# ---------------------------------------------------------------------------
 # Test 5 - visual match (probe rows == gallery rows 0-9, similarity ~ 1.0)
-# ---------------------------------------------------------------------------
 
 def test_query_visual_match(probe_artifact, gallery_artifact, sample_trajectories):
     """Probe rows matching gallery rows should score above thresholds."""
@@ -198,9 +184,7 @@ def test_query_visual_match(probe_artifact, gallery_artifact, sample_trajectorie
         assert "confidence" in traj
 
 
-# ---------------------------------------------------------------------------
 # Test 6 - embedding dim mismatch (no PCA file)
-# ---------------------------------------------------------------------------
 
 def test_query_dim_mismatch(fixture_timeline_dir):
     """Probe and gallery with different dims and no PCA pkl -> dim_mismatch mode."""

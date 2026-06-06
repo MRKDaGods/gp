@@ -371,9 +371,7 @@ function formatClock(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// ---------------------------------------------------------------------------
 // Main component
-// ---------------------------------------------------------------------------
 
 export function OutputStage() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -1240,9 +1238,7 @@ export function OutputStageActions() {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Sub-components
-// ---------------------------------------------------------------------------
 
 function TrajectoryItem({ trajectory }: { trajectory: OutputTrajectory }) {
   const vt = trajectory.vehicleType;

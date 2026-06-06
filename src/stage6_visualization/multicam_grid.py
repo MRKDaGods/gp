@@ -20,9 +20,7 @@ from src.core.data_models import GlobalTrajectory, TrackletFrame
 from src.stage6_visualization.video_annotator import _COLORS, _get_color, _lerp_bbox
 
 
-# ---------------------------------------------------------------------------
 # Grid layout
-# ---------------------------------------------------------------------------
 
 @dataclass
 class GridLayout:
@@ -86,9 +84,7 @@ def compute_grid_layout(
     )
 
 
-# ---------------------------------------------------------------------------
 # Frame reader
-# ---------------------------------------------------------------------------
 
 class FrameReader:
     """Reads stage-0 extracted JPEG frames, resizing on the fly."""
@@ -130,9 +126,7 @@ class FrameReader:
         return self._frame_range
 
 
-# ---------------------------------------------------------------------------
 # Multi-camera grid renderer
-# ---------------------------------------------------------------------------
 
 _INFO_BAR_H = 36  # pixels
 
@@ -160,7 +154,7 @@ class MultiCamGridRenderer:
         self.trail_length = trail_length
         self.max_interp_gap = int(output_fps * max_interp_seconds)
 
-    # ----- public API -------------------------------------------------------
+    # public API
 
     def render_trajectory(
         self,
@@ -287,7 +281,7 @@ class MultiCamGridRenderer:
 
         return outputs
 
-    # ----- internal ---------------------------------------------------------
+    # internal
 
     def _build_frame_lookup(
         self, trajectory: GlobalTrajectory,

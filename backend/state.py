@@ -48,18 +48,14 @@ class AppState:
         self.video_to_latest_run.clear()
 
 
-# ---------------------------------------------------------------------------
 # Production singleton
-# ---------------------------------------------------------------------------
 app_state: AppState = AppState()
 
-# ---------------------------------------------------------------------------
 # Backward-compatibility aliases
 #
 # These names are direct references to the *same* dict / lock objects
 # inside ``app_state``.  Any call site that imports these names and
 # mutates them in-place continues to work without modification.
-# ---------------------------------------------------------------------------
 active_runs = app_state.active_runs
 uploaded_videos = app_state.uploaded_videos
 video_to_latest_run = app_state.video_to_latest_run

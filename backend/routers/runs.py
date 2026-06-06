@@ -166,7 +166,7 @@ async def get_matched_alternatives(
     anchor_cam_norm = _normalize_camera_id(anchorCameraId) if anchorCameraId else ""
     anchor_tid = int(anchorTrackId) if anchorTrackId is not None else None
 
-    # --- Per-anchor mode: compute from stage2 embeddings ---
+    # Per-anchor mode: compute from stage2 embeddings
     if anchor_cam_norm and anchor_tid is not None and anchor_tid >= 0:
         gallery_run_id = str(summary.get("datasetRunId") or "").strip() or run_id
         bank = _build_tracklet_embedding_bank(gallery_run_id)
@@ -285,7 +285,7 @@ async def get_matched_alternatives(
             },
         }
 
-    # --- Legacy mode: run-level alternatives list (fallback) ---
+    # Legacy mode: run-level alternatives list (fallback)
     alternatives_raw = (
         summary.get("topAlternatives")
         if isinstance(summary.get("topAlternatives"), list)

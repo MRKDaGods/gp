@@ -23,9 +23,7 @@ import numpy as np
 from loguru import logger
 
 
-# ---------------------------------------------------------------------------
 # Main entry point
-# ---------------------------------------------------------------------------
 
 def k_reciprocal_rerank(
     embeddings: np.ndarray,
@@ -61,9 +59,7 @@ def k_reciprocal_rerank(
         active_nodes.add(i)
         active_nodes.add(j)
 
-    # ------------------------------------------------------------------
     # Build per-node top-k1 neighbour lists  (sparse path)
-    # ------------------------------------------------------------------
     topk_map: Dict[int, np.ndarray] = {}        # node -> array of k1 nn ids
     sim_cache: Dict[int, np.ndarray] = {}        # node -> corresponding sims
 
@@ -82,9 +78,7 @@ def k_reciprocal_rerank(
             embeddings, active_nodes, k1, topk_map, sim_cache
         )
 
-    # ------------------------------------------------------------------
     # Build k-reciprocal sets
-    # ------------------------------------------------------------------
     k_reciprocal_sets: Dict[int, Set[int]] = {}
     for node in active_nodes:
         forward = set(topk_map[node].tolist()) - {-1}
@@ -116,9 +110,7 @@ def k_reciprocal_rerank(
                 expanded |= rj
         expanded_sets[node] = expanded
 
-    # ------------------------------------------------------------------
     # Compute weighted Jaccard for each candidate pair
-    # ------------------------------------------------------------------
     # Pre-compute similarity lookup for all nodes referenced in expanded sets.
     # This avoids O(|union| x D) dot products per pair -> massive speedup.
     all_expanded_nodes: Set[int] = set()
@@ -166,9 +158,7 @@ def k_reciprocal_rerank(
     return result
 
 
-# ---------------------------------------------------------------------------
 # Internal helpers
-# ---------------------------------------------------------------------------
 
 def _pairwise_sim(embeddings: np.ndarray, i: int, j: int) -> float:
     """Cosine similarity between two L2-normed vectors (dot product)."""

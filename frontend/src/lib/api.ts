@@ -280,9 +280,7 @@ export async function getEvalResult(jobId: string): Promise<EvalJobResultPayload
   return fetchApi<EvalJobResultPayload>(`/v1/eval/${encodeURIComponent(jobId)}/result`);
 }
 
-// ============================================================================
 // Video Management
-// ============================================================================
 
 export async function uploadVideo(
   file: File,
@@ -342,9 +340,7 @@ export async function deleteVideo(id: string): Promise<ApiResponse<void>> {
   return fetchApi(`/videos/${id}`, { method: 'DELETE' });
 }
 
-// ============================================================================
 // Pipeline Stage Execution
-// ============================================================================
 
 export interface FusionModelRequest {
   model_id: string;
@@ -436,9 +432,7 @@ export async function cancelKaggleKernel(runId: string): Promise<ApiResponse<Kag
   });
 }
 
-// ============================================================================
 // Stage 1: Detection & Tracking
-// ============================================================================
 
 export async function getDetections(
   videoId: string,
@@ -501,9 +495,7 @@ export async function getFrameWithDetections(
   };
 }
 
-// ============================================================================
 // Stage 4: Association & Search
-// ============================================================================
 
 export async function getTracklets(
   cameraId?: string,
@@ -729,9 +721,7 @@ export async function searchTracklet(options: {
   });
 }
 
-// ============================================================================
 // Stage 5: Evaluation
-// ============================================================================
 
 export async function getEvaluationResults(
   runId: string
@@ -739,9 +729,7 @@ export async function getEvaluationResults(
   return fetchApi(`/evaluation/${runId}`);
 }
 
-// ============================================================================
 // Stage 6: Visualization & Export
-// ============================================================================
 
 export async function generateSummaryVideo(
   runId: string,
@@ -806,9 +794,7 @@ export async function importKaggleRunArtifacts(
   });
 }
 
-// ============================================================================
 // WebSocket Connection
-// ============================================================================
 
 export function createWebSocket(
   runId: string,
@@ -840,9 +826,7 @@ export function createWebSocket(
   return ws;
 }
 
-// ============================================================================
 // Utilities
-// ============================================================================
 
 export function getFrameUrl(videoId: string, frameId: number): string {
   return apiUrl(`/frames/${videoId}/${frameId}`);
@@ -852,9 +836,7 @@ export function getVideoStreamUrl(videoId: string): string {
   return apiUrl(`/videos/stream/${videoId}`);
 }
 
-// ============================================================================
 // Dataset endpoints
-// ============================================================================
 
 /** Loaded from dataset/<name>/camera_coordinates.json via GET /datasets */
 export interface CameraMapCoordinateEntry {
