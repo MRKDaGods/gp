@@ -55,6 +55,9 @@ const TIMELINE_PLAYHEAD_FPS = 12;
 /** Tracklet full-frame picks/sec while playing (lower than playhead to limit image decode load). */
 const TRACKLET_PICK_FPS = 15;
 const TRACKLET_PICK_BUCKET_SEC = 1 / TRACKLET_PICK_FPS;
+/** When no vehicle is selected, cap how many global trajectories the overview renders
+ *  so Stage 4 never dumps the entire association (hundreds of rows / a multi-hour ruler). */
+const NON_QUERY_MAX_TRAJECTORIES = 20;
 const TIMELINE_SHOW_ALTERNATIVES_EVENT = "mtmc:timeline:show-alternatives";
 const TIMELINE_RERUN_ASSOCIATION_EVENT = "mtmc:timeline:rerun-association";
 
@@ -294,61 +297,30 @@ export function TimelineStage() {
       };
     }
 
-    const flat: { seg: CameraLaneSegment }[] = [];
-    lanesDraft.forEach((lane) => {
-      lane.segments.forEach((seg) => {
-        flat.push({ seg });
-      });
-    });
-    flat.sort((a, b) => {
-      const ds = a.seg.start - b.seg.start;
-      if (ds !== 0) return ds;
-      const de = a.seg.end - b.seg.end;
-      if (de !== 0) return de;
-      const ka = `${a.seg.trajectoryId}\0${a.seg.trackId}`;
-      const kb = `${b.seg.trajectoryId}\0${b.seg.trackId}`;
-      return ka.localeCompare(kb);
-    });
-
-    const sumRanges: { sumStart: number; sumEnd: number; seg: CameraLaneSegment }[] = [];
-    let cum = 0;
-    for (const { seg } of flat) {
-      const len = Math.max(seg.end - seg.start, 1e-6);
-      sumRanges.push({ sumStart: cum, sumEnd: cum + len, seg });
-      cum += len;
-    }
-    const totalDur = Math.max(cum, 1);
-
-    const keyToSum = new Map<string, { sumStart: number; sumEnd: number }>();
-    for (const r of sumRanges) {
-      const s = r.seg;
-      const key = `${s.cameraId}|${s.trajectoryId}|${s.trackId}|${s.start}|${s.end}`;
-      keyToSum.set(key, { sumStart: r.sumStart, sumEnd: r.sumEnd });
-    }
+    // Wall-clock timeline. Lay every segment at its REAL time, relative to the vehicle's
+    // first appearance, so a car seen in two overlapping cameras (e.g. cam A 0:15-0:17 and
+    // cam B 0:16-0:18) shows in BOTH at once during the overlap. The previous model
+    // concatenated segments end-to-end, which replayed the overlapping camera's last
+    // second when the playhead reached the next segment ("video 1 loops").
+    const allSegs = lanesDraft.flatMap((lane) => lane.segments);
+    const wallStart = Math.min(...allSegs.map((s) => s.start));
+    const wallEnd = Math.max(...allSegs.map((s) => s.end));
+    const totalDur = Math.max(wallEnd - wallStart, 1);
 
     const lanesWithSum: CameraLane[] = lanesDraft.map((lane) => ({
       ...lane,
-      segments: lane.segments.map((seg) => {
-        const key = `${seg.cameraId}|${seg.trajectoryId}|${seg.trackId}|${seg.start}|${seg.end}`;
-        const sum = keyToSum.get(key)!;
-        return { ...seg, sumStart: sum.sumStart, sumEnd: sum.sumEnd };
-      }),
+      segments: lane.segments.map((seg) => ({
+        ...seg,
+        // Ruler position = real time relative to the first appearance, so overlapping
+        // camera segments overlap on the timeline instead of stacking sequentially.
+        sumStart: seg.start - wallStart,
+        sumEnd: seg.end - wallStart,
+      })),
     }));
 
-    const sumOffsetToVideoTime = (offset: number): number => {
-      if (sumRanges.length === 0) return 0;
-      const o = Math.min(Math.max(offset, 0), totalDur);
-      if (o >= totalDur - 1e-9) return sumRanges[sumRanges.length - 1].seg.end;
-      for (const r of sumRanges) {
-        if (o >= r.sumStart && o < r.sumEnd) {
-          const slen = r.sumEnd - r.sumStart;
-          const wallLen = Math.max(r.seg.end - r.seg.start, 1e-6);
-          const local = slen > 0 ? (o - r.sumStart) / slen : 0;
-          return r.seg.start + local * wallLen;
-        }
-      }
-      return sumRanges[sumRanges.length - 1].seg.end;
-    };
+    // Playhead offset is wall-clock seconds from the first appearance -> absolute source time.
+    const sumOffsetToVideoTime = (offset: number): number =>
+      wallStart + Math.min(Math.max(offset, 0), totalDur);
 
     return {
       cameraLanes: lanesWithSum,
@@ -442,7 +414,10 @@ export function TimelineStage() {
    */
   const buildTracksFromTrajectories = (
     trajectories: any[],
-    selectedTrackKeys?: Set<string>
+    selectedTrackKeys?: Set<string>,
+    /** Cap the number of distinct global trajectories rendered (best-scoring first).
+     *  Used in query mode so picking one vehicle shows that vehicle, not every look-alike. */
+    maxTrajectories?: number
   ): TimelineTrack[] => {
     if (!Array.isArray(trajectories) || trajectories.length === 0) return [];
 
@@ -476,7 +451,15 @@ export function TimelineStage() {
       return sb - sa;
     });
 
-    sortedFiltered.forEach((trajectory: any, trajectoryIndex: number) => {
+    // In query mode, keep only the top-N best-matching global trajectories so a
+    // single-vehicle pick renders that one vehicle (across its cameras) instead of
+    // every visually-similar car. The remainder remain reachable via "Alternatives".
+    const cappedFiltered =
+      typeof maxTrajectories === "number" && maxTrajectories > 0
+        ? sortedFiltered.slice(0, maxTrajectories)
+        : sortedFiltered;
+
+    cappedFiltered.forEach((trajectory: any, trajectoryIndex: number) => {
       const globalId = Number(trajectory.globalId ?? trajectory.global_id ?? trajectoryIndex + 1);
 
       // Backend writes snake_case timeline entries from global_trajectories.py:
@@ -564,6 +547,21 @@ export function TimelineStage() {
       return;
     }
 
+    // Refresh restore: if a matched result is already persisted for this exact context,
+    // show it WITHOUT re-running the association query. Upstream edits (selection change,
+    // run switch, re-inference, manual "Run Association") clear `tracksContextKey`, so this
+    // only short-circuits a genuine no-op reload such as a page refresh.
+    {
+      const tl = useTimelineStore.getState();
+      if (tl.tracks.length > 0 && tl.tracksContextKey === timelineLoadKey) {
+        prevTimelineLoadKeyRef.current = timelineLoadKey;
+        timelineHandledStampRef.current = `${timelineLoadKey}\0${triggerReload}\0${downstreamInvalidateGeneration}`;
+        setTracksLoading(false);
+        updateStageProgress(4, { status: "completed", progress: 100, message: "Association loaded" });
+        return;
+      }
+    }
+
     const loadKeyChanged = prevTimelineLoadKeyRef.current !== timelineLoadKey;
     if (loadKeyChanged) {
       prevTimelineLoadKeyRef.current = timelineLoadKey;
@@ -597,9 +595,9 @@ export function TimelineStage() {
       /** Deferred until loader finishes — avoids effect re-entry + cancelled mid-flight when runId syncs from diagnostics */
       let pendingRunIdFromDiagnostics: string | null = null;
       let loadErrored = false;
+      let finalTracksSet = false;
       try {
         let attemptedAssociation = false;
-        let finalTracksSet = false;
         const selectedTrackIdsArr = Array.from(selectedTrackIdSet).map((v) => String(v));
         const sortedSel = selectedTrackIdsArr.slice().sort().join(",");
         const exportDedupeKey = (probeKey: string) =>
@@ -664,14 +662,22 @@ export function TimelineStage() {
           });
 
           if (q1Traj.length > 0) {
-            const rows = buildTracksFromTrajectories(q1Traj);
+            // Show one global trajectory per selected vehicle (the best visual match),
+            // not every trajectory above the similarity threshold.
+            const maxMatched = Math.max(1, selectedTrackIdSet.size);
+            const rows = buildTracksFromTrajectories(q1Traj, undefined, maxMatched);
             if (rows.length > 0) {
               setMatchedFallbackActive(false);
               finalTracksSet = true;
               if (seq !== loadTracksSeqRef.current) return;
               applyTracksReplaceKeepingMeta(rows);
-              updateStageProgress(4, { status: "completed", progress: 100, message: String(q1Data.message ?? "Association loaded (query-matched)") });
-              console.info("decision", "matched trajectories rendered", { rows: rows.length });
+              const shownCameras = new Set(rows.map((r) => r.cameraId)).size;
+              const hidden = Math.max(0, q1Traj.length - maxMatched);
+              const msg = hidden > 0
+                ? `Tracking your selected vehicle across ${shownCameras} camera${shownCameras === 1 ? "" : "s"}. ${hidden} other similar vehicle${hidden === 1 ? "" : "s"} available under Alternatives.`
+                : String(q1Data.message ?? "Association loaded (query-matched)");
+              updateStageProgress(4, { status: "completed", progress: 100, message: msg });
+              console.info("decision", "matched trajectories rendered (capped)", { rows: rows.length, shownGlobals: maxMatched, hidden });
               console.groupEnd();
               return;
             }
@@ -757,14 +763,17 @@ export function TimelineStage() {
           const trajectoryResponse = await getTrajectories(runId);
           if (cancelled) return;
 
-          const trajectoryRows = buildTracksFromTrajectories(
-            Array.isArray(trajectoryResponse.data) ? trajectoryResponse.data : []
-          );
+          const allTraj = Array.isArray(trajectoryResponse.data) ? trajectoryResponse.data : [];
+          const trajectoryRows = buildTracksFromTrajectories(allTraj, undefined, NON_QUERY_MAX_TRAJECTORIES);
           if (trajectoryRows.length > 0) {
             finalTracksSet = true;
             applyTracksReplaceKeepingMeta(trajectoryRows);
-            updateStageProgress(4, { status: "completed", progress: 100, message: "Association loaded (query-matched)" });
-            console.info("decision", "non-query stage4 trajectories rendered", { rows: trajectoryRows.length });
+            const shown = Math.min(allTraj.length, NON_QUERY_MAX_TRAJECTORIES);
+            const msg = allTraj.length > shown
+              ? `Showing ${shown} of ${allTraj.length} cross-camera trajectories. Pick a vehicle in the Selection stage to track just that one.`
+              : `Showing ${allTraj.length} cross-camera trajector${allTraj.length === 1 ? "y" : "ies"}.`;
+            updateStageProgress(4, { status: "completed", progress: 100, message: msg });
+            console.info("decision", "non-query stage4 trajectories rendered (capped)", { rows: trajectoryRows.length, total: allTraj.length });
             console.groupEnd();
             return;
           }
@@ -800,14 +809,17 @@ export function TimelineStage() {
           if (!cancelled) {
             const traj2 = await getTrajectories(stage4RunId);
             if (cancelled) return;
-            const rows2 = buildTracksFromTrajectories(
-              Array.isArray(traj2.data) ? traj2.data : []
-            );
+            const allTraj2 = Array.isArray(traj2.data) ? traj2.data : [];
+            const rows2 = buildTracksFromTrajectories(allTraj2, undefined, NON_QUERY_MAX_TRAJECTORIES);
             if (rows2.length > 0) {
               finalTracksSet = true;
               applyTracksReplaceKeepingMeta(rows2);
-              updateStageProgress(4, { status: "completed", progress: 100, message: "Association complete (query-matched)" });
-              console.info("decision", "non-query stage4 trajectories rendered after rerun", { rows: rows2.length });
+              const shown2 = Math.min(allTraj2.length, NON_QUERY_MAX_TRAJECTORIES);
+              const msg2 = allTraj2.length > shown2
+                ? `Showing ${shown2} of ${allTraj2.length} cross-camera trajectories. Pick a vehicle in the Selection stage to track just that one.`
+                : `Showing ${allTraj2.length} cross-camera trajector${allTraj2.length === 1 ? "y" : "ies"}.`;
+              updateStageProgress(4, { status: "completed", progress: 100, message: msg2 });
+              console.info("decision", "non-query stage4 trajectories rendered after rerun (capped)", { rows: rows2.length, total: allTraj2.length });
               console.groupEnd();
               return;
             }
@@ -900,6 +912,11 @@ export function TimelineStage() {
           setTracksLoading(false);
           if (!loadErrored) {
             timelineHandledStampRef.current = stamp;
+            if (finalTracksSet) {
+              // Tie the just-loaded result to this context so a refresh restores it
+              // instead of re-running the association query.
+              useTimelineStore.getState().setTracksContextKey(timelineLoadKey);
+            }
           }
         }
       }
@@ -926,15 +943,29 @@ export function TimelineStage() {
     setRunId,
   ]);
 
+  // Pause playback when this stage isn't visible. All stages stay mounted (hidden via
+  // CSS), so a running playhead would otherwise keep advancing and the hidden camera grid
+  // would keep fetching crops/clips after the user navigates away.
+  useEffect(() => {
+    if (currentStage !== 4 && isPlaying) setIsPlaying(false);
+  }, [currentStage, isPlaying]);
+
   // Playback: fixed UI rate so we don't re-render the whole stage at source video FPS.
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || currentStage !== 4) return;
     const increment = 1 / TIMELINE_PLAYHEAD_FPS;
     const interval = setInterval(() => {
-      setCurrentTime((t) => (t + increment >= totalDuration ? 0 : t + increment));
+      setCurrentTime((t) => Math.min(t + increment, totalDuration));
     }, 1000 / TIMELINE_PLAYHEAD_FPS);
     return () => clearInterval(interval);
-  }, [isPlaying, totalDuration]);
+  }, [isPlaying, totalDuration, currentStage]);
+
+  // Stop at the end of the tracked vehicle's timeline instead of looping back to the start.
+  useEffect(() => {
+    if (isPlaying && currentStage === 4 && totalDuration > 0 && currentTime >= totalDuration) {
+      setIsPlaying(false);
+    }
+  }, [currentTime, totalDuration, isPlaying, currentStage]);
 
   useEffect(() => {
     setCurrentTime((t) => Math.min(t, totalDuration));
@@ -1441,7 +1472,11 @@ export function TimelineStage() {
             currentFrame={Math.round(currentTime * 2)}
             totalFrames={Math.max(1, Math.round(totalDuration * 2) + 1)}
             speedOptions={[]}
-            onPlayPause={() => setIsPlaying(!isPlaying)}
+            onPlayPause={() => {
+              // If stopped at the end, pressing play restarts from the beginning.
+              if (!isPlaying && currentTime >= totalDuration - 1e-6) setCurrentTime(0);
+              setIsPlaying(!isPlaying);
+            }}
             onStepBack={() => setCurrentTime(0)}
             onStepForward={() => setCurrentTime(totalDuration)}
             onFrameChange={(frame) => setCurrentTime(Math.min(totalDuration, frame / 2))}

@@ -598,7 +598,7 @@ export function DetectionStage() {
   // Filter the tracked-vehicle list by class (All / Car / Truck / Bus).
   const [classFilter, setClassFilter] = useState<number | "all">("all");
   const { runId, stages, updateStageProgress, setIsRunning } = usePipelineStore();
-  const { setCurrentStage } = useSessionStore();
+  const { currentStage, setCurrentStage } = useSessionStore();
   // Live run telemetry is published to the store by the shared stage runner.
   const runTelemetry = usePipelineStore((s) => s.runTelemetry) ?? {};
   const runInput = usePipelineStore((s) => s.runInput);
@@ -825,6 +825,13 @@ export function DetectionStage() {
       setCurrentFrame(max);
     }
   }, [navTotalFrames, currentFrame, setCurrentFrame]);
+
+  // Pause playback when this stage isn't visible. All stages stay mounted (hidden via
+  // CSS), so a running video/frame-fallback loop would otherwise keep playing — and
+  // fetching frames — after the user navigates away from Detection.
+  useEffect(() => {
+    if (currentStage !== 1 && isPlaying) setIsPlaying(false);
+  }, [currentStage, isPlaying, setIsPlaying]);
 
   // Play/pause native video when not using JPEG fallback
   useEffect(() => {

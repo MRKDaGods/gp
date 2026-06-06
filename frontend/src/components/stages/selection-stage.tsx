@@ -14,7 +14,7 @@ import { DisclosurePanel, ErrorBanner } from "@/components/pipeline";
 import { apiUrl, getTracklets } from "@/lib/api";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import { cn, getClassColor } from "@/lib/utils";
-import { useDetectionStore, useSessionStore, useVideoStore } from "@/store";
+import { useDetectionStore, useManualStageStore, usePipelineStore, useSessionStore, useVideoStore } from "@/store";
 
 const CLASS_LABEL: Record<number, string> = { 2: "Car", 7: "Truck", 5: "Bus" };
 
@@ -185,7 +185,12 @@ export function SelectionStage() {
       skipSelectionFlushRef.current = false;
       return;
     }
-    flushPipelineFromStage(2);
+    // The selection is consumed ONLY by the Stage-4 timeline query — feature
+    // extraction (Stage 2) and indexing (Stage 3) run over the whole run and never
+    // receive the selection. So invalidate from Timeline onward (4 → Refinement →
+    // Output) and keep Inference intact, instead of forcing a needless (and on real
+    // data, GPU-expensive) re-extraction every time the picked vehicle changes.
+    flushPipelineFromStage(4);
   }, [selectionSig]);
 
   const selectedTracklets = useMemo(
@@ -380,10 +385,22 @@ export function SelectionStage() {
 export function SelectionStageActions() {
   const { selectedTrackIds } = useDetectionStore();
   const { setCurrentStage } = useSessionStore();
+  const updateStageProgress = usePipelineStore((s) => s.updateStageProgress);
+  const runId = usePipelineStore((s) => s.runId);
+  const markManualStageDone = useManualStageStore((s) => s.markManualStageDone);
+
+  const handleContinue = () => {
+    // Selection is a manual pick with no pipeline run of its own — stamp it done when the
+    // user finishes and moves on, so the nav reflects it (mirrors Refinement), and record it
+    // per-run so loading the run later restores the checkmark.
+    updateStageProgress(2, { status: "completed", progress: 100, message: "Tracklets selected" });
+    if (runId) markManualStageDone(runId, 2);
+    setCurrentStage(3);
+  };
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <Button type="button" onClick={() => setCurrentStage(3)} disabled={selectedTrackIds.size === 0} aria-label="Continue to Stage 3 inference">
+      <Button type="button" onClick={handleContinue} disabled={selectedTrackIds.size === 0} aria-label="Continue to Stage 3 inference">
         Continue to Inference
       </Button>
     </div>
@@ -403,7 +420,8 @@ function TrackletCard({
 }) {
   const [imgError, setImgError] = useState(false);
   const [frameIdx, setFrameIdx] = useState(0);
-  const [preloaded, setPreloaded] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const preloadedRef = useRef(false);
 
   const cropUrls = useMemo(() => {
     const urls: string[] = [];
@@ -427,29 +445,31 @@ function TrackletCard({
 
   const currentUrl = cropUrls.length > 0 ? cropUrls[frameIdx % cropUrls.length] : null;
 
+  // Preload the remaining sample frames only on first hover. An idle grid of many
+  // tracklets must NOT fire a crop request for every frame of every card up front.
   useEffect(() => {
-    if (cropUrls.length <= 1) {
-      setPreloaded(true);
-      return;
-    }
-    let loaded = 0;
+    if (!hovered || preloadedRef.current || cropUrls.length <= 1) return;
+    preloadedRef.current = true;
     for (const url of cropUrls) {
       const img = new Image();
       img.src = url;
-      img.onload = img.onerror = () => {
-        loaded += 1;
-        if (loaded >= cropUrls.length) setPreloaded(true);
-      };
     }
-  }, [cropUrls]);
+  }, [hovered, cropUrls]);
 
+  // Scrub through the sample frames ONLY while hovered. Inactive stages stay mounted in
+  // this dashboard (hidden via CSS), so an always-on interval kept re-fetching crops
+  // forever after leaving Selection. A hidden card can't be hovered, so gating on hover
+  // both kills the idle flood and stops it entirely once you navigate away.
   useEffect(() => {
-    if (cropUrls.length <= 1 || !preloaded) return;
+    if (!hovered || cropUrls.length <= 1) {
+      setFrameIdx(0);
+      return;
+    }
     const id = setInterval(() => {
       setFrameIdx((index) => (index + 1) % cropUrls.length);
     }, 250);
     return () => clearInterval(id);
-  }, [cropUrls.length, preloaded]);
+  }, [hovered, cropUrls.length]);
 
   return (
     <Card
@@ -458,6 +478,10 @@ function TrackletCard({
         isSelected ? "border-success shadow-lg shadow-success/20" : "hover:border-destructive/50"
       )}
       onClick={onToggle}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
       role="button"
       tabIndex={0}
       aria-label={`${isSelected ? "Deselect" : "Select"} tracklet ${tracklet.id}`}

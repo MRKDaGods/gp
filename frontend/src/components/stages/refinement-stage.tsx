@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, Image as ImageIcon, RefreshCw, Search, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DisclosurePanel, ErrorBanner, PlaybackControls } from "@/components/pipeline";
 import { getMatchedAlternatives, getRunFullFrameUrl, getTrackletSequence } from "@/lib/api";
 import { cn, formatDuration, getCameraColor } from "@/lib/utils";
-import { usePipelineStore, useSessionStore, useTimelineStore, useVideoStore } from "@/store";
+import { useManualStageStore, usePipelineStore, useSessionStore, useTimelineStore, useVideoStore } from "@/store";
 import { TrackletFrameView } from "@/components/ui/double-buffered-img";
 import type { TimelineTrack } from "@/types";
 
@@ -121,6 +121,28 @@ export function RefinementStage() {
     }, Math.max(120, 900 / playbackSpeed));
     return () => window.clearInterval(id);
   }, [isPlaying, playbackSpeed, refinementCandidateFrames.length]);
+
+  // If the user comes back and changes their reference frames (or a re-search / clear empties
+  // them), Refinement is being re-worked — un-mark it done (and drop its per-run completion
+  // marker) so it isn't shown as finished while edits are pending.
+  //
+  // CRITICAL: depend ONLY on `refinementFrames`, and read runId/stores via getState. Listing
+  // `runId` as a dep made this fire when a run is LOADED (runId changes) and wipe the done
+  // status that useLoadRun had just restored — making Refinement go stale on open-run/refresh.
+  const skipFramesInvalidateRef = useRef(true);
+  useEffect(() => {
+    if (skipFramesInvalidateRef.current) {
+      skipFramesInvalidateRef.current = false;
+      return;
+    }
+    const pipeline = usePipelineStore.getState();
+    const rid = pipeline.runId;
+    if (rid) useManualStageStore.getState().clearManualStage(rid, 5);
+    const stage5 = pipeline.stages.find((st) => st.stage === 5);
+    if (stage5 && (stage5.status === "completed" || stage5.progress >= 100)) {
+      pipeline.updateStageProgress(5, { status: "idle", progress: 0, message: "" });
+    }
+  }, [refinementFrames]);
 
   const handleFrameSelect = (frameId: string) => {
     if (refinementFrames.includes(frameId)) {
@@ -296,6 +318,18 @@ export function RefinementStage() {
 export function RefinementStageActions() {
   const { refinementFrames, clearRefinementFrames, setCurrentStage } = useSessionStore();
   const { currentVideo } = useVideoStore();
+  const updateStageProgress = usePipelineStore((s) => s.updateStageProgress);
+  const runId = usePipelineStore((s) => s.runId);
+  const markManualStageDone = useManualStageStore((s) => s.markManualStageDone);
+
+  const handleContinue = () => {
+    // Refinement is a manual review with no pipeline run of its own, so nothing else marks
+    // it complete. Stamp it done when the user finishes and moves on, so the nav reflects it,
+    // and record it per-run so loading the run later restores the checkmark.
+    updateStageProgress(5, { status: "completed", progress: 100, message: "Refinement reviewed" });
+    if (runId) markManualStageDone(runId, 5);
+    setCurrentStage(6);
+  };
 
   return (
     <>
@@ -312,7 +346,7 @@ export function RefinementStageActions() {
         <Search className="mr-2 h-4 w-4" />
         Re-Search
       </Button>
-      <Button type="button" onClick={() => setCurrentStage(6)}>
+      <Button type="button" onClick={handleContinue}>
         Continue to Output
         <ArrowRight className="ml-2 h-4 w-4" />
       </Button>

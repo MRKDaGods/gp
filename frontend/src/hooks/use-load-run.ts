@@ -4,7 +4,7 @@ import { useCallback } from "react";
 
 import { useToast } from "@/hooks/use-toast";
 import { getDatasetVideos, getRunDetail, type RunStageMap } from "@/lib/api";
-import { usePipelineStore, useSessionStore, useVideoStore } from "@/store";
+import { useDetectionStore, useManualStageStore, usePipelineStore, useSessionStore, useTimelineStore, useVideoStore } from "@/store";
 import type { StageNumber, VideoFile } from "@/types";
 
 /** Re-open an existing run from disk: restore run id, input context, per-stage
@@ -38,6 +38,10 @@ export function useLoadRun() {
 
       // Start from a clean slate, then restore this run's identity + input.
       resetPipeline();
+      // Switching runs: drop the previous run's tracking selection + timeline tracks so
+      // the new run doesn't inherit a stale pick (the selection now persists across reloads).
+      useDetectionStore.getState().deselectAll();
+      useTimelineStore.getState().resetAfterUpstreamEdit();
       setRunId(detail.runId);
       if (detail.inputDir) {
         setRunInput({
@@ -55,6 +59,12 @@ export function useLoadRun() {
           ? { status: "completed", progress: 100, message: "Loaded from disk" }
           : { status: "idle", progress: 0, message: "" });
       }
+
+      // Manual stages (Selection / Refinement) leave no disk artifacts, so the loop above
+      // can't detect them. Restore their completion from the per-run marker.
+      useManualStageStore.getState().getManualStagesDone(detail.runId).forEach((s) => {
+        updateStageProgress(s as StageNumber, { status: "completed", progress: 100, message: "Completed" });
+      });
 
       // Restore the camera footage. Prefer freshly-probed records (full metadata
       // for the scrubber); fall back to the light records stored in run_context.

@@ -1,10 +1,15 @@
 import type { StageNumber } from "@/types";
 import {
   PIPELINE_STAGE_DEFAULTS,
+  useManualStageStore,
   usePipelineStore,
   useSessionStore,
   useTimelineStore,
 } from "@/store";
+
+/** Manual UI stages (no pipeline run) whose per-run completion markers must be cleared
+ *  when an upstream stage at-or-before them is invalidated. */
+const MANUAL_STAGES: StageNumber[] = [2, 5];
 
 /**
  * Reset pipeline progress for this stage and all later stages, clear timeline/refinement/output session data,
@@ -25,4 +30,15 @@ export function flushPipelineFromStage(firstPipelineStageToInvalidate: StageNumb
   useTimelineStore.getState().resetAfterUpstreamEdit();
   useSessionStore.getState().clearRefinementFrames();
   useSessionStore.getState().clearConfirmedClips();
+
+  // Drop per-run completion markers for any manual stage at or after the invalidated point,
+  // so loading the run later doesn't restore a "done" checkmark for work that's now stale.
+  const runId = usePipelineStore.getState().runId;
+  if (runId) {
+    MANUAL_STAGES.forEach((manualStage) => {
+      if (manualStage >= firstPipelineStageToInvalidate) {
+        useManualStageStore.getState().clearManualStage(runId, manualStage);
+      }
+    });
+  }
 }

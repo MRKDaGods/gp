@@ -25,6 +25,9 @@ function stageIsDone(stage?: StageProgress | null): boolean {
  */
 const PREREQUISITE_OVERRIDE: Partial<Record<StageNumber, StageNumber>> = {
   3: 1,
+  // Refinement (UI 5) is an OPTIONAL manual review with no pipeline run of its own, so it
+  // must not gate Output. Output's real prerequisite is the cross-camera association (UI 4).
+  6: 4,
 };
 
 /** The stage that must be done before `stage` can run (null for stage 0). */

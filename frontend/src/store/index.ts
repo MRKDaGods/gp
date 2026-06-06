@@ -445,6 +445,7 @@ interface DetectionState {
 
 export const useDetectionStore = create<DetectionState>()(
   devtools(
+    persist(
     (set, get) => ({
       detections: [],
       selectedIds: new Set(),
@@ -540,6 +541,26 @@ export const useDetectionStore = create<DetectionState>()(
           hoveredId: null,
         }),
     }),
+    {
+      // Persist only the user's tracking selection so it survives a page
+      // refresh. Without this, Stage 4 loses the picked vehicle and falls
+      // back to rendering EVERY trajectory. Sets are stored as arrays.
+      name: 'detection-selection',
+      partialize: (s) => ({
+        selectedTrackIds: Array.from(s.selectedTrackIds),
+        multiSelectMode: s.multiSelectMode,
+      }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<{ selectedTrackIds: number[]; multiSelectMode: boolean }>;
+        return {
+          ...current,
+          multiSelectMode:
+            typeof p.multiSelectMode === "boolean" ? p.multiSelectMode : current.multiSelectMode,
+          selectedTrackIds: new Set<number>(Array.isArray(p.selectedTrackIds) ? p.selectedTrackIds : []),
+        };
+      },
+    }
+    ),
     { name: 'detection-store' }
   )
 );
@@ -615,9 +636,14 @@ interface TimelineState {
   confirmedTracks: Set<string>;
   /** Once true (user confirmed/unconfirmed any clip), output filters to confirmed clips only. */
   timelineClipFilterEngaged: boolean;
+  /** The timeline-load key (video/run/selection) the current `tracks` were matched for.
+   *  Persisted so a refresh can restore the result instead of re-running the association query. */
+  tracksContextKey: string | null;
 
   // Actions
   setTracks: (tracks: TimelineTrack[]) => void;
+  /** Record which load-context the current tracks belong to (for refresh restore). */
+  setTracksContextKey: (key: string | null) => void;
   /** Full reset after upstream stage edits (video, selection, re-inference). */
   resetAfterUpstreamEdit: () => void;
   /** Replace rows from Stage-4 loaders; keep user confirmations for the same row ids. */
@@ -637,6 +663,7 @@ interface TimelineState {
 
 export const useTimelineStore = create<TimelineState>()(
   devtools(
+    persist(
     (set) => ({
       tracks: [],
       zoom: 1,
@@ -644,9 +671,12 @@ export const useTimelineStore = create<TimelineState>()(
       selectedTrackId: null,
       confirmedTracks: new Set(),
       timelineClipFilterEngaged: false,
+      tracksContextKey: null,
 
       setTracks: (tracks) =>
-        set({ tracks, timelineClipFilterEngaged: false, confirmedTracks: new Set() }),
+        set({ tracks, timelineClipFilterEngaged: false, confirmedTracks: new Set(), tracksContextKey: null }),
+
+      setTracksContextKey: (key) => set({ tracksContextKey: key }),
 
       resetAfterUpstreamEdit: () =>
         set({
@@ -654,6 +684,7 @@ export const useTimelineStore = create<TimelineState>()(
           confirmedTracks: new Set(),
           timelineClipFilterEngaged: false,
           selectedTrackId: null,
+          tracksContextKey: null,
         }),
 
       applyTracksReplaceKeepingMeta: (tracks) =>
@@ -744,7 +775,83 @@ export const useTimelineStore = create<TimelineState>()(
           ),
         })),
     }),
+    {
+      // Persist the matched timeline result so refreshing Stage 4 restores it instead of
+      // re-running the cross-camera association query. Upstream edits (selection change,
+      // run switch, re-inference) clear `tracksContextKey`, so stale results never linger.
+      name: 'mtmc-timeline',
+      partialize: (s) => ({
+        tracks: s.tracks,
+        tracksContextKey: s.tracksContextKey,
+        confirmedTracks: Array.from(s.confirmedTracks),
+        timelineClipFilterEngaged: s.timelineClipFilterEngaged,
+        selectedTrackId: s.selectedTrackId,
+      }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<{
+          tracks: TimelineTrack[];
+          tracksContextKey: string | null;
+          confirmedTracks: string[];
+          timelineClipFilterEngaged: boolean;
+          selectedTrackId: string | null;
+        }>;
+        return {
+          ...current,
+          tracks: Array.isArray(p.tracks) ? p.tracks : current.tracks,
+          tracksContextKey: typeof p.tracksContextKey === "string" ? p.tracksContextKey : null,
+          confirmedTracks: new Set<string>(Array.isArray(p.confirmedTracks) ? p.confirmedTracks : []),
+          timelineClipFilterEngaged: Boolean(p.timelineClipFilterEngaged),
+          selectedTrackId: typeof p.selectedTrackId === "string" ? p.selectedTrackId : null,
+        };
+      },
+    }
+    ),
     { name: 'timeline-store' }
+  )
+);
+
+// ============================================================================
+// Manual Stage Store - per-run completion of stages that run no pipeline
+// (Selection / Refinement). Persisted by runId so loading a run restores their
+// "done" checkmarks, which can't be inferred from disk artifacts.
+// ============================================================================
+
+interface ManualStageState {
+  completedByRun: Record<string, number[]>;
+  markManualStageDone: (runId: string, stage: number) => void;
+  clearManualStage: (runId: string, stage: number) => void;
+  /** Drop all markers for a run (e.g. when it's deleted, so a reused id starts clean). */
+  clearRun: (runId: string) => void;
+  getManualStagesDone: (runId: string) => number[];
+}
+
+export const useManualStageStore = create<ManualStageState>()(
+  persist(
+    (set, get) => ({
+      completedByRun: {},
+      markManualStageDone: (runId, stage) =>
+        set((s) => {
+          if (!runId) return s;
+          const cur = s.completedByRun[runId] ?? [];
+          if (cur.includes(stage)) return s;
+          return { completedByRun: { ...s.completedByRun, [runId]: [...cur, stage].sort((a, b) => a - b) } };
+        }),
+      clearManualStage: (runId, stage) =>
+        set((s) => {
+          const cur = s.completedByRun[runId];
+          if (!cur || !cur.includes(stage)) return s;
+          return { completedByRun: { ...s.completedByRun, [runId]: cur.filter((x) => x !== stage) } };
+        }),
+      clearRun: (runId) =>
+        set((s) => {
+          if (!(runId in s.completedByRun)) return s;
+          const next = { ...s.completedByRun };
+          delete next[runId];
+          return { completedByRun: next };
+        }),
+      getManualStagesDone: (runId) => (runId ? get().completedByRun[runId] ?? [] : []),
+    }),
+    { name: 'mtmc-manual-stages', version: 1 }
   )
 );
 

@@ -100,19 +100,38 @@ def _stage0_frame_path(run_id: str, camera_id: str, frame_id: int) -> Optional[P
 
 
 def _resolve_stage0_camera_dir(run_id: str, camera_id: str) -> Optional[Path]:
-    """Directory with extracted stage0 frames for a camera."""
-    cam = _normalize_camera_id(str(camera_id))
-    primary = OUTPUT_DIR / run_id / "stage0" / cam
-    if primary.is_dir():
-        return primary
+    """Directory with extracted stage0 frames for a camera.
+
+    Stage0 dirs may be named with the FULL camera id (e.g. ``S01_c002``) or a normalized
+    short id (e.g. ``c002``). ``_normalize_camera_id`` collapses ``S01_c002`` -> ``c002``,
+    so resolving by the normalized id alone 404s when the dir on disk keeps the scene
+    prefix. Try the raw id first (matches what the crops endpoint does), then the
+    normalized id, then any sibling whose normalized name matches — so this works
+    regardless of the on-disk naming convention.
+    """
+    raw = str(camera_id or "").strip()
+    cam = _normalize_camera_id(raw)
+    names = [n for n in (raw, cam) if n]
+
+    roots = [OUTPUT_DIR / run_id / "stage0"]
     if OUTPUT_DIR.exists():
-        for pre_root in sorted(OUTPUT_DIR.glob("dataset_precompute_s*"), reverse=True):
-            d = pre_root / "stage0" / cam
+        roots.extend(p / "stage0" for p in sorted(OUTPUT_DIR.glob("dataset_precompute_s*"), reverse=True))
+    roots.append(OUTPUT_DIR / "dataset_precompute_s01" / "stage0")
+
+    for root in roots:
+        for name in names:
+            d = root / name
             if d.is_dir():
                 return d
-    legacy = OUTPUT_DIR / "dataset_precompute_s01" / "stage0" / cam
-    if legacy.is_dir():
-        return legacy
+        # Last resort: match any camera dir whose normalized name equals the target
+        # (e.g. on-disk "S01_c002" for a requested "c002", or vice versa).
+        if cam and root.is_dir():
+            try:
+                for d in root.iterdir():
+                    if d.is_dir() and _normalize_camera_id(d.name) == cam:
+                        return d
+            except OSError:
+                pass
     return None
 
 
@@ -134,6 +153,15 @@ def _export_tracklet_clip(
     target_fps: float = 10.0,
 ) -> Tuple[bool, str]:
     """Export a cropped mp4 clip for a tracklet from stage0 frame artifacts."""
+    # Skip re-encoding when a non-empty clip already exists. Tracklet clips are
+    # deterministic within a run, so re-running ffmpeg on every timeline query (e.g.
+    # each Stage-4 refresh) is pure waste — return the cached file instead.
+    try:
+        if out_path.exists() and out_path.stat().st_size > 0:
+            return True, "exists (cached)"
+    except OSError:
+        pass
+
     if not _HAS_CV2:
         return False, "opencv_not_available"
 
@@ -241,6 +269,10 @@ def _allowed_clip_keys_from_request(
     return allowed
 
 
+# Bump when the summary-video overlay/labels change, to invalidate cached selected renders.
+_SUMMARY_RENDER_VERSION = "v3-corner-label"
+
+
 def _generate_annotated_summary_video(
     run_id: str,
     target_fps: float = 10.0,
@@ -288,7 +320,13 @@ def _generate_annotated_summary_video(
     if include_clips is None:
         out_path = out_dir / "summary.mp4"
     else:
-        blob = json.dumps(include_clips, sort_keys=True, default=str).encode("utf-8")
+        # Include a render-version token so changing the overlay/labels invalidates the
+        # cached selected-summary instead of returning a stale render.
+        blob = json.dumps(
+            {"render": _SUMMARY_RENDER_VERSION, "clips": include_clips},
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8")
         h = hashlib.sha256(blob).hexdigest()[:24]
         out_path = out_dir / f"summary_sel_{h}.mp4"
 
@@ -306,6 +344,8 @@ def _generate_annotated_summary_video(
     LABEL_BG = (0, 0, 0)
     LABEL_FG = (255, 255, 255)
     FONT = _cv2.FONT_HERSHEY_SIMPLEX
+
+    prev_cam_key: Optional[str] = None
 
     try:
         for clip_idx, clip_info in enumerate(clips):
@@ -335,9 +375,11 @@ def _generate_annotated_summary_video(
             if stage0_dir is None:
                 continue
 
-            if writer is not None and transition_frames > 0:
+            # Show a transition card only when the camera actually changes (not between
+            # consecutive tracklets of the same camera, which produced duplicate separators).
+            if writer is not None and transition_frames > 0 and cam_key != prev_cam_key:
                 card = np.zeros((vid_h, vid_w, 3), dtype=np.uint8)
-                label = f"Camera: {camera_id}"
+                label = f"Camera {camera_id}"
                 font_scale = min(vid_w, vid_h) / 500.0
                 thickness = max(1, int(font_scale * 2))
                 (tw, th), _ = _cv2.getTextSize(label, FONT, font_scale, thickness)
@@ -347,6 +389,7 @@ def _generate_annotated_summary_video(
                 for _ in range(transition_frames):
                     writer.write(card)
                     total_written += 1
+            prev_cam_key = cam_key
 
             step = max(1, int(np.ceil(len(frames) / 300)))
             sampled = frames[::step]
@@ -384,7 +427,9 @@ def _generate_annotated_summary_video(
                     by2 = min(h, int(bbox[3]))
                     _cv2.rectangle(img, (bx1, by1), (bx2, by2), BOX_COLOR, 2)
 
-                    label = f"Cam: {camera_id} | Track #{track_id} | {confidence*100:.0f}%"
+                    # Per-detection tag near the box (track + confidence). The camera is
+                    # shown by the fixed corner label below, so it's not repeated here.
+                    label = f"Track #{track_id} | {confidence*100:.0f}%"
                     font_scale = 0.55
                     thickness = 1
                     (tw, th), baseline = _cv2.getTextSize(label, FONT, font_scale, thickness)
@@ -392,6 +437,21 @@ def _generate_annotated_summary_video(
                     ly = max(th + baseline + 4, by1 - 6)
                     _cv2.rectangle(img, (lx, ly - th - baseline - 2), (lx + tw + 4, ly + 2), LABEL_BG, -1)
                     _cv2.putText(img, label, (lx + 2, ly - baseline), FONT, font_scale, LABEL_FG, thickness, _cv2.LINE_AA)
+
+                    # Persistent camera label, fixed at the bottom-left with a solid black
+                    # background, so EVERY frame clearly states which camera it is — not just
+                    # a one-off separator card between segments.
+                    cam_label = f"Camera: {camera_id}"
+                    cl_scale = max(0.6, min(vid_w, vid_h) / 900.0)
+                    cl_thick = max(1, int(round(cl_scale * 2)))
+                    (cw, cht), cbaseline = _cv2.getTextSize(cam_label, FONT, cl_scale, cl_thick)
+                    # Flush to the bottom-left corner (no outer margin); only a small inner
+                    # text pad so the glyphs don't touch the box edge.
+                    inner = 6
+                    box_w = cw + inner * 2
+                    box_h = cht + cbaseline + inner * 2
+                    _cv2.rectangle(img, (0, h - box_h), (box_w, h), LABEL_BG, -1)
+                    _cv2.putText(img, cam_label, (inner, h - cbaseline - inner), FONT, cl_scale, LABEL_FG, cl_thick, _cv2.LINE_AA)
 
                     writer.write(img)
                     total_written += 1

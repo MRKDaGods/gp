@@ -245,12 +245,15 @@ function CameraPreview({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !clipUrl) return;
-    if (isPlaying) {
+    // Only the camera that currently holds the vehicle plays. Otherwise every tile with a
+    // clip plays at once, so a past camera's clip keeps replaying ("looping") after the
+    // vehicle has already handed off to the next camera.
+    if (isPlaying && isActive) {
       video.play().catch(() => {});
     } else {
       video.pause();
     }
-  }, [isPlaying, clipUrl]);
+  }, [isPlaying, isActive, clipUrl]);
 
   const cropUrl = (() => {
     if (!camera.activeTrack) return null;

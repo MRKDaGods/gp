@@ -1,0 +1,19 @@
+{
+  "id": "yahiaakhalafallah/14o-edge-classifier-eval",
+  "title": "14o Edge Classifier Eval",
+  "code_file": "14o_edge_classifier_eval.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/14h-robust-tracklet-pooling",
+    "yahiaakhalafallah/14j-r50-ibn-features"
+  ]
+}

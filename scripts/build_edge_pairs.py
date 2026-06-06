@@ -522,6 +522,192 @@ FEATURE_NAMES = [
 CATEGORICAL_FEATURES = ["camera_pair_id"]
 
 
+class PairFeatureBuilder:
+    """Shared per-run feature builder used by BOTH the offline pair-table
+    generator (``build_pairs``) and the live Stage-4 ``rescore_edges`` inference.
+
+    Holding the single source of truth for the per-pair feature vector here
+    guarantees the training table and the inference-time features live in the
+    *identical* FIC+AQE space with identical ordering (FEATURE_NAMES) — the
+    spec's hard "train/infer distribution match" requirement (section 7).
+
+    Inputs are the already-transformed pipeline arrays:
+      * ``primary``     — FIC+AQE-whitened primary embeddings (N, Dp), L2-normed.
+      * ``tertiary``    — FIC-only DINOv2 embeddings (N, Dt) or None.
+      * ``quaternary``  — FIC-only R50-IBN embeddings (N, Dq) or None.
+      * ``camera_ids`` / ``class_ids`` / ``track_ids`` — per-row metadata.
+      * ``start_times`` / ``end_times`` / ``num_frames`` / ``mean_confs`` —
+        per-row temporal + quality metadata.
+      * ``st_validator`` — a SpatioTemporalValidator (CityFlowV2 priors).
+      * ``fusion_weights`` — (w_primary, w_tertiary, w_quaternary).
+
+    ``features_for_pair(i, j)`` returns the ordered FEATURE_NAMES dict for the
+    unordered tracklet pair (i, j). ``feature_vector(i, j)`` returns the same as
+    a float list in FEATURE_NAMES order (for direct model.predict input).
+    """
+
+    def __init__(
+        self,
+        *,
+        primary: np.ndarray,
+        tertiary: Optional[np.ndarray],
+        quaternary: Optional[np.ndarray],
+        camera_ids: Sequence[str],
+        class_ids: Sequence[int],
+        track_ids: Sequence[int],
+        start_times: Sequence[float],
+        end_times: Sequence[float],
+        num_frames: Sequence[int],
+        mean_confs: Sequence[float],
+        st_validator: SpatioTemporalValidator,
+        fusion_weights: Tuple[float, float, float],
+    ) -> None:
+        self.camera_ids = list(camera_ids)
+        self.class_ids = list(class_ids)
+        self.track_ids = list(track_ids)
+        self.start_times = list(start_times)
+        self.end_times = list(end_times)
+        self.num_frames = list(num_frames)
+        self.mean_confs = list(mean_confs)
+        self.st_validator = st_validator
+        self.w_pri, self.w_tert, self.w_quat = fusion_weights
+        self.n = len(self.camera_ids)
+
+        self.cam_scene = {c: extract_scene(c) for c in set(self.camera_ids)}
+
+        # Per-stream full cosine matrices (rank features need full neighbourhoods).
+        self.sim_primary = primary @ primary.T
+        self.sim_tert = tertiary @ tertiary.T if tertiary is not None else None
+        self.sim_quat = quaternary @ quaternary.T if quaternary is not None else None
+
+        # Integer code for each unordered camera pair (categorical feature).
+        # Precomputed DETERMINISTICALLY over the sorted set of cameras so the code
+        # is independent of pair-iteration order — this is what guarantees the
+        # camera_pair_id feature is identical between the offline training table
+        # (build_pairs) and the live rescore_edges inference (different loop order).
+        sorted_cams = sorted(set(self.camera_ids))
+        self._cam_pair_code: Dict[Tuple[str, str], int] = {}
+        for a_i, ca in enumerate(sorted_cams):
+            for cb in sorted_cams[a_i + 1:]:
+                self._cam_pair_code[(ca, cb)] = len(self._cam_pair_code)
+        # Memoize per-(query, scene) cross-camera ranking orders so the O(N) rank
+        # scan is computed once per query, not once per pair.
+        self._rank_cache: Dict[int, Dict[int, int]] = {}
+
+    def pair_code(self, ci: str, cj: str) -> int:
+        key = tuple(sorted((ci, cj)))
+        code = self._cam_pair_code.get(key)
+        if code is None:
+            # Camera not seen at construction (e.g. a same-camera pair, which
+            # never reaches the gate). Append deterministically.
+            code = len(self._cam_pair_code)
+            self._cam_pair_code[key] = code
+        return code
+
+    def _rank_map(self, i: int) -> Dict[int, int]:
+        """Map {candidate_idx -> rank} of i's cross-camera same-class same-scene
+        candidates ordered by descending primary cosine (rank 0 = nearest)."""
+        cached = self._rank_cache.get(i)
+        if cached is not None:
+            return cached
+        ci = self.camera_ids[i]
+        scene_i = self.cam_scene[ci]
+        cls_i = self.class_ids[i]
+        cands = [
+            k for k in range(self.n)
+            if self.camera_ids[k] != ci and self.class_ids[k] == cls_i
+            and self.cam_scene[self.camera_ids[k]] == scene_i
+        ]
+        if not cands:
+            self._rank_cache[i] = {}
+            return {}
+        sims = self.sim_primary[i, cands]
+        order = sorted(zip(cands, sims), key=lambda kv: -kv[1])
+        rank_map = {k: rank for rank, (k, _) in enumerate(order)}
+        self._rank_cache[i] = rank_map
+        return rank_map
+
+    def cross_camera_rank(self, i: int, j: int) -> int:
+        """Rank of j among i's cross-camera same-class candidates (n if absent)."""
+        return self._rank_map(i).get(j, self.n)
+
+    def features_for_pair(self, i: int, j: int) -> Dict[str, float]:
+        """Ordered FEATURE_NAMES feature dict for the unordered pair (i, j).
+
+        Symmetric: uses sorted camera names for ``camera_pair_id`` and the
+        min/max/ratio quality features, so (i, j) and (j, i) yield identical
+        appearance/temporal/quality features (rank features are direction-aware
+        and combined symmetrically into recip_rank_harmonic / is_mutual_top1).
+        The ``cam_a, cam_b`` orientation for the st-prior follows the start-time
+        ordering exactly as the offline table generator did.
+        """
+        cam_i, cam_j = self.camera_ids[i], self.camera_ids[j]
+
+        cos_p = float(self.sim_primary[i, j])
+        cos_d = float(self.sim_tert[i, j]) if self.sim_tert is not None else 0.0
+        cos_r = float(self.sim_quat[i, j]) if self.sim_quat is not None else 0.0
+        cos_fused = self.w_pri * cos_p + self.w_tert * cos_d + self.w_quat * cos_r
+        streams = [cos_p]
+        if self.sim_tert is not None:
+            streams.append(cos_d)
+        if self.sim_quat is not None:
+            streams.append(cos_r)
+        cos_min = float(np.min(streams))
+        cos_max = float(np.max(streams))
+        cos_std = float(np.std(streams))
+
+        rank_j = self.cross_camera_rank(i, j)
+        rank_i = self.cross_camera_rank(j, i)
+        is_mutual_top1 = 1 if (rank_j == 0 and rank_i == 0) else 0
+        recip = 0.5 * (1.0 / (rank_j + 1.0) + 1.0 / (rank_i + 1.0))
+
+        si, ei = self.start_times[i], self.end_times[i]
+        sj, ej = self.start_times[j], self.end_times[j]
+        later_start = max(si, sj)
+        earlier_end = min(ei, ej)
+        time_gap = max(0.0, later_start - earlier_end)
+        if si <= sj:
+            ca, cb = cam_i, cam_j
+        else:
+            ca, cb = cam_j, cam_i
+        st_score = self.st_validator.transition_score(ca, cb, 0.0, time_gap)
+        t_overlap = compute_temporal_overlap_ratio(si, ei, sj, ej)
+        pair_mean_time, pair_max_time = _pair_prior_times(self.st_validator, cam_i, cam_j)
+
+        li = max(int(self.num_frames[i]), 1)
+        lj = max(int(self.num_frames[j]), 1)
+        min_track_len = float(min(li, lj))
+        len_ratio = float(min(li, lj) / max(li, lj))
+        min_mean_conf = float(min(self.mean_confs[i], self.mean_confs[j]))
+
+        return {
+            "cos_primary": cos_p,
+            "cos_dinov2": cos_d,
+            "cos_r50ibn": cos_r,
+            "cos_fused": cos_fused,
+            "cos_min": cos_min,
+            "cos_max": cos_max,
+            "cos_std": cos_std,
+            "rank_i_of_j": float(rank_i),
+            "rank_j_of_i": float(rank_j),
+            "is_mutual_top1": float(is_mutual_top1),
+            "recip_rank_harmonic": float(recip),
+            "time_gap": float(time_gap),
+            "st_score": float(st_score),
+            "temporal_overlap_ratio": float(t_overlap),
+            "camera_pair_id": float(self.pair_code(cam_i, cam_j)),
+            "pair_mean_time": float(pair_mean_time),
+            "pair_max_time": float(pair_max_time),
+            "min_track_len": min_track_len,
+            "len_ratio": len_ratio,
+            "min_mean_conf": min_mean_conf,
+        }
+
+    def feature_vector(self, i: int, j: int) -> List[float]:
+        feats = self.features_for_pair(i, j)
+        return [float(feats[name]) for name in FEATURE_NAMES]
+
+
 def build_pairs(
     run: RunInputs,
     st_validator: SpatioTemporalValidator,
@@ -536,12 +722,29 @@ def build_pairs(
     ``fusion_weights`` is (w_primary, w_tertiary, w_quaternary); defaults to the
     module K7 constants. cos_fused = w_p*cos_primary + w_t*cos_dinov2 + w_q*cos_r50ibn,
     matching the live Stage-4 score fusion (pipeline.py:497-511).
+
+    Feature computation is delegated to ``PairFeatureBuilder`` — the SAME object
+    the live ``edge_classifier.rescore_edges`` uses — so the training table and
+    the deployed inference share one feature-space definition.
     """
     w_pri, w_tert, w_quat = fusion_weights if fusion_weights is not None else (
         K7_W_PRIMARY, K7_W_TERTIARY, K7_W_QUATERNARY
     )
-    n = len(run.camera_ids)
-    primary, tertiary, quaternary = run.primary, run.tertiary, run.quaternary
+
+    fb = PairFeatureBuilder(
+        primary=run.primary,
+        tertiary=run.tertiary,
+        quaternary=run.quaternary,
+        camera_ids=run.camera_ids,
+        class_ids=run.class_ids,
+        track_ids=run.track_ids,
+        start_times=run.start_times,
+        end_times=run.end_times,
+        num_frames=run.num_frames,
+        mean_confs=run.mean_confs,
+        st_validator=st_validator,
+        fusion_weights=(w_pri, w_tert, w_quat),
+    )
 
     # Group indices by camera; precompute scene per camera.
     cam_to_idxs: Dict[str, List[int]] = defaultdict(list)
@@ -549,37 +752,6 @@ def build_pairs(
         cam_to_idxs[cam].append(i)
     cameras = sorted(cam_to_idxs)
     cam_scene = {c: extract_scene(c) for c in cameras}
-
-    # Per-stream full cosine matrices (rank features need full neighbourhoods).
-    sim_primary = primary @ primary.T
-    sim_tert = tertiary @ tertiary.T if tertiary is not None else None
-    sim_quat = quaternary @ quaternary.T if quaternary is not None else None
-
-    # Integer code for each unordered camera pair (categorical feature).
-    cam_pair_code: Dict[Tuple[str, str], int] = {}
-
-    def pair_code(ci: str, cj: str) -> int:
-        key = tuple(sorted((ci, cj)))
-        if key not in cam_pair_code:
-            cam_pair_code[key] = len(cam_pair_code)
-        return cam_pair_code[key]
-
-    # Rank of j among i's cross-camera, same-class candidates by primary cosine.
-    def cross_camera_rank(i: int, j: int) -> int:
-        ci = run.camera_ids[i]
-        same_class_other_cam = [
-            k for k in range(n)
-            if run.camera_ids[k] != ci and run.class_ids[k] == run.class_ids[i]
-            and cam_scene[run.camera_ids[k]] == cam_scene[ci]
-        ]
-        if not same_class_other_cam:
-            return n
-        sims = sim_primary[i, same_class_other_cam]
-        order = sorted(zip(same_class_other_cam, sims), key=lambda kv: -kv[1])
-        for rank, (k, _) in enumerate(order):
-            if k == j:
-                return rank
-        return n
 
     cols: Dict[str, list] = {name: [] for name in FEATURE_NAMES}
     cols.update({"label": [], "cam_i": [], "cam_j": [], "track_i": [], "track_j": [], "scene": []})
@@ -610,64 +782,10 @@ def build_pairs(
                         continue
                     label = 1 if gi == gj else 0
 
-                    cos_p = float(sim_primary[i, j])
-                    cos_d = float(sim_tert[i, j]) if sim_tert is not None else 0.0
-                    cos_r = float(sim_quat[i, j]) if sim_quat is not None else 0.0
-                    cos_fused = w_pri * cos_p + w_tert * cos_d + w_quat * cos_r
-                    streams = [cos_p]
-                    if sim_tert is not None:
-                        streams.append(cos_d)
-                    if sim_quat is not None:
-                        streams.append(cos_r)
-                    cos_min = float(np.min(streams))
-                    cos_max = float(np.max(streams))
-                    cos_std = float(np.std(streams))
-
-                    rank_j = cross_camera_rank(i, j)
-                    rank_i = cross_camera_rank(j, i)
-                    is_mutual_top1 = 1 if (rank_j == 0 and rank_i == 0) else 0
-                    recip = 0.5 * (1.0 / (rank_j + 1.0) + 1.0 / (rank_i + 1.0))
-
-                    si, ei = run.start_times[i], run.end_times[i]
-                    sj, ej = run.start_times[j], run.end_times[j]
-                    later_start = max(si, sj)
-                    earlier_end = min(ei, ej)
-                    time_gap = max(0.0, later_start - earlier_end)
-                    if si <= sj:
-                        ca, cb = cam_a, cam_b
-                    else:
-                        ca, cb = cam_b, cam_a
-                    st_score = st_validator.transition_score(ca, cb, 0.0, time_gap)
-                    t_overlap = compute_temporal_overlap_ratio(si, ei, sj, ej)
-                    pair_mean_time, pair_max_time = _pair_prior_times(st_validator, cam_a, cam_b)
-
-                    li = max(int(run.num_frames[i]), 1)
-                    lj = max(int(run.num_frames[j]), 1)
-                    min_track_len = float(min(li, lj))
-                    len_ratio = float(min(li, lj) / max(li, lj))
-                    min_mean_conf = float(min(run.mean_confs[i], run.mean_confs[j]))
-
+                    feats = fb.features_for_pair(i, j)
+                    cos_fused = feats["cos_fused"]
                     feats = {
-                        "cos_primary": cos_p,
-                        "cos_dinov2": cos_d,
-                        "cos_r50ibn": cos_r,
-                        "cos_fused": cos_fused,
-                        "cos_min": cos_min,
-                        "cos_max": cos_max,
-                        "cos_std": cos_std,
-                        "rank_i_of_j": float(rank_i),
-                        "rank_j_of_i": float(rank_j),
-                        "is_mutual_top1": float(is_mutual_top1),
-                        "recip_rank_harmonic": float(recip),
-                        "time_gap": float(time_gap),
-                        "st_score": float(st_score),
-                        "temporal_overlap_ratio": float(t_overlap),
-                        "camera_pair_id": pair_code(cam_a, cam_b),
-                        "pair_mean_time": float(pair_mean_time),
-                        "pair_max_time": float(pair_max_time),
-                        "min_track_len": min_track_len,
-                        "len_ratio": len_ratio,
-                        "min_mean_conf": min_mean_conf,
+                        **feats,
                         "label": label,
                         "cam_i": cam_a,
                         "cam_j": cam_b,

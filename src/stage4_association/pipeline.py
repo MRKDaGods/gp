@@ -538,6 +538,58 @@ def run_stage4(
 
     logger.info(f"Combined similarity pairs: {len(combined_sim)}")
 
+    # Step 5-EC: Learned edge classifier / re-ranker (default OFF).
+    # Rescores combined_sim with a learned per-edge P(same-vehicle) model before
+    # any post-adjustment or graph solve. blend_lambda=0 + prob_threshold<=0 is a
+    # provable no-op (returns combined_sim unchanged). See
+    # docs/subagent-specs/edge-classifier-association.md sections 5-7.
+    edge_clf_probs: Optional[Dict[Tuple[int, int], float]] = None
+    ec_cfg = stage_cfg.get("edge_classifier", {})
+    if ec_cfg.get("enabled", False):
+        from src.stage4_association.edge_classifier import rescore_edges
+
+        # cos_fused fusion weights mirror the score-level fusion (Step 3b):
+        # tertiary stream == DINOv2, quaternary stream == R50-IBN.
+        ec_fusion_weights = (
+            round(1.0 - sec_weight - tert_weight - quat_weight, 6),
+            tert_weight,
+            quat_weight,
+        )
+        # mean confidence per tracklet from Stage-1 (matches build_edge_pairs).
+        ec_tracklet_lookup: Dict[Tuple[str, int], Tracklet] = {}
+        for _cam_id, _tracks in tracklets_by_camera.items():
+            for _t in _tracks:
+                ec_tracklet_lookup[(_t.camera_id, _t.track_id)] = _t
+        track_ids = [f.track_id for f in features]
+        mean_confs = [
+            ec_tracklet_lookup[(cam, tid)].mean_confidence
+            if (cam, tid) in ec_tracklet_lookup else 0.0
+            for cam, tid in zip(camera_ids, track_ids)
+        ]
+        edge_clf_probs = {}
+        n_before = len(combined_sim)
+        combined_sim = rescore_edges(
+            combined_sim,
+            primary=embeddings,
+            tertiary=tert_embeddings,
+            quaternary=quat_embeddings,
+            camera_ids=camera_ids,
+            class_ids=class_ids,
+            track_ids=track_ids,
+            start_times=start_times,
+            end_times=end_times,
+            num_frames=num_frames,
+            mean_confs=mean_confs,
+            st_validator=st_validator,
+            fusion_weights=ec_fusion_weights,
+            ec_cfg=ec_cfg,
+            edge_probs_out=edge_clf_probs,
+        )
+        logger.info(
+            f"Edge classifier rescored {n_before} edges -> {len(combined_sim)} "
+            f"kept (fusion_weights={ec_fusion_weights})."
+        )
+
     # Step 5a: Per-camera-pair similarity normalization.
     # Center each camera-pair distribution on the global mean of eligible pairs
     # to reduce systematic cross-camera score bias before graph construction.

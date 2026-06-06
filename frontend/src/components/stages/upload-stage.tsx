@@ -17,7 +17,7 @@ import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
 import { getDatasetVideos, getFrameUrl, getVideos, importKaggleRunArtifacts, uploadVideo } from "@/lib/api";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
 import { type AppDataset, useDatasetStore } from "@/lib/store";
-import { usePipelineStore, useSessionStore, useVideoStore } from "@/store";
+import { useDetectionStore, usePipelineStore, useSessionStore, useTimelineStore, useVideoStore } from "@/store";
 import type { VideoFile } from "@/types";
 
 /** Map a loaded dataset/folder name to the vehicle/person model family so the
@@ -267,6 +267,10 @@ export function UploadStage() {
     // Fresh run: clear any prior run state, then capture this run's input context
     // so every downstream stage page can run incrementally against the same run.
     resetPipeline();
+    // Also drop the previous run's tracking selection + timeline tracks (the selection
+    // now persists across reloads) so this fresh run doesn't inherit a stale pick.
+    useDetectionStore.getState().deselectAll();
+    useTimelineStore.getState().resetAfterUpstreamEdit();
     setRunInput({
       inputDir: activeInputDir,
       cameras,

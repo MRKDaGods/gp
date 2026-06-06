@@ -18,7 +18,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useLoadRun } from "@/hooks/use-load-run";
 import { deleteRun, getRuns, type RunStageState, type RunSummary } from "@/lib/api";
 import { cn, formatBytes } from "@/lib/utils";
-import { usePipelineStore, useSessionStore, useVideoStore } from "@/store";
+import { useDetectionStore, useManualStageStore, usePipelineStore, useSessionStore, useTimelineStore, useVideoStore } from "@/store";
+
+/** Drop run-scoped selection/timeline state so a cleared workspace doesn't inherit a stale pick. */
+function clearRunScopedSelection() {
+  useDetectionStore.getState().deselectAll();
+  useTimelineStore.getState().resetAfterUpstreamEdit();
+}
 
 const STAGE_LABELS = ["Ingest", "Detect", "Features", "Index", "Assoc", "Eval", "Viz"];
 
@@ -203,9 +209,11 @@ export function RunManagerDialog({ open, onOpenChange }: { open: boolean; onOpen
     setBusyId(run.runId);
     try {
       await deleteRun(run.runId);
+      useManualStageStore.getState().clearRun(run.runId);
       if (run.runId === activeRunId) {
         // The active run was deleted — clear the workspace.
         resetPipeline();
+        clearRunScopedSelection();
         setVideos([]);
         setCurrentVideo(null);
         setSessionStage(0);
@@ -224,6 +232,7 @@ export function RunManagerDialog({ open, onOpenChange }: { open: boolean; onOpen
     (deletedIds: string[]) => {
       if (activeRunId && deletedIds.includes(activeRunId)) {
         resetPipeline();
+        clearRunScopedSelection();
         setVideos([]);
         setCurrentVideo(null);
         setSessionStage(0);
@@ -247,6 +256,7 @@ export function RunManagerDialog({ open, onOpenChange }: { open: boolean; onOpen
       const results = await Promise.allSettled(ids.map((id) => deleteRun(id)));
       const okIds = ids.filter((_, i) => results[i].status === "fulfilled");
       const failed = ids.length - okIds.length;
+      okIds.forEach((id) => useManualStageStore.getState().clearRun(id));
       clearWorkspaceIfActiveDeleted(okIds);
       const okSet = new Set(okIds);
       setRuns((prev) => prev.filter((r) => !okSet.has(r.runId)));
@@ -271,6 +281,7 @@ export function RunManagerDialog({ open, onOpenChange }: { open: boolean; onOpen
 
   const handleNewRun = () => {
     resetPipeline();
+    clearRunScopedSelection();
     setVideos([]);
     setCurrentVideo(null);
     setSessionStage(0);

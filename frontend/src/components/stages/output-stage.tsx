@@ -45,6 +45,9 @@ import {
 const API_BASE = apiBase();
 const outputPalette = ["#22c55e", "#3b82f6", "#f97316", "#e11d48", "#06b6d4", "#8b5cf6", "#f59e0b"];
 const OUTPUT_EXPORT_EVENT = "mtmc:stage6:export";
+/** With no timeline context (e.g. Output opened directly / after a refresh), cap how many
+ *  trajectories the map + counts render so Stage 6 never dumps the entire association. */
+const OUTPUT_MAX_TRAJECTORIES = 20;
 
 const VehiclePathMap = dynamic(() => import("@/components/maps/vehicle-path-map"), { ssr: false });
 
@@ -199,16 +202,30 @@ function applyTimelineSelectionToTrajectories(
   tracks: TimelineTrack[],
   timelineFilterEngaged: boolean
 ): OutputTrajectory[] {
-  if (!timelineFilterEngaged || tracks.length === 0) return all;
+  // No timeline context at all (e.g. Output opened directly / after a refresh):
+  // hand the full set back to the caller, which caps it so it can't melt down.
+  if (tracks.length === 0) return all;
 
-  const confirmedRows = tracks.filter((t) => t.confirmed);
-  if (confirmedRows.length === 0) return [];
+  // Which rows define the identity set to show:
+  //  - Once the user engages the per-clip filter (confirm/unconfirm), honor only
+  //    confirmed clips and trim each path to those cameras (original behavior).
+  //  - Otherwise scope Output to whatever the timeline is showing — i.e. the
+  //    selected/matched vehicle, already capped upstream in Stage 4 — instead of
+  //    silently rendering every trajectory in the run.
+  const definingRows = timelineFilterEngaged ? tracks.filter((t) => t.confirmed) : tracks;
+  if (definingRows.length === 0) return [];
 
   const out: OutputTrajectory[] = [];
 
   for (const traj of all) {
-    const rowsForTraj = confirmedRows.filter((row) => trajectoryOwnsRow(traj, row));
+    const rowsForTraj = definingRows.filter((row) => trajectoryOwnsRow(traj, row));
     if (rowsForTraj.length === 0) continue;
+
+    if (!timelineFilterEngaged) {
+      // Show the whole matched vehicle (all its cameras).
+      out.push(traj);
+      continue;
+    }
 
     const allowedKeys = new Set(rowsForTraj.map((row) => cameraKeyForMatch(row.cameraId)));
 
@@ -388,15 +405,39 @@ export function OutputStage() {
   const { tracks: timelineTracks, timelineClipFilterEngaged } = useTimelineStore();
   const { toast } = useToast();
 
-  const displayTrajectories = useMemo(
-    () =>
-      applyTimelineSelectionToTrajectories(
-        trajectories,
-        timelineTracks,
-        timelineClipFilterEngaged
-      ),
-    [trajectories, timelineTracks, timelineClipFilterEngaged]
-  );
+  const { displayTrajectories, trajectoryOverflow } = useMemo(() => {
+    const selected = applyTimelineSelectionToTrajectories(
+      trajectories,
+      timelineTracks,
+      timelineClipFilterEngaged
+    );
+
+    // User is actively curating confirmed clips — respect their selection verbatim
+    // (including an intentional empty set).
+    if (timelineClipFilterEngaged) {
+      return { displayTrajectories: selected, trajectoryOverflow: null };
+    }
+
+    // Timeline context is present and lined up with the loaded trajectories: scope the
+    // output to the reviewed/selected vehicle(s) (already capped upstream in Stage 4).
+    if (timelineTracks.length > 0 && selected.length > 0) {
+      return { displayTrajectories: selected, trajectoryOverflow: null };
+    }
+
+    // No usable context (Output opened directly, after a refresh, or a stale context that
+    // doesn't match the loaded trajectories): bound the full association so the map +
+    // counts stay usable instead of dumping every trajectory (or showing nothing).
+    if (trajectories.length > OUTPUT_MAX_TRAJECTORIES) {
+      const capped = [...trajectories]
+        .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
+        .slice(0, OUTPUT_MAX_TRAJECTORIES);
+      return {
+        displayTrajectories: capped,
+        trajectoryOverflow: { shown: capped.length, total: trajectories.length },
+      };
+    }
+    return { displayTrajectories: trajectories, trajectoryOverflow: null };
+  }, [trajectories, timelineTracks, timelineClipFilterEngaged]);
 
   const visibleTrajectories = useMemo(
     () => displayTrajectories.filter((trajectory) => !hiddenTrajectoryIds.has(trajectory.id)),
@@ -996,6 +1037,11 @@ export function OutputStage() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs">Visible trajectories</Label>
+                  {trajectoryOverflow ? (
+                    <p className="text-[11px] leading-tight text-muted-foreground">
+                      Showing top {trajectoryOverflow.shown} of {trajectoryOverflow.total}. Pick a vehicle in Selection (or confirm clips in Timeline) to scope the output.
+                    </p>
+                  ) : null}
                   <div className="max-h-36 space-y-1 overflow-auto rounded border bg-muted/20 p-2">
                     {displayTrajectories.length === 0 ? <p className="text-xs text-muted-foreground">No trajectories loaded.</p> : null}
                     {displayTrajectories.map((trajectory) => (
