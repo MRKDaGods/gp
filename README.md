@@ -119,6 +119,7 @@ this submission. Download them and place them under `data/raw/`:
 | CityFlowV2 (AI City 2022, Track 1) | Vehicle detection, tracking, MTMC, eval | <https://www.aicitychallenge.org/2022-data-and-evaluation/> (manual request) |
 | WILDTRACK | Person ground-plane tracking and MTMC | WILDTRACK dataset release |
 | VeRi-776 | Single-camera vehicle ReID training/eval | Public mirrors; a Kaggle copy is used by the setup script |
+| Market-1501 | Person ReID training | Public person ReID benchmark |
 
 `scripts/download_assets.py --datasets` fetches the public VeRi-776 evaluation
 copy. CityFlowV2 must be requested and downloaded manually from the official AI
