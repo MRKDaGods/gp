@@ -270,6 +270,24 @@ stage4:
                    S02_c008: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
         S02_c008: {S02_c006: {min_time: 0, max_time: 30, mean_time: 8.1, std_time: 6.2},
                    S02_c007: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
+    # --- Geospatial reachability constraint ---
+    # Gates unreachable cross-camera pairs and favours near-camera near-time
+    # matches, using per-camera coordinates. No-op when <2 cameras have coords.
+    geospatial:
+      enabled: true
+      gate: true            # drop cross-camera pairs unreachable in the elapsed time
+      weight: 0.15          # 0..1: how strongly geo plausibility modulates the score
+      camera_coordinates_path: ""   # path to camera_coordinates.json (else from dataset)
+      overlap_fov_radius_m: 150.0   # cameras within this can co-observe (gap ~ 0)
+      overlap_time_window_s: 1.0    # gaps <= this are treated as simultaneous
+      reach_margin: 0.5             # slack on max speed (GPS error, road bends)
+      min_time_s: 0.5               # floor on elapsed time for required-speed calc
+      person:
+        max_speed_ms: 8.0           # ~29 km/h
+        typical_speed_ms: 1.4       # ~5 km/h walking
+      vehicle:
+        max_speed_ms: 40.0          # ~144 km/h
+        typical_speed_ms: 11.0      # ~40 km/h urban
     graph:
       similarity_threshold: 0.60  # v30: optimal for 280D PCA whitened embeddings
       algorithm: "conflict_free_cc"  # used when stage4.association.solver=cc
