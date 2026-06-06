@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import List
 
 import plotly.graph_objects as go
-from loguru import logger
 
 from src.core.data_models import GlobalTrajectory
 

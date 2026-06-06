@@ -19,11 +19,9 @@ Implements:
 from __future__ import annotations
 
 import argparse
-import os
 import time
 from pathlib import Path
 
-import numpy as np
 import torch
 import torch.nn as nn
 from loguru import logger
@@ -36,7 +34,7 @@ from src.training.losses import (
     CircleLoss,
 )
 from src.training.datasets import build_dataloader
-from src.training.evaluate_reid import evaluate_reid, compute_reranking
+from src.training.evaluate_reid import evaluate_reid
 from src.training.seed import set_seed
 
 

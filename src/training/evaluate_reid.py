@@ -1,7 +1,7 @@
 """ReID evaluation: mAP, CMC, and optional re-ranking.
 
 Standard evaluation protocol for person/vehicle re-identification
-on Market-1501, VeRi-776, MSMT17, etc.
+on Market-1501, VeRi-776, CityFlowV2, etc.
 
 Implements:
   - Feature extraction from query and gallery sets

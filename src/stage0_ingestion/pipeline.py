@@ -7,7 +7,7 @@ and writes frames + manifest to the stage output directory.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from loguru import logger
 from omegaconf import DictConfig
@@ -16,7 +16,6 @@ from src.core.constants import FRAME_MANIFEST_FILE
 from src.core.data_models import FrameInfo
 from src.core.io_utils import save_frame_manifest
 from src.stage0_ingestion.frame_extractor import extract_frames_from_video
-from src.stage0_ingestion.preprocessor import preprocess_frame
 
 
 def run_stage0(

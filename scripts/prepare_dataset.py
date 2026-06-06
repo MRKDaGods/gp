@@ -5,7 +5,6 @@ Converts raw downloaded datasets into the unified format expected by the pipelin
 Usage:
     python scripts/prepare_dataset.py --dataset market1501 --root data/raw/market1501
     python scripts/prepare_dataset.py --dataset veri776 --root data/raw/veri776
-    python scripts/prepare_dataset.py --dataset aic2023 --root data/raw/aic2023
     python scripts/prepare_dataset.py --dataset cityflowv2 --root data/raw/cityflowv2
     python scripts/prepare_dataset.py --dataset wildtrack --root data/raw/wildtrack
 """
@@ -14,7 +13,6 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -28,7 +26,7 @@ sys.path.insert(0, str(project_root))
 @click.command()
 @click.option(
     "--dataset", "-d", required=True,
-    type=click.Choice(["market1501", "veri776", "aic2023", "cityflowv2", "cityflowv2_reid", "wildtrack"]),
+    type=click.Choice(["market1501", "veri776", "cityflowv2", "cityflowv2_reid", "wildtrack"]),
 )
 @click.option("--root", "-r", required=True, type=click.Path(exists=True))
 @click.option("--output", "-o", default=None, type=click.Path())
@@ -42,9 +40,6 @@ def main(dataset: str, root: str, output: str | None):
         prepare_market1501(root, output)
     elif dataset == "veri776":
         prepare_veri776(root, output)
-    elif dataset == "aic2023":
-        print(f"AIC2023 preparation: check dataset structure in {root}")
-        print("The pipeline reads videos directly from the dataset directory.")
     elif dataset == "cityflowv2":
         prepare_cityflowv2(root, output)
     elif dataset == "cityflowv2_reid":

@@ -1,9 +1,7 @@
 """Tests for I/O utilities."""
 
-import json
 
 import numpy as np
-import pytest
 
 from src.core.data_models import (
     EvaluationResult,

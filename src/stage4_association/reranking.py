@@ -17,7 +17,7 @@ Improvements over baseline
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 import numpy as np
 from loguru import logger

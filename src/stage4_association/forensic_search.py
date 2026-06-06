@@ -215,8 +215,6 @@ class ForensicSearchEngine:
             top_k: Maximum results.
             min_similarity: Minimum cosine similarity threshold.
         """
-        import torch
-        from torchvision import transforms
         # Delegate to the ReID model's preprocessing pipeline
         embedding = reid_model.extract_embedding(image_bgr)
         if embedding is None:

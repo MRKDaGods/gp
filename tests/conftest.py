@@ -10,7 +10,6 @@ import pytest
 
 from src.core.data_models import (
     Detection,
-    FrameInfo,
     GlobalTrajectory,
     Tracklet,
     TrackletFeatures,

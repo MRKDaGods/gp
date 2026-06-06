@@ -1,7 +1,6 @@
 """Tests for Average Query Expansion (AQE)."""
 
 import numpy as np
-import pytest
 
 from src.stage4_association.query_expansion import (
     average_query_expansion,

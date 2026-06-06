@@ -9,7 +9,6 @@ from backend.config import OUTPUT_DIR
 from backend.services.logging_service import _timeline_debug
 from backend.services.video_service import (
     _detect_camera_for_video,
-    _extract_camera_id,
     _normalize_camera_id,
 )
 from backend.state import uploaded_videos, video_to_latest_run

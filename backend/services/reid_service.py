@@ -17,7 +17,7 @@ from PIL import Image, UnidentifiedImageError
 
 from backend.config import UPLOAD_DIR
 from backend.models.reid import FusionReIDResponse, ReIDComponentResult, ReIDQueryResult, ReIDRankedMatch, SingleCamReIDResponse
-from backend.models.requests import FusionReIDModelWeight, ReIDImageInput, SingleCamReIDRequest
+from backend.models.requests import FusionReIDModelWeight, ReIDImageInput
 from backend.services.model_registry import PROJECT_ROOT, get_model, get_registry
 from src.serving.reid_loaders import extract_features, load_reid_model
 

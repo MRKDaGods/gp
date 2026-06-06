@@ -16,9 +16,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import cv2
 import numpy as np
@@ -972,7 +971,7 @@ def _refresh_traj_meta(traj: dict):
 
 
 def _save_corrected(trajs: List[dict], run_dir: str):
-    from src.core.data_models import GlobalTrajectory, Tracklet, TrackletFrame
+    from src.core.data_models import TrackletFrame
 
     gt_list = []
     for t in trajs:

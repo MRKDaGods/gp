@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from backend.config import UPLOAD_DIR, VIDEO_EXTENSIONS
+from backend.config import UPLOAD_DIR
 from backend.dependencies import get_app_state
 from backend.services.clip_service import _transcode_to_mp4
 from backend.services.video_service import _build_video_record

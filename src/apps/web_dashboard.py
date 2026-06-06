@@ -22,7 +22,6 @@ if str(project_root) not in sys.path:
 from src.core.io_utils import (
     load_evaluation_result,
     load_global_trajectories,
-    load_tracklets_by_camera,
 )
 
 

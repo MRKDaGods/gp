@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import shutil
 import tempfile
 import zipfile
 from datetime import datetime, timezone
@@ -166,7 +165,7 @@ class KagglePollingWorker:
     async def _emit_status(self, run_id: str, state: Dict[str, Any]) -> None:
         """Send a websocket status event to the run channel when available."""
         if self.websocket_manager is None:
-            # TODO(Phase 14): integrate websocket events when ws manager is added.
+            # No websocket manager configured; status is delivered via polling.
             return
         send_to_run = getattr(self.websocket_manager, "send_to_run", None)
         if send_to_run is None:

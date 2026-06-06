@@ -6,10 +6,7 @@ from src.core.data_models import (
     Detection,
     EvaluationResult,
     FrameInfo,
-    GlobalTrajectory,
-    Tracklet,
     TrackletFeatures,
-    TrackletFrame,
 )
 
 

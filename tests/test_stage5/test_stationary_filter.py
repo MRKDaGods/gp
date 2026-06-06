@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from src.core.data_models import GlobalTrajectory, Tracklet, TrackletFrame
 from src.stage5_evaluation.pipeline import _filter_stationary

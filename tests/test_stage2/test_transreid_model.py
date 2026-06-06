@@ -10,7 +10,6 @@ Tests cover:
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 import torch
 from unittest.mock import MagicMock
@@ -212,8 +211,6 @@ class TestReIDModelTransReIDRouting:
         from src.stage2_features.reid_model import _CLIP_MEAN, _CLIP_STD, _IMAGENET_MEAN, _IMAGENET_STD
 
         # CLIP model -> CLIP normalization
-        import cv2
-        from unittest.mock import patch, MagicMock
 
         # We can't easily instantiate ReIDModel (needs weights/GPU),
         # so test the normalization constants directly

@@ -1,6 +1,5 @@
 """Tests for AppState containerisation (Phase 4)."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.dependencies import get_app_state

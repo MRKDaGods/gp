@@ -6,7 +6,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import plotly.graph_objects as go
-from loguru import logger
 
 from src.core.data_models import GlobalTrajectory
 

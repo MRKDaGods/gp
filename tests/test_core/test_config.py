@@ -1,8 +1,6 @@
 """Tests for core configuration loader."""
 
-from pathlib import Path
 
-import pytest
 from omegaconf import DictConfig
 
 from src.core.config import config_to_dict, load_config, save_config

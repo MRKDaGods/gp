@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import numpy as np
-import pytest
 
 from src.stage4_association.camera_bias import CameraDistanceBias, ZoneTransitionModel
 

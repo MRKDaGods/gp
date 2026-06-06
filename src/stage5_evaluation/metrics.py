@@ -292,7 +292,6 @@ def _evaluate_with_trackeval(
     metrics: List[str],
 ) -> EvaluationResult:
     """Evaluate using TrackEval library with proper seqmap generation."""
-    import trackeval
     import tempfile, shutil
 
     gt_path = Path(gt_dir)

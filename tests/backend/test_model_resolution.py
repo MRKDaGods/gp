@@ -20,7 +20,6 @@ import pytest
 
 from backend.models.registry import (
     CheckpointRef,
-    ModelArchitecture,
     ModelEntry,
     Provenance,
     Requirements,

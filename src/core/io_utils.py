@@ -18,7 +18,6 @@ from src.core.data_models import (
     FrameInfo,
     GlobalTrajectory,
     Tracklet,
-    TrackletFeatures,
     TrackletFrame,
 )
 

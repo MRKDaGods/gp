@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from loguru import logger
 
 from src.core.data_models import EvaluationResult, GlobalTrajectory
 

@@ -6,7 +6,7 @@ intra-camera tracklet merging to reduce fragmentation.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 from loguru import logger

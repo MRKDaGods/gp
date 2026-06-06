@@ -7,7 +7,7 @@ from typing import Dict, List
 
 import pandas as pd
 from loguru import logger
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from src.core.data_models import EvaluationResult
 

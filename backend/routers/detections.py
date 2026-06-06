@@ -1,8 +1,7 @@
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend.config import OUTPUT_DIR
 from backend.dependencies import get_app_state
 from backend.services.tracklet_service import (
     _confidence_for_tracklet_frame,

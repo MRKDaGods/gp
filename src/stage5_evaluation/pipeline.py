@@ -7,7 +7,7 @@ Evaluates tracking results against ground truth using standard metrics
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import numpy as np
 from loguru import logger

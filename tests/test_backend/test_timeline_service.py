@@ -6,13 +6,11 @@ the filesystem, keeping tests fast and hermetic.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from unittest.mock import patch
 
 import numpy as np
-import pytest
 
 from backend.models.embedding import EmbeddingArtifact
 from backend.repositories.dataset_repository import DatasetRepository

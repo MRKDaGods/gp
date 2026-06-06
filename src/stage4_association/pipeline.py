@@ -25,7 +25,7 @@ from src.core.data_models import GlobalTrajectory, Tracklet, TrackletFeatures
 from src.core.io_utils import load_multi_query_embeddings, save_global_trajectories
 from src.stage3_indexing.faiss_index import FAISSIndex
 from src.stage3_indexing.metadata_store import MetadataStore
-from src.stage4_association.camera_bias import CameraDistanceBias, ZoneTransitionModel
+from src.stage4_association.camera_bias import CameraDistanceBias
 from src.stage4_association.aflink import aflink_post_association
 from src.stage4_association.fic import per_camera_whiten, cross_camera_augment, iterative_fac
 from src.stage4_association.global_trajectories import merge_tracklets_to_trajectories
@@ -34,7 +34,6 @@ from src.stage4_association.query_expansion import average_query_expansion_batch
 from src.stage4_association.reranking import k_reciprocal_rerank
 from src.stage4_association.similarity import (
     compute_combined_similarity,
-    compute_temporal_overlap_ratio,
     mutual_nearest_neighbor_filter,
 )
 from src.stage4_association.spatial_temporal import SpatioTemporalValidator
@@ -1070,7 +1069,6 @@ def run_stage4(
     # Auto-generate forensic report alongside trajectory JSON
     try:
         from src.stage4_association.forensic_search import ForensicSearchEngine
-        from src.core.io_utils import load_embeddings, load_hsv_features
         engine = ForensicSearchEngine(
             embeddings=embeddings,
             index_map=[{"camera_id": f.camera_id, "track_id": f.track_id, "class_id": f.class_id}

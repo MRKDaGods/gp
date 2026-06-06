@@ -6,7 +6,7 @@ Generates annotated videos, BEV maps, timeline views, and data exports.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from loguru import logger
 from omegaconf import DictConfig

@@ -15,7 +15,6 @@ from backend.config import (
     _CAMERA_LINE_RE,
     _CAMERAS_TOTAL_RE,
     _FRAME_LINE_RE,
-    _HAS_CV2,
     _PIPELINE_PYTHON,
     _PROJECT_ROOT,
     _STAGE_LINE_RE,

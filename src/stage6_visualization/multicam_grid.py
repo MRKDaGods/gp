@@ -17,7 +17,7 @@ import numpy as np
 from loguru import logger
 
 from src.core.data_models import GlobalTrajectory, TrackletFrame
-from src.stage6_visualization.video_annotator import _COLORS, _get_color, _lerp_bbox
+from src.stage6_visualization.video_annotator import _get_color, _lerp_bbox
 
 
 # Grid layout

@@ -12,10 +12,9 @@ This is approximately a 15.6m x 45m area centred on the public square.
 from __future__ import annotations
 
 import json
-import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 import cv2
 import numpy as np

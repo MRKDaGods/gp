@@ -1,4 +1,4 @@
-"""ReID dataset loaders for Market-1501, VeRi-776, and MSMT17.
+"""ReID dataset loaders for Market-1501, VeRi-776, and CityFlowV2.
 
 Handles the standard train/query/gallery splits and provides
 PyTorch Dataset and DataLoader with identity-balanced sampling
@@ -8,9 +8,7 @@ PyTorch Dataset and DataLoader with identity-balanced sampling
 from __future__ import annotations
 
 import os
-import re
 from collections import defaultdict
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -96,38 +94,6 @@ def parse_veri776(root: str) -> Tuple[List, List, List]:
     return train, query, gallery
 
 
-def parse_msmt17(root: str) -> Tuple[List, List, List]:
-    """Parse MSMT17 dataset using list_*.txt files."""
-    train, query, gallery = [], [], []
-
-    for list_file, split_list, subdir in [
-        ("list_train.txt", train, "train"),
-        ("list_query.txt", query, "test"),
-        ("list_gallery.txt", gallery, "test"),
-    ]:
-        list_path = os.path.join(root, list_file)
-        if not os.path.isfile(list_path):
-            raise FileNotFoundError(f"MSMT17 list not found: {list_path}")
-
-        with open(list_path) as f:
-            for line in f:
-                parts = line.strip().split(" ")
-                fname = parts[0]
-                pid = int(parts[1])
-                # Camera from filename: XXXX_XX_cXX_XXXXXX.jpg
-                cam_match = re.search(r"_c(\d+)_", fname)
-                cam = int(cam_match.group(1)) - 1 if cam_match else 0
-                img_path = os.path.join(root, subdir, fname)
-                split_list.append((img_path, pid, cam))
-
-    # Re-label train pids
-    train_pids = sorted(set(pid for _, pid, _ in train))
-    pid2label = {pid: label for label, pid in enumerate(train_pids)}
-    train = [(path, pid2label[pid], cam) for path, pid, cam in train]
-
-    return train, query, gallery
-
-
 def parse_cityflowv2(root: str) -> Tuple[List, List, List]:
     """Parse CityFlowV2 ReID crops.
 
@@ -178,100 +144,10 @@ def parse_cityflowv2(root: str) -> Tuple[List, List, List]:
     return train, query, gallery
 
 
-def parse_cityflowv2_synth(root: str) -> Tuple[List, List, List]:
-    """Parse CityFlowV2 real crops + VehicleX synthetic data for combined training.
-
-    This is the AIC-winner recipe lever: the winning teams trained their ReID
-    backbones on real CityFlow crops PLUS ~1,362 synthetic VehicleX identities
-    (85% of their training images were synthetic). Our prior IBN-a attempts used
-    real-only data and capped at ~52.77% mAP; the synthetic identities add the
-    viewpoint/lighting diversity that teaches cross-camera invariance.
-
-    Expected structure:
-        root/
-          train/      real CityFlow crops   XXXX_SCENE_cNNN_fFFFFFF.jpg
-          query/      real CityFlow query crops
-          gallery/    real CityFlow gallery crops
-          synthetic/  VehicleX synthetic crops  <id>_<...>.jpg  (id = leading int token)
-
-    Synthetic identities are appended to the TRAIN split only, in an offset id
-    space so they never collide with real CityFlow ids. Query/gallery (evaluation)
-    stay REAL-only - we always measure CityFlow mAP, never synthetic. Synthetic
-    images map to a single sentinel camera id (their "camera" is a render viewpoint,
-    not a physical camera). If `synthetic/` is absent this behaves like
-    `parse_cityflowv2` (real-only), so the same dataset name works either way.
-    """
-    train, query, gallery = [], [], []
-
-    for split_name, split_list in [
-        ("train", train),
-        ("query", query),
-        ("gallery", gallery),
-    ]:
-        split_dir = os.path.join(root, split_name)
-        if not os.path.isdir(split_dir):
-            raise FileNotFoundError(f"CityFlowV2 ReID split not found: {split_dir}")
-        for fname in sorted(os.listdir(split_dir)):
-            if not fname.endswith(".jpg"):
-                continue
-            parts = fname.split("_")
-            if len(parts) < 4:
-                continue
-            pid = int(parts[0])
-            cam_name = parts[1] + "_" + parts[2]  # e.g. S01_c001
-            split_list.append((os.path.join(split_dir, fname), pid, cam_name))
-
-    # Map real camera names to integer ids
-    all_cams = sorted({cam for _, _, cam in train + query + gallery})
-    cam2id = {c: i for i, c in enumerate(all_cams)}
-    train = [(p, pid, cam2id[c]) for p, pid, c in train]
-    query = [(p, pid, cam2id[c]) for p, pid, c in query]
-    gallery = [(p, pid, cam2id[c]) for p, pid, c in gallery]
-
-    # Append synthetic images to TRAIN with an offset id space.
-    synth_dir = os.path.join(root, "synthetic")
-    n_synth = 0
-    if os.path.isdir(synth_dir):
-        real_max_pid = max((pid for _, pid, _ in train), default=-1)
-        synth_cam = len(all_cams)  # single sentinel synthetic "camera"
-        synth = []
-        for dirpath, _, fnames in os.walk(synth_dir):
-            for fname in sorted(fnames):
-                if not fname.lower().endswith((".jpg", ".jpeg", ".png")):
-                    continue
-                token = fname.split("_")[0].split(".")[0]
-                try:
-                    sid = int(token)
-                except ValueError:
-                    continue
-                synth.append(
-                    (os.path.join(dirpath, fname), real_max_pid + 1 + sid, synth_cam)
-                )
-        train = train + synth
-        n_synth = len(synth)
-
-    # Re-label combined train pids to 0..N-1 (real + synthetic share one head).
-    train_pids = sorted(set(pid for _, pid, _ in train))
-    pid2label = {pid: label for label, pid in enumerate(train_pids)}
-    train = [(path, pid2label[pid], cam) for path, pid, cam in train]
-
-    if n_synth:
-        from loguru import logger as _logger
-
-        _logger.info(
-            f"cityflowv2_synth: {len(train) - n_synth} real + {n_synth} synthetic "
-            f"= {len(train)} train imgs, {len(train_pids)} combined ids"
-        )
-
-    return train, query, gallery
-
-
 DATASET_PARSERS = {
     "market1501": parse_market1501,
     "veri776": parse_veri776,
-    "msmt17": parse_msmt17,
     "cityflowv2": parse_cityflowv2,
-    "cityflowv2_synth": parse_cityflowv2_synth,
 }
 
 

@@ -8,7 +8,6 @@ from typing import Any, Dict, Optional
 
 from backend.config import OUTPUT_DIR
 from backend.services.clip_service import _export_tracklet_clip
-from backend.services.logging_service import _timeline_debug
 from backend.services.tracklet_service import _find_tracklet_in_run
 from backend.state import uploaded_videos
 

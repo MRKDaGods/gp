@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import cv2
-import numpy as np
 from loguru import logger
 
 from src.core.data_models import Tracklet
