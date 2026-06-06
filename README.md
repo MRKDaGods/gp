@@ -156,11 +156,16 @@ sizes, and checksums). `scripts/verify_assets.py` checks them.
 The main entry point is `scripts/run_pipeline.py`:
 
 ```bash
-python scripts/run_pipeline.py --config configs/default.yaml                            # full pipeline
+# Vehicle pipeline (CityFlowV2). The base config is paired with a dataset config.
+python scripts/run_pipeline.py --config configs/default.yaml --dataset-config configs/datasets/cityflowv2.yaml
+
+# Person pipeline (WILDTRACK)
 python scripts/run_pipeline.py --config configs/default.yaml --dataset-config configs/datasets/wildtrack.yaml
-python scripts/run_pipeline.py --config configs/default.yaml --stages 3,4,5             # a subset of stages
-python scripts/run_pipeline.py --config configs/default.yaml --smoke-test              # first 10 frames per camera
-python scripts/run_pipeline.py --config configs/default.yaml --dry-run                 # print resolved config only
+
+# A subset of stages, a quick smoke run, or a config-only dry run:
+python scripts/run_pipeline.py --config configs/default.yaml --dataset-config configs/datasets/cityflowv2.yaml --stages 3,4,5
+python scripts/run_pipeline.py --config configs/default.yaml --dataset-config configs/datasets/cityflowv2.yaml --smoke-test
+python scripts/run_pipeline.py --config configs/default.yaml --dataset-config configs/datasets/cityflowv2.yaml --dry-run
 ```
 
 Outputs are written under `data/outputs/<run_id>/`.
