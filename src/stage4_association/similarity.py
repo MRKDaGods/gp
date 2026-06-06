@@ -34,8 +34,8 @@ def compute_temporal_overlap_ratio(
     """Compute temporal IoU between two tracklets.
 
     Returns the fraction of temporal overlap relative to the shorter tracklet's
-    duration.  This is more informative than IoU for asymmetric durations —
-    a short tracklet fully contained in a long one should get score ≈ 1.0.
+    duration.  This is more informative than IoU for asymmetric durations -
+    a short tracklet fully contained in a long one should get score ~ 1.0.
 
     Returns:
         Ratio in [0, 1].  0 means no temporal overlap.
@@ -227,7 +227,7 @@ def compute_combined_similarity(
         score = w_app * app_sim + w_hsv * hsv_sim + w_st * st_score
 
         # Temporal overlap bonus: for overlapping-FOV cameras, temporal
-        # co-existence is a strong positive signal — the same vehicle is
+        # co-existence is a strong positive signal - the same vehicle is
         # visible in both cameras simultaneously.
         if to_enabled and is_cross_camera:
             if t_overlap > 0:
@@ -250,7 +250,7 @@ def compute_combined_similarity(
             li = max(float(num_frames[i]), 1.0)
             lj = max(float(num_frames[j]), 1.0)
             min_len = min(li, lj)
-            confidence = min_len / (min_len + 10.0)  # saturates: 5f→0.33, 10f→0.5, 20f→0.67, 50f→0.83
+            confidence = min_len / (min_len + 10.0)  # saturates: 5f->0.33, 10f->0.5, 20f->0.67, 50f->0.83
             length_w = math.pow(confidence, length_power)
             score *= 0.5 + 0.5 * length_w  # penalty range [0.5, 1.0]
 

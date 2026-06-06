@@ -105,7 +105,7 @@ function formatModelBadgeBody(
     const firstModelNames = fusion.models.slice(0, 2).map((model) => model.modelId).join(", ");
 
     return {
-      primary: `Fusion · ${fusion.models.length} models`,
+      primary: `Fusion * ${fusion.models.length} models`,
       secondary: firstModelNames || null,
       isFallback: false,
     };
@@ -121,15 +121,15 @@ function sidebarStatusSentence(
   executionTarget: "local" | "kaggle"
 ): string {
   if (status === "running") {
-    return `Running on ${executionTarget === "kaggle" ? "Kaggle" : "local"} · ${Math.round(progress)}% complete`;
+    return `Running on ${executionTarget === "kaggle" ? "Kaggle" : "local"} * ${Math.round(progress)}% complete`;
   }
   if (status === "blocked") return `${stageLabel} is blocked - complete the previous stage first`;
-  if (status === "done") return `${stageLabel} is done · ${executionTarget} execution`;
-  if (status === "error") return `${stageLabel} has an error · click to view`;
-  return `${stageLabel} is ${statusMeta(status).label.toLowerCase()} · ${executionTarget} execution`;
+  if (status === "done") return `${stageLabel} is done * ${executionTarget} execution`;
+  if (status === "error") return `${stageLabel} has an error * click to view`;
+  return `${stageLabel} is ${statusMeta(status).label.toLowerCase()} * ${executionTarget} execution`;
 }
 
-/** Clean stepper indicator for the sidebar — no loud dashed/amber states. */
+/** Clean stepper indicator for the sidebar - no loud dashed/amber states. */
 function StageStepDot({
   status,
   isActive,
@@ -173,7 +173,7 @@ function StageStepDot({
       </span>
     );
   } else {
-    // idle / blocked — quiet, neutral
+    // idle / blocked - quiet, neutral
     body = (
       <span className={cn(base, "border-border/70 bg-transparent text-muted-foreground/50")}>
         <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -246,7 +246,7 @@ function SidebarStageRow({
                 <StalenessChip label="Stale" />
               ) : (
                 <span className="max-w-full truncate text-[11px] font-normal opacity-70">
-                  {stageState.status === "blocked" ? `needs Stage ${prerequisiteStage(stage.id) ?? stage.id - 1}` : `${statusMeta(stageState.status).label.toLowerCase()}${stageState.status === "running" ? ` · ${Math.round(progress)}%` : ""}`}
+                  {stageState.status === "blocked" ? `needs Stage ${prerequisiteStage(stage.id) ?? stage.id - 1}` : `${statusMeta(stageState.status).label.toLowerCase()}${stageState.status === "running" ? ` * ${Math.round(progress)}%` : ""}`}
                 </span>
               )}
             </span>
@@ -468,7 +468,7 @@ export function MainDashboard() {
             {!sidebarOpen && (
               <TooltipContent side="right">
                 {modelBadgeBody.secondary
-                  ? `${modelBadgeBody.primary} · ${modelBadgeBody.secondary}`
+                  ? `${modelBadgeBody.primary} * ${modelBadgeBody.secondary}`
                   : modelBadgeBody.primary}
               </TooltipContent>
             )}

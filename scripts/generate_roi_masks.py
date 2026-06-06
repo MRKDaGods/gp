@@ -7,7 +7,7 @@ this script generates approximate ROI masks by:
 3. Using edge detection + morphological operations to identify road regions
 4. Saving as roi.jpg in each camera directory
 
-The masks don't need to be perfect — even coarse masks that remove 
+The masks don't need to be perfect - even coarse masks that remove 
 obvious non-road regions (sky, buildings, sidewalks) significantly 
 reduce false positive detections.
 

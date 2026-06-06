@@ -80,8 +80,8 @@ export function DoubleBufferedFrameImg({
 }
 
 /**
- * Tracklet full-frame + bbox overlay. Parent should throttle frame picks (e.g. ~15–20/s) so
- * `src` does not change every React tick — that keeps decode + layout work bounded.
+ * Tracklet full-frame + bbox overlay. Parent should throttle frame picks (e.g. ~15-20/s) so
+ * `src` does not change every React tick - that keeps decode + layout work bounded.
  */
 export function TrackletFrameView({
   src,

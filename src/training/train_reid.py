@@ -403,7 +403,7 @@ def main():
         elapsed = time.time() - t0
         lr_current = optimizer.param_groups[0]["lr"]
         logger.info(
-            f"Epoch {epoch}/{args.epochs} done in {elapsed:.1f}s — "
+            f"Epoch {epoch}/{args.epochs} done in {elapsed:.1f}s - "
             f"Loss: {train_metrics['loss']:.4f}, LR: {lr_current:.6f}"
         )
 
@@ -440,7 +440,7 @@ def main():
 
             if is_best:
                 torch.save(ckpt, output_dir / "best_model.pth")
-                logger.info(f"  ★ New best mAP: {best_mAP:.4f}")
+                logger.info(f"  * New best mAP: {best_mAP:.4f}")
 
                 # Also save just the model weights for deployment
                 torch.save(

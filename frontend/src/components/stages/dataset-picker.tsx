@@ -85,7 +85,7 @@ function fpsLabel(d: AvailableDataset): string {
   if (src == null && sample == null) return "";
   if (src == null) return `samples @ ${sample} fps`;
   if (sample != null && Math.abs(sample - src) > 0.01) {
-    return `${src} fps source · samples @ ${sample} fps`;
+    return `${src} fps source * samples @ ${sample} fps`;
   }
   return `${src} fps`;
 }
@@ -225,9 +225,9 @@ function CuratedDatasets({
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">{d.inputDir}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {d.cameraCount} cameras · {LAYOUT_LABEL[d.layout]}
-                  {fpsLabel(d) ? ` · ${fpsLabel(d)}` : ""}
-                  {d.width && d.height ? ` · ${d.width}×${d.height}` : ""}
+                  {d.cameraCount} cameras * {LAYOUT_LABEL[d.layout]}
+                  {fpsLabel(d) ? ` * ${fpsLabel(d)}` : ""}
+                  {d.width && d.height ? ` * ${d.width}x${d.height}` : ""}
                 </p>
                 <div className="mt-2">
                   <CameraChips cameras={d.cameras} />

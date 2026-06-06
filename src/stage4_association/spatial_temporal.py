@@ -130,7 +130,7 @@ class SpatioTemporalValidator:
 
         Uses Gaussian centered on mean_time with sigma = max(learned_std,
         (max_time - min_time) / 3) to ensure wide coverage of the valid
-        time range — overlapping-FOV cameras have very low mean_time but
+        time range - overlapping-FOV cameras have very low mean_time but
         legitimate transitions can be much longer (vehicles re-entering
         the FOV after a red light, etc.).
         """
@@ -154,9 +154,9 @@ class SpatioTemporalValidator:
         """Score using the global min/max time gap as a prior.
 
         Design: favour *shorter* re-appearance times.
-        * ``min_time_gap == 0`` → overlapping FOV; peak at 0, half-Gaussian.
-        * Otherwise → Gaussian centred at ``min_time_gap`` with sigma chosen
-          so that score ≈ 0.01 at ``max_time_gap``.
+        * ``min_time_gap == 0`` -> overlapping FOV; peak at 0, half-Gaussian.
+        * Otherwise -> Gaussian centred at ``min_time_gap`` with sigma chosen
+          so that score ~ 0.01 at ``max_time_gap``.
         """
         if self.min_time_gap == 0:
             # Half-Gaussian peaking at 0, dropping to ~0.01 at max
@@ -164,10 +164,10 @@ class SpatioTemporalValidator:
             sigma = max(sigma, 1.0)
             return math.exp(-0.5 * (abs_diff / sigma) ** 2)
 
-        # Centre at min_time_gap — short transitions are most likely.
-        # Choose sigma so score at max_time_gap ≈ 0.01:
+        # Centre at min_time_gap - short transitions are most likely.
+        # Choose sigma so score at max_time_gap ~ 0.01:
         #   exp(-0.5 * ((max-min)/sigma)^2) = 0.01
-        #   sigma = (max-min) / sqrt(2*ln(100)) ≈ (max-min) / 3.035
+        #   sigma = (max-min) / sqrt(2*ln(100)) ~ (max-min) / 3.035
         range_t = self.max_time_gap - self.min_time_gap
         sigma = range_t / math.sqrt(2 * math.log(100))
         sigma = max(sigma, 1.0)

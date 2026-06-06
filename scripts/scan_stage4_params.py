@@ -124,7 +124,7 @@ def main(run: str, scan: str, config: str, dataset_config: str):
                 "id_switches": metrics.get("id_switches", 0),
             })
             console.print(
-                f"  → IDF1={results[-1]['idf1']:.4f} "
+                f"  -> IDF1={results[-1]['idf1']:.4f} "
                 f"MOTA={results[-1]['mota']:.4f} "
                 f"HOTA={results[-1]['hota']:.4f} "
                 f"IDSW={results[-1]['id_switches']}"

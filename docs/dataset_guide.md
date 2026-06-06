@@ -23,7 +23,7 @@ Datasets for training ReID models (on Kaggle) and evaluating the full MTMC pipel
 - **Used for**: Advanced evaluation / transfer learning
 - **Note**: Much harder than Market-1501 due to more cameras and complex scenes
 
-### DukeMTMC-reID — DO NOT USE
+### DukeMTMC-reID - DO NOT USE
 - Retracted for ethical concerns (privacy violations)
 - Any use in papers will be flagged by reviewers
 
@@ -38,13 +38,13 @@ Datasets for training ReID models (on Kaggle) and evaluating the full MTMC pipel
 - **Filename format**: `XXXX_cYYY_NNNNN.jpg` (XXXX=vehicle ID, YYY=camera)
 - **Used for**: Pre-training vehicle ReID models (static image dataset, NOT multi-camera tracking)
 - **Target metrics**: mAP >= 78%, Rank-1 >= 95%
-- **Limitation**: No multi-camera tracking ground truth — cannot evaluate IDF1, HOTA, MOTA
+- **Limitation**: No multi-camera tracking ground truth - cannot evaluate IDF1, HOTA, MOTA
 
-### CityFlowV2 ReID Crops (Primary — Multi-Camera)
+### CityFlowV2 ReID Crops (Primary - Multi-Camera)
 - **Source**: AI City Challenge 2022 Track 1 (46 cameras, city intersections)
 - **Type**: Real multi-camera vehicle tracking with cross-camera identity labels
 - **Crops extracted from**: GT annotations + video frames via `scripts/extract_cityflowv2_crops.py`
-- **Structure**: data/processed/cityflowv2_reid/ → train/, query/, gallery/
+- **Structure**: data/processed/cityflowv2_reid/ -> train/, query/, gallery/
 - **Filename format**: `XXXX_SCENE_cNNN_fFFFFFF.jpg` (vehicle_id, scene_camera, frame)
 - **Used for**: Fine-tuning vehicle ReID (NB09) + full MTMC evaluation (IDF1, HOTA, MOTA)
 - **Training notebook**: `notebooks/kaggle/09_vehicle_reid_cityflowv2/`
@@ -52,7 +52,7 @@ Datasets for training ReID models (on Kaggle) and evaluating the full MTMC pipel
 - **Target metrics (MTMC)**: IDF1 >= 70%, HOTA >= 50%, MOTA >= 60%
 
 ### AI City Challenge 2023 Track 2
-- **Task**: Cityflow-NL — vehicle retrieval with natural language
+- **Task**: Cityflow-NL - vehicle retrieval with natural language
 - **Source**: Available on Kaggle
 - **Used for**: Full pipeline evaluation
 - **Note**: Also useful for NL query application development
@@ -67,7 +67,7 @@ Datasets for training ReID models (on Kaggle) and evaluating the full MTMC pipel
 
 ## Multi-Camera End-to-End
 
-### CityFlowV2 — AI City Challenge 2022 Track 1 (Vehicle MTMC, Primary)
+### CityFlowV2 - AI City Challenge 2022 Track 1 (Vehicle MTMC, Primary)
 - **Cameras**: 46 cameras across 16 city intersections (2 scenes)
 - **Type**: Multi-camera multi-target vehicle tracking
 - **Resolution**: 960p+
@@ -76,7 +76,7 @@ Datasets for training ReID models (on Kaggle) and evaluating the full MTMC pipel
 - **GT format**: MOT-style gt.txt per camera
 - **Config**: `configs/datasets/cityflowv2.yaml`
 - **Used for**: End-to-end MTMC evaluation (IDF1, HOTA, MOTA) + ReID fine-tuning
-- **Published baselines**: IDF1 ≈ 70-84%, MOTA ≈ 60-78%, HOTA ≈ 50-65%
+- **Published baselines**: IDF1 ~ 70-84%, MOTA ~ 60-78%, HOTA ~ 50-65%
 
 #### ReID Crop Extraction
 ```bash
@@ -107,7 +107,7 @@ python scripts/prepare_dataset.py --dataset market1501 --root data/raw/market150
 # VeRi-776
 python scripts/prepare_dataset.py --dataset veri776 --root data/raw/veri776
 
-# CityFlowV2 ReID crops (multi-camera vehicle tracking → ReID training)
+# CityFlowV2 ReID crops (multi-camera vehicle tracking -> ReID training)
 python scripts/extract_cityflowv2_crops.py --data_root data/raw/cityflowv2
 
 # AIC2023 (reads videos directly)
@@ -119,34 +119,34 @@ This creates CSV manifests in `{root}/manifests/` with columns: image_path, iden
 ### Directory Structure
 ```
 data/
-├── raw/
-│   ├── market1501/
-│   │   ├── bounding_box_train/
-│   │   ├── bounding_box_test/
-│   │   ├── query/
-│   │   └── manifests/        ← generated
-│   ├── veri776/
-│   │   ├── image_train/
-│   │   ├── image_test/
-│   │   ├── image_query/
-│   │   └── manifests/        ← generated
-│   ├── cityflowv2/           ← multi-camera vehicle tracking
-│   │   ├── S01_c001/vdo.avi + gt.txt
-│   │   ├── S01_c002/vdo.avi + gt.txt
-│   │   └── ...
-│   └── aic2023/
-│       └── ...
-├── processed/
-│   └── cityflowv2_reid/      ← extracted ReID crops
-│       ├── train/             ← 70% of multi-cam vehicle IDs
-│       ├── query/             ← 1 crop per camera per eval vehicle
-│       ├── gallery/           ← remaining crops + distractors
-│       └── splits.json        ← split metadata
-└── models/                    ← trained weights
++-- raw/
+|   +-- market1501/
+|   |   +-- bounding_box_train/
+|   |   +-- bounding_box_test/
+|   |   +-- query/
+|   |   +-- manifests/        <- generated
+|   +-- veri776/
+|   |   +-- image_train/
+|   |   +-- image_test/
+|   |   +-- image_query/
+|   |   +-- manifests/        <- generated
+|   +-- cityflowv2/           <- multi-camera vehicle tracking
+|   |   +-- S01_c001/vdo.avi + gt.txt
+|   |   +-- S01_c002/vdo.avi + gt.txt
+|   |   +-- ...
+|   +-- aic2023/
+|       +-- ...
++-- processed/
+|   +-- cityflowv2_reid/      <- extracted ReID crops
+|       +-- train/             <- 70% of multi-cam vehicle IDs
+|       +-- query/             <- 1 crop per camera per eval vehicle
+|       +-- gallery/           <- remaining crops + distractors
+|       +-- splits.json        <- split metadata
++-- models/                    <- trained weights
 ```
 
 ## Kaggle Upload Strategy
-1. Market-1501 and VeRi-776 are already on Kaggle as datasets — just add to notebook
+1. Market-1501 and VeRi-776 are already on Kaggle as datasets - just add to notebook
 2. EPFL Multi-Camera: download locally, zip, upload as Kaggle dataset (~1GB)
 3. AIC2023: check existing Kaggle datasets, may already be available
 4. Model weights after training: download from Kaggle notebook output

@@ -130,7 +130,7 @@ export function KaggleCredentialsModal({ open, onOpenChange }: KaggleCredentials
               kaggle.com/&lt;username&gt;/account
               <ExternalLink className="h-3.5 w-3.5" />
             </a>{' '}
-            {'→'} Create New Token
+            {'->'} Create New Token
           </p>
 
           <DialogFooter className="gap-2 sm:gap-0">

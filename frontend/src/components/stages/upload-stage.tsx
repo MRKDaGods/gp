@@ -76,7 +76,7 @@ export function UploadStage() {
         const response = await getVideos();
         if (response.success && response.data) {
           // Show genuine user uploads on mount. Dataset footage is loaded on
-          // demand via the picker — BUT keep any persisted dataset cameras (from
+          // demand via the picker - BUT keep any persisted dataset cameras (from
           // a prior run restored after reload) so re-opening a run still shows its
           // footage. Merge uploads with the persisted dataset videos.
           const uploadsOnly = response.data.filter((v) =>
@@ -229,7 +229,7 @@ export function UploadStage() {
     }
     toast({
       title: "Input unlocked",
-      description: "Pipeline reset — you can choose a different dataset or cameras now.",
+      description: "Pipeline reset - you can choose a different dataset or cameras now.",
     });
   }, [activeInputDir, resetPipeline, setCurrentVideo, setVideos, toast]);
 
@@ -255,7 +255,7 @@ export function UploadStage() {
   }, [datasetCameraVideos]);
 
   // Stage 0 only: ingest the selected cameras and CREATE the run. Detection,
-  // features, indexing, and association are NOT cascaded — each runs from its
+  // features, indexing, and association are NOT cascaded - each runs from its
   // own stage page against this run. Nothing downstream auto-starts.
   const handleStartRun = useCallback(async () => {
     if (!activeInputDir) return;
@@ -279,7 +279,7 @@ export function UploadStage() {
     });
     // Restrict the workspace to ONLY the selected cameras so every downstream
     // stage (detection viewer, camera switcher, etc.) shows/uses exactly what's
-    // being processed — not every camera in the dataset folder. Mirrors what
+    // being processed - not every camera in the dataset folder. Mirrors what
     // loading an existing run does (useLoadRun also scopes to the run's cameras).
     setVideos(chosen);
     setCurrentVideo(chosen[0] ?? null);
@@ -289,7 +289,7 @@ export function UploadStage() {
         uiStage: 0,
         // Surface the mode in the live progress message so it's unambiguous
         // whether the quick test (first 10 frames) is actually in effect.
-        label: smokeRun ? "ingestion (quick test · first 10 frames/camera)" : "ingestion (full video)",
+        label: smokeRun ? "ingestion (quick test * first 10 frames/camera)" : "ingestion (full video)",
       });
       if (result === "completed") {
         toast({
@@ -414,7 +414,7 @@ export function UploadStage() {
             <CardTitle className="flex items-center justify-between gap-3 text-base">
               <span className="flex items-center gap-2">
                 <FileVideo className="h-5 w-5" />
-                {activeDataset ? `Video Gallery — ${activeDataset}` : "Video Gallery"}
+                {activeDataset ? `Video Gallery - ${activeDataset}` : "Video Gallery"}
               </span>
               <Badge variant="secondary">{videos.length} videos</Badge>
             </CardTitle>
@@ -429,7 +429,7 @@ export function UploadStage() {
                 <div className="flex items-center gap-3">
                   <label
                     className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
-                    title="Process only the first 10 frames per camera — a fast sanity check that runs without a GPU."
+                    title="Process only the first 10 frames per camera - a fast sanity check that runs without a GPU."
                   >
                     <Checkbox checked={smokeRun} onCheckedChange={(v) => setSmokeRun(Boolean(v))} />
                     Quick test (10 frames)
@@ -447,8 +447,8 @@ export function UploadStage() {
                       <Play className="mr-2 h-4 w-4" />
                     )}
                     {isStartingMtmc || stage0Status === "running"
-                      ? "Ingesting…"
-                      : `Start run · ingest ${selectedIds.size} ${selectedIds.size === 1 ? "camera" : "cameras"}`}
+                      ? "Ingesting..."
+                      : `Start run * ingest ${selectedIds.size} ${selectedIds.size === 1 ? "camera" : "cameras"}`}
                   </Button>
                 </div>
               </div>
@@ -463,7 +463,7 @@ export function UploadStage() {
                 <div className="flex h-[300px] flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
                   <AlertCircle className="h-8 w-8" />
                   <p>No videos loaded</p>
-                  <p className="text-sm">Pick a dataset with “Load videos” above, or upload your own.</p>
+                  <p className="text-sm">Pick a dataset with "Load videos" above, or upload your own.</p>
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -541,7 +541,7 @@ export function UploadStage() {
 export function UploadStageActions() {
   const { setCurrentStage } = useSessionStore();
   const stages = usePipelineStore((s) => s.stages);
-  // Navigation only — Stage 1 detection is started from the Detection page's own
+  // Navigation only - Stage 1 detection is started from the Detection page's own
   // Run button. Stays disabled until ingestion (stage 0) has actually finished,
   // not merely when the run id is allocated at ingestion start.
   const ingestDone = toStageStatus(stages.find((s) => s.stage === 0)) === "done";

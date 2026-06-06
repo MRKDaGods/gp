@@ -59,15 +59,15 @@ def per_camera_whiten(
         n_cam = X.shape[0]
 
         if n_cam < min_samples:
-            # Too few samples — just keep original (already L2-normed)
+            # Too few samples - just keep original (already L2-normed)
             continue
 
         # Per-camera mean
         mean = X.mean(axis=0)
 
-        # FIC whitening: P = inv(C + n * lambda * I), where C = (X-μ)^T(X-μ)
+        # FIC whitening: P = inv(C + n * lambda * I), where C = (X-u)^T(X-u)
         centered = X - mean  # (n_cam, D)
-        CtC = centered.T @ centered  # (D, D) — scatter of centered data
+        CtC = centered.T @ centered  # (D, D) - scatter of centered data
         reg = n_cam * regularisation * np.eye(D, dtype=CtC.dtype)
         P = np.linalg.inv(CtC + reg)
 

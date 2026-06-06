@@ -2,7 +2,7 @@
 
 Improvements over baseline
 --------------------------
-* **Per-camera accumulators** — motmetrics creates one ``MOTAccumulator``
+* **Per-camera accumulators** - motmetrics creates one ``MOTAccumulator``
   per camera sequence then merges them with
   ``mm.utils.merge_event_dataframes`` for a proper overall score.
   The old code used a single accumulator mixing all cameras together,
@@ -39,7 +39,7 @@ from src.core.data_models import EvaluationResult
 def _analyze_mtmc_errors(acc) -> Dict:
     """Analyze fragmentation (under-merging) vs conflation (over-merging).
 
-    Extracts frame-level GT↔pred matches from the motmetrics accumulator
+    Extracts frame-level GT<->pred matches from the motmetrics accumulator
     to identify:
     - Fragmented GT IDs: one GT identity matched to multiple predicted IDs
     - Conflated pred IDs: one predicted ID matched to multiple GT identities
@@ -51,9 +51,9 @@ def _analyze_mtmc_errors(acc) -> Dict:
         if matches.empty:
             return {}
 
-        # GT → set of pred IDs it was matched to
+        # GT -> set of pred IDs it was matched to
         gt_to_preds: Dict[int, set] = {}
-        # Pred → set of GT IDs it was matched to
+        # Pred -> set of GT IDs it was matched to
         pred_to_gts: Dict[int, set] = {}
 
         for _, row in matches.iterrows():
@@ -109,7 +109,7 @@ def evaluate_mtmc(
     Unlike per-camera evaluation, this merges all cameras into one
     accumulator with globally-unique GT IDs and globally-unique predicted
     IDs.  A vehicle tracked with the same global_id across cameras is
-    treated as one identity — matching the AI City Challenge protocol.
+    treated as one identity - matching the AI City Challenge protocol.
 
     IDF1 = 2*IDTP / (2*IDTP + IDFP + IDFN)
 
@@ -132,7 +132,7 @@ def evaluate_mtmc(
     gt_dir_p = Path(gt_dir)
     pred_dir_p = Path(pred_dir)
 
-    # Single global accumulator — GT IDs are globally unique per CityFlowV2
+    # Single global accumulator - GT IDs are globally unique per CityFlowV2
     global_acc = mm.MOTAccumulator(auto_id=True)
     per_camera: Dict[str, Dict[str, float]] = {}
 
@@ -199,7 +199,7 @@ def evaluate_mtmc(
     mtmc_mota = float(global_summary["mota"].iloc[0])
     mtmc_idsw = int(global_summary["num_switches"].iloc[0])
 
-    # ── Error analysis: fragmentation vs conflation ─────────────────────
+    # -- Error analysis: fragmentation vs conflation ---------------------
     error_analysis = _analyze_mtmc_errors(global_acc)
 
     logger.info(
@@ -267,7 +267,7 @@ def _remap_class1_in_dir(src_dir: Path, dst_dir: Path, glob: str = "*.txt") -> N
     CityFlowV2 uses class=-1 in GT (unclassified vehicle) and class 2/5/7 in
     predictions.  Remapping both GT and predictions to class=1 ensures TrackEval
     places them in the same "pedestrian" bucket and can compute HOTA correctly.
-    Without this fix GT class=-1 ends up in a separate bucket → HOTA=0.
+    Without this fix GT class=-1 ends up in a separate bucket -> HOTA=0.
     """
     dst_dir.mkdir(parents=True, exist_ok=True)
     for src_file in src_dir.glob(glob):
@@ -305,12 +305,12 @@ def _evaluate_with_trackeval(
     # Remap BOTH to class=1 in temporary copies so TrackEval can match them.
     tmp_root = Path(tempfile.mkdtemp())
     try:
-        # Remap predictions (2/5/7 → 1)
+        # Remap predictions (2/5/7 -> 1)
         remapped_pred_name = pred_path.name + "_cls1"
         remapped_pred_path = tmp_root / remapped_pred_name
         _remap_class1_in_dir(pred_path, remapped_pred_path)
 
-        # Remap GT (-1 → 1): build a parallel GT directory with updated class fields
+        # Remap GT (-1 -> 1): build a parallel GT directory with updated class fields
         gt_remapped_root = tmp_root / "gt_cls1"
         gt_remapped_path = _remap_gt_class1(gt_path, gt_remapped_root)
 
@@ -350,7 +350,7 @@ def _remap_gt_class1(gt_path: Path, dst_root: Path) -> Path:
             import shutil
             shutil.copy2(str(src_seqinfo), str(dst_seq / "seqinfo.ini"))
 
-        # Find gt.txt — CityFlowV2 places it at either gt/gt.txt or gt.txt
+        # Find gt.txt - CityFlowV2 places it at either gt/gt.txt or gt.txt
         src_gt_candidates = [
             seq_dir / "gt" / "gt.txt",
             seq_dir / "gt.txt",
@@ -427,14 +427,14 @@ def _run_trackeval(
 
     raw_results, _ = evaluator.evaluate([dataset], metrics_list)
 
-    # Parse results — collect per-sequence and overall
+    # Parse results - collect per-sequence and overall
     result = EvaluationResult()
     per_camera: Dict[str, Dict[str, float]] = {}
 
     for _trk, tracker_results in raw_results.items():
         for _ds, dataset_results in tracker_results.items():
             for seq_name, seq_results in dataset_results.items():
-                # Skip COMBINED_SEQ — TrackEval sums raw TP/FP/FN across
+                # Skip COMBINED_SEQ - TrackEval sums raw TP/FP/FN across
                 # sequences, which is invalid for multi-camera setups where
                 # cameras share the same vehicles.  Per-camera mean is the
                 # standard aggregation for MTMC benchmarks.

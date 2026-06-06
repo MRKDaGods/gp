@@ -1,4 +1,4 @@
-"""Stage 1 — Per-Camera Detection & Tracking pipeline.
+"""Stage 1 - Per-Camera Detection & Tracking pipeline.
 
 Runs YOLO detection and BoxMOT tracking on extracted frames for each camera,
 producing per-camera Tracklet lists.
@@ -42,7 +42,7 @@ def _load_roi_mask(cfg: DictConfig, camera_id: str) -> Optional[np.ndarray]:
     coverage = mask.sum() / 255 / mask.size * 100
     if coverage < 10.0:
         logger.warning(
-            f"ROI mask for {camera_id} has only {coverage:.1f}% coverage — "
+            f"ROI mask for {camera_id} has only {coverage:.1f}% coverage - "
             f"skipping (likely bad mask)"
         )
         return None
@@ -211,7 +211,7 @@ def run_stage1(
         all_tracklets[camera_id] = tracklets
         logger.info(f"  Camera {camera_id}: {len(tracklets)} tracklets")
 
-    # Check frame failure rate — for forensics, >20% loss is unacceptable
+    # Check frame failure rate - for forensics, >20% loss is unacceptable
     if failed_frames > 0:
         failure_rate = failed_frames / max(total_frames, 1) * 100
         logger.warning(
@@ -220,7 +220,7 @@ def run_stage1(
         if failure_rate > 20.0:
             raise RuntimeError(
                 f"Too many frame read failures: {failed_frames}/{total_frames} "
-                f"({failure_rate:.1f}%) — aborting stage 1 to prevent incomplete evidence"
+                f"({failure_rate:.1f}%) - aborting stage 1 to prevent incomplete evidence"
             )
 
     # Save

@@ -92,7 +92,7 @@ def _run_dir_for_video(video_id: str) -> Optional[Path]:
 
 
 def _persist_probe_link(video_id: str, run_id: str) -> None:
-    """Write video_id → run_id mapping to disk so it survives server restarts."""
+    """Write video_id -> run_id mapping to disk so it survives server restarts."""
     try:
         link_path = OUTPUT_DIR / run_id / "probe_video_id.txt"
         link_path.parent.mkdir(parents=True, exist_ok=True)

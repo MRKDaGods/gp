@@ -28,7 +28,7 @@ def main(models_dir: str):
     models_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
-    print("MTMC Tracker — Model Weight Download")
+    print("MTMC Tracker - Model Weight Download")
     print("=" * 60)
 
     # 1. YOLO26m

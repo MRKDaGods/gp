@@ -30,7 +30,7 @@ class StubRepository:
         self,
         videos: Dict[str, Dict] | None = None,
         latest_runs: Dict[str, str] | None = None,
-        trajectories: Optional[List[Dict]] = None,   # None → stage4 missing
+        trajectories: Optional[List[Dict]] = None,   # None -> stage4 missing
         probe_artifact: Optional[EmbeddingArtifact] = None,
         gallery_artifact: Optional[EmbeddingArtifact] = None,
     ) -> None:
@@ -86,7 +86,7 @@ _NOOP_PATCHES = [
 
 
 # ---------------------------------------------------------------------------
-# Test 1 — EmbeddingArtifact.load from fixture directory
+# Test 1 - EmbeddingArtifact.load from fixture directory
 # ---------------------------------------------------------------------------
 
 def test_embedding_artifact_load(fixture_timeline_dir):
@@ -100,7 +100,7 @@ def test_embedding_artifact_load(fixture_timeline_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test 2 — InMemoryDatasetRepository smoke test
+# Test 2 - InMemoryDatasetRepository smoke test
 # ---------------------------------------------------------------------------
 
 def test_dataset_repository_get_video():
@@ -114,7 +114,7 @@ def test_dataset_repository_get_video():
 
 
 # ---------------------------------------------------------------------------
-# Test 3 — no_selection fast path
+# Test 3 - no_selection fast path
 # ---------------------------------------------------------------------------
 
 def test_query_no_selection():
@@ -133,7 +133,7 @@ def test_query_no_selection():
 
 
 # ---------------------------------------------------------------------------
-# Test 4 — Stage 4 missing → needs_association
+# Test 4 - Stage 4 missing -> needs_association
 # ---------------------------------------------------------------------------
 
 def test_query_no_stage4():
@@ -159,7 +159,7 @@ def test_query_no_stage4():
 
 
 # ---------------------------------------------------------------------------
-# Test 5 — visual match (probe rows ≡ gallery rows 0-9, similarity ≈ 1.0)
+# Test 5 - visual match (probe rows == gallery rows 0-9, similarity ~ 1.0)
 # ---------------------------------------------------------------------------
 
 def test_query_visual_match(probe_artifact, gallery_artifact, sample_trajectories):
@@ -171,8 +171,8 @@ def test_query_visual_match(probe_artifact, gallery_artifact, sample_trajectorie
         gallery_artifact=gallery_artifact,
     )
     service = TimelineService(repo)
-    # Select probe tracks 1+2 only — their rows (0-3) are identical to gallery
-    # rows 0-3 (trajectory 0, c002 tracks 10+11), giving similarity ≈ 1.0.
+    # Select probe tracks 1+2 only - their rows (0-3) are identical to gallery
+    # rows 0-3 (trajectory 0, c002 tracks 10+11), giving similarity ~ 1.0.
     # Selecting all 5 tracks would reduce p25 below threshold because the other
     # trajectories don't cover all probe tracks simultaneously.
     req = _make_request(
@@ -199,11 +199,11 @@ def test_query_visual_match(probe_artifact, gallery_artifact, sample_trajectorie
 
 
 # ---------------------------------------------------------------------------
-# Test 6 — embedding dim mismatch (no PCA file)
+# Test 6 - embedding dim mismatch (no PCA file)
 # ---------------------------------------------------------------------------
 
 def test_query_dim_mismatch(fixture_timeline_dir):
-    """Probe and gallery with different dims and no PCA pkl → dim_mismatch mode."""
+    """Probe and gallery with different dims and no PCA pkl -> dim_mismatch mode."""
     probe = EmbeddingArtifact.load(fixture_timeline_dir / "probe", "probe_run")
     assert probe is not None
 

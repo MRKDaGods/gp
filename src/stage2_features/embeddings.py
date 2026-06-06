@@ -66,14 +66,14 @@ def camera_aware_batch_normalize(
         epsilon: Small constant to avoid division by zero.
 
     Returns:
-        (N, D) camera-BN'd embeddings (not yet L2-normalized —
+        (N, D) camera-BN'd embeddings (not yet L2-normalized -
         caller should apply ``l2_normalize`` afterwards).
     """
     result = embeddings.copy()
     unique_cameras = set(camera_ids)
 
     if len(unique_cameras) <= 1:
-        # Only one camera — global BN
+        # Only one camera - global BN
         mean = result.mean(axis=0, keepdims=True)
         std = result.std(axis=0, keepdims=True) + epsilon
         return ((result - mean) / std).astype(np.float32)

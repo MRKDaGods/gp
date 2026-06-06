@@ -75,7 +75,7 @@ export function DatasetProcessing() {
             void fetchDatasets(); // refresh list
           }
         } catch (err) {
-          // log but keep polling — transient network hiccup
+          // log but keep polling - transient network hiccup
           console.warn(`Status poll failed for ${id}:`, err);
         }
       }
@@ -121,7 +121,7 @@ export function DatasetProcessing() {
             </h2>
             <p className="text-muted-foreground mt-1">
               Select a dataset folder to process all cameras through the full
-              pipeline (stages 0–4).
+              pipeline (stages 0-4).
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={fetchDatasets}>
@@ -232,7 +232,7 @@ export function DatasetProcessing() {
                             Stage {(progress.completedStages ?? 0) + 1} of{" "}
                             {progress.totalStages}
                             {progress.currentStageName &&
-                              ` — ${progress.currentStageName}`}
+                              ` - ${progress.currentStageName}`}
                           </div>
                         )}
                       </div>

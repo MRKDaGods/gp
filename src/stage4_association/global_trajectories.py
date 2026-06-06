@@ -50,15 +50,15 @@ def merge_tracklets_to_trajectories(
         feat_indices = [x[0] for x in tracklets]
         ordered_tracklets = [x[1] for x in tracklets]
 
-        # ── Confidence: mean pairwise cosine similarity ──────────────────
+        # -- Confidence: mean pairwise cosine similarity ------------------
         confidence = _compute_cluster_confidence(feat_indices, embeddings, combined_sim)
 
-        # ── Evidence: pairwise similarity records for audit trail ─────────
+        # -- Evidence: pairwise similarity records for audit trail ---------
         evidence = _build_evidence_records(
             feat_indices, feature_to_tracklet_key, combined_sim,
         )
 
-        # ── Timeline: ordered camera appearances ─────────────────────────
+        # -- Timeline: ordered camera appearances -------------------------
         timeline = [
             {
                 "camera_id": t.camera_id,

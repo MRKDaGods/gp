@@ -47,8 +47,8 @@ python scripts/download_weights.py --set veri --force             # re-download
 | `all` | ~2.3 GB | Everything above (8 files) |
 
 The two `veri` checkpoints are the exact SHA-256-pinned files reported in the
-paper (`tab:repro`): Stream 1 `8d32334a…`, Stream 2 (CLIP-SENet v6)
-`d24bd3cd…`. Evaluating them reproduces the 89.97% standalone and 93.32% fusion
+paper (`tab:repro`): Stream 1 `8d32334a...`, Stream 2 (CLIP-SENet v6)
+`d24bd3cd...`. Evaluating them reproduces the 89.97% standalone and 93.32% fusion
 mAP results.
 
 ## Datasets
@@ -65,7 +65,7 @@ python scripts/download_assets.py --all --dry-run # preview
 | Asset | Destination | Source |
 | --- | --- | --- |
 | VeRi-776 eval dataset | `data/raw/veri776/` | Kaggle dataset `abhyudaya12/veri-vehicle-re-identification-dataset` |
-| CityFlowV2 dataset | `data/raw/cityflowv2/` | Manual — see below |
+| CityFlowV2 dataset | `data/raw/cityflowv2/` | Manual - see below |
 
 CityFlowV2 is not available as a complete public Kaggle dataset. Download AI City
 Challenge 2022 Track 1 manually from the official site, then place it under

@@ -83,11 +83,11 @@ REID_DEAD_ENDS = [
 ]
 
 HARSH_TRUTH = {
-    "10.1 Where do we stand against verified VeRi-776 SOTA?": "Our best single-model mAP of **89.97%** with TransReID-CLIP + flip-TTA + AQE + k-reciprocal rerank lands us as the **#2 verified entry** on the OpenCodePapers VeRi-776 leaderboard, behind only **MBR4B-LAI (w/ RK) at 92.1%**, and **+1.97pp ahead** of RPTM (88.0%, the prior single-network non-meta winner). On **R1** our 98.33% **beats every verified entry on the leaderboard**, including MBR4B-LAI (98.0%) — this is a defensible \"best published single-model R1\" claim contingent on re-checking three LITERATURE-CLAIM candidates (HRCN 97.32, MsKAT 97.40, DCAL 96.90) which on existing literature numbers are all below 98.33%. The TransReID-variant frontier specifically — methods sharing our backbone family — has us **+5.47pp mAP and +1.03pp R1 over the strongest verified peer (CLIP-ReID, 84.5/97.3)**, and **+7.67pp / +1.23pp over the original TransReID baseline**. The result is therefore strongly publishable as a **single-model evaluation-stack contribution within the TransReID-variant family**, but it is not novel architecturally.",
-    "10.2 What is the actual bottleneck if we want to chase 92%+?": "The **2.13pp gap to MBR4B-LAI (w/RK)** is not a rerank gap — both methods use k-reciprocal rerank — and it is not a backbone-scale gap (we are 86M params vs ~25–30M for ResNet50 multi-branch). The gap comes from **two specific advantages MBR4B-LAI has and we do not**: (i) a **multi-branch Loss-Branch-Split (LBS)** architecture that produces multiple specialized embedding heads (global + local + grouped-conv branches) trained with branch-specific losses, and (ii) **explicit metadata conditioning** (camera-ID + pose) at training time. Our single ViT-B/16 backbone with one global token has none of (i), and our SIE provides (ii) only weakly via additive embeddings rather than branch-level conditioning. **Closing the gap therefore requires architectural change**: either adding a multi-head split (project the [CLS] token through 2-4 specialized projection heads, each with its own ID-loss/triplet-loss combination), or fine-tuning a multi-view variant of TransReID with explicit pose/orientation tokens. **Loss change alone (e.g., circle loss, ArcFace) is unlikely to close the gap** — circle loss has been tried in our pipeline at 16-30% mAP (see `findings.md`), and ArcFace on ResNet101-IBN-a hit a 50.80% mAP ceiling. Pretrain quality (CLIP) is already strong. Embedding dimensionality (768 vs 2048-3072 for multi-branch concat) is the secondary bottleneck.",
-    "10.3 What is the strongest paper angle?": "The publishable angle is **NOT \"we beat SOTA\"** — MBR4B-LAI's 92.1 forecloses that. The angle that survives Reviewer 2 is one of three options, in order of strength:\n\n1. **\"Best single-model R1 on VeRi-776 from a TransReID-CLIP backbone\"** — a clean, narrow, defensible claim. 98.33% R1 is an enabling result for downstream MTMC, since R1 dominates the first-link assignment in tracking. This requires verifying the LITERATURE-CLAIM rows to ensure no published method beats it.\n2. **\"Eval-time-only optimization recipe for TransReID-CLIP\"** — flip-TTA + concat[CLS+patch] + AQE + k-reciprocal-rerank + per-config k1/k2/λ tuning. We ship a +5.47pp mAP / +1.03pp R1 lift over the same backbone (CLIP-ReID) with **zero training cost**. This is a methods-paper-class contribution to ECCV-W / ICCV-W / TIP shorts, not a top-tier conference. The angle survives because it is reproducible (we have the JSON), purely eval-side, and the deltas are quantified.\n3. **\"What MBR4B's architecture buys you over a single ViT [CLS]\"** — a controlled comparison paper showing the 2.13pp gap is fully explained by branch-split + metadata. This requires retraining MBR4B-LAI ourselves to confirm. Higher-impact but higher-risk.",
-    "10.4 Recommendation": "**Do NOT pursue further architecture refinement on the VeRi-776 single-model angle.** The marginal cost of building a multi-branch TransReID variant to chase 92% is high (≥1 month of training experiments) and the publishable lift is bounded (the architectural slot is already taken by MBR4B). **Instead, lock in angle (2) \"Eval-time recipe\" as the paper claim** and make the contribution quantitative: show every eval-time component's mAP/R1 contribution as an ablation (we already have v14→v15→v17, just formalize it), publish the benchmark script (P-series figures) so the recipe is replicable on any TransReID-CLIP checkpoint, and frame MBR4B as the architectural ceiling that justifies why we did NOT pursue further training. **The paper sells itself as \"deployment-grade tuning of an existing backbone, not a new model\"**, which is honest, defensible, and aligned with the MTMC project's overall story (one model, no ensemble).",
-    "10.5 Caveats": "- Three LITERATURE-CLAIM rows (HRCN 97.32 R1, MsKAT 97.40 R1, DCAL 96.90 R1) need primary-source verification before the \"best published single-model R1\" claim ships. Coder must fetch these arXiv PDFs and confirm or refute.\n- The MBR4B family's `+RK` = +6pp claim should be verified against the paper's ablation table; if their `+RK` lift is smaller than ours (we get +7.76pp from baseline 82.21 → 89.97), our recipe may already be the stronger reranking variant. If true, that strengthens angle (2).\n- The 86M / 17.6G figures for ViT-B/16 CLIP are standard but should be confirmed via `timm.create_model(\"vit_base_patch16_clip_224\").default_cfg` and a `fvcore.nn.FlopCountAnalysis` measurement at 224x224 input.",
+    "10.1 Where do we stand against verified VeRi-776 SOTA?": "Our best single-model mAP of **89.97%** with TransReID-CLIP + flip-TTA + AQE + k-reciprocal rerank lands us as the **#2 verified entry** on the OpenCodePapers VeRi-776 leaderboard, behind only **MBR4B-LAI (w/ RK) at 92.1%**, and **+1.97pp ahead** of RPTM (88.0%, the prior single-network non-meta winner). On **R1** our 98.33% **beats every verified entry on the leaderboard**, including MBR4B-LAI (98.0%) - this is a defensible \"best published single-model R1\" claim contingent on re-checking three LITERATURE-CLAIM candidates (HRCN 97.32, MsKAT 97.40, DCAL 96.90) which on existing literature numbers are all below 98.33%. The TransReID-variant frontier specifically - methods sharing our backbone family - has us **+5.47pp mAP and +1.03pp R1 over the strongest verified peer (CLIP-ReID, 84.5/97.3)**, and **+7.67pp / +1.23pp over the original TransReID baseline**. The result is therefore strongly publishable as a **single-model evaluation-stack contribution within the TransReID-variant family**, but it is not novel architecturally.",
+    "10.2 What is the actual bottleneck if we want to chase 92%+?": "The **2.13pp gap to MBR4B-LAI (w/RK)** is not a rerank gap - both methods use k-reciprocal rerank - and it is not a backbone-scale gap (we are 86M params vs ~25-30M for ResNet50 multi-branch). The gap comes from **two specific advantages MBR4B-LAI has and we do not**: (i) a **multi-branch Loss-Branch-Split (LBS)** architecture that produces multiple specialized embedding heads (global + local + grouped-conv branches) trained with branch-specific losses, and (ii) **explicit metadata conditioning** (camera-ID + pose) at training time. Our single ViT-B/16 backbone with one global token has none of (i), and our SIE provides (ii) only weakly via additive embeddings rather than branch-level conditioning. **Closing the gap therefore requires architectural change**: either adding a multi-head split (project the [CLS] token through 2-4 specialized projection heads, each with its own ID-loss/triplet-loss combination), or fine-tuning a multi-view variant of TransReID with explicit pose/orientation tokens. **Loss change alone (e.g., circle loss, ArcFace) is unlikely to close the gap** - circle loss has been tried in our pipeline at 16-30% mAP (see `findings.md`), and ArcFace on ResNet101-IBN-a hit a 50.80% mAP ceiling. Pretrain quality (CLIP) is already strong. Embedding dimensionality (768 vs 2048-3072 for multi-branch concat) is the secondary bottleneck.",
+    "10.3 What is the strongest paper angle?": "The publishable angle is **NOT \"we beat SOTA\"** - MBR4B-LAI's 92.1 forecloses that. The angle that survives Reviewer 2 is one of three options, in order of strength:\n\n1. **\"Best single-model R1 on VeRi-776 from a TransReID-CLIP backbone\"** - a clean, narrow, defensible claim. 98.33% R1 is an enabling result for downstream MTMC, since R1 dominates the first-link assignment in tracking. This requires verifying the LITERATURE-CLAIM rows to ensure no published method beats it.\n2. **\"Eval-time-only optimization recipe for TransReID-CLIP\"** - flip-TTA + concat[CLS+patch] + AQE + k-reciprocal-rerank + per-config k1/k2/lambda tuning. We ship a +5.47pp mAP / +1.03pp R1 lift over the same backbone (CLIP-ReID) with **zero training cost**. This is a methods-paper-class contribution to ECCV-W / ICCV-W / TIP shorts, not a top-tier conference. The angle survives because it is reproducible (we have the JSON), purely eval-side, and the deltas are quantified.\n3. **\"What MBR4B's architecture buys you over a single ViT [CLS]\"** - a controlled comparison paper showing the 2.13pp gap is fully explained by branch-split + metadata. This requires retraining MBR4B-LAI ourselves to confirm. Higher-impact but higher-risk.",
+    "10.4 Recommendation": "**Do NOT pursue further architecture refinement on the VeRi-776 single-model angle.** The marginal cost of building a multi-branch TransReID variant to chase 92% is high (>=1 month of training experiments) and the publishable lift is bounded (the architectural slot is already taken by MBR4B). **Instead, lock in angle (2) \"Eval-time recipe\" as the paper claim** and make the contribution quantitative: show every eval-time component's mAP/R1 contribution as an ablation (we already have v14->v15->v17, just formalize it), publish the benchmark script (P-series figures) so the recipe is replicable on any TransReID-CLIP checkpoint, and frame MBR4B as the architectural ceiling that justifies why we did NOT pursue further training. **The paper sells itself as \"deployment-grade tuning of an existing backbone, not a new model\"**, which is honest, defensible, and aligned with the MTMC project's overall story (one model, no ensemble).",
+    "10.5 Caveats": "- Three LITERATURE-CLAIM rows (HRCN 97.32 R1, MsKAT 97.40 R1, DCAL 96.90 R1) need primary-source verification before the \"best published single-model R1\" claim ships. Coder must fetch these arXiv PDFs and confirm or refute.\n- The MBR4B family's `+RK` = +6pp claim should be verified against the paper's ablation table; if their `+RK` lift is smaller than ours (we get +7.76pp from baseline 82.21 -> 89.97), our recipe may already be the stronger reranking variant. If true, that strengthens angle (2).\n- The 86M / 17.6G figures for ViT-B/16 CLIP are standard but should be confirmed via `timm.create_model(\"vit_base_patch16_clip_224\").default_cfg` and a `fvcore.nn.FlopCountAnalysis` measurement at 224x224 input.",
 }
 
 
@@ -276,7 +276,7 @@ def metric_block(perf: dict[str, Any], key: str) -> dict[str, Any]:
 def stat_mean_std(block: dict[str, Any]) -> str:
     if not block:
         return "N/A"
-    return f"{block.get('mean', 0.0):.2f} ± {block.get('std', 0.0):.2f} ms"
+    return f"{block.get('mean', 0.0):.2f} +/- {block.get('std', 0.0):.2f} ms"
 
 
 def perf_value(perf: dict[str, Any], key: str) -> float | None:
@@ -330,8 +330,8 @@ def build_g9_veri_rerank_sweep(veri_results: dict[str, Any], veri_summary: dict[
         ax_right.plot(series["lambdas"], series["map"], color=sweep_colors[k1], marker="s", linewidth=1.8, linestyle="--")
     ax_left.scatter([0.2], [veri_summary["best_r1"]["r1"]], color=COLORS["frontier"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
     ax_right.scatter([0.2], [veri_summary["best_map"]["map"]], color=COLORS["frontier"], marker="*", s=220, edgecolors="black", linewidths=0.8, zorder=4)
-    ax_left.set_title("VeRi-776 Rerank λ Sweep on the Deployed TransReID-CLIP Checkpoint")
-    ax_left.set_xlabel("Rerank λ")
+    ax_left.set_title("VeRi-776 Rerank lambda Sweep on the Deployed TransReID-CLIP Checkpoint")
+    ax_left.set_xlabel("Rerank lambda")
     ax_left.set_ylabel("R1 (%)")
     ax_right.set_ylabel("mAP (%)")
     ax_left.set_xticks(VERI_SWEEP_LAMBDAS)
@@ -343,7 +343,7 @@ def build_g9_veri_rerank_sweep(veri_results: dict[str, Any], veri_summary: dict[
     ax_right.spines["left"].set_visible(False)
     ax_right.spines["right"].set_color("#777777")
     ax_right.tick_params(colors="#333333")
-    fig.text(0.01, 0.01, f"Source: {relative_path(VERI_RESULTS_PATH)}. The lines show the single_flip rerank λ sweep; starred markers identify the checked-in best-R1 and best-mAP v17 rows.", fontsize=8, color=COLORS["text"])
+    fig.text(0.01, 0.01, f"Source: {relative_path(VERI_RESULTS_PATH)}. The lines show the single_flip rerank lambda sweep; starred markers identify the checked-in best-R1 and best-mAP v17 rows.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "G9_veri_rerank_sweep")
 
 
@@ -472,7 +472,7 @@ def build_v6_eval_ablation(veri_summary: dict[str, dict[str, Any]]) -> None:
     ax_right.spines["left"].set_visible(False)
     ax_right.spines["right"].set_color("#777777")
     ax_right.tick_params(colors="#333333")
-    fig.text(0.01, 0.01, f"Rows are reconstructed from {relative_path(VERI_RESULTS_PATH)} using the stored rerank and AQE configs. The figure intentionally preserves the existing v14→v15→v17 storyline from the checked-in evaluation bundle.", fontsize=8, color=COLORS["text"])
+    fig.text(0.01, 0.01, f"Rows are reconstructed from {relative_path(VERI_RESULTS_PATH)} using the stored rerank and AQE configs. The figure intentionally preserves the existing v14->v15->v17 storyline from the checked-in evaluation bundle.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "V6_veri_eval_ablation")
 
 
@@ -506,7 +506,7 @@ def build_v8_ge90_focus(veri_summary: dict[str, dict[str, Any]]) -> None:
     ax.set_xlim(88.5, 93.5)
     ax.set_title("Verified VeRi-776 Methods at or Above 90% mAP")
     format_axes(ax)
-    fig.text(0.01, 0.01, "Verified ≥90% mAP entries on VeRi-776 from the OpenCodePapers leaderboard as of April 2026 = 1. The dashed blue line is our best single-model reference at 89.97 mAP.", fontsize=8, color=COLORS["text"])
+    fig.text(0.01, 0.01, "Verified >=90% mAP entries on VeRi-776 from the OpenCodePapers leaderboard as of April 2026 = 1. The dashed blue line is our best single-model reference at 89.97 mAP.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "V8_veri_ge90_focus")
 
 
@@ -522,7 +522,7 @@ def build_v9_single_vs_ensemble(rows: list[dict[str, Any]]) -> None:
     ax.set_xlim(-0.4, 1.4)
     ax.set_ylim(55, 95)
     ax.set_title("Verified VeRi-776 Entries by Single-Model vs Ensemble Status")
-    ax.text(1.0, 75.0, "No verified ensemble entries\nwith mAP ≥ 80 in this research pass\n(DATA_UNAVAILABLE)", ha="center", va="center", fontsize=9.0, color=COLORS["text"])
+    ax.text(1.0, 75.0, "No verified ensemble entries\nwith mAP >= 80 in this research pass\n(DATA_UNAVAILABLE)", ha="center", va="center", fontsize=9.0, color=COLORS["text"])
     format_axes(ax)
     fig.text(0.01, 0.01, "The verified leaderboard slice used by this report collapses to single-model methods. MBR4B-LAI uses metadata fusion, but it is still a single network in the spec taxonomy.", fontsize=8, color=COLORS["text"])
     save_figure(fig, "V9_veri_single_vs_ensemble")
@@ -627,7 +627,7 @@ def build_p5_pipeline_breakdown(perf: dict[str, Any]) -> None:
     note = hardware_caption(perf)
     alt_rerank = breakdown.get("rerank_k1_30_k2_10_lambda_0p2")
     if alt_rerank is not None:
-        note = f"{note} Alternate rerank timing also logged: k1=30, k2=10, λ=0.2 = {float(alt_rerank):.1f} ms."
+        note = f"{note} Alternate rerank timing also logged: k1=30, k2=10, lambda=0.2 = {float(alt_rerank):.1f} ms."
     fig.text(0.01, 0.01, note, fontsize=8, color=COLORS["text"])
     save_figure(fig, "P5_veri_pipeline_breakdown")
 
@@ -657,8 +657,8 @@ The local benchmark is intentionally narrow: batch-1 inference timing for the Vi
 | Peak VRAM fp32 | {perf.get('vram_peak_mb_fp32', 'N/A')} MB |
 | Peak VRAM fp16 | {perf.get('vram_peak_mb_fp16', 'N/A')} MB |
 | AQE k=3 | {pipeline.get('aqe_k3', 'N/A')} ms |
-| Rerank k1=30, k2=10, λ=0.2 | {pipeline.get('rerank_k1_30_k2_10_lambda_0p2', 'N/A')} ms |
-| Rerank k1=80, k2=15, λ=0.2 | {pipeline.get('rerank_k1_80_k2_15_lambda_0p2', 'N/A')} ms |
+| Rerank k1=30, k2=10, lambda=0.2 | {pipeline.get('rerank_k1_30_k2_10_lambda_0p2', 'N/A')} ms |
+| Rerank k1=80, k2=15, lambda=0.2 | {pipeline.get('rerank_k1_80_k2_15_lambda_0p2', 'N/A')} ms |
 
 Figures **P1-P5** translate the same JSON into plot form. Every non-ours latency or VRAM bar remains explicitly marked as DATA_UNAVAILABLE rather than backfilled with guessed values.
 
@@ -686,9 +686,9 @@ This report is now intentionally **VeRi-776 only**. The repository-backed headli
 | Config | mAP | R1 | R5 | R10 | Source |
 |---|---:|---:|---:|---:|---|
 | Baseline with SIE (20 cams) | {veri_summary['baseline']['map']:.2f}% | {veri_summary['baseline']['r1']:.2f}% | {veri_summary['baseline']['r5']:.2f}% | {veri_summary['baseline']['r10']:.2f}% | `{relative_path(VERI_RESULTS_PATH)}` |
-| Best R1: single_flip rerank (k1=24, k2=8, λ=0.2) | {veri_summary['best_r1']['map']:.2f}% | **{veri_summary['best_r1']['r1']:.2f}%** | {veri_summary['best_r1']['r5']:.2f}% | {veri_summary['best_r1']['r10']:.2f}% | same |
-| Best mAP: concat_patch_flip AQE k=3 + rerank (k1=80, k2=15, λ=0.2) | **{veri_summary['best_map']['map']:.2f}%** | {veri_summary['best_map']['r1']:.2f}% | {veri_summary['best_map']['r5']:.2f}% | {veri_summary['best_map']['r10']:.2f}% | same |
-| Joint optimum: concat_patch_flip AQE k=2 + rerank (k1=80, k2=15, λ=0.2) | {veri_summary['joint']['map']:.2f}% | {veri_summary['joint']['r1']:.2f}% | {veri_summary['joint']['r5']:.2f}% | {veri_summary['joint']['r10']:.2f}% | same |
+| Best R1: single_flip rerank (k1=24, k2=8, lambda=0.2) | {veri_summary['best_r1']['map']:.2f}% | **{veri_summary['best_r1']['r1']:.2f}%** | {veri_summary['best_r1']['r5']:.2f}% | {veri_summary['best_r1']['r10']:.2f}% | same |
+| Best mAP: concat_patch_flip AQE k=3 + rerank (k1=80, k2=15, lambda=0.2) | **{veri_summary['best_map']['map']:.2f}%** | {veri_summary['best_map']['r1']:.2f}% | {veri_summary['best_map']['r5']:.2f}% | {veri_summary['best_map']['r10']:.2f}% | same |
+| Joint optimum: concat_patch_flip AQE k=2 + rerank (k1=80, k2=15, lambda=0.2) | {veri_summary['joint']['map']:.2f}% | {veri_summary['joint']['r1']:.2f}% | {veri_summary['joint']['r5']:.2f}% | {veri_summary['joint']['r10']:.2f}% | same |
 
 The checked-in JSON turns VeRi-776 into a first-class result instead of a side note. The non-dominated endpoints remain split: **best R1** comes from the single_flip rerank row, while **best mAP** comes from concat_patch_flip + AQE + rerank on the same checkpoint.
 
@@ -715,9 +715,9 @@ The checked-in JSON turns VeRi-776 into a first-class result instead of a side n
 
 The verified frontier inside the TransReID family is clean: our best-mAP row is **+5.47pp mAP / +0.50pp R1** over CLIP-ReID, and our best-R1 row pushes even further on rank-1 while trading away some mAP.
 
-### 2.3 Methods with Verified mAP ≥ 90%
+### 2.3 Methods with Verified mAP >= 90%
 
-Verified ≥90% mAP count: **{len(ge90)}**.
+Verified >=90% mAP count: **{len(ge90)}**.
 
 | Method | mAP | R1 | Notes |
 |---|---:|---:|---|
@@ -728,23 +728,23 @@ Verified ≥90% mAP count: **{len(ge90)}**.
 
 ## 5. Figures
 
-- ![G5 dead ends](figures/G5_dead_ends.png) — Vehicle-ReID negative controls that still matter for the VeRi-only paper angle.
-- ![G6 compute cost](figures/G6_compute_cost.png) — Parameter-efficiency reference for the subset of VeRi-776 rows that report model size.
-- ![G9 VeRi rerank sweep](figures/G9_veri_rerank_sweep.png) — The checked-in rerank λ sweep for the deployed checkpoint.
-- ![V1 VeRi pareto](figures/V1_veri_pareto.png) — Verified and citation-pending R1 vs mAP scatter with the Pareto frontier.
-- ![V2 VeRi grouped categories](figures/V2_veri_category_grouped.png) — Verified mAP leaders grouped by General SOTA, TransReID-Variant, and Ours.
-- ![V3 VeRi mAP vs params](figures/V3_veri_map_vs_params.png) — Efficiency frontier over the rows that actually disclose parameter counts.
-- ![V4 VeRi backbone family](figures/V4_veri_backbone_family.png) — Best verified result by backbone family.
-- ![V5 VeRi year progression](figures/V5_veri_year_progression.png) — Best verified mAP by year, with DATA_UNAVAILABLE years left explicit.
-- ![V6 VeRi eval ablation](figures/V6_veri_eval_ablation.png) — Eval-time progression from baseline to the non-dominated v17 endpoints.
-- ![V7 VeRi gap to SOTA](figures/V7_veri_gap_to_sota.png) — Gap to the 92.1 mAP verified ceiling for every verified row.
-- ![V8 VeRi ge90 focus](figures/V8_veri_ge90_focus.png) — The verified ≥90% mAP slice, with our 89.97 reference line.
-- ![V9 VeRi single vs ensemble](figures/V9_veri_single_vs_ensemble.png) — Single-model vs ensemble strip plot showing the verified roster collapses to single-model methods.
-- ![P1 latency](figures/P1_veri_inference_latency.png) — Local batch-1 latency benchmark with DATA_UNAVAILABLE placeholders for literature baselines.
-- ![P2 VRAM](figures/P2_veri_vram_peak.png) — Peak VRAM benchmark with the same explicit DATA_UNAVAILABLE handling.
-- ![P3 mAP vs FLOPs](figures/P3_veri_map_vs_flops.png) — Small reference plot for the few rows with FLOPs values.
-- ![P4 params vs FLOPs](figures/P4_veri_params_vs_flops.png) — Degenerate but explicit architectural-efficiency reference for the ViT-B/16 family.
-- ![P5 pipeline breakdown](figures/P5_veri_pipeline_breakdown.png) — Stacked timing view for the best-mAP eval path.
+- ![G5 dead ends](figures/G5_dead_ends.png) - Vehicle-ReID negative controls that still matter for the VeRi-only paper angle.
+- ![G6 compute cost](figures/G6_compute_cost.png) - Parameter-efficiency reference for the subset of VeRi-776 rows that report model size.
+- ![G9 VeRi rerank sweep](figures/G9_veri_rerank_sweep.png) - The checked-in rerank lambda sweep for the deployed checkpoint.
+- ![V1 VeRi pareto](figures/V1_veri_pareto.png) - Verified and citation-pending R1 vs mAP scatter with the Pareto frontier.
+- ![V2 VeRi grouped categories](figures/V2_veri_category_grouped.png) - Verified mAP leaders grouped by General SOTA, TransReID-Variant, and Ours.
+- ![V3 VeRi mAP vs params](figures/V3_veri_map_vs_params.png) - Efficiency frontier over the rows that actually disclose parameter counts.
+- ![V4 VeRi backbone family](figures/V4_veri_backbone_family.png) - Best verified result by backbone family.
+- ![V5 VeRi year progression](figures/V5_veri_year_progression.png) - Best verified mAP by year, with DATA_UNAVAILABLE years left explicit.
+- ![V6 VeRi eval ablation](figures/V6_veri_eval_ablation.png) - Eval-time progression from baseline to the non-dominated v17 endpoints.
+- ![V7 VeRi gap to SOTA](figures/V7_veri_gap_to_sota.png) - Gap to the 92.1 mAP verified ceiling for every verified row.
+- ![V8 VeRi ge90 focus](figures/V8_veri_ge90_focus.png) - The verified >=90% mAP slice, with our 89.97 reference line.
+- ![V9 VeRi single vs ensemble](figures/V9_veri_single_vs_ensemble.png) - Single-model vs ensemble strip plot showing the verified roster collapses to single-model methods.
+- ![P1 latency](figures/P1_veri_inference_latency.png) - Local batch-1 latency benchmark with DATA_UNAVAILABLE placeholders for literature baselines.
+- ![P2 VRAM](figures/P2_veri_vram_peak.png) - Peak VRAM benchmark with the same explicit DATA_UNAVAILABLE handling.
+- ![P3 mAP vs FLOPs](figures/P3_veri_map_vs_flops.png) - Small reference plot for the few rows with FLOPs values.
+- ![P4 params vs FLOPs](figures/P4_veri_params_vs_flops.png) - Degenerate but explicit architectural-efficiency reference for the ViT-B/16 family.
+- ![P5 pipeline breakdown](figures/P5_veri_pipeline_breakdown.png) - Stacked timing view for the best-mAP eval path.
 
 ## 6. Harsh Truth
 

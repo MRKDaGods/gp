@@ -84,7 +84,7 @@ export function ContractBanner({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-base font-semibold sm:text-lg">Stage {stage} · {title}</h1>
+            <h1 className="truncate text-base font-semibold sm:text-lg">Stage {stage} * {title}</h1>
             <StageStatusBadge status={status} />
             {blockedBy ? (
               <Button

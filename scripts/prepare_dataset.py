@@ -129,7 +129,7 @@ def _write_manifest(rows, path):
 
 
 def prepare_cityflowv2(root: Path, output: Path):
-    """Prepare CityFlowV2 dataset — verify structure and list cameras.
+    """Prepare CityFlowV2 dataset - verify structure and list cameras.
 
     After download_datasets.py, CityFlowV2 is organised as:
         data/raw/cityflowv2/S001_c001/vdo.avi + gt.txt
@@ -177,7 +177,7 @@ def prepare_cityflowv2(root: Path, output: Path):
 
 
 def prepare_wildtrack(root: Path, output: Path):
-    """Prepare WILDTRACK dataset — convert JSON annotations to MOT format.
+    """Prepare WILDTRACK dataset - convert JSON annotations to MOT format.
 
     Converts the WILDTRACK per-frame JSON annotations into per-camera
     MOTChallenge-format gt.txt files that the evaluation stage can use.

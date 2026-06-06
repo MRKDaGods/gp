@@ -62,7 +62,7 @@ function detectionCropUrl(
   return apiUrl(`/crops/${encodeURIComponent(videoId)}?frameId=${frameId}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&quality=${quality}&minEdge=${minEdge}&pad=0.12`);
 }
 
-/** Frames per camera a quick-test run ingests/processes — mirrors the pipeline's
+/** Frames per camera a quick-test run ingests/processes - mirrors the pipeline's
  *  smoke-test cap (stage0 max_frames / stage1 cam_frames[:10]). */
 const SMOKE_FRAME_LIMIT = 10;
 
@@ -118,9 +118,9 @@ function summariseTracks(
 }
 
 /**
- * First frame each track appears — used for sidebar thumbs only.
+ * First frame each track appears - used for sidebar thumbs only.
  * Playback updates overlay boxes every frame; if thumbs used that data, the
- * crop URL would change ~30×/s and flood `/api/crops` (freezing the video).
+ * crop URL would change ~30x/s and flood `/api/crops` (freezing the video).
  */
 function buildTrackThumbnailSources(
   frameMap: Map<number, Detection[]>
@@ -292,14 +292,14 @@ const DetectionCropThumb = memo(function DetectionCropThumb({
   );
 }, detectionCropThumbPropsEqual);
 
-/** Stable FPS for frame index ↔ time mapping (fallback 25 when metadata is missing). */
+/** Stable FPS for frame index <-> time mapping (fallback 25 when metadata is missing). */
 function effectivePlaybackFps(video: VideoFile | null): number {
   if (!video) return 25;
   const f = video.fps;
   return f > 0 ? Math.min(Math.max(f, 1), 120) : 25;
 }
 
-/** Align frame index with decoded media time using real duration (avoids fps-metadata mismatch → sticky boxes). */
+/** Align frame index with decoded media time using real duration (avoids fps-metadata mismatch -> sticky boxes). */
 function timeToFrameIndex(tSec: number, durationSec: number, totalFrames: number): number {
   const maxF = Math.max(0, totalFrames - 1);
   if (maxF <= 0) return 0;
@@ -322,7 +322,7 @@ function frameIndexToTimeSec(
   return frame / fallbackFps;
 }
 
-/** Isolated `<video>` so parent frame updates don’t reconcile the media element (smoother decode/paint). */
+/** Isolated `<video>` so parent frame updates don't reconcile the media element (smoother decode/paint). */
 const DetectionStreamVideo = memo(function DetectionStreamVideo({
   streamUrl,
   videoRef,
@@ -376,7 +376,7 @@ function ProgressStat({
   );
 }
 
-/** Verbose Stage 1 progress panel — shows live telemetry and a Cancel control. */
+/** Verbose Stage 1 progress panel - shows live telemetry and a Cancel control. */
 function DetectionProgressPanel({
   status,
   progress,
@@ -421,8 +421,8 @@ function DetectionProgressPanel({
   const pct = Math.max(0, Math.min(100, Math.round(progress)));
   const stageValue =
     completedStages && totalStages
-      ? `${stageLabel ?? "Stage"} · ${Math.min(completedStages, totalStages)}/${totalStages}`
-      : stageLabel ?? "—";
+      ? `${stageLabel ?? "Stage"} * ${Math.min(completedStages, totalStages)}/${totalStages}`
+      : stageLabel ?? "-";
   return (
     <div
       className={cn(
@@ -444,8 +444,8 @@ function DetectionProgressPanel({
             {failed
               ? "Detection failed"
               : running
-                ? "Detecting & tracking…"
-                : "Stage 1 — Detection & Tracking"}
+                ? "Detecting & tracking..."
+                : "Stage 1 - Detection & Tracking"}
           </span>
         </div>
         {running ? (
@@ -465,7 +465,7 @@ function DetectionProgressPanel({
       <div className="space-y-3 px-4 py-3">
         <div>
           <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-            <span className="truncate text-muted-foreground">{message ?? "Working…"}</span>
+            <span className="truncate text-muted-foreground">{message ?? "Working..."}</span>
             <span className="shrink-0 font-mono text-muted-foreground">{pct}%</span>
           </div>
           {/* Backend reports coarse per-stage milestones, not per-frame progress.
@@ -504,11 +504,11 @@ function DetectionProgressPanel({
           />
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          <span className="truncate">Source: {videoName ?? "—"}</span>
+          <span className="truncate">Source: {videoName ?? "-"}</span>
           {camera ? (
             <span className="font-mono">
               Camera {camera}
-              {camerasProcessed ? ` · ${camerasProcessed} processed` : ""}
+              {camerasProcessed ? ` * ${camerasProcessed} processed` : ""}
             </span>
           ) : null}
           {frame && frameTotal ? (
@@ -521,14 +521,14 @@ function DetectionProgressPanel({
         {running && liveMessage ? (
           <p className="truncate text-xs text-foreground/80">{liveMessage}</p>
         ) : null}
-        {/* Error detail — show WHY a run failed instead of silently reverting. */}
+        {/* Error detail - show WHY a run failed instead of silently reverting. */}
         {failed && errorMessage ? (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             <p className="font-medium">The detection run did not complete.</p>
             <p className="mt-0.5 break-words font-mono text-[11px] opacity-90">{errorMessage}</p>
           </div>
         ) : null}
-        {/* Live, verbose pipeline log — the raw subprocess output, tailing. */}
+        {/* Live, verbose pipeline log - the raw subprocess output, tailing. */}
         {(running || failed) && logTail ? (
           <div className="overflow-hidden rounded-md border border-border/60 bg-background/60">
             <div className="flex items-center gap-1.5 border-b border-border/40 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -545,7 +545,7 @@ function DetectionProgressPanel({
   );
 }
 
-/** Camera tab bar — switch which camera's footage + detections are displayed.
+/** Camera tab bar - switch which camera's footage + detections are displayed.
  *  Only rendered for multi-camera runs (a single-camera run has nothing to switch). */
 function CameraSwitcher({
   videos,
@@ -616,9 +616,9 @@ export function DetectionStage() {
   const seekTokenRef = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
   const [videoSize, setVideoSize] = useState({ width: 1920, height: 1080 });
-  // Full source-video frame count (used for accurate frame↔time mapping).
+  // Full source-video frame count (used for accurate frame<->time mapping).
   const [totalFrames, setTotalFrames] = useState(100);
-  // Highest frame id that actually has detections — i.e. how far detection was
+  // Highest frame id that actually has detections - i.e. how far detection was
   // run. For a quick-test (10-frame) run this is ~9, so the scrubber/playback are
   // bounded to the processed range instead of spanning the whole source video.
   const [detectedMaxFrame, setDetectedMaxFrame] = useState<number | null>(null);
@@ -679,9 +679,9 @@ export function DetectionStage() {
 
   // Navigable frame count. The <video> element always streams the FULL source
   // file, but for a quick-test run only the first SMOKE_FRAME_LIMIT frames are
-  // ingested/processed, so we cap the scrubber to that scope — both before
+  // ingested/processed, so we cap the scrubber to that scope - both before
   // detection runs (via runInput.smoke) and after (via the detected range).
-  // frame↔time mapping always uses the full `totalFrames` so seeks stay accurate.
+  // frame<->time mapping always uses the full `totalFrames` so seeks stay accurate.
   const navTotalFrames = (() => {
     let cap = totalFrames;
     if (detectedMaxFrame != null) cap = Math.min(cap, detectedMaxFrame + 1);
@@ -708,7 +708,7 @@ export function DetectionStage() {
     if (prevDetectionVideoIdRef.current !== id) {
       prevDetectionVideoIdRef.current = id;
       // In a multi-camera dataset run every camera belongs to ONE run, so
-      // switching the *viewed* camera is just a view change — it must not flush
+      // switching the *viewed* camera is just a view change - it must not flush
       // downstream stage progress. Only flush in the single-upload flow where a
       // different video genuinely means a different source.
       if (!usePipelineStore.getState().runInput) {
@@ -744,7 +744,7 @@ export function DetectionStage() {
       setVideoSize({ width: currentVideo.width || 1920, height: currentVideo.height || 1080 });
 
       // Only show detections once THIS run's detection has completed. Before that
-      // (idle / running / error) the viewer stays empty — we never display stale
+      // (idle / running / error) the viewer stays empty - we never display stale
       // artifacts left over from a previous run on the same source video.
       if (stage1Status !== "done") {
         detectionCacheRef.current = new Map();
@@ -786,7 +786,7 @@ export function DetectionStage() {
     };
   }, [currentVideo, stage1Status, setDetections, setIsPlaying]);
 
-  // Container size tracking — use clientWidth/clientHeight (excludes border)
+  // Container size tracking - use clientWidth/clientHeight (excludes border)
   // and ResizeObserver for reliable layout tracking.
   useEffect(() => {
     const el = containerRef.current;
@@ -800,7 +800,7 @@ export function DetectionStage() {
     return () => ro.disconnect();
   }, []);
 
-  // Look up cached detections for the current frame — no API call.
+  // Look up cached detections for the current frame - no API call.
   useEffect(() => {
     if (!currentVideo || isLoading) return;
     const cached = detectionCacheRef.current.get(currentFrame);
@@ -827,8 +827,8 @@ export function DetectionStage() {
   }, [navTotalFrames, currentFrame, setCurrentFrame]);
 
   // Pause playback when this stage isn't visible. All stages stay mounted (hidden via
-  // CSS), so a running video/frame-fallback loop would otherwise keep playing — and
-  // fetching frames — after the user navigates away from Detection.
+  // CSS), so a running video/frame-fallback loop would otherwise keep playing - and
+  // fetching frames - after the user navigates away from Detection.
   useEffect(() => {
     if (currentStage !== 1 && isPlaying) setIsPlaying(false);
   }, [currentStage, isPlaying, setIsPlaying]);
@@ -856,7 +856,7 @@ export function DetectionStage() {
     const tick = (timeSec?: number) => {
       const t = timeSec ?? v.currentTime;
       const dur = v.duration;
-      // Loop playback within the processed range — a quick-test run only has the
+      // Loop playback within the processed range - a quick-test run only has the
       // first few frames, so don't keep playing the rest of the source video.
       if (Number.isFinite(navMaxTime) && navMaxTime > 0 && t > navMaxTime + 1e-3) {
         v.currentTime = 0;
@@ -1056,7 +1056,7 @@ export function DetectionStage() {
                 />
               ) : (
                 <span className="text-xs text-muted-foreground">
-                  One scrubber drives all tiles · nudge a camera’s offset to align it
+                  One scrubber drives all tiles * nudge a camera's offset to align it
                 </span>
               )}
             </div>
@@ -1122,7 +1122,7 @@ export function DetectionStage() {
                         </p>
                       </>
                     ) : (
-                      <p className="font-medium text-white">Loading detections…</p>
+                      <p className="font-medium text-white">Loading detections...</p>
                     )}
                   </div>
                 </div>
@@ -1200,7 +1200,7 @@ export function DetectionStage() {
                   </div>
                 </div>
 
-                {/* Bounding boxes overlay — above frame stack (imgs use z-1/z-2) */}
+                {/* Bounding boxes overlay - above frame stack (imgs use z-1/z-2) */}
                 <div className="absolute inset-0 z-[5]" style={{ pointerEvents: "none" }}>
                   {detections.map((detection) => {
                     const isSelected = selectedTrackIds.has(detection.trackId);
@@ -1235,7 +1235,7 @@ export function DetectionStage() {
                         onMouseEnter={() => setHoveredId(detection.id)}
                         onMouseLeave={() => setHoveredId(null)}
                       >
-                        {/* Label — leads with the track ID so vehicles are identifiable */}
+                        {/* Label - leads with the track ID so vehicles are identifiable */}
                         <div
                           className={cn(
                             "absolute -top-6 left-0 flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-white whitespace-nowrap",
@@ -1314,7 +1314,7 @@ export function DetectionStage() {
               </div>
             )}
             <div className="mt-2.5 flex items-center justify-between gap-2">
-              <span className="text-[11px] text-muted-foreground">Tap to view · tick to follow across cameras</span>
+              <span className="text-[11px] text-muted-foreground">Tap to view * tick to follow across cameras</span>
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
                   type="button"
@@ -1324,7 +1324,7 @@ export function DetectionStage() {
                 >
                   Select all
                 </button>
-                <span className="text-muted-foreground/40">·</span>
+                <span className="text-muted-foreground/40">*</span>
                 <button
                   type="button"
                   className="text-[11px] font-medium text-muted-foreground hover:text-destructive disabled:opacity-40"
@@ -1359,7 +1359,7 @@ export function DetectionStage() {
                   const rangeLabel =
                     track.firstFrame === track.lastFrame
                       ? `frame ${track.firstFrame}`
-                      : `${track.firstFrame}–${track.lastFrame}`;
+                      : `${track.firstFrame}-${track.lastFrame}`;
                   return (
                     <div
                       key={`track-${track.trackId}`}
@@ -1374,7 +1374,7 @@ export function DetectionStage() {
                       onMouseEnter={() => setHoveredId(`track-${track.trackId}`)}
                       onMouseLeave={() => setHoveredId(null)}
                     >
-                      {/* Thumbnail — click to jump to this vehicle */}
+                      {/* Thumbnail - click to jump to this vehicle */}
                       <button
                         type="button"
                         onClick={() => jumpToVehicle(track.thumbFrameId)}
@@ -1397,7 +1397,7 @@ export function DetectionStage() {
                         )}
                         {/* legibility gradient */}
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-black/75 to-transparent" />
-                        {/* id + live — badge turns green when the vehicle is on screen now */}
+                        {/* id + live - badge turns green when the vehicle is on screen now */}
                         <span
                           className={cn(
                             "pointer-events-none absolute left-1 top-1 flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-bold text-white",
@@ -1436,9 +1436,9 @@ export function DetectionStage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                         </svg>
                       </button>
-                      {/* caption — frame coverage */}
+                      {/* caption - frame coverage */}
                       <div className="flex items-center justify-between gap-1 px-1.5 py-1 text-[10px] text-muted-foreground">
-                        <span className="truncate" title={`Frames ${track.firstFrame}–${track.lastFrame}`}>{rangeLabel}</span>
+                        <span className="truncate" title={`Frames ${track.firstFrame}-${track.lastFrame}`}>{rangeLabel}</span>
                         <span className="shrink-0">{track.frameCount}f</span>
                       </div>
                     </div>
@@ -1513,7 +1513,7 @@ export function DetectionStageActions() {
         <>
           <span className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            Detection running…
+            Detection running...
           </span>
           <Button type="button" variant="destructive" onClick={() => void handleCancel()} aria-label="Cancel detection run">
             <Square className="mr-2 h-3 w-3 fill-current" />

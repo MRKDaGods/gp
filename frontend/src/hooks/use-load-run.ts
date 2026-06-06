@@ -103,7 +103,7 @@ export function useLoadRun() {
 
       // Land on the furthest meaningful stage: Detection if tracking ran, else Upload.
       // Land on the furthest useful UI stage for what's on disk:
-      // assoc → Timeline, index/features → Inference, tracking/ingestion → Detection.
+      // assoc -> Timeline, index/features -> Inference, tracking/ingestion -> Detection.
       const s = detail.stages;
       const target: StageNumber = s.stage4 ? 4 : (s.stage3 || s.stage2) ? 3 : (s.stage1 || s.stage0) ? 1 : 0;
       setSessionStage(target);
@@ -111,7 +111,7 @@ export function useLoadRun() {
 
       toast({
         title: `Run ${detail.runId} opened`,
-        description: detail.name ? `${detail.name} — ${finalVideos.length} cameras` : `${finalVideos.length} cameras restored`,
+        description: detail.name ? `${detail.name} - ${finalVideos.length} cameras` : `${finalVideos.length} cameras restored`,
         variant: "success",
       });
       return true;

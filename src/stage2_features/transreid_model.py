@@ -1,9 +1,9 @@
 """TransReID model for inference in the MTMC pipeline.
 
 TransReID (He et al., ICCV 2021) with:
-- ViT backbone (via timm) — supports CLIP ViT-Base and standard ViTs
-- Side Information Embedding (SIE) — camera-aware tokens broadcast to ALL tokens
-- Jigsaw Patch Module (JPM) — used only during training
+- ViT backbone (via timm) - supports CLIP ViT-Base and standard ViTs
+- Side Information Embedding (SIE) - camera-aware tokens broadcast to ALL tokens
+- Jigsaw Patch Module (JPM) - used only during training
 - BNNeck + optional projection for deployment features
 - norm_pre support for CLIP ViT compatibility (critical for CLIP backbones)
 
@@ -32,7 +32,7 @@ class TransReID(nn.Module):
     During training, returns (cls_score, proj_feat[, jpm_score]).
 
     v6 CRITICAL FIX: Includes timm's norm_pre for CLIP compatibility.
-    CLIP ViTs use pre-LayerNorm that standard ViTs lack — skipping it
+    CLIP ViTs use pre-LayerNorm that standard ViTs lack - skipping it
     completely destroys pretrained features.
     """
 
@@ -53,8 +53,8 @@ class TransReID(nn.Module):
         self.sie_camera = sie_camera and num_cameras > 0
         self.jpm = jpm
 
-        # ViT backbone — pass img_size when it differs from the timm default
-        # (e.g. person ReID uses 256×128 → grid 16×8 = 128 patches)
+        # ViT backbone - pass img_size when it differs from the timm default
+        # (e.g. person ReID uses 256x128 -> grid 16x8 = 128 patches)
         timm_kwargs = dict(pretrained=pretrained, num_classes=0)
         if img_size is not None:
             timm_kwargs["img_size"] = img_size
@@ -83,7 +83,7 @@ class TransReID(nn.Module):
         self.bn = nn.BatchNorm1d(self.vit_dim)
         self.bn.bias.requires_grad_(False)
 
-        # Projection: Identity when embed_dim == vit_dim (e.g., 768 → 768)
+        # Projection: Identity when embed_dim == vit_dim (e.g., 768 -> 768)
         self.proj = (
             nn.Linear(self.vit_dim, embed_dim, bias=False)
             if embed_dim != self.vit_dim
@@ -145,7 +145,7 @@ class TransReID(nn.Module):
                 x = blk(x)
         x = self.vit.norm(x)
 
-        # CLS token → global feature
+        # CLS token -> global feature
         g_feat = x[:, 0]
         bn = self.bn(g_feat)
         proj = self.proj(bn)
@@ -166,7 +166,7 @@ class TransReID(nn.Module):
         # If concat_patch is set, concatenate CLS with GeM-pooled patches
         proj_normed = F.normalize(proj, p=2, dim=1)
         if getattr(self, "_concat_patch", False):
-            patches = x[:, 1:]  # (B, N, D) — patch tokens
+            patches = x[:, 1:]  # (B, N, D) - patch tokens
             # GeM pooling: generalized mean with p=3 (more discriminative than avg)
             gem_p = getattr(self, "_gem_p", 3.0)
             patch_gem = (patches.clamp(min=1e-6) ** gem_p).mean(dim=1) ** (1.0 / gem_p)
@@ -194,7 +194,7 @@ def build_transreid(
         pretrained: Load pretrained ViT weights from timm.
         weights_path: Path to trained TransReID checkpoint.
         img_size: (H, W) input image size.  When different from the timm
-            default (224×224), timm creates the ViT with the correct
+            default (224x224), timm creates the ViT with the correct
             patch grid and positional embedding length.
 
     Returns:
@@ -265,7 +265,7 @@ def build_transreid(
                     padded[:ckpt_cams] = state_dict[key]
                     state_dict[key] = padded
                     logger.info(
-                        f"SIE embed: padded {ckpt_cams} → "
+                        f"SIE embed: padded {ckpt_cams} -> "
                         f"{model_sd[key].shape[0]} cameras"
                     )
                 elif key == "vit.pos_embed":
@@ -276,8 +276,8 @@ def build_transreid(
                     if ckpt_tokens == model_tokens:
                         pass  # same size, load directly
                     elif model_tokens > ckpt_tokens:
-                        # Model requests larger grid (e.g. 384×384) than checkpoint
-                        # (e.g. 256×256). Bicubic-interpolate grid embeddings.
+                        # Model requests larger grid (e.g. 384x384) than checkpoint
+                        # (e.g. 256x256). Bicubic-interpolate grid embeddings.
                         cls_token = ckpt_pe[:, :1, :]  # (1, 1, D)
                         grid_pe = ckpt_pe[:, 1:, :]    # (1, N_ckpt, D)
                         ckpt_grid = int(grid_pe.shape[1] ** 0.5)
@@ -290,20 +290,20 @@ def build_transreid(
                         grid_pe = grid_pe.permute(0, 2, 3, 1).reshape(1, model_grid * model_grid, -1)
                         state_dict[key] = torch.cat([cls_token, grid_pe], dim=1)
                         logger.info(
-                            f"Interpolated vit.pos_embed: {ckpt_grid}×{ckpt_grid} → "
-                            f"{model_grid}×{model_grid} grid (bicubic)"
+                            f"Interpolated vit.pos_embed: {ckpt_grid}x{ckpt_grid} -> "
+                            f"{model_grid}x{model_grid} grid (bicubic)"
                         )
                     else:
-                        # Checkpoint has more tokens — resize model to match
+                        # Checkpoint has more tokens - resize model to match
                         logger.info(
-                            f"Resizing vit.pos_embed: model {model_sd[key].shape} → "
+                            f"Resizing vit.pos_embed: model {model_sd[key].shape} -> "
                             f"checkpoint {state_dict[key].shape}"
                         )
                         model.vit.pos_embed = nn.Parameter(
                             torch.zeros_like(state_dict[key]), requires_grad=False,
                         )
                 else:
-                    # Shape mismatch on classifier heads etc. — drop
+                    # Shape mismatch on classifier heads etc. - drop
                     logger.debug(
                         f"Dropping key {key}: ckpt {state_dict[key].shape} "
                         f"vs model {model_sd[key].shape}"

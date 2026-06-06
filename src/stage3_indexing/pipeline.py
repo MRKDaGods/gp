@@ -1,4 +1,4 @@
-"""Stage 3 — Indexing & Storage pipeline.
+"""Stage 3 - Indexing & Storage pipeline.
 
 Builds a FAISS index for embedding search and populates a SQLite metadata store.
 """

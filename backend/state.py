@@ -39,7 +39,7 @@ class AppState:
     def reset(self) -> None:
         """Clear all state dicts in-place.  Safe to call between tests.
 
-        The lock is intentionally preserved — resetting it while another
+        The lock is intentionally preserved - resetting it while another
         thread holds it would cause a deadlock.
         """
         self.active_runs.clear()

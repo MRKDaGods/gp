@@ -123,12 +123,12 @@ export function RefinementStage() {
   }, [isPlaying, playbackSpeed, refinementCandidateFrames.length]);
 
   // If the user comes back and changes their reference frames (or a re-search / clear empties
-  // them), Refinement is being re-worked — un-mark it done (and drop its per-run completion
+  // them), Refinement is being re-worked - un-mark it done (and drop its per-run completion
   // marker) so it isn't shown as finished while edits are pending.
   //
   // CRITICAL: depend ONLY on `refinementFrames`, and read runId/stores via getState. Listing
   // `runId` as a dep made this fire when a run is LOADED (runId changes) and wipe the done
-  // status that useLoadRun had just restored — making Refinement go stale on open-run/refresh.
+  // status that useLoadRun had just restored - making Refinement go stale on open-run/refresh.
   const skipFramesInvalidateRef = useRef(true);
   useEffect(() => {
     if (skipFramesInvalidateRef.current) {
@@ -381,7 +381,7 @@ function buildRefinedTrack(alt: any, avgScore: number, index: number): TimelineT
     representativeFrame: alt.representativeFrame,
     representativeBbox: alt.representativeBbox,
     segments: [segment],
-    label: alt.label ?? `Refined · ${alt.cameraId} · track ${alt.trackId}`,
+    label: alt.label ?? `Refined * ${alt.cameraId} * track ${alt.trackId}`,
     confidence: avgScore,
     className: alt.className ?? "vehicle",
   };

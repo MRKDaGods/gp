@@ -97,7 +97,7 @@ class ReIDModel:
         # Enable CLS+GeM(patches) concatenation for TransReID
         if concat_patch and self.is_transreid:
             self.model._concat_patch = True
-            self.embedding_dim = embedding_dim * 2  # 768 → 1536
+            self.embedding_dim = embedding_dim * 2  # 768 -> 1536
 
         norm_tag = "CLIP" if self.clip_normalization else "ImageNet"
         interp_tag = "BICUBIC" if self._interp == cv2.INTER_CUBIC else "BILINEAR"
@@ -384,7 +384,7 @@ class ReIDModel:
             vit_model=vit_model,
             pretrained=weights_path is None,
             weights_path=weights_path,
-            img_size=self.input_size,  # (H, W) — sets correct patch grid
+            img_size=self.input_size,  # (H, W) - sets correct patch grid
         )
         return model
 
@@ -599,7 +599,7 @@ class ReIDModel:
                 features = self._extract_batch(batch_crops, cam_id=cam_id)
             except RuntimeError as e:
                 if "out of memory" in str(e).lower():
-                    # CUDA OOM — retry with halved batch size
+                    # CUDA OOM - retry with halved batch size
                     import torch
                     torch.cuda.empty_cache()
                     half_bs = max(1, len(batch_crops) // 2)
@@ -797,7 +797,7 @@ class ReIDModel:
                 t = self._preprocess(batch).to(self.device)
                 if self.half:
                     t = t.half()
-                # Full forward pass: ViT backbone → BNNeck (updates running stats)
+                # Full forward pass: ViT backbone -> BNNeck (updates running stats)
                 _ = self.model(t)
 
         # Restore momentum and switch back to eval (locks in the adapted stats)

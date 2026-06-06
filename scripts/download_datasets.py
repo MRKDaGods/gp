@@ -34,7 +34,7 @@ DATASETS = {
         "description": "Multi-camera multi-target vehicle tracking across 46 cameras at 16 city intersections",
         "target_dir": "data/raw/cityflowv2",
         "type": "gdrive",
-        # AIC 2022 Track 1 — dataset archive on Google Drive
+        # AIC 2022 Track 1 - dataset archive on Google Drive
         # If this ID becomes stale, check https://www.aicitychallenge.org/2022-data-and-evaluation/
         "gdrive_id": "13wNJpS_Oaoe-7y5Dzexg_Ol7bKu1OWuC",
         "archive_name": "AIC22_Track1_MTMC_Tracking.zip",
@@ -172,7 +172,7 @@ def _post_extract_wildtrack(target_dir: Path) -> None:
           annotations_positions/*.json
 
     WILDTRACK comes with frame images (not video), so we generate stub videos
-    from the image sequences so Stage 0 can process them uniformly — OR we
+    from the image sequences so Stage 0 can process them uniformly - OR we
     configure Stage 0 to read frames directly.  For now we just verify structure.
     """
     extracted = _find_extracted_root(target_dir, marker_dirs=["Image_subsets"])

@@ -56,7 +56,7 @@ function normalizeVideoFile(raw: any): VideoFile {
   };
 }
 
-/** Map API confidence to 0–1 for UI (handles 0–100 percent from some sources). */
+/** Map API confidence to 0-1 for UI (handles 0-100 percent from some sources). */
 function normalizeConfidence(raw: unknown): number {
   let c = Number(raw ?? 0);
   if (!Number.isFinite(c)) return 0;
@@ -985,7 +985,7 @@ export interface RunStageMap {
 export type RunStageState = "idle" | "running" | "done" | "error";
 
 /** Per-stage status that merges disk artifacts with the in-flight run's live
- *  stage — so a running/failed stage shows even before it writes output. */
+ *  stage - so a running/failed stage shows even before it writes output. */
 export type RunStageStatusMap = Record<keyof RunStageMap, RunStageState>;
 
 export interface RunVideoRecord {
@@ -1033,7 +1033,7 @@ export async function getRunDetail(runId: string): Promise<ApiResponse<RunSummar
   return fetchApi<ApiResponse<RunSummary>>(`/runs/${encodeURIComponent(runId)}`);
 }
 
-/** Delete a run — removes its directory from disk and clears server state. */
+/** Delete a run - removes its directory from disk and clears server state. */
 export async function deleteRun(runId: string): Promise<ApiResponse<{ runId: string; removed: boolean }>> {
   return fetchApi<ApiResponse<{ runId: string; removed: boolean }>>(`/runs/${encodeURIComponent(runId)}`, {
     method: 'DELETE',

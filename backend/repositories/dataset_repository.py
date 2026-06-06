@@ -1,4 +1,4 @@
-"""DatasetRepository — protocol and in-memory implementation.
+"""DatasetRepository - protocol and in-memory implementation.
 
 The protocol defines the read-only view over pipeline artefacts needed by
 ``TimelineService`` and other query-time services.  The in-memory
@@ -39,10 +39,10 @@ class DatasetRepository(Protocol):
         """Load global trajectories for *run_id* from Stage-4 output.
 
         Returns:
-            ``None``  — if ``outputs/{run_id}/stage4/global_trajectories.json``
+            ``None``  - if ``outputs/{run_id}/stage4/global_trajectories.json``
                         does not exist (Stage 4 has not run for this run).
-            ``[]``    — if the file exists but is empty or non-list.
-            List[…]  — parsed trajectory list otherwise.
+            ``[]``    - if the file exists but is empty or non-list.
+            List[...]  - parsed trajectory list otherwise.
         """
         ...
 
@@ -61,8 +61,8 @@ class InMemoryDatasetRepository:
     globals in ``backend.state`` and the constant in ``backend.config``.
 
     Args:
-        uploaded_videos:     Mapping of ``video_id`` → video-record dict.
-        video_to_latest_run: Mapping of ``video_id`` → latest ``run_id``.
+        uploaded_videos:     Mapping of ``video_id`` -> video-record dict.
+        video_to_latest_run: Mapping of ``video_id`` -> latest ``run_id``.
         output_dir:          Root outputs directory (``backend.config.OUTPUT_DIR``).
     """
 

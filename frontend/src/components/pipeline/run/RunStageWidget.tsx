@@ -60,7 +60,7 @@ export function RunStageWidget({
   const setModalOpen = useKaggleCredentialsStore((state) => state.setModalOpen);
   const resolvedStatus = status ?? toStageStatus(stageProgress);
   const resolvedProgress = progress ?? stageProgress?.progress ?? 0;
-  const resolvedMessage = eta ? `${message ?? stageProgress?.message ?? "Waiting to run"} · ETA ${eta}` : message ?? stageProgress?.message;
+  const resolvedMessage = eta ? `${message ?? stageProgress?.message ?? "Waiting to run"} * ETA ${eta}` : message ?? stageProgress?.message;
   const resolvedTitle = title ?? (stage !== undefined ? `Stage ${stage}` : runLabel);
   const showKaggle = stageTarget === "kaggle" && Boolean(runId) && (isRunning || resolvedStatus === "running");
   const showControls = Boolean(onRun || children);

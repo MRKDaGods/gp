@@ -103,8 +103,8 @@ class TrackletFeatures:
     track_id: int
     camera_id: str
     class_id: int
-    embedding: np.ndarray       # shape: (embed_dim,) — PCA-whitened, L2-normed
-    hsv_histogram: np.ndarray   # shape: (h_bins + s_bins + v_bins,) — L2-normed
+    embedding: np.ndarray       # shape: (embed_dim,) - PCA-whitened, L2-normed
+    hsv_histogram: np.ndarray   # shape: (h_bins + s_bins + v_bins,) - L2-normed
     raw_embedding: Optional[np.ndarray] = None  # before PCA, for debugging
     multi_query_embeddings: Optional[np.ndarray] = None  # shape: (K, D) if enabled
 
@@ -120,7 +120,7 @@ class GlobalTrajectory:
     Forensic / intelligence metadata
     ---------------------------------
     confidence : mean pairwise cosine similarity between all tracklet pairs in
-        the cluster, in [0, 1].  A score ≥ 0.7 indicates a high-confidence
+        the cluster, in [0, 1].  A score >= 0.7 indicates a high-confidence
         identity match suitable for operational decisions.  Scores below 0.5
         should be treated as tentative.
 
@@ -141,8 +141,8 @@ class GlobalTrajectory:
     global_id: int
     tracklets: List[Tracklet] = field(default_factory=list)
 
-    # ── Forensic metadata ─────────────────────────────────────────────────────
-    confidence: float = 0.0   # mean pairwise appearance similarity (0–1)
+    # -- Forensic metadata -----------------------------------------------------
+    confidence: float = 0.0   # mean pairwise appearance similarity (0-1)
     evidence: List[Dict[str, Any]] = field(default_factory=list)
     # Camera-ordered timeline: [{"camera_id": str, "start": float, "end": float}]
     timeline: List[Dict[str, Any]] = field(default_factory=list)

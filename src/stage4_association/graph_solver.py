@@ -183,7 +183,7 @@ class GraphSolver:
 
         This is the approach used by the AIC21 1st-place MTMC solution.
         Complete linkage means two clusters merge only when ALL inter-cluster
-        distances are below the threshold — conservative and avoids runaway
+        distances are below the threshold - conservative and avoids runaway
         transitive merges.
 
         For nodes not connected by edges, distance is set to 1.0 (maximum
@@ -194,7 +194,7 @@ class GraphSolver:
         # Get only nodes that participate in at least one edge
         active_nodes = sorted(set(u for u, v in G.edges()) | set(v for u, v in G.edges()))
         if len(active_nodes) < 2:
-            # No edges or only one node with edges — return connected components
+            # No edges or only one node with edges - return connected components
             return list(nx.connected_components(G))
 
         # Build node index mapping
@@ -235,7 +235,7 @@ class GraphSolver:
 
         logger.info(
             f"Agglomerative clustering (complete linkage): "
-            f"{m} active nodes → {len(clusters_dict)} clusters "
+            f"{m} active nodes -> {len(clusters_dict)} clusters "
             f"+ {num_nodes - m} singletons"
         )
         return clusters
@@ -296,7 +296,7 @@ class GraphSolver:
                 for b in members_b:
                     if camera_ids[b] != cam_a:
                         continue
-                    # Same camera — check temporal overlap
+                    # Same camera - check temporal overlap
                     if start_times[a] <= end_times[b] and start_times[b] <= end_times[a]:
                         return True
             return False
@@ -483,7 +483,7 @@ class GraphSolver:
 
             total_pair_matches += matched_here
             logger.info(
-                f"Network flow pair {cam_a}↔{cam_b}: {matched_here} matches "
+                f"Network flow pair {cam_a}<->{cam_b}: {matched_here} matches "
                 f"above threshold {self.similarity_threshold:.3f}"
             )
 

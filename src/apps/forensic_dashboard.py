@@ -1,4 +1,4 @@
-"""MTMC Forensic Dashboard — Multi-Dataset Tracker.
+"""MTMC Forensic Dashboard - Multi-Dataset Tracker.
 
 Compact, multi-dataset forensic dashboard for cross-camera identity tracking.
 Key features:
@@ -56,10 +56,10 @@ DATASET_COLORS = {
     "unknown": "#6b7280",
 }
 DATASET_ICONS = {
-    "wildtrack": "🚶", "cityflowv2": "🚗", "epfl_lab": "🏢",
+    "wildtrack": "", "cityflowv2": "", "epfl_lab": "",
     "epfl_terrace": "T", "unknown": "?",
 }
-CLASS_ICONS = {"person": "🚶", "car": "🚗", "bus": "🚌", "truck": "🚛"}
+CLASS_ICONS = {"person": "", "car": "", "bus": "", "truck": ""}
 
 # 20-colour palette for identities in timeline view
 ID_PALETTE = [
@@ -102,7 +102,7 @@ COMPACT_CSS = """
 
 def ds_badge(name: str) -> str:
     c = DATASET_COLORS.get(name, DATASET_COLORS["unknown"])
-    icon = DATASET_ICONS.get(name, "📁")
+    icon = DATASET_ICONS.get(name, "")
     return (f'<span class="ds-badge" style="background:{c}18;color:{c};'
             f'border:1px solid {c}">{icon} {name.upper()}</span>')
 
@@ -313,9 +313,9 @@ def get_active_ds() -> Optional[dict]:
 # Pages
 # ---------------------------------------------------------------------------
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ OVERVIEW                                                                │
-# └─────────────────────────────────────────────────────────────────────────┘
+# +-------------------------------------------------------------------------+
+# | OVERVIEW                                                                |
+# +-------------------------------------------------------------------------+
 
 def page_overview():
     st.markdown("## Overview")
@@ -338,7 +338,7 @@ def page_overview():
             st.markdown("---")
             continue
 
-        # ── Metric pills ─────────────────────────────────────────────
+        # -- Metric pills ---------------------------------------------
         all_cams = sorted({tk["camera_id"] for t in trajs for tk in t["tracklets"]})
         multi = sum(1 for t in trajs if t["num_cameras"] > 1)
         cols = st.columns(7)
@@ -351,10 +351,10 @@ def page_overview():
             cols[5].metric("IDF1", f'{ev["idf1"]:.1%}')
             cols[6].metric("MOTA", f'{ev["mota"]:.1%}')
         else:
-            cols[5].metric("IDF1", "—")
-            cols[6].metric("MOTA", "—")
+            cols[5].metric("IDF1", "-")
+            cols[6].metric("MOTA", "-")
 
-        # ── Camera + class compact row ────────────────────────────────
+        # -- Camera + class compact row --------------------------------
         c_left, c_right = st.columns([3, 2])
         with c_left:
             manifest = entry.get("manifest")
@@ -370,10 +370,10 @@ def page_overview():
             cls_counts: Dict[str, int] = {}
             for t in trajs:
                 cls_counts[t["class_name"]] = cls_counts.get(t["class_name"], 0) + 1
-            parts = " · ".join(f"{CLASS_ICONS.get(c, '')} {c} **{n}**" for c, n in sorted(cls_counts.items()))
+            parts = " * ".join(f"{CLASS_ICONS.get(c, '')} {c} **{n}**" for c, n in sorted(cls_counts.items()))
             st.markdown(parts)
 
-        # ── Per-camera eval breakdown (collapsed) ─────────────────────
+        # -- Per-camera eval breakdown (collapsed) ---------------------
         if ev and ev.get("details"):
             per_cam = ev["details"].get("per_camera", {})
             if per_cam:
@@ -384,7 +384,7 @@ def page_overview():
                             for cam, m in sorted(per_cam.items())]
                     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-        # ── Top multi-camera identities ───────────────────────────────
+        # -- Top multi-camera identities -------------------------------
         with st.expander("Top multi-camera identities"):
             ranked = sorted(trajs, key=lambda t: (t["num_cameras"], t["total_duration"]), reverse=True)[:10]
             rows = [{
@@ -392,16 +392,16 @@ def page_overview():
                 "Class": t["class_name"],
                 "Cams": t["num_cameras"],
                 "Duration": f'{t["total_duration"]:.1f}s',
-                "Route": " → ".join(t["camera_sequence"]),
+                "Route": " -> ".join(t["camera_sequence"]),
             } for t in ranked]
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
         st.markdown("---")
 
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ IDENTITY BROWSER                                                        │
-# └─────────────────────────────────────────────────────────────────────────┘
+# +-------------------------------------------------------------------------+
+# | IDENTITY BROWSER                                                        |
+# +-------------------------------------------------------------------------+
 
 def page_gallery():
     st.markdown("## Identity Browser")
@@ -418,7 +418,7 @@ def page_gallery():
         st.warning("No trajectories loaded.")
         return
 
-    # ── Compact filter bar ────────────────────────────────────────────
+    # -- Compact filter bar --------------------------------------------
     c1, c2, c3, c4, c5 = st.columns([1.2, 0.8, 1, 0.7, 1.5])
     classes = sorted({t["class_name"] for t in trajs})
     with c1:
@@ -426,7 +426,7 @@ def page_gallery():
     with c2:
         fmin = st.number_input("Min cams", 1, 20, 1, key=f"gal_min_{ds}")
     with c3:
-        fsort = st.selectbox("Sort", ["Cameras ↓", "Duration ↓", "Frames ↓", "ID ↑"], key=f"gal_sort_{ds}")
+        fsort = st.selectbox("Sort", ["Cameras v", "Duration v", "Frames v", "ID ^"], key=f"gal_sort_{ds}")
     with c4:
         fsize = st.selectbox("Per page", [24, 48, 96], key=f"gal_sz_{ds}")
     with c5:
@@ -456,7 +456,7 @@ def page_gallery():
     page_items = filtered[pn * fsize:(pn + 1) * fsize]
     st.caption(f"Showing {len(page_items)} of {len(filtered)} identities")
 
-    # ── Card grid (5 columns) ────────────────────────────────────────
+    # -- Card grid (5 columns) ----------------------------------------
     n_cols = 5
     for row_start in range(0, len(page_items), n_cols):
         cols = st.columns(n_cols)
@@ -478,20 +478,20 @@ def page_gallery():
                     icon = CLASS_ICONS.get(t["class_name"], "")
                     cams_short = ", ".join(sorted({tk["camera_id"] for tk in t["tracklets"]}))
                     st.markdown(
-                        f'**{icon} ID {t["global_id"]}** · {t["class_name"]}  \n'
-                        f'📷{t["num_cameras"]} · ⏱{t["total_duration"]:.1f}s  \n'
+                        f'**{icon} ID {t["global_id"]}** * {t["class_name"]}  \n'
+                        f'{t["num_cameras"]} * {t["total_duration"]:.1f}s  \n'
                         f'<small style="color:#94a3b8">{cams_short}</small>',
                         unsafe_allow_html=True,
                     )
-                    if st.button("Inspect →", key=f"ins_{ds}_{t['global_id']}"):
+                    if st.button("Inspect ->", key=f"ins_{ds}_{t['global_id']}"):
                         st.session_state.selected_gid = t["global_id"]
                         st.session_state.nav_to = "Inspector"
                         st.rerun()
 
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ CROSS-CAMERA TIMELINE                                                   │
-# └─────────────────────────────────────────────────────────────────────────┘
+# +-------------------------------------------------------------------------+
+# | CROSS-CAMERA TIMELINE                                                   |
+# +-------------------------------------------------------------------------+
 
 def page_timeline():
     st.markdown("## Cross-Camera Timeline")
@@ -545,7 +545,7 @@ def page_timeline():
                 hovertemplate=(
                     f'ID {traj["global_id"]} ({traj["class_name"]})<br>'
                     f'Camera: {tk["camera_id"]}<br>'
-                    f'Time: {tk["start_time"]:.1f}s – {tk["end_time"]:.1f}s<br>'
+                    f'Time: {tk["start_time"]:.1f}s - {tk["end_time"]:.1f}s<br>'
                     f'Frames: {tk["num_frames"]}<extra></extra>'
                 ),
             ))
@@ -563,9 +563,9 @@ def page_timeline():
     st.plotly_chart(fig, use_container_width=True)
 
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ SURVEILLANCE VIEW                                                       │
-# └─────────────────────────────────────────────────────────────────────────┘
+# +-------------------------------------------------------------------------+
+# | SURVEILLANCE VIEW                                                       |
+# +-------------------------------------------------------------------------+
 
 def page_surveillance():
     st.markdown("## Surveillance")
@@ -617,8 +617,8 @@ def page_surveillance():
         f'<span class="cam-pill {"cam-on" if cam in active_cams else "cam-off"}">{cam}</span>'
         for cam in cameras
     )
-    st.markdown(f'<div class="info-card">**ID {selected_gid}** · {traj["class_name"]} · '
-                f'Frame {frame_id} · {len(active_cams)}/{len(cameras)} active {pills}</div>',
+    st.markdown(f'<div class="info-card">**ID {selected_gid}** * {traj["class_name"]} * '
+                f'Frame {frame_id} * {len(active_cams)}/{len(cameras)} active {pills}</div>',
                 unsafe_allow_html=True)
 
     # Camera grid
@@ -647,9 +647,9 @@ def page_surveillance():
                              use_container_width=True)
 
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ IDENTITY INSPECTOR                                                      │
-# └─────────────────────────────────────────────────────────────────────────┘
+# +-------------------------------------------------------------------------+
+# | IDENTITY INSPECTOR                                                      |
+# +-------------------------------------------------------------------------+
 
 def page_inspector():
     st.markdown("## Identity Inspector")
@@ -675,15 +675,15 @@ def page_inspector():
         return
 
     # Header card
-    route = " → ".join(traj["camera_sequence"])
+    route = " -> ".join(traj["camera_sequence"])
     st.markdown(
-        f'<div class="info-card"><b style="font-size:1.15rem">ID {gid}</b> · '
-        f'{traj["class_name"]} · {traj["num_cameras"]} cams · '
-        f'{traj["total_duration"]:.1f}s · Route: {route}</div>',
+        f'<div class="info-card"><b style="font-size:1.15rem">ID {gid}</b> * '
+        f'{traj["class_name"]} * {traj["num_cameras"]} cams * '
+        f'{traj["total_duration"]:.1f}s * Route: {route}</div>',
         unsafe_allow_html=True,
     )
 
-    # ── Appearance strip ──────────────────────────────────────────────
+    # -- Appearance strip ----------------------------------------------
     st.markdown('<div class="section-hd">Appearance Across Cameras</div>', unsafe_allow_html=True)
     sorted_tks = sorted(traj["tracklets"], key=lambda tk: tk["start_time"])
     n = len(sorted_tks)
@@ -693,11 +693,11 @@ def page_inspector():
             crop = get_representative_crop(stage0_dir, tk)
             if crop:
                 st.image(crop, use_container_width=True)
-            st.caption(f"{tk['camera_id']} · trk {tk['track_id']}\n"
-                       f"{tk['start_time']:.1f}–{tk['end_time']:.1f}s\n"
-                       f"{tk['num_frames']}f · {tk['mean_confidence']:.2f}")
+            st.caption(f"{tk['camera_id']} * trk {tk['track_id']}\n"
+                       f"{tk['start_time']:.1f}-{tk['end_time']:.1f}s\n"
+                       f"{tk['num_frames']}f * {tk['mean_confidence']:.2f}")
 
-    # ── Timeline bar chart ────────────────────────────────────────────
+    # -- Timeline bar chart --------------------------------------------
     st.markdown('<div class="section-hd">Timeline</div>', unsafe_allow_html=True)
     cam_colors = {}
     fig = go.Figure()
@@ -712,7 +712,7 @@ def page_inspector():
             marker_color=cam_colors[cam],
             name=cam, legendgroup=cam, showlegend=(cam not in shown),
             hovertemplate=(f"{cam} trk {tk['track_id']}<br>"
-                           f"{tk['start_time']:.1f}–{tk['end_time']:.1f}s<br>"
+                           f"{tk['start_time']:.1f}-{tk['end_time']:.1f}s<br>"
                            f"{tk['num_frames']} frames<extra></extra>"),
         ))
         shown.add(cam)
@@ -720,7 +720,7 @@ def page_inspector():
                       margin=dict(t=5, b=35, l=60, r=10))
     st.plotly_chart(fig, use_container_width=True)
 
-    # ── Tracklet table ────────────────────────────────────────────────
+    # -- Tracklet table ------------------------------------------------
     with st.expander("Tracklet Details"):
         rows = [{
             "Camera": tk["camera_id"], "Track": tk["track_id"],
@@ -731,9 +731,9 @@ def page_inspector():
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ CORRECTIONS                                                             │
-# └─────────────────────────────────────────────────────────────────────────┘
+# +-------------------------------------------------------------------------+
+# | CORRECTIONS                                                             |
+# +-------------------------------------------------------------------------+
 
 def page_corrections():
     st.markdown("## Identity Corrections")
@@ -755,7 +755,7 @@ def page_corrections():
 
     gid_opts = sorted(t["global_id"] for t in trajs)
 
-    # ── Reassign ──────────────────────────────────────────────────────
+    # -- Reassign ------------------------------------------------------
     with tab_reassign:
         st.caption("Move a wrongly-assigned tracklet to a different identity.")
         src_gid = st.selectbox("Source identity", gid_opts, key=f"c_src_{ds}")
@@ -763,7 +763,7 @@ def page_corrections():
         if src:
             tk_labels = [
                 f"{tk['camera_id']}/trk_{tk['track_id']} ({tk['num_frames']}f, "
-                f"{tk['start_time']:.1f}–{tk['end_time']:.1f}s)"
+                f"{tk['start_time']:.1f}-{tk['end_time']:.1f}s)"
                 for tk in src["tracklets"]
             ]
             sel_label = st.selectbox("Tracklet", tk_labels, key=f"c_tk_{ds}")
@@ -791,10 +791,10 @@ def page_corrections():
                                        src_gid, new_gid, reason)
                     _save_corrected(trajs, data["run_dir"])
                     load_trajectories.clear()
-                    st.success(f"Tracklet → ID {new_gid}")
+                    st.success(f"Tracklet -> ID {new_gid}")
                     st.rerun()
 
-    # ── Merge ─────────────────────────────────────────────────────────
+    # -- Merge ---------------------------------------------------------
     with tab_merge:
         st.caption("Merge two identities that are the same entity.")
         ca, cb = st.columns(2)
@@ -806,7 +806,7 @@ def page_corrections():
                     stage0_dir, max(ta["tracklets"], key=lambda tk: tk["num_frames"]))
                 if crop_a:
                     st.image(crop_a, width=160)
-                st.caption(f"{ta['num_cameras']} cams · {ta['total_duration']:.1f}s")
+                st.caption(f"{ta['num_cameras']} cams * {ta['total_duration']:.1f}s")
         with cb:
             gid_b = st.selectbox("Identity B", [g for g in gid_opts if g != gid_a], key=f"m_b_{ds}")
             tb = get_traj_by_gid(trajs, gid_b)
@@ -815,7 +815,7 @@ def page_corrections():
                     stage0_dir, max(tb["tracklets"], key=lambda tk: tk["num_frames"]))
                 if crop_b:
                     st.image(crop_b, width=160)
-                st.caption(f"{tb['num_cameras']} cams · {tb['total_duration']:.1f}s")
+                st.caption(f"{tb['num_cameras']} cams * {tb['total_duration']:.1f}s")
 
         reason = st.text_input("Reason", key=f"m_rsn_{ds}")
         if st.button("Merge", type="primary", key=f"m_apply_{ds}"):
@@ -826,13 +826,13 @@ def page_corrections():
                 store.log_merge(gid_a, gid_b, gid_a, reason)
                 _save_corrected(trajs, data["run_dir"])
                 load_trajectories.clear()
-                st.success(f"ID {gid_b} → ID {gid_a}")
+                st.success(f"ID {gid_b} -> ID {gid_a}")
                 st.rerun()
 
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ AUDIT LOG                                                               │
-# └─────────────────────────────────────────────────────────────────────────┘
+# +-------------------------------------------------------------------------+
+# | AUDIT LOG                                                               |
+# +-------------------------------------------------------------------------+
 
 def page_audit():
     st.markdown("## Audit Log")
@@ -853,7 +853,7 @@ def page_audit():
     if active and st.button("Undo Last"):
         undone = store.undo_last()
         if undone:
-            st.warning(f'Undone: {undone["action"]} (ID {undone["source_gid"]} → {undone["target_gid"]})')
+            st.warning(f'Undone: {undone["action"]} (ID {undone["source_gid"]} -> {undone["target_gid"]})')
         st.rerun()
 
     if corrections:
@@ -868,9 +868,9 @@ def page_audit():
         st.info("No corrections recorded.")
 
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ DATASET COMPARISON                                                      │
-# └─────────────────────────────────────────────────────────────────────────┘
+# +-------------------------------------------------------------------------+
+# | DATASET COMPARISON                                                      |
+# +-------------------------------------------------------------------------+
 
 def page_comparison():
     st.markdown("## Dataset Comparison")
@@ -1020,14 +1020,14 @@ def _save_corrected(trajs: List[dict], run_dir: str):
 def main():
     st.set_page_config(
         page_title="MTMC Forensic Tracker",
-        page_icon="🔍",
+        page_icon="",
         layout="wide",
         initial_sidebar_state="expanded",
     )
     st.markdown(COMPACT_CSS, unsafe_allow_html=True)
 
-    # ── Sidebar ───────────────────────────────────────────────────────
-    st.sidebar.markdown("### 🔍 MTMC Forensic Tracker")
+    # -- Sidebar -------------------------------------------------------
+    st.sidebar.markdown("###  MTMC Forensic Tracker")
 
     # Legacy --run-dir support
     parser = argparse.ArgumentParser()
@@ -1056,7 +1056,7 @@ def main():
             if not runs:
                 continue
             labels = [r.name for r in runs]
-            choice = st.sidebar.selectbox(f"{DATASET_ICONS.get(ds, '📁')} {ds}",
+            choice = st.sidebar.selectbox(f"{DATASET_ICONS.get(ds, '')} {ds}",
                                           labels, key=f"pick_{ds}")
             run_dir = runs[labels.index(choice)]
             if f"ds_{ds}" not in st.session_state:
@@ -1097,9 +1097,9 @@ def main():
     # Footer
     active = st.session_state.get("active_ds", "")
     loaded_count = sum(1 for k in st.session_state if k.startswith("ds_"))
-    st.sidebar.caption(f"Active: {active} · {loaded_count} dataset(s) loaded")
+    st.sidebar.caption(f"Active: {active} * {loaded_count} dataset(s) loaded")
 
-    # ── Page Router ───────────────────────────────────────────────────
+    # -- Page Router ---------------------------------------------------
     if page == "Overview":
         page_overview()
     elif page == "Identity Browser":

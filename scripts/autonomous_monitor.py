@@ -495,7 +495,7 @@ def phase2_analyze_results() -> Phase2Decision:
             f"Exp A ({exp_a_map:.4f}) did not beat baseline ({BASELINE_MAP:.4f}). "
             "Skipping checkpoint update."
         )
-        log("Proceeding with 10a→10b→10c chain using EXISTING baseline checkpoint.")
+        log("Proceeding with 10a->10b->10c chain using EXISTING baseline checkpoint.")
         return Phase2Decision(
             exp_a_map=exp_a_map,
             exp_b_map=exp_b_map,

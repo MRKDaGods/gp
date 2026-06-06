@@ -2,14 +2,14 @@
 # Derived from AI City Challenge 2022 Track 1 MTMC vehicle tracking data
 #
 # Crops are extracted from video frames using GT annotations (gt.txt per camera).
-# This is a REAL multi-camera tracking dataset — vehicles appear across multiple
+# This is a REAL multi-camera tracking dataset - vehicles appear across multiple
 # cameras at city intersections, enabling true cross-camera ReID evaluation.
 #
 # Extraction: python scripts/extract_cityflowv2_crops.py
 # Training:   notebooks/kaggle/09_vehicle_reid_cityflowv2/
 #
 # Published baselines (cross-camera vehicle ReID on CityFlowV2):
-#   mAP ≈ 40-65%    Rank-1 ≈ 55-80%    (depends on camera subset)
+#   mAP ~ 40-65%    Rank-1 ~ 55-80%    (depends on camera subset)
 #
 # Key characteristics:
 #   - Real traffic intersection footage (not studio/controlled)
@@ -29,7 +29,7 @@ dataset:
   gallery_dir: "gallery"
 
   # Cameras used (subset of full 46-camera set)
-  # Default: 2 scenes × 3 cameras each (overlapping coverage)
+  # Default: 2 scenes x 3 cameras each (overlapping coverage)
   cameras:
     - "S01_c001"
     - "S01_c002"
@@ -47,7 +47,7 @@ dataset:
     min_area: 2000              # minimum bbox area in pixels
     train_ratio: 0.7            # 70% of multi-cam IDs for training
     query_per_cam: 1            # 1 query crop per camera per vehicle
-    min_cams_for_eval: 2        # need ≥2 cameras for meaningful cross-cam eval
+    min_cams_for_eval: 2        # need >=2 cameras for meaningful cross-cam eval
 
   # Training parameters for ReID
   training:

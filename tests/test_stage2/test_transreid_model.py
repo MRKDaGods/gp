@@ -33,7 +33,7 @@ class TestTransReIDModel:
         )
         assert model is not None
         assert model.vit_dim == 768
-        assert not model.sie_camera  # no cameras → SIE disabled
+        assert not model.sie_camera  # no cameras -> SIE disabled
 
     def test_build_transreid_with_sie(self):
         """TransReID builds with SIE enabled when num_cameras > 0."""
@@ -60,7 +60,7 @@ class TestTransReIDModel:
         assert torch.allclose(norms, torch.ones(2), atol=1e-5)
 
     def test_identity_projection_when_dims_match(self):
-        """Projection is Identity when embed_dim == vit_dim (768 → 768)."""
+        """Projection is Identity when embed_dim == vit_dim (768 -> 768)."""
         from src.stage2_features.transreid_model import TransReID
 
         model = TransReID(num_classes=10, embed_dim=768, pretrained=False)
@@ -211,7 +211,7 @@ class TestReIDModelTransReIDRouting:
         """CLIP normalization is auto-detected from vit_model name."""
         from src.stage2_features.reid_model import _CLIP_MEAN, _CLIP_STD, _IMAGENET_MEAN, _IMAGENET_STD
 
-        # CLIP model → CLIP normalization
+        # CLIP model -> CLIP normalization
         import cv2
         from unittest.mock import patch, MagicMock
 

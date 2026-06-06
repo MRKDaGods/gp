@@ -1,5 +1,5 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Pipeline weight manifest — single source of truth for downloadable checkpoints.
+# -----------------------------------------------------------------------------
+# Pipeline weight manifest - single source of truth for downloadable checkpoints.
 #
 # All required weights are consolidated into ONE public Kaggle dataset so that a
 # fresh clone can fetch everything needed to run the pipeline and reproduce the
@@ -12,7 +12,7 @@
 # Each file is SHA-256 pinned; the downloader verifies integrity after fetch.
 # `name` is the (flat) filename inside the Kaggle dataset; `local_path` is where
 # the file is placed in the repo (matches configs/model_registry.yaml).
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 version: 1
 kaggle_dataset: mrkdagods/mtmc-veri776-pipeline-weights
 license: CC-BY-4.0

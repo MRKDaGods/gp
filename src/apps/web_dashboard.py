@@ -155,7 +155,7 @@ def get_run_dir() -> Path:
 def main():
     st.set_page_config(
         page_title="MTMC Tracker Dashboard",
-        page_icon="📹",
+        page_icon="",
         layout="wide",
     )
 
@@ -299,7 +299,7 @@ def page_search(run_dir: Path):
                     )
 
             with info_col:
-                st.write(f"**Cameras visited**: {' → '.join(traj.camera_sequence)}")
+                st.write(f"**Cameras visited**: {' -> '.join(traj.camera_sequence)}")
                 st.write(f"**Time span**: {traj.time_span[0]:.1f}s - {traj.time_span[1]:.1f}s")
 
                 for tk in tracklets:
@@ -384,7 +384,7 @@ def page_nl_query(run_dir: Path):
 
                 with info_col:
                     st.write(f"**Description**: {desc}")
-                    st.write(f"**Cameras**: {' → '.join(traj.camera_sequence)}")
+                    st.write(f"**Cameras**: {' -> '.join(traj.camera_sequence)}")
                     st.write(f"**Duration**: {traj.total_duration:.1f}s")
 
                 if len(camera_thumbnails) > 1:

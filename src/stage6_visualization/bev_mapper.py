@@ -32,7 +32,7 @@ class BEVMapper:
         self,
         trajectories: List[GlobalTrajectory],
         camera_positions: Optional[Dict[str, Tuple[float, float]]] = None,
-        title: str = "Bird's-Eye View — Global Trajectories",
+        title: str = "Bird's-Eye View - Global Trajectories",
     ) -> plt.Figure:
         """Plot BEV trajectory map.
 

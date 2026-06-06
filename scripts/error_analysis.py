@@ -268,7 +268,7 @@ def main():
                     continue
                 cross_sims = 1 - cdist(embeddings[idx_a], embeddings[idx_b], metric="cosine")
                 top1 = cross_sims.max(axis=1)
-                print(f"  {cam_a} → {cam_b}: {len(idx_a)}x{len(idx_b)}, "
+                print(f"  {cam_a} -> {cam_b}: {len(idx_a)}x{len(idx_b)}, "
                       f"top1 mean={top1.mean():.3f}, std={top1.std():.3f}, "
                       f"max={top1.max():.3f}")
     

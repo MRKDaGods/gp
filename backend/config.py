@@ -1,7 +1,7 @@
 """Centralised configuration constants for the backend package.
 
 All path constants, environment flags, and shared regex patterns live here.
-Nothing in this module imports from other backend/ modules — it is a pure
+Nothing in this module imports from other backend/ modules - it is a pure
 dependency leaf.
 """
 import os
@@ -17,7 +17,7 @@ try:
 except ImportError:
     _HAS_CV2 = False
 
-# Project root: backend/config.py → backend/ → project root
+# Project root: backend/config.py -> backend/ -> project root
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Python executable used to spawn pipeline subprocesses.
@@ -28,7 +28,7 @@ _PIPELINE_PYTHON: str = str(_VENV_PYTHON) if _VENV_PYTHON.exists() else sys.exec
 # ffprobe for video duration probing (optional)
 _FFPROBE = _shutil.which("ffprobe")
 
-# ── Directory constants ────────────────────────────────────────────────────
+# -- Directory constants ----------------------------------------------------
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
 # Runs are read from more than one root: app-created runs land in `outputs/`,
@@ -47,16 +47,16 @@ DATASET_BROWSE_ROOT = Path("data/raw")
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mkv", ".mov", ".m4v"}
 DEMO_VIDEO_FALLBACK = Path("S02_c008.avi")
 
-# ── Feature flags ──────────────────────────────────────────────────────────
+# -- Feature flags ----------------------------------------------------------
 ENABLE_KAGGLE_IMPORT = (
     os.getenv("MTMC_ENABLE_KAGGLE_IMPORT", "1").strip().lower()
     in {"1", "true", "yes", "on"}
 )
 
-# ── Precompute run id ──────────────────────────────────────────────────────
+# -- Precompute run id ------------------------------------------------------
 PRECOMPUTE_RUN_ID = "dataset_precompute_s01"
 
-# ── Pipeline stage labels ──────────────────────────────────────────────────
+# -- Pipeline stage labels --------------------------------------------------
 _STAGE_NAMES = {
     0: "Ingestion & Pre-Processing",
     1: "Detection & Tracking (YOLOv26 + DeepOCSORT)",
@@ -76,7 +76,7 @@ _FRAME_LINE_RE = re.compile(r"\[PROGRESS\]\s+camera=([\w_]+)\s+frame=(\d+)\s+tot
 # Total camera count emitted once before the stage-1 loop: "[PROGRESS] cameras_total=N"
 _CAMERAS_TOTAL_RE = re.compile(r"\[PROGRESS\]\s+cameras_total=(\d+)")
 
-# ── Timeline / ReID similarity thresholds ─────────────────────────────────
+# -- Timeline / ReID similarity thresholds ---------------------------------
 # Applied in TimelineService._score_trajectories(); both conditions must hold
 # for a trajectory to be considered a visual match.
 # Lowered from 0.82/0.74 to accommodate cross-run queries where probe
@@ -88,7 +88,7 @@ SIMILARITY_THRESHOLD_P25: float = 0.60
 PCA_MODEL_PATH = Path("models/reid/pca_transform.pkl")
 
 
-# ── Run discovery across output roots ──────────────────────────────────────
+# -- Run discovery across output roots --------------------------------------
 def _is_safe_run_id(run_id: str) -> bool:
     """Reject run_ids that could escape an output root via path traversal."""
     return bool(run_id) and "/" not in run_id and "\\" not in run_id and ".." not in run_id

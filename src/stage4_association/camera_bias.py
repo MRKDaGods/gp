@@ -274,7 +274,7 @@ class ZoneTransitionModel:
 
         key = (src_cam, src_zone, dst_cam, dst_zone)
         if key not in self._transitions:
-            return 0.0  # Unknown transition → not valid
+            return 0.0  # Unknown transition -> not valid
 
         trans = self._transitions[key]
         if trans["min_time"] <= time_gap <= trans["max_time"]:

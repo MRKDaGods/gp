@@ -380,8 +380,8 @@ class ReIDModelBoT(nn.Module):
     """ReID model with Bag-of-Tricks (BoT) training setup.
 
     Architecture:
-        backbone → GAP → feat (for triplet loss)
-                       → BNNeck → classifier (for ID loss)
+        backbone -> GAP -> feat (for triplet loss)
+                       -> BNNeck -> classifier (for ID loss)
 
     During inference, extracts the BN-normalized feature (after BNNeck)
     for cosine-distance matching, or the raw feature for Euclidean matching.

@@ -19,7 +19,7 @@ from backend.services.pipeline_service import (
 )
 from backend.services.video_service import _scan_startup_videos
 
-# ── Routers ────────────────────────────────────────────────────────────────
+# -- Routers ----------------------------------------------------------------
 from backend.routers import (
     crops,
     datasets,
@@ -40,7 +40,7 @@ from backend.routers import (
     videos,
 )
 
-# ── App ────────────────────────────────────────────────────────────────────
+# -- App --------------------------------------------------------------------
 app = FastAPI(title="MTMC Tracker API", version="1.0.0")
 
 app.add_middleware(
@@ -60,7 +60,7 @@ app.add_middleware(
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# ── Include routers ────────────────────────────────────────────────────────
+# -- Include routers --------------------------------------------------------
 app.include_router(health.router)
 app.include_router(locations.router)
 app.include_router(results.router)
@@ -80,7 +80,7 @@ app.include_router(search.router)
 app.include_router(timeline.router)
 
 
-# ── Startup event ──────────────────────────────────────────────────────────
+# -- Startup event ----------------------------------------------------------
 @app.on_event("startup")
 async def _on_startup() -> None:
     # Suppress Windows-specific "ConnectionResetError: [WinError 10054]" spam
@@ -89,7 +89,7 @@ async def _on_startup() -> None:
         def _win_exc_handler(loop, context):
             exc = context.get("exception")
             if isinstance(exc, (ConnectionResetError, BrokenPipeError)):
-                return  # harmless — browser closed the socket
+                return  # harmless - browser closed the socket
             loop.default_exception_handler(context)
 
         asyncio.get_event_loop().set_exception_handler(_win_exc_handler)

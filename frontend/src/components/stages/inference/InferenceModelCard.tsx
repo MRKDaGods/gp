@@ -44,16 +44,16 @@ function SummaryChip({ modelMode, selectedModelMeta, fusion }: {
   if (modelMode === "fusion") {
     const modelCount = fusion?.models.length ?? 0;
     const summary = modelCount > 0
-      ? `${modelCount} models · ${fusion?.models.map((model) => `${model.modelId} ${(model.weight * 100).toFixed(0)}%`).join(" + ")}`
+      ? `${modelCount} models * ${fusion?.models.map((model) => `${model.modelId} ${(model.weight * 100).toFixed(0)}%`).join(" + ")}`
       : "Pick 2 to 3 models";
 
-    return <Badge variant="secondary" className="max-w-full truncate">Fusion · {summary}</Badge>;
+    return <Badge variant="secondary" className="max-w-full truncate">Fusion * {summary}</Badge>;
   }
 
   const metric = formatMetric(getHeadlineMetric(selectedModelMeta));
   const label = selectedModelMeta
-    ? `${selectedModelMeta.id}${metric ? ` · ${metric}` : ""}`
-    : "legacy config · configs/default.yaml";
+    ? `${selectedModelMeta.id}${metric ? ` * ${metric}` : ""}`
+    : "legacy config * configs/default.yaml";
 
   return <Badge variant="secondary" className="max-w-full truncate">{label}</Badge>;
 }

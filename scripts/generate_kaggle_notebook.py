@@ -1,8 +1,8 @@
 """Generates 3 chained Kaggle notebooks for the MTMC pipeline.
 
-  10a  →  stages 0-2  (heavy GPU work, ~90 min)  →  saves checkpoint.tar.gz
-  10b  →  stage 3     (FAISS indexing, ~1 min)   →  mounts 10a output
-  10c  →  stages 4-5  (association + eval, ~6 min)→  mounts 10b output (iteration loop)
+  10a  ->  stages 0-2  (heavy GPU work, ~90 min)  ->  saves checkpoint.tar.gz
+  10b  ->  stage 3     (FAISS indexing, ~1 min)   ->  mounts 10a output
+  10c  ->  stages 4-5  (association + eval, ~6 min)->  mounts 10b output (iteration loop)
 
 Each notebook is self-contained: clones repo, installs deps, then picks up from
 the previous notebook's /kaggle/working/checkpoint.tar.gz.
@@ -24,11 +24,11 @@ REPO_URL = "https://github.com/MRKDaGods/gp.git"
 OWNER = "gumfreddy"
 WEIGHTS_OWNER = "mrkdagods"  # mtmc-weights dataset lives on this account
 
-# Kaggle kernel slugs — must match what Kaggle derives from the title
+# Kaggle kernel slugs - must match what Kaggle derives from the title
 # Rule: lowercase, replace non-alnum with hyphen, collapse hyphens
-# "MTMC 10a - Stages 0-2 (Tracking + ReID Features)" → mtmc-10a-stages-0-2-tracking-reid-features
-# "MTMC 10b - Stage 3 (FAISS Indexing)"              → mtmc-10b-stage-3-faiss-indexing
-# "MTMC 10c - Stages 4-5 (Association + Eval)"       → mtmc-10c-stages-4-5-association-eval
+# "MTMC 10a - Stages 0-2 (Tracking + ReID Features)" -> mtmc-10a-stages-0-2-tracking-reid-features
+# "MTMC 10b - Stage 3 (FAISS Indexing)"              -> mtmc-10b-stage-3-faiss-indexing
+# "MTMC 10c - Stages 4-5 (Association + Eval)"       -> mtmc-10c-stages-4-5-association-eval
 SLUG_10A = "mtmc-10a-stages-0-2-tracking-reid-features"
 SLUG_10B = "mtmc-10b-stage-3-faiss-indexing"
 SLUG_10C = "mtmc-10c-stages-4-5-association-eval"
@@ -127,7 +127,7 @@ if shutil.which("nvidia-smi"):
         _major, _minor = _cap.strip().split(".")
         _sm = int(_major) * 10 + int(_minor)
         if _sm < 70:
-            print(f"\\u26a0 GPU {_gpu_name.strip()} (sm_{_sm}) — installing compatible PyTorch ...")
+            print(f"\\u26a0 GPU {_gpu_name.strip()} (sm_{_sm}) - installing compatible PyTorch ...")
             subprocess.check_call([
                 sys.executable, "-m", "pip", "install", "-q",
                 "torch==2.4.1", "torchvision==0.19.1",
@@ -343,12 +343,12 @@ def build_10a():
     cells.append(md("## 2. Mount Model Weights\nModel weights dataset (`mtmc-weights`) must be attached.", "a07"))
     cells.append(code(COPY_WEIGHTS, "a08"))
 
-    # ── KD model integration (conditional) ────────────────────────────
+    # -- KD model integration (conditional) ----------------------------
     if USE_KD_MODEL:
         cells.append(md(
             "## 2b. KD Model Override\n\n"
             "Replace baseline TransReID vehicle model with Knowledge-Distilled version\n"
-            "from 09c training output (ViT-L teacher → ViT-B student).",
+            "from 09c training output (ViT-L teacher -> ViT-B student).",
             "a08b"))
         cells.append(code(f"""\
 # --- KD model integration ---
@@ -377,7 +377,7 @@ if _KD_SRC:
     _cfg_path.write_text(_yaml.dump(_cfg, default_flow_style=False, sort_keys=False))
     print(f"\\u2713 Config patched: vehicle weights_path: {{_old_weights}} -> transreid_cityflowv2_kd_best.pth")
 else:
-    print("\\u26a0 KD model not found — using baseline TransReID weights")
+    print("\\u26a0 KD model not found - using baseline TransReID weights")
     for _p in _KD_SEARCH:
         print(f"  tried: {{_p}}")
 """, "a08c"))
@@ -782,7 +782,7 @@ def build_10c():
         f"    print(f\"\\u2713 GT annotations at {{GT_DIR}}\")\n"
         f"else:\n"
         f"    GT_DIR = \"\"\n"
-        f"    print(\"WARNING: GT files not found in repo — eval will skip metrics\")\n"
+        f"    print(\"WARNING: GT files not found in repo - eval will skip metrics\")\n"
         f"print(f\"\\u2713 Checkpoint extracted -- run: {{RUN_NAME}}\")\n"
         f"for s in [\"stage1\", \"stage2\", \"stage3\"]:\n"
         f"    d = RUN_DIR / s\n"
@@ -803,12 +803,12 @@ SIM_THRESH        = 0.53  # v46: 0.53 (optimal from sweep)
 ALGORITHM         = "connected_components"
 LOUVAIN_RES       = 0.70  # fallback for community_detection
 
-# Weights — v46 defaults (appearance-heavy for vehicles)
+# Weights - v46 defaults (appearance-heavy for vehicles)
 APPEARANCE_WEIGHT = 0.75  # v46: CityFlowV2 vehicle config
 HSV_WEIGHT        = 0.0   # v46: disabled (hurts vehicles)
 ST_WEIGHT         = round(1.0 - APPEARANCE_WEIGHT - HSV_WEIGHT, 4)
 
-# Bridge pruning: v46 found pruning HURTS (-1.4pp) → disabled
+# Bridge pruning: v46 found pruning HURTS (-1.4pp) -> disabled
 BRIDGE_PRUNE      = 0.0   # v46: 0.0 (pruning hurts by -1.4pp)
 MAX_COMP_SIZE     = 12
 
@@ -875,7 +875,7 @@ cmd = [
 if GT_DIR:
     cmd += ["--override", f"stage5.ground_truth_dir={GT_DIR}"]
 else:
-    print("WARNING: GT_DIR is empty — eval will skip metric computation")
+    print("WARNING: GT_DIR is empty - eval will skip metric computation")
 print("CMD:", " ".join(str(c) for c in cmd))
 print("=" * 70)
 t0 = time.time()
@@ -893,7 +893,7 @@ print(f"\\u2713 Stages 4-5 done in {elapsed/60:.1f} min")\
     cells.append(md(
         "## 6. Automated Parameter Scan (optional)\n\n"
         "Runs stages 4-5 across a grid of parameter values and reports the best combination.\n"
-        "Each combination takes ~2 min → a 12-point scan takes ~24 min total.\n\n"
+        "Each combination takes ~2 min -> a 12-point scan takes ~24 min total.\n\n"
         "**Comment out this cell if you just want the single run above.**",
         "c15"))
 
@@ -907,8 +907,8 @@ SCAN_ENABLED = False
 if SCAN_ENABLED:
     import itertools
 
-    # Grid to search — v14: updated after v12 scan analysis.
-    # v12 finding: CC and CD produce identical results → removed algorithm axis.
+    # Grid to search - v14: updated after v12 scan analysis.
+    # v12 finding: CC and CD produce identical results -> removed algorithm axis.
     # Added gallery_expansion.threshold to scan orphan recovery aggressiveness.
     # v15: added length_weight_power (0.0=no penalty, 0.5=penalize short tracklets)
     # v16: added orphan_match_threshold to test Phase 2 orphan-orphan matching
@@ -916,7 +916,7 @@ if SCAN_ENABLED:
     #       Dropped len_weight axis (fix at 0.5) to keep grid <400.
     #       Added cross-ID NMS in format_converter.
     # v19: replaced appearance_w=0.65 with 0.95 (near-zero ST) because
-    #       ST score is near-constant for CityFlowV2 (all pairs 0.7-1.0) →
+    #       ST score is near-constant for CityFlowV2 (all pairs 0.7-1.0) ->
     #       27.5% of combined score was noise. test if appearance-dominant is better.
     #       Orphan matching now uses GraphSolver with bridge pruning.
     #       Reranking uses pre-computed sim matrix for ~10x speedup.
@@ -924,7 +924,7 @@ if SCAN_ENABLED:
     #      Added 0.60 and 0.65 to explore more conservative matching.
     #      FIC+FAC enabled, reranking lambda from SOTA.
     #      Reduced other axes to keep combos manageable.
-    # Total: 6 × 2 × 2 × 2 × 2 × 2 × 2 = 384 combos (~160 min at ~25s each)
+    # Total: 6 x 2 x 2 x 2 x 2 x 2 x 2 = 384 combos (~160 min at ~25s each)
     scan_grid = {
         "sim_thresh":       [0.35, 0.40, 0.50, 0.55, 0.60, 0.65],  # 6: wider range incl. conservative
         "appearance_w":     [0.80, 0.95],                     # 2
@@ -1042,7 +1042,7 @@ if SCAN_ENABLED:
     print("\\n" + "=" * 80)
     print(f"SCAN RESULTS (sorted by {sort_key})")
     print("=" * 80)
-    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'orph':<6} {'rr_λ':<6} {'alg':<5} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
+    header = f"{'sim':<6} {'app_w':<7} {'bridge':<8} {'gal_th':<7} {'orph':<6} {'rr_lambda':<6} {'alg':<5} {'st_w':<7} {'IDF1':>7} {'MOTA':>7} {'HOTA':>7}"
     print(header)
     for r2 in results:
         alg_short = 'agg' if r2.get('algorithm','') == 'agglomerative' else 'cc'
@@ -1056,7 +1056,7 @@ if SCAN_ENABLED:
           f"alg={best.get('algorithm','?')} "
           f"-> IDF1={best['IDF1']:.3f} MOTA={best['MOTA']:.3f} HOTA={best['HOTA']:.3f}")
 
-    # ── Parameter sensitivity analysis ──
+    # -- Parameter sensitivity analysis --
     print("\\n" + "=" * 80)
     print("PARAMETER SENSITIVITY ANALYSIS")
     print("=" * 80)
@@ -1074,7 +1074,7 @@ if SCAN_ENABLED:
             print(f"  {param_name}={pval:<10} avg HOTA={avg_hota:.3f} avg IDF1={avg_idf1:.3f} "
                   f"avg MOTA={avg_mota:.3f} best HOTA={best_hota:.3f} (n={len(subset)})")
 
-    # ── MTMC MOTA breakdown ──
+    # -- MTMC MOTA breakdown --
     if any(r2.get("MTMC_MOTA", 0) != 0 for r2 in results):
         print("\\n" + "=" * 80)
         print("TOP 10 by MTMC_MOTA:")
@@ -1112,11 +1112,11 @@ else:
     print("Scan disabled. Set SCAN_ENABLED = True to run grid search.")\
 """, "c16"))
 
-    # ── Hierarchical centroid expansion A/B test ──────────────────────────
+    # -- Hierarchical centroid expansion A/B test --------------------------
     cells.append(md(
         "## 7. Feature A/B Tests\n\n"
         "Tests untried association features vs the v46 baseline.\n"
-        "- **CSLS**: Cross-domain Similarity Local Scaling — hubness reduction to penalize 'universal hub' embeddings",
+        "- **CSLS**: Cross-domain Similarity Local Scaling - hubness reduction to penalize 'universal hub' embeddings",
         "c17"))
 
     cells.append(code("""\

@@ -17,7 +17,7 @@ if _HAS_CV2:
 
 router = APIRouter()
 
-# ── Upload-video crop performance ───────────────────────────────────────────
+# -- Upload-video crop performance -------------------------------------------
 # Each crop used to open a fresh VideoCapture; dozens of parallel sidebar
 # requests exhausted the worker and stalled video streaming.  We keep one
 # capture per video_id (serialized per video) and LRU-cache decoded full
@@ -70,7 +70,7 @@ def _read_frame_bgr(video_id: str, video_path: Path, frame_id: int):
 
 
 def _resolve_camera_id(state: AppState, video_id: str) -> str:
-    """Match ``detections`` router: prefer run’s camera, else filename heuristic."""
+    """Match ``detections`` router: prefer run's camera, else filename heuristic."""
     run_id = state.video_to_latest_run.get(video_id)
     camera_id = None
     if run_id and run_id in state.active_runs:
@@ -86,7 +86,7 @@ def _load_frame_bgr_aligned_to_tracklets(
 
     Stage 1 bboxes are in the resolution of extracted frames (often resized in
     stage 0).  Cropping the *uploaded* video at full resolution misaligns
-    coordinates → garbage / grey / white smears in thumbnails.
+    coordinates -> garbage / grey / white smears in thumbnails.
     """
     run_id = state.video_to_latest_run.get(video_id)
     cam = _resolve_camera_id(state, video_id)

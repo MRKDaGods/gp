@@ -6,7 +6,7 @@ per camera that defines where valid detections can appear.
 
 The WILDTRACK ground plane is defined in centimetres on a grid from
 (-360, -900) to (1200, 3600) in the world coordinate system (cm).
-This is approximately a 15.6m × 45m area centred on the public square.
+This is approximately a 15.6m x 45m area centred on the public square.
 """
 
 from __future__ import annotations
@@ -24,14 +24,14 @@ from loguru import logger
 
 # WILDTRACK ground plane bounds in CENTIMETRES (world coordinates)
 # These define the rectangular area on the ground plane where people are annotated.
-# Reference: WILDTRACK paper — grid from (-360,-900) to (1200,3600) with 2.5cm spacing
-# This corresponds to (480+120)×(1440+360) grid cells = 600×1800 in 2.5cm units
+# Reference: WILDTRACK paper - grid from (-360,-900) to (1200,3600) with 2.5cm spacing
+# This corresponds to (480+120)x(1440+360) grid cells = 600x1800 in 2.5cm units
 GP_XMIN, GP_XMAX = -480, 1440   # cm  (wider than paper to include margin)
 GP_YMIN, GP_YMAX = -1120, 3880  # cm
 GP_Z = 0.0                       # ground plane at z=0
 
 
-# Camera naming: CVLab1..4 → C1..C4, IDIAP1..3 → C5..C7
+# Camera naming: CVLab1..4 -> C1..C4, IDIAP1..3 -> C5..C7
 _CALIB_NAMES = {
     "C1": "CVLab1", "C2": "CVLab2", "C3": "CVLab3", "C4": "CVLab4",
     "C5": "IDIAP1", "C6": "IDIAP2", "C7": "IDIAP3",

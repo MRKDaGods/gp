@@ -185,9 +185,9 @@ export function SelectionStage() {
       skipSelectionFlushRef.current = false;
       return;
     }
-    // The selection is consumed ONLY by the Stage-4 timeline query — feature
+    // The selection is consumed ONLY by the Stage-4 timeline query - feature
     // extraction (Stage 2) and indexing (Stage 3) run over the whole run and never
-    // receive the selection. So invalidate from Timeline onward (4 → Refinement →
+    // receive the selection. So invalidate from Timeline onward (4 -> Refinement ->
     // Output) and keep Inference intact, instead of forcing a needless (and on real
     // data, GPU-expensive) re-extraction every time the picked vehicle changes.
     flushPipelineFromStage(4);
@@ -220,13 +220,13 @@ export function SelectionStage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by #id…"
+              placeholder="Search by #id..."
               className="h-8 pl-8 text-sm"
               aria-label="Search tracklets by id"
             />
           </div>
           <Badge variant="outline" className="ml-auto shrink-0">
-            {selectedTrackIds.size} selected · {filteredTracklets.length} shown
+            {selectedTrackIds.size} selected * {filteredTracklets.length} shown
           </Badge>
           {selectedTrackIds.size > 0 && (
             <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={deselectAll}>
@@ -390,7 +390,7 @@ export function SelectionStageActions() {
   const markManualStageDone = useManualStageStore((s) => s.markManualStageDone);
 
   const handleContinue = () => {
-    // Selection is a manual pick with no pipeline run of its own — stamp it done when the
+    // Selection is a manual pick with no pipeline run of its own - stamp it done when the
     // user finishes and moves on, so the nav reflects it (mirrors Refinement), and record it
     // per-run so loading the run later restores the checkmark.
     updateStageProgress(2, { status: "completed", progress: 100, message: "Tracklets selected" });

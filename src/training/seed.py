@@ -9,13 +9,13 @@ Use this to make ReID training runs reproducible end-to-end:
 
 Notes / caveats:
     - ``deterministic=True`` sets ``cudnn.deterministic=True`` and ``cudnn.benchmark=False``.
-      NEVER flip ``cudnn.benchmark=True`` afterwards — that re-enables nondeterministic
+      NEVER flip ``cudnn.benchmark=True`` afterwards - that re-enables nondeterministic
       convolution autotuning and silently breaks reproducibility.
     - ``worker_init_fn`` is required because each DataLoader worker is a forked process;
       torch re-seeds each worker's torch RNG deterministically from the base seed, but
       numpy / python ``random`` are NOT re-seeded automatically. seed_worker fixes that.
     - Even fully seeded, exact bit-reproducibility also requires the same library
-      versions (torch / torchvision / timm / numpy) and the same GPU/driver — some CUDA
+      versions (torch / torchvision / timm / numpy) and the same GPU/driver - some CUDA
       kernels (atomics, certain convolutions) remain nondeterministic unless you also call
       ``torch.use_deterministic_algorithms(True)`` (which can error on unsupported ops and
       slow training). We default to the practical cudnn-deterministic level.

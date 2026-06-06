@@ -1,4 +1,4 @@
-﻿import sys as _sys
+import sys as _sys
 import asyncio
 
 if _sys.platform == "win32":

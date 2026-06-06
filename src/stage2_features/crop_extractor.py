@@ -254,7 +254,7 @@ class CropExtractor:
         Divides the tracklet timeline into temporal strata and picks the
         best-quality crop from each stratum first, then fills remaining
         slots with the globally best remaining crops.  This ensures
-        viewpoint diversity — vehicles changing angle/size across a
+        viewpoint diversity - vehicles changing angle/size across a
         long tracklet will be represented throughout.
         """
         if len(candidates) <= max_crops:

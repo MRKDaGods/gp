@@ -20,7 +20,7 @@ function stageIsDone(stage?: StageProgress | null): boolean {
  * The UI nav stages don't map 1:1 to pipeline prerequisites. "Selection" (UI
  * stage 2) is a manual pick with no pipeline run of its own, and feature
  * extraction (pipeline stage 2) actually runs *inside* the Inference stage (UI
- * 3). So Inference's real prerequisite is Detection (UI 1), not Selection —
+ * 3). So Inference's real prerequisite is Detection (UI 1), not Selection -
  * otherwise Inference is permanently "blocked" because Selection never completes.
  */
 const PREREQUISITE_OVERRIDE: Partial<Record<StageNumber, StageNumber>> = {

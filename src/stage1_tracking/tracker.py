@@ -93,7 +93,7 @@ class TrackerWrapper:
         _reid = reid_weights or "models/tracker/osnet_x0_25_msmt17.pt"
         kwargs["reid_weights"] = Path(_reid)
 
-        # Pass BoxMOT-specific config params — filter to only those accepted by this tracker version
+        # Pass BoxMOT-specific config params - filter to only those accepted by this tracker version
         if tracker_config:
             valid_params = set(inspect.signature(tracker_cls.__init__).parameters.keys()) - {"self"}
             for key in ["track_high_thresh", "track_low_thresh", "new_track_thresh",

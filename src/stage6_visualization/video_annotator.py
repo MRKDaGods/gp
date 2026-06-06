@@ -103,7 +103,7 @@ class VideoAnnotator:
                     continue  # Adjacent frames, no interpolation needed
 
                 if gap > max_interp_gap:
-                    continue  # Gap too large, person was likely lost — don't interpolate
+                    continue  # Gap too large, person was likely lost - don't interpolate
 
                 for mid in range(f_a.frame_id + 1, f_b.frame_id):
                     t_ratio = (mid - f_a.frame_id) / gap

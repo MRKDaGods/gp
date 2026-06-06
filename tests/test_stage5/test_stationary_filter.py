@@ -66,7 +66,7 @@ class TestStationaryFilter:
         assert len(result) == 1
 
     def test_single_frame_tracklet_removed(self):
-        """Single-frame tracklets have no displacement → stationary."""
+        """Single-frame tracklets have no displacement -> stationary."""
         t = _make_trajectory(1, "S01_c001", [(100.0, 200.0, 150.0, 250.0)])
         result = _filter_stationary([t], min_displacement_px=50.0)
         assert len(result) == 0
@@ -81,7 +81,7 @@ class TestVelocityBasedStationary:
 
     def test_oscillating_parked_car_caught(self):
         """A car that arrives and parks: endpoint displacement > 50px
-        but mean velocity < 1.5px/frame → caught by velocity check."""
+        but mean velocity < 1.5px/frame -> caught by velocity check."""
         # First 10 frames: approaching (6px/frame), then 50 frames: parked
         bboxes = []
         for i in range(10):

@@ -53,7 +53,7 @@ class ZoneScorer:
         """Assign entry and exit zone IDs to each tracklet.
 
         Returns:
-            (entry_zones, exit_zones) — zone IDs per tracklet (-1 if unknown).
+            (entry_zones, exit_zones) - zone IDs per tracklet (-1 if unknown).
         """
         n = len(camera_ids)
         entry_zones = [-1] * n
@@ -96,14 +96,14 @@ class ZoneScorer:
     ) -> float:
         """Compute zone transition score for a pair of tracklets.
 
-        Checks both directions (i exits → j enters, j exits → i enters)
+        Checks both directions (i exits -> j enters, j exits -> i enters)
         and returns the max score. Returns:
           1.0 if a valid transition exists
           0.0 if no zone info available (either zone == -1)
          -1.0 if zones are assigned but transition is invalid
         """
         if exit_zone_i < 0 or entry_zone_j < 0 or exit_zone_j < 0 or entry_zone_i < 0:
-            return 0.0  # Unknown — don't penalise
+            return 0.0  # Unknown - don't penalise
 
         # Check both directions
         fwd = self.is_valid_transition(cam_i, exit_zone_i, cam_j, entry_zone_j)

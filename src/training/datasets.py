@@ -2,7 +2,7 @@
 
 Handles the standard train/query/gallery splits and provides
 PyTorch Dataset and DataLoader with identity-balanced sampling
-(PK sampler: P identities × K instances per identity per batch).
+(PK sampler: P identities x K instances per identity per batch).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import torchvision.transforms as T
 from src.training.seed import seed_worker, make_generator
 
 
-# ─── Dataset parsers ──────────────────────────────────────────────────────
+# --- Dataset parsers ------------------------------------------------------
 
 
 def parse_market1501(root: str) -> Tuple[List, List, List]:
@@ -196,7 +196,7 @@ def parse_cityflowv2_synth(root: str) -> Tuple[List, List, List]:
 
     Synthetic identities are appended to the TRAIN split only, in an offset id
     space so they never collide with real CityFlow ids. Query/gallery (evaluation)
-    stay REAL-only — we always measure CityFlow mAP, never synthetic. Synthetic
+    stay REAL-only - we always measure CityFlow mAP, never synthetic. Synthetic
     images map to a single sentinel camera id (their "camera" is a render viewpoint,
     not a physical camera). If `synthetic/` is absent this behaves like
     `parse_cityflowv2` (real-only), so the same dataset name works either way.
@@ -275,7 +275,7 @@ DATASET_PARSERS = {
 }
 
 
-# ─── Transforms ───────────────────────────────────────────────────────────
+# --- Transforms -----------------------------------------------------------
 
 
 def build_train_transforms(
@@ -317,7 +317,7 @@ def build_test_transforms(height: int = 256, width: int = 128) -> T.Compose:
     ])
 
 
-# ─── Dataset ──────────────────────────────────────────────────────────────
+# --- Dataset --------------------------------------------------------------
 
 
 class ReIDDataset(Dataset):
@@ -342,11 +342,11 @@ class ReIDDataset(Dataset):
         return img, pid, cam, img_path
 
 
-# ─── PK Sampler ──────────────────────────────────────────────────────────
+# --- PK Sampler ----------------------------------------------------------
 
 
 class PKSampler(Sampler):
-    """PK sampler: P identities × K instances per identity per batch.
+    """PK sampler: P identities x K instances per identity per batch.
 
     Used for triplet loss training to ensure meaningful positive/negative
     pairs exist in each batch.

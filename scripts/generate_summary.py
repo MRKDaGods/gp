@@ -41,7 +41,7 @@ def main():
 
     lines = []
     lines.append("=" * 65)
-    lines.append("MTMC TRACKING EVALUATION — CityFlowV2 (6 cameras)")
+    lines.append("MTMC TRACKING EVALUATION - CityFlowV2 (6 cameras)")
     lines.append(f"Run: run_20260314_095505")
     lines.append(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     lines.append("=" * 65)

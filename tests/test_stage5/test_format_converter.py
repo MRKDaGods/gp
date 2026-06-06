@@ -1,4 +1,4 @@
-"""Tests for stage 5 format converter — frame numbering and format correctness."""
+"""Tests for stage 5 format converter - frame numbering and format correctness."""
 
 from __future__ import annotations
 
@@ -52,11 +52,11 @@ class TestMOTFrameNumbering:
         lines = output_file.read_text().strip().split("\n")
         assert len(lines) == 2
 
-        # First line: frame_id=0 in internal repr → 1 in MOT output
+        # First line: frame_id=0 in internal repr -> 1 in MOT output
         parts0 = lines[0].split(",")
         assert int(parts0[0]) == 1, f"Expected 1-based frame 1, got {parts0[0]}"
 
-        # Second line: frame_id=99 → 100 in MOT output
+        # Second line: frame_id=99 -> 100 in MOT output
         parts1 = lines[1].split(",")
         assert int(parts1[0]) == 100, f"Expected 1-based frame 100, got {parts1[0]}"
 
@@ -65,10 +65,10 @@ class TestCrossIDNMS:
     """Verify cross-ID NMS removes overlapping predictions from different trajectories."""
 
     def test_nms_removes_duplicate_boxes(self, tmp_path: Path):
-        """Two trajectories with nearly-identical boxes on same frame → NMS keeps one."""
+        """Two trajectories with nearly-identical boxes on same frame -> NMS keeps one."""
         from src.stage5_evaluation.format_converter import trajectories_to_mot_submission
 
-        # bbox format: (x1, y1, x2, y2) — xyxy
+        # bbox format: (x1, y1, x2, y2) - xyxy
         # Trajectory A: global_id=1, frames 0-2
         traj_a = _make_trajectory(
             global_id=1,
@@ -105,7 +105,7 @@ class TestCrossIDNMS:
             assert int(parts[1]) == 1, f"Expected global_id 1, got {parts[1]}"
 
     def test_nms_keeps_non_overlapping_boxes(self, tmp_path: Path):
-        """Two trajectories with non-overlapping boxes on same frame → both kept."""
+        """Two trajectories with non-overlapping boxes on same frame -> both kept."""
         from src.stage5_evaluation.format_converter import trajectories_to_mot_submission
 
         # Far apart: no IoU
@@ -176,7 +176,7 @@ class TestConfigurableNMSThreshold:
         """At IoU=0.3, moderately overlapping boxes get suppressed."""
         from src.stage5_evaluation.format_converter import trajectories_to_mot_submission
 
-        # Two boxes with ~40% IoU — suppressed at 0.3 but not at 0.5
+        # Two boxes with ~40% IoU - suppressed at 0.3 but not at 0.5
         traj_a = _make_trajectory(
             global_id=1,
             camera_id="S01_c001",
@@ -193,11 +193,11 @@ class TestConfigurableNMSThreshold:
                 TrackletFrame(frame_id=0, timestamp=0.0, bbox=(150, 250, 250, 350), confidence=0.7),
             ],
         )
-        # At default IoU=0.5 — both kept (IoU~0.25 < 0.5)
+        # At default IoU=0.5 - both kept (IoU~0.25 < 0.5)
         trajectories_to_mot_submission([traj_a, traj_b], tmp_path, cross_id_nms_iou=0.5)
         lines_05 = (tmp_path / "S01_c001.txt").read_text().strip().split("\n")
 
-        # At IoU=0.2 — traj_b suppressed
+        # At IoU=0.2 - traj_b suppressed
         import shutil
         shutil.rmtree(tmp_path)
         tmp_path.mkdir()

@@ -66,7 +66,7 @@ class PCAWhitener:
     def save(self, path: str | Path) -> None:
         """Save fitted PCA model to disk."""
         if self.pca is None:
-            raise RuntimeError("Nothing to save — PCA not fitted.")
+            raise RuntimeError("Nothing to save - PCA not fitted.")
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:

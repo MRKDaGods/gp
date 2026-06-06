@@ -3,7 +3,7 @@
 WILDTRACK and similar multi-view benchmarks evaluate on the **ground plane**:
 - GT: 3D ground positions per person per frame (from annotations_positions JSON)
 - Pred: Back-projected foot positions from per-camera tracklets
-- Matching: L2 distance on ground plane (typically ≤50cm)
+- Matching: L2 distance on ground plane (typically <=50cm)
 - Metrics: MODA, MODP, Precision, Recall (via motmetrics)
 
 This is the correct evaluation protocol used by published SOTA methods
@@ -31,20 +31,20 @@ if not hasattr(np, "asfarray"):
     np.asfarray = lambda a, dtype=np.float64: np.asarray(a, dtype=dtype)  # type: ignore[attr-defined]
 
 
-# ── WILDTRACK constants ────────────────────────────────────────────────────
+# -- WILDTRACK constants ----------------------------------------------------
 GRID_W = 480        # grid columns
 GP_XMIN = -300.0    # cm
 GP_YMIN = -900.0    # cm
 CELL_SIZE = 2.5     # cm per cell
 
-# Camera name mapping: WILDTRACK calib files → our camera IDs
+# Camera name mapping: WILDTRACK calib files -> our camera IDs
 _CAM_NAME_MAP = {
     "CVLab1": "C1", "CVLab2": "C2", "CVLab3": "C3", "CVLab4": "C4",
     "IDIAP1": "C5", "IDIAP2": "C6", "IDIAP3": "C7",
 }
 
 
-# ── Calibration loading ───────────────────────────────────────────────────
+# -- Calibration loading ---------------------------------------------------
 
 def _load_calibration(calibrations_dir: Path) -> Dict[str, Dict[str, np.ndarray]]:
     """Load WILDTRACK calibration files (intrinsic_zero + extrinsic)."""
@@ -58,7 +58,7 @@ def _load_calibration(calibrations_dir: Path) -> Dict[str, Dict[str, np.ndarray]
         if cam_id is None:
             continue
 
-        # Load extrinsic — rvec/tvec may be plain text in WILDTRACK XMLs
+        # Load extrinsic - rvec/tvec may be plain text in WILDTRACK XMLs
         fs = cv2.FileStorage(str(xml_file), cv2.FILE_STORAGE_READ)
         rvec_node = fs.getNode("rvec")
         tvec_node = fs.getNode("tvec")
@@ -124,7 +124,7 @@ def _parse_text_node(xml_path: Path, tag: str) -> Optional[np.ndarray]:
 def _pixel_to_ground(
     u: float, v: float, K: np.ndarray, R: np.ndarray, tvec: np.ndarray,
 ) -> Optional[Tuple[float, float]]:
-    """Back-project image point (u, v) to Z=0 ground plane → (gx, gy) in cm."""
+    """Back-project image point (u, v) to Z=0 ground plane -> (gx, gy) in cm."""
     K_inv = np.linalg.inv(K)
     ray_cam = K_inv @ np.array([u, v, 1.0])
     ray_world = R.T @ ray_cam
@@ -138,7 +138,7 @@ def _pixel_to_ground(
     return float(pt[0]), float(pt[1])
 
 
-# ── GT loading ─────────────────────────────────────────────────────────────
+# -- GT loading -------------------------------------------------------------
 
 def _posid_to_ground(pos_id: int) -> Tuple[float, float]:
     """Convert WILDTRACK positionID to ground-plane (gx, gy) in cm."""
@@ -212,7 +212,7 @@ def _is_ground_point_in_any_camera(
     return False
 
 
-# ── Prediction building ───────────────────────────────────────────────────
+# -- Prediction building ---------------------------------------------------
 
 def build_pred_ground_positions(
     trajectories: List[GlobalTrajectory],
@@ -309,7 +309,7 @@ def ground_plane_nms(
     return merged
 
 
-# ── Main evaluation ───────────────────────────────────────────────────────
+# -- Main evaluation -------------------------------------------------------
 
 def evaluate_ground_plane(
     gt_positions: Dict[int, List[Tuple[int, float, float]]],

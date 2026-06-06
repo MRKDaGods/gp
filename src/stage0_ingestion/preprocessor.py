@@ -58,7 +58,7 @@ def preprocess_frame(
     Returns:
         Preprocessed frame (BGR uint8 or float32 if normalized).
     """
-    # CLAHE enhancement first — improves all downstream processing
+    # CLAHE enhancement first - improves all downstream processing
     if clahe:
         frame = apply_clahe(frame, clip_limit=clahe_clip_limit)
 

@@ -178,7 +178,7 @@ class MultiCamGridRenderer:
             logger.warning(f"GID {trajectory.global_id}: no frame data, skipping")
             return
 
-        # Determine frame span — use trajectory's active range only
+        # Determine frame span - use trajectory's active range only
         traj_frames = sorted(lookup.keys())
         fid_lo = traj_frames[0]
         fid_hi = traj_frames[-1]

@@ -44,7 +44,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
     if apply_cpu_when_no_cuda(cfg):
         console.print(Panel(
             "[yellow]No CUDA device found (or PyTorch has no GPU build). "
-            "Stages 1–2 will use CPU — runs are much slower.[/yellow]",
+            "Stages 1-2 will use CPU - runs are much slower.[/yellow]",
             title="Device",
         ))
 
@@ -255,15 +255,15 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
                         gal_embeddings, gal_index_map = load_embeddings(gallery_dir / "stage2")
                         gal_hsv_matrix = load_hsv_features(gallery_dir / "stage2")
 
-                        # Dimension compatibility check — probe and gallery must share the
+                        # Dimension compatibility check - probe and gallery must share the
                         # same embedding dimension (same ReID model).  If they differ, skip
                         # the gallery merge rather than crash with a cryptic numpy error.
                         if features and gal_embeddings.shape[1] != features[0].embedding.shape[0]:
                             probe_dim = features[0].embedding.shape[0]
                             gal_dim = gal_embeddings.shape[1]
                             console.print(
-                                f"[yellow]  ⚠ Gallery embedding dim ({gal_dim}) ≠ probe dim "
-                                f"({probe_dim}) — skipping gallery merge. "
+                                f"[yellow]  [!] Gallery embedding dim ({gal_dim}) != probe dim "
+                                f"({probe_dim}) - skipping gallery merge. "
                                 f"Re-compute the gallery with the same ReID model.[/yellow]"
                             )
                             raise ValueError(
@@ -300,7 +300,7 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
                                 t.camera_id = new_cam_id
                             new_tracklets_by_camera[new_cam_id] = tracklets
 
-                        # Merge — do this last so features is never half-mutated on error
+                        # Merge - do this last so features is never half-mutated on error
                         merged_features = gal_features + new_features
                         merged_tracklets = dict(new_tracklets_by_camera)
                         merged_tracklets.update(gal_tracklets_by_camera)

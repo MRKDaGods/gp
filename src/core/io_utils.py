@@ -253,7 +253,7 @@ def save_global_trajectories(
         entry = {
             "global_id": gt.global_id,
             "tracklets": [_tracklet_to_dict(t) for t in gt.tracklets],
-            # Forensic fields (new — zero/empty for legacy trajectories)
+            # Forensic fields (new - zero/empty for legacy trajectories)
             "confidence": gt.confidence,
             "evidence": gt.evidence,
             "timeline": gt.timeline,
@@ -272,7 +272,7 @@ def load_global_trajectories(path: str | Path) -> List[GlobalTrajectory]:
             GlobalTrajectory(
                 global_id=d["global_id"],
                 tracklets=tracklets,
-                # Forensic fields — default to 0/empty for legacy files
+                # Forensic fields - default to 0/empty for legacy files
                 confidence=float(d.get("confidence", 0.0)),
                 evidence=d.get("evidence", []),
                 timeline=d.get("timeline", []),

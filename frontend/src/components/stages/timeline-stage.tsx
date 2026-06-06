@@ -50,7 +50,7 @@ import type {
   TimelineCameraLaneSegmentWithSum as CameraLaneSegmentWithSum,
 } from "./timeline/types";
 
-/** Playhead & ruler updates/sec while playing — lower = less React work (grid + memos). */
+/** Playhead & ruler updates/sec while playing - lower = less React work (grid + memos). */
 const TIMELINE_PLAYHEAD_FPS = 12;
 /** Tracklet full-frame picks/sec while playing (lower than playhead to limit image decode load). */
 const TRACKLET_PICK_FPS = 15;
@@ -159,7 +159,7 @@ export function TimelineStage() {
     [galleryRunId, resolvedProbeRunId, runId]
   );
 
-  /** Update local resolved probe from timeline diagnostics. Do not call setRunId here — that would
+  /** Update local resolved probe from timeline diagnostics. Do not call setRunId here - that would
    *  change the loadTracks effect deps mid-await and cancel the in-flight loader (blank timeline). */
   const applyTimelineResolvedProbe = useCallback(
     (diagnostics: Record<string, unknown> | null | undefined): string | null => {
@@ -217,7 +217,7 @@ export function TimelineStage() {
     return Math.max(best, 0);
   };
 
-  // Ruler 0…T where T is the sum of every tracklet segment duration. Segments are placed
+  // Ruler 0...T where T is the sum of every tracklet segment duration. Segments are placed
   // end-to-end in wall-clock order (per global sort by segment start). Playhead value is
   // that combined time; sumOffsetToVideoTime maps it back to source video time for previews.
   const {
@@ -400,7 +400,7 @@ export function TimelineStage() {
         selected: false,
         confirmed: false,
         segments: [seg],
-        label: `G-${String(gid).padStart(4, "0")} · ${cam} · track ${tid}`,
+        label: `G-${String(gid).padStart(4, "0")} * ${cam} * track ${tid}`,
         confidence: Number(clip.confidence ?? 0),
       });
     }
@@ -409,7 +409,7 @@ export function TimelineStage() {
 
   /**
    * Notebook-aligned: one row per global trajectory.
-   * Each row carries a `segments[]` array — one colored block per camera,
+   * Each row carries a `segments[]` array - one colored block per camera,
    * matching the `gp-stage-4.ipynb` multi-camera timeline visualization.
    */
   const buildTracksFromTrajectories = (
@@ -523,7 +523,7 @@ export function TimelineStage() {
           representativeFrame: seg.representativeFrame,
           representativeBbox: seg.representativeBbox,
           segments: [seg],
-          label: `G-${String(globalId).padStart(4, "0")} · ${seg.cameraId} · track ${seg.trackId}`,
+          label: `G-${String(globalId).padStart(4, "0")} * ${seg.cameraId} * track ${seg.trackId}`,
           confidence,
           className,
         });
@@ -534,7 +534,7 @@ export function TimelineStage() {
   };
 
   // Stage 4: run real association, then load tracks.
-  // When the tab is inactive (user is on another stage), do not fetch — avoids hammering the API during Selection edits.
+  // When the tab is inactive (user is on another stage), do not fetch - avoids hammering the API during Selection edits.
   useEffect(() => {
     let cancelled = false;
 
@@ -586,13 +586,13 @@ export function TimelineStage() {
       updateStageProgress(4, {
         status: "running",
         progress: 5,
-        message: "Running cross-camera association…",
+        message: "Running cross-camera association...",
       });
     }
 
     const loadTracks = async () => {
       const seq = ++loadTracksSeqRef.current;
-      /** Deferred until loader finishes — avoids effect re-entry + cancelled mid-flight when runId syncs from diagnostics */
+      /** Deferred until loader finishes - avoids effect re-entry + cancelled mid-flight when runId syncs from diagnostics */
       let pendingRunIdFromDiagnostics: string | null = null;
       let loadErrored = false;
       let finalTracksSet = false;
@@ -711,7 +711,7 @@ export function TimelineStage() {
             updateStageProgress(4, {
               status: "idle",
               progress: 0,
-              message: "Cross-camera association hasn't run yet — press Run Association.",
+              message: "Cross-camera association hasn't run yet - press Run Association.",
             });
             // Fall through to render single-camera tracklets below, if any.
           }
@@ -778,7 +778,7 @@ export function TimelineStage() {
             return;
           }
 
-          // No stage4 artifacts yet — run stage 4 now
+          // No stage4 artifacts yet - run stage 4 now
           updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association..." });
           const stageResp = await runStage(4, { runId, videoId: currentVideo.id, ...stage4KaggleRequest() });
           if (cancelled) return;
@@ -906,7 +906,7 @@ export function TimelineStage() {
         ) {
           setRunId(pendingRunIdFromDiagnostics);
         }
-        // Only the latest load invocation may clear loading — avoids Strict Mode / runId churn
+        // Only the latest load invocation may clear loading - avoids Strict Mode / runId churn
         // flipping loading off mid-fetch or leaving it stuck when an older async completes later.
         if (seq === loadTracksSeqRef.current) {
           setTracksLoading(false);
@@ -1185,7 +1185,7 @@ export function TimelineStage() {
     [zoom, totalDuration, timelineStart]
   );
 
-  // offsetToTime: inverse — pixel offset → ruler time
+  // offsetToTime: inverse - pixel offset -> ruler time
   const offsetToTime = useCallback(
     (px: number) => {
       const baseWidth = 1200;
@@ -1314,7 +1314,7 @@ export function TimelineStage() {
   const shownCameraLanes = cameraLanes.length;
   const selectedTrackletCount = selectedTrackIdSet.size;
 
-  // Dynamic time ruler tick interval: keep ~10–15 ticks on screen regardless of duration
+  // Dynamic time ruler tick interval: keep ~10-15 ticks on screen regardless of duration
   const rulerTickInterval = totalDuration <= 30 ? 5 : totalDuration <= 120 ? 10 : totalDuration <= 600 ? 30 : 60;
   const rulerTickCount = Math.ceil(totalDuration / rulerTickInterval) + 1;
   const rulerPlayheadLeft = timeToPixel(timelineStart + currentTime);

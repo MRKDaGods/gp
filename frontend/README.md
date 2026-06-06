@@ -52,15 +52,15 @@ NEXT_PUBLIC_API_URL=http://localhost:8004/api
 
 ```
 src/
-├── app/                 # Next.js pages
-├── components/
-│   ├── layout/          # Dashboard layout
-│   ├── stages/          # Pipeline stage views
-│   └── ui/              # shadcn components
-├── lib/                 # API client, utilities
-├── store/               # Zustand stores
-├── types/               # TypeScript types
-└── hooks/               # Custom React hooks
++-- app/                 # Next.js pages
++-- components/
+|   +-- layout/          # Dashboard layout
+|   +-- stages/          # Pipeline stage views
+|   +-- ui/              # shadcn components
++-- lib/                 # API client, utilities
++-- store/               # Zustand stores
++-- types/               # TypeScript types
++-- hooks/               # Custom React hooks
 ```
 
 ## Development

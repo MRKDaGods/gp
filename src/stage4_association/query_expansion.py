@@ -96,7 +96,7 @@ def average_query_expansion_batched(
     k: int = 5,
     alpha: float = 1.0,
 ) -> np.ndarray:
-    """Vectorised variant of AQE — faster for large N.
+    """Vectorised variant of AQE - faster for large N.
 
     Semantics match :func:`average_query_expansion` (same weighting, same
     handling of invalid indices and of rows with no valid neighbours).

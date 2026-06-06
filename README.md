@@ -86,8 +86,8 @@ python scripts/verify_assets.py
 All pipeline and paper checkpoints are consolidated into one public Kaggle
 dataset (`mrkdagods/mtmc-veri776-pipeline-weights`, CC BY 4.0) and are SHA-256
 pinned in `configs/weights_manifest.yaml`. `download_weights.py` lets you fetch a
-single model set — `vehicle-mtmc-14e`, `vehicle-mtmc-14k`, `person-mtmc`, `veri`
-— or `all`. See `SETUP.md` for the full table and `LAUNCH.md` for launch
+single model set - `vehicle-mtmc-14e`, `vehicle-mtmc-14k`, `person-mtmc`, `veri`
+- or `all`. See `SETUP.md` for the full table and `LAUNCH.md` for launch
 commands. CityFlowV2 must be downloaded manually from the AI City Challenge site
 because the complete dataset is not available as a public Kaggle dataset.
 

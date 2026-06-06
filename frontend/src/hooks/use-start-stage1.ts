@@ -15,7 +15,7 @@ export interface StartStage1Options {
 
 function getStage1ErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.status === 429) {
-    return "Both Kaggle slots busy — try again later";
+    return "Both Kaggle slots busy - try again later";
   }
   return error instanceof Error ? error.message : String(error);
 }

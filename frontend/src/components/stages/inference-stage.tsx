@@ -21,7 +21,7 @@ import type { RunModelMetadata, SingleStageRunStatus, StageNumber } from "@/type
 function getRunStageErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return "Kaggle credentials missing or invalid. Configure them in the sidebar settings.";
-    if (error.status === 429) return "Both Kaggle slots busy — try again later";
+    if (error.status === 429) return "Both Kaggle slots busy - try again later";
     if (error.status === 400) {
       const data = error.data as { detail?: unknown; message?: unknown } | undefined;
       return String(data?.detail ?? data?.message ?? error.message);
@@ -227,7 +227,7 @@ export function InferenceActions() {
   const isRunning = stage2Status === "running" || stage3Status === "running";
 
   // Per-stage gating: in the dataset flow, features need detection (stage 1)
-  // done and indexing needs features (stage 2) done — each runs only on demand.
+  // done and indexing needs features (stage 2) done - each runs only on demand.
   const datasetFlow = Boolean(runInput);
   const detectionDone = toStageStatus(stages.find((s) => s.stage === 1)) === "done";
   const featuresDone = stage2Status === "done";
@@ -261,7 +261,7 @@ export function InferenceActions() {
 
   const runBackendStage = useCallback(async (stage: 2 | 3) => {
     // Per-stage dataset flow: a run was created at ingestion (Stage 0). Run this
-    // pipeline stage incrementally against the same run — nothing cascades and
+    // pipeline stage incrementally against the same run - nothing cascades and
     // it only fires from this button press.
     if (runInput) {
       setError(null);
@@ -413,7 +413,7 @@ export function InferenceActions() {
     <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
       <div className="flex flex-wrap items-center gap-2">
         {/* One compute switch drives both Features (2) and Index (3), which run
-            together on this page — two separate toggles were redundant. */}
+            together on this page - two separate toggles were redundant. */}
         <ExecutionTargetToggle stage={2} stages={[2, 3]} variant="compact" />
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">

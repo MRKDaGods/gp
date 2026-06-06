@@ -102,7 +102,7 @@ def trajectories_to_mot_submission(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Optional ground-plane ROI filter (WILDTRACK) ──────────────────
+    # -- Optional ground-plane ROI filter (WILDTRACK) ------------------
     roi_bbox = None
     cam_calibs = None
     if roi_config:
@@ -192,7 +192,7 @@ def trajectories_to_mot_submission(
     # Write per-camera files
     for cam_id, rows in camera_rows.items():
         rows.sort(key=lambda r: (r[0], r[1]))
-        # Deduplicate same (frame, global_id) entries — keep highest confidence.
+        # Deduplicate same (frame, global_id) entries - keep highest confidence.
         # These can arise when the graph solver incorrectly merges two same-camera
         # tracklets that share overlapping frames.
         seen: dict = {}
@@ -285,7 +285,7 @@ def trajectories_to_mot_submission(
         f"{sum(len(r) for r in camera_rows.values())} detection rows"
     )
 
-    # ── Per-camera diagnostic summary ────────────────────────────────────────
+    # -- Per-camera diagnostic summary ----------------------------------------
     # Helps diagnose FP ratio issues and detect cameras with anomalous counts.
     global_ids_per_cam = {}
     for cam_id, rows in sorted(camera_rows.items()):

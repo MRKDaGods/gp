@@ -105,7 +105,7 @@ export function SplashScreen() {
           priority
         />
 
-        {/* Loading bar — driven by React state, no CSS animation flicker */}
+        {/* Loading bar - driven by React state, no CSS animation flicker */}
         <div className="mt-4 h-[2px] w-48 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full bg-accent-strong/60"

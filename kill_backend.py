@@ -1,4 +1,4 @@
-﻿import subprocess, sys, time
+import subprocess, sys, time
 
 def pids_on_port(port):
     pids = []

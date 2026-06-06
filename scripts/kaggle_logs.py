@@ -119,12 +119,12 @@ def main():
 
     # Check status first
     status, fail_msg = get_status(args.kernel)
-    # Normalize — strip enum prefix if present
+    # Normalize - strip enum prefix if present
     status_clean = status.replace("KernelWorkerStatus.", "").upper() if status else "UNKNOWN"
 
     if status_clean not in TERMINAL_STATUSES:
         if args.wait:
-            print(f"Kernel is {status_clean} — waiting for completion (poll every {args.poll_interval}s)...",
+            print(f"Kernel is {status_clean} - waiting for completion (poll every {args.poll_interval}s)...",
                   file=sys.stderr)
             while status_clean not in TERMINAL_STATUSES:
                 time.sleep(args.poll_interval)
@@ -136,14 +136,14 @@ def main():
             if fail_msg:
                 print(f"Failure message: {fail_msg}", file=sys.stderr)
         else:
-            print(f"Kernel is {status_clean} — logs are only available after completion.", file=sys.stderr)
+            print(f"Kernel is {status_clean} - logs are only available after completion.", file=sys.stderr)
             print(f"Use --wait to poll until done, or check the Kaggle website for live logs.", file=sys.stderr)
             sys.exit(0)
 
     log = fetch_logs(args.kernel, tail=args.tail, raw=args.raw)
 
     if not log.strip():
-        print(f"(No log output returned — kernel status: {status_clean})", file=sys.stderr)
+        print(f"(No log output returned - kernel status: {status_clean})", file=sys.stderr)
         if fail_msg:
             print(f"Failure message: {fail_msg}", file=sys.stderr)
         sys.exit(0)

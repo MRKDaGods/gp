@@ -43,7 +43,7 @@ async def query_timeline(request: TimelineQueryRequest, state: AppState = Depend
 
     timeline_query_cache_put(cache_key, response_payload)
 
-    # ── I/O side-effects (stay in router) ───────────────────────────────
+    # -- I/O side-effects (stay in router) -------------------------------
     if request.skipExports:
         return response_payload
 

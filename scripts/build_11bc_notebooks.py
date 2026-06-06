@@ -133,7 +133,7 @@ print("\\n\\u2713 All required modules importable")'''
 
 
 # ============================================================================
-# 11b — Stage 3 (FAISS Indexing)
+# 11b - Stage 3 (FAISS Indexing)
 # ============================================================================
 
 def build_11b() -> dict:
@@ -306,7 +306,7 @@ print("  Next: attach this notebook's output to 11c, then push 11c.")'''))
 
 
 # ============================================================================
-# 11c — Stages 4-5 (Association + Evaluation)
+# 11c - Stages 4-5 (Association + Evaluation)
 # ============================================================================
 
 def build_11c() -> dict:

@@ -40,7 +40,7 @@ from src.training.evaluate_reid import (
     eval_market1501,
 )
 
-# ── CLIP normalization (must match training) ─────────────────────────────
+# -- CLIP normalization (must match training) -----------------------------
 CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
 
@@ -56,11 +56,11 @@ CAMERAS = [
 ]
 
 
-# ── Step 1: Extract crops from videos ────────────────────────────────────
+# -- Step 1: Extract crops from videos ------------------------------------
 
 
 def load_gt(gt_path: str) -> List[Tuple[int, int, int, int, int, int]]:
-    """Load MOT GT file → list of (frame, id, x, y, w, h)."""
+    """Load MOT GT file -> list of (frame, id, x, y, w, h)."""
     rows = []
     with open(gt_path) as f:
         for line in f:
@@ -170,7 +170,7 @@ def extract_crops(
     return dict(all_crops)
 
 
-# ── Step 2: Build query/gallery split ────────────────────────────────────
+# -- Step 2: Build query/gallery split ------------------------------------
 
 
 def build_reid_split(
@@ -179,7 +179,7 @@ def build_reid_split(
 ) -> Tuple[List, List]:
     """Build query and gallery lists.
 
-    For each vehicle ID that appears in ≥2 cameras:
+    For each vehicle ID that appears in >=2 cameras:
       - Query: 1 random crop from each camera
       - Gallery: all remaining crops
 
@@ -232,7 +232,7 @@ def build_reid_split(
 
     logger.info(
         f"ReID split: {len(query)} query, {len(gallery)} gallery "
-        f"({len(multi_cam_ids)} IDs with ≥2 cameras, "
+        f"({len(multi_cam_ids)} IDs with >=2 cameras, "
         f"{len(single_cam_ids)} distractor IDs)"
     )
     return query, gallery
@@ -248,7 +248,7 @@ def limit_vehicle_ids(
     return {vehicle_id: all_crops[vehicle_id] for vehicle_id in selected_ids}
 
 
-# ── Step 3: Dataset & transforms ─────────────────────────────────────────
+# -- Step 3: Dataset & transforms -----------------------------------------
 
 
 class CropDataset(Dataset):
@@ -274,7 +274,7 @@ def build_eval_transforms(height: int = 224, width: int = 224) -> T.Compose:
     ])
 
 
-# ── Step 4: Feature extraction ───────────────────────────────────────────
+# -- Step 4: Feature extraction -------------------------------------------
 
 
 @torch.no_grad()
@@ -314,7 +314,7 @@ def extract_features(
     )
 
 
-# ── Step 5: Average Query Expansion ──────────────────────────────────────
+# -- Step 5: Average Query Expansion --------------------------------------
 
 
 def average_query_expansion(
@@ -343,7 +343,7 @@ def average_query_expansion(
     return expanded
 
 
-# ── Main ──────────────────────────────────────────────────────────────────
+# -- Main ------------------------------------------------------------------
 
 
 def main():
@@ -386,9 +386,9 @@ def main():
     logger.info(f"Device: {args.device}")
     logger.info(f"Weights: {args.weights}")
     logger.info(f"Image size: {args.img_size}")
-    logger.info(f"QE k={args.qe_k}, Re-rank: k1={args.k1}, k2={args.k2}, λ={args.lambda_value}")
+    logger.info(f"QE k={args.qe_k}, Re-rank: k1={args.k1}, k2={args.k2}, lambda={args.lambda_value}")
 
-    # ── 1. Extract crops ──────────────────────────────────────────────
+    # -- 1. Extract crops ----------------------------------------------
     if os.path.isdir(args.crop_dir) and len(os.listdir(args.crop_dir)) > 100:
         logger.info(f"Reusing existing crops in {args.crop_dir}")
         # Rebuild all_crops from filenames: {tid}_{cam}_f{frame}.jpg
@@ -413,7 +413,7 @@ def main():
         )
     all_crops = limit_vehicle_ids(all_crops, args.max_ids)
 
-    # ── 2. Build query/gallery ────────────────────────────────────────
+    # -- 2. Build query/gallery ----------------------------------------
     query_list, gallery_list = build_reid_split(all_crops)
 
     transform = build_eval_transforms(args.img_size[0], args.img_size[1])
@@ -429,7 +429,7 @@ def main():
         num_workers=args.num_workers, pin_memory=True,
     )
 
-    # ── 3. Load model ────────────────────────────────────────────────
+    # -- 3. Load model ------------------------------------------------
     logger.info("Loading TransReID model ...")
     model = build_transreid(
         num_classes=1,
@@ -443,7 +443,7 @@ def main():
     model = model.to(args.device)
     model.eval()
 
-    # ── 4. Extract features ──────────────────────────────────────────
+    # -- 4. Extract features ------------------------------------------
     t0 = time.time()
     logger.info("Extracting query features ...")
     q_feats, q_pids, q_camids = extract_features(model, q_loader, args.device)
@@ -455,7 +455,7 @@ def main():
     t_feat = time.time() - t0
     logger.info(f"Feature extraction: {t_feat:.1f}s")
 
-    # ── 5. Optional: Average Query Expansion ─────────────────────────
+    # -- 5. Optional: Average Query Expansion -------------------------
     if args.qe_k > 0:
         logger.info(f"Applying Average Query Expansion (k={args.qe_k}) ...")
         # QE on combined features, then split back
@@ -464,7 +464,7 @@ def main():
         q_feats = all_feats[: len(q_pids)]
         g_feats = all_feats[len(q_pids) :]
 
-    # ── 6. Standard eval (cosine distance) ───────────────────────────
+    # -- 6. Standard eval (cosine distance) ---------------------------
     logger.info("Computing cosine distance ...")
     sim = q_feats @ g_feats.T
     distmat = 1.0 - sim
@@ -483,11 +483,11 @@ def main():
         "R10": float(cmc[9]),
     }
 
-    # ── 7. Re-ranking ────────────────────────────────────────────────
+    # -- 7. Re-ranking ------------------------------------------------
     if args.rerank:
         logger.info(
             f"\nComputing re-ranked distance (k1={args.k1}, k2={args.k2}, "
-            f"λ={args.lambda_value}) ..."
+            f"lambda={args.lambda_value}) ..."
         )
         t0 = time.time()
         distmat_rr = compute_reranking(

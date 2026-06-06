@@ -118,7 +118,7 @@ export function PipelineRunHeader({
       </Button>
       <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
         <GitBranch className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Stage {currentStage + 1}/7 · {label}</span>
+        <span className="truncate">Stage {currentStage + 1}/7 * {label}</span>
         <StageStatusBadge status={currentStageState.status} />
       </div>
       <div className="hidden min-w-[140px] max-w-[220px] flex-1 items-center gap-2 md:flex">
@@ -149,7 +149,7 @@ export function PipelineRunHeader({
                   className="w-full rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:border-status-error/40 hover:bg-status-error/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => onSelectErrorStage?.(stageError.stage)}
                 >
-                  <div className="font-medium">Stage {stageError.stage} · {stageError.label}</div>
+                  <div className="font-medium">Stage {stageError.stage} * {stageError.label}</div>
                   <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{stageError.message}</div>
                 </button>
               ))}

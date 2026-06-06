@@ -28,7 +28,7 @@ sys.path.insert(0, str(project_root))
 
 console = Console()
 
-# ─── Config datasets ────────────────────────────────────────────────────
+# --- Config datasets ----------------------------------------------------
 
 DATASET_CONFIGS: Dict[str, str] = {
     "wildtrack": "configs/datasets/wildtrack.yaml",
@@ -37,7 +37,7 @@ DATASET_CONFIGS: Dict[str, str] = {
 }
 
 
-# ─── Stage validators ───────────────────────────────────────────────────
+# --- Stage validators ---------------------------------------------------
 
 def validate_stage0(run_dir: Path) -> Dict:
     """Check frame extraction outputs."""
@@ -240,7 +240,7 @@ STAGE_VALIDATORS = {
 }
 
 
-# ─── Pipeline runner ────────────────────────────────────────────────────
+# --- Pipeline runner ----------------------------------------------------
 
 def run_pipeline_for_dataset(dataset: str, stages: List[int]) -> Path:
     """Run the pipeline for a dataset and return the output directory."""
@@ -367,7 +367,7 @@ def _discover_video_paths(cfg) -> dict:
     return video_paths
 
 
-# ─── Report ─────────────────────────────────────────────────────────────
+# --- Report -------------------------------------------------------------
 
 def print_validation_report(dataset: str, run_dir: Path, stages: List[int]):
     """Print a per-stage diagnostic table."""
@@ -411,7 +411,7 @@ def print_validation_report(dataset: str, run_dir: Path, stages: List[int]):
         console.print()
 
 
-# ─── CLI ────────────────────────────────────────────────────────────────
+# --- CLI ----------------------------------------------------------------
 
 @click.command()
 @click.option("--datasets", "-d", multiple=True, required=True,

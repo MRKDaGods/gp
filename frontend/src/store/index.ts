@@ -18,7 +18,7 @@ import type {
 // Pipeline Store - Manages pipeline execution state
 // ============================================================================
 
-/** Canonical sidebar pipeline labels — shared by pipeline store reset + downstream flush. */
+/** Canonical sidebar pipeline labels - shared by pipeline store reset + downstream flush. */
 export const PIPELINE_STAGE_DEFAULTS: StageProgress[] = [
   { stage: 0, status: 'idle', progress: 0, message: 'Ingestion', completedAt: null, lastRunAt: null, staleSince: null },
   { stage: 1, status: 'idle', progress: 0, message: 'Detection & Tracking', completedAt: null, lastRunAt: null, staleSince: null },
@@ -65,7 +65,7 @@ export interface RunTelemetry {
   camerasProcessed?: number;
   frame?: number;
   frameTotal?: number;
-  /** Latest status message from the pipeline (e.g. "Detection — camera S01_c001"). */
+  /** Latest status message from the pipeline (e.g. "Detection - camera S01_c001"). */
   message?: string;
   /** Rolling tail of the pipeline subprocess output (verbose live log). */
   logTail?: string;
@@ -302,10 +302,10 @@ export const usePipelineStore = create<PipelineState>()(
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<PipelineState>;
         // A stage left "running" when the tab was reloaded is no longer being
-        // polled — downgrade it to idle so it isn't stuck spinning forever.
+        // polled - downgrade it to idle so it isn't stuck spinning forever.
         const stages = (p.stages ?? current.stages).map((st) =>
           st.status === 'running'
-            ? { ...st, status: 'idle' as const, progress: 0, message: 'Interrupted by reload — re-run if needed' }
+            ? { ...st, status: 'idle' as const, progress: 0, message: 'Interrupted by reload - re-run if needed' }
             : st
         );
         return {
@@ -421,7 +421,7 @@ interface DetectionState {
   detections: Detection[];
   /** @deprecated Use selectedTrackIds for persistent selection */
   selectedIds: Set<string>;
-  /** Track-level selection — persists across frame changes */
+  /** Track-level selection - persists across frame changes */
   selectedTrackIds: Set<number>;
   multiSelectMode: boolean;
   hoveredId: string | null;

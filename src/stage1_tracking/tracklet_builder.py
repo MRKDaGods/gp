@@ -25,7 +25,7 @@ def interpolate_tracklet_frames(
 ) -> List[TrackletFrame]:
     """Fill temporal gaps in a tracklet with linearly-interpolated bboxes.
 
-    If two consecutive observations are separated by ≤ *max_gap* frames,
+    If two consecutive observations are separated by <= *max_gap* frames,
     intermediate ``TrackletFrame`` entries are synthesised with linearly
     interpolated bounding boxes and confidence = 0 (so downstream stages
     can distinguish real vs. interpolated detections).
@@ -83,8 +83,8 @@ def merge_intra_camera_tracklets(
 
     When the tracker loses an object and re-acquires it shortly after, two
     separate tracklets are created for the same identity.  This function
-    greedily merges pairs whose temporal gap is ≤ *max_time_gap* seconds and
-    whose last/first bounding boxes have IoU ≥ (1 - *max_iou_distance*).
+    greedily merges pairs whose temporal gap is <= *max_time_gap* seconds and
+    whose last/first bounding boxes have IoU >= (1 - *max_iou_distance*).
 
     Args:
         tracklets: List of tracklets from the same camera, sorted by start_time.

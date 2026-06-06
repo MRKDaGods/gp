@@ -5,12 +5,12 @@ Applied as a post-processing step on FAISS retrieval results.
 
 Improvements over baseline
 --------------------------
-* **Sparse computation** — instead of an O(N²) full similarity matrix we use
+* **Sparse computation** - instead of an O(N^2) full similarity matrix we use
   the FAISS index that already exists upstream to compute per-node
   neighbourhoods.  When no FAISS index is available we fall back to a
   *local* similarity matrix built only from the nodes that appear in the
-  candidate set, which is typically ≪ N.
-* **Weighted Jaccard** — the k-reciprocal overlap is weighted by the actual
+  candidate set, which is typically << N.
+* **Weighted Jaccard** - the k-reciprocal overlap is weighted by the actual
   cosine similarity of the shared neighbours rather than treating every
   neighbour as binary.
 """
@@ -44,7 +44,7 @@ def k_reciprocal_rerank(
         k2: Number of nearest neighbours for expanded set (unused in
             weighted variant but controls expansion breadth).
         lambda_value: Blending factor (0 = only Jaccard, 1 = only original).
-        faiss_index: Optional FAISS index over *embeddings* — if supplied
+        faiss_index: Optional FAISS index over *embeddings* - if supplied
             the expensive argsort is replaced with a fast ANN lookup.
 
     Returns:
@@ -64,11 +64,11 @@ def k_reciprocal_rerank(
     # ------------------------------------------------------------------
     # Build per-node top-k1 neighbour lists  (sparse path)
     # ------------------------------------------------------------------
-    topk_map: Dict[int, np.ndarray] = {}        # node → array of k1 nn ids
-    sim_cache: Dict[int, np.ndarray] = {}        # node → corresponding sims
+    topk_map: Dict[int, np.ndarray] = {}        # node -> array of k1 nn ids
+    sim_cache: Dict[int, np.ndarray] = {}        # node -> corresponding sims
 
     if faiss_index is not None:
-        # FAISS batch query — only for active nodes
+        # FAISS batch query - only for active nodes
         active_list = sorted(active_nodes)
         query_emb = embeddings[active_list].astype(np.float32)
         sims, indices = faiss_index.search(query_emb, k1)
@@ -93,7 +93,7 @@ def k_reciprocal_rerank(
             if j in topk_map:
                 backward = set(topk_map[j].tolist()) - {-1}
             else:
-                # j is not an active query — compute its nns on the fly
+                # j is not an active query - compute its nns on the fly
                 jvec = embeddings[j : j + 1].astype(np.float32)
                 if faiss_index is not None:
                     _, jnn = faiss_index.search(jvec, k1)
@@ -120,7 +120,7 @@ def k_reciprocal_rerank(
     # Compute weighted Jaccard for each candidate pair
     # ------------------------------------------------------------------
     # Pre-compute similarity lookup for all nodes referenced in expanded sets.
-    # This avoids O(|union| × D) dot products per pair → massive speedup.
+    # This avoids O(|union| x D) dot products per pair -> massive speedup.
     all_expanded_nodes: Set[int] = set()
     for node in active_nodes:
         all_expanded_nodes |= expanded_sets.get(node, set())
@@ -128,7 +128,7 @@ def k_reciprocal_rerank(
     expanded_list = sorted(all_expanded_nodes)
     expanded_idx = {n: idx for idx, n in enumerate(expanded_list)}
     expanded_embs = embeddings[expanded_list]  # (M, D)
-    # Pre-compute M×M similarity matrix (all L2-normed → dot product = cosine)
+    # Pre-compute MxM similarity matrix (all L2-normed -> dot product = cosine)
     sim_matrix = expanded_embs @ expanded_embs.T  # (M, M)
 
     result: Dict[Tuple[int, int], float] = {}
@@ -161,7 +161,7 @@ def k_reciprocal_rerank(
 
     logger.debug(
         f"Re-ranked {len(result)} pairs "
-        f"(k1={k1}, k2={k2}, λ={lambda_value}, active_nodes={len(active_nodes)})"
+        f"(k1={k1}, k2={k2}, lambda={lambda_value}, active_nodes={len(active_nodes)})"
     )
     return result
 
@@ -185,8 +185,8 @@ def _build_local_topk(
     """Build top-k neighbours using a *local* similarity matrix.
 
     We only compute similarities among the active node set + a 1-hop expansion
-    (all nodes that appear in any candidate pair). This is O(M²) where
-    M = |active_nodes| ≪ N.
+    (all nodes that appear in any candidate pair). This is O(M^2) where
+    M = |active_nodes| << N.
     """
     active_list = sorted(active_nodes)
     n_active = len(active_list)
@@ -198,7 +198,7 @@ def _build_local_topk(
     active_emb = embeddings[active_list]  # (M, D)
     local_sim = np.dot(active_emb, active_emb.T)  # (M, M)
 
-    # Map global index → local index
+    # Map global index -> local index
     g2l = {g: l for l, g in enumerate(active_list)}
 
     k_eff = min(k, n_active)

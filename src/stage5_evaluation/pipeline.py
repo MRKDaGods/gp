@@ -1,4 +1,4 @@
-"""Stage 5 — System Evaluation & Quality Assessment pipeline.
+"""Stage 5 - System Evaluation & Quality Assessment pipeline.
 
 Evaluates tracking results against ground truth using standard metrics
 (HOTA, IDF1, MOTA) and generates evaluation reports.
@@ -67,7 +67,7 @@ def run_stage5(
                 "margin_cm": 100.0,
             }
 
-    # ── Optional: remove stationary vehicles (parked cars) ──────────────────
+    # -- Optional: remove stationary vehicles (parked cars) ------------------
     # Detections on parked/stationary vehicles create long-lived tracks with
     # near-zero displacement.  These are guaranteed FP in MTMC evaluation
     # (GT only annotates moving, intersection-crossing vehicles).
@@ -80,7 +80,7 @@ def run_stage5(
             trajectories, min_displacement, max_mean_velocity
         )
 
-    # ── Optional: confidence-based trajectory filter ─────────────────────────
+    # -- Optional: confidence-based trajectory filter -------------------------
     # Trajectory confidence = mean pairwise appearance similarity between
     # tracklets in the cluster.  Low-confidence trajectories are likely wrong
     # associations (noise from gallery expansion or weak merges).
@@ -95,9 +95,9 @@ def run_stage5(
                 f"with confidence < {min_traj_conf:.2f}"
             )
 
-    # ── Optional: minimum total frames per trajectory ────────────────────────
+    # -- Optional: minimum total frames per trajectory ------------------------
     # Trajectories with very few total frames across all cameras are likely
-    # noise — brief detections wrongly linked cross-camera.
+    # noise - brief detections wrongly linked cross-camera.
     min_traj_frames = int(stage_cfg.get("min_trajectory_frames", 0))
     if min_traj_frames > 0:
         before = len(trajectories)
@@ -112,10 +112,10 @@ def run_stage5(
                 f"with < {min_traj_frames} total frames"
             )
 
-    # ── Optional: only submit multi-camera trajectories ──────────────────────
+    # -- Optional: only submit multi-camera trajectories ----------------------
     # CityFlowV2/AIC GT exclusively annotates vehicles that cross multiple
     # cameras.  Single-camera trajectories (vehicles never seen in >1 camera)
-    # are GUARANTEED false positives in the GT sense, and typically have 3-5×
+    # are GUARANTEED false positives in the GT sense, and typically have 3-5x
     # more predictions than GT vehicles.  Filtering them out removes massive
     # IDFP with no true-positive loss.
     submit_traj = trajectories
@@ -136,7 +136,7 @@ def run_stage5(
     )
     logger.info(f"Predictions converted to MOT format in {pred_dir}")
 
-    # ── Track edge trimming ──────────────────────────────────────────────────
+    # -- Track edge trimming --------------------------------------------------
     # CityFlowV2 GT only annotates vehicles inside the intersection zone.
     # Track "tails" (first/last N frames) correspond to approach/departure
     # and are pure FP.  Trim frames at track edges with below-median confidence
@@ -149,9 +149,9 @@ def run_stage5(
             trim_fraction=float(trim_cfg.get("trim_fraction", 0.10)),
         )
 
-    # ── Track smoothing ──────────────────────────────────────────────────────
+    # -- Track smoothing ------------------------------------------------------
     # Smooth bounding box trajectories to reduce detection jitter.
-    # Improves IoU with GT boxes → better MOTA/IDF1.  Uses Savitzky-Golay
+    # Improves IoU with GT boxes -> better MOTA/IDF1.  Uses Savitzky-Golay
     # filter on bbox (cx, cy, w, h) to preserve trends while removing noise.
     smooth_cfg = stage_cfg.get("track_smoothing", {})
     if smooth_cfg.get("enabled", False):
@@ -161,12 +161,12 @@ def run_stage5(
             polyorder=int(smooth_cfg.get("polyorder", 2)),
         )
 
-    # ── Submission quality diagnostic ─────────────────────────────────────────
+    # -- Submission quality diagnostic -----------------------------------------
     # Compare prediction volume against GT to detect FP flood issues early.
     if gt_dir is not None and Path(gt_dir).exists():
         _log_submission_quality(pred_dir, Path(gt_dir))
 
-    # ── GT zone filter ────────────────────────────────────────────────────────
+    # -- GT zone filter --------------------------------------------------------
     # Smarter filter: for each camera, keep only PREDICTION TRACKS that share
     # at least one frame with a GT box (IoU > 0).  Tracks that never overlap
     # any GT box are DEFINITELY non-GT vehicles (parked cars, wrong direction).
@@ -183,13 +183,13 @@ def run_stage5(
             min_overlap_frames=int(stage_cfg.get("gt_zone_min_overlap_frames", 1)),
         )
 
-    # ── Frame-level GT clip ───────────────────────────────────────────────────
+    # -- Frame-level GT clip ---------------------------------------------------
     # Drop individual prediction ROWS (frames) where our box doesn't overlap
-    # any GT box (IoU > 0).  These frames are outside the GT annotation zone —
+    # any GT box (IoU > 0).  These frames are outside the GT annotation zone -
     # the vehicle has already left or hasn't yet entered the intersection area.
     # Submitting these frames = pure IDFP with no corresponding IDTP.
-    # Removing them: IDFP decreases → IDF1 increases.  IDFN unchanged since GT
-    # has no annotation in those frames → motmetrics doesn't penalise non-submission.
+    # Removing them: IDFP decreases -> IDF1 increases.  IDFN unchanged since GT
+    # has no annotation in those frames -> motmetrics doesn't penalise non-submission.
     if gt_dir is not None and Path(gt_dir).exists() and stage_cfg.get("gt_frame_clip", False):
         _apply_gt_frame_clip(
             pred_dir=pred_dir,
@@ -238,7 +238,7 @@ def run_stage5(
                 f"annotations={annotations_dir}, calibrations={calibrations_dir}"
             )
 
-    # ── Standard per-camera 2D MOT evaluation ──
+    # -- Standard per-camera 2D MOT evaluation --
     if gt_dir is not None and Path(gt_dir).exists():
         iou_threshold = float(stage_cfg.get("iou_threshold", 0.5))
         result = evaluate_mot(
@@ -266,7 +266,7 @@ def run_stage5(
                         parts.append(f"{k}={v}")
                 logger.info(" ".join(parts))
 
-        # ── MTMC IDF1 (AI City Challenge protocol) ──
+        # -- MTMC IDF1 (AI City Challenge protocol) --
         # Use a single global accumulator with globally-unique GT IDs so that
         # correct re-identification across cameras is rewarded, matching the
         # evaluation methodology of published MTMC papers (AIC21 SOTA=84.1%).
@@ -336,7 +336,7 @@ def _apply_gt_frame_clip(
 
     For each camera, loads the GT file and, for every row in the prediction
     file, checks if the predicted box has IoU > *min_iou* with ANY GT box in
-    the same frame.  Rows that fail are removed — they correspond to frames
+    the same frame.  Rows that fail are removed - they correspond to frames
     where the vehicle is outside the GT annotation zone (before/after the
     intersection crossing).
 
@@ -384,7 +384,7 @@ def _apply_gt_frame_clip(
                 frame = int(parts[0])
 
                 # If no GT box exists in this frame, the prediction is outside
-                # the annotation zone → guaranteed IDFP → drop it.
+                # the annotation zone -> guaranteed IDFP -> drop it.
                 if frame not in gt_boxes_by_frame:
                     dropped += 1
                     continue
@@ -484,7 +484,7 @@ def _log_submission_quality(pred_dir: Path, gt_dir: Path) -> None:
     if overall_ratio > 2.0:
         logger.warning(
             f"Submission quality: {total_pred} pred rows vs {total_gt} GT rows "
-            f"({overall_ratio:.1f}x) — HIGH FP ratio detected. "
+            f"({overall_ratio:.1f}x) - HIGH FP ratio detected. "
             f"Consider raising detection confidence or enabling stationary filter."
         )
     else:
@@ -505,12 +505,12 @@ def _smooth_prediction_tracks(
     and smooths (cx, cy, w, h) using scipy's Savitzky-Golay filter.  Short
     tracks (< window) are left unchanged.
 
-    This reduces detection jitter → better IoU with GT → improved MOTA/IDF1.
+    This reduces detection jitter -> better IoU with GT -> improved MOTA/IDF1.
     """
     try:
         from scipy.signal import savgol_filter
     except ImportError:
-        logger.warning("scipy not available — skipping track smoothing")
+        logger.warning("scipy not available - skipping track smoothing")
         return
 
     total_smoothed = 0
@@ -554,7 +554,7 @@ def _smooth_prediction_tracks(
             for dim in range(4):
                 coords[:, dim] = savgol_filter(coords[:, dim], window, polyorder)
 
-            # Write back as (x, y, w, h) — ensure non-negative w, h
+            # Write back as (x, y, w, h) - ensure non-negative w, h
             for k, parts in enumerate(rows):
                 cx, cy = coords[k, 0], coords[k, 1]
                 w = max(coords[k, 2], 1.0)
@@ -703,7 +703,7 @@ def _filter_stationary(
       2. Mean per-frame velocity (if max_mean_velocity_px > 0): catches parked
          cars that oscillate enough for endpoint displacement > threshold.
 
-    This is a **non-GT filter** — no ground truth information is used.
+    This is a **non-GT filter** - no ground truth information is used.
     """
     import math
 
@@ -765,7 +765,7 @@ def _trim_track_edges(
 
     CityFlowV2 GT only annotates vehicles in the intersection zone.  Track
     "tails" (approach/departure) are pure FP.  This trims frames at track
-    edges where the detector was least confident — a GT-free proxy for the
+    edges where the detector was least confident - a GT-free proxy for the
     annotation boundary.
 
     Modes:

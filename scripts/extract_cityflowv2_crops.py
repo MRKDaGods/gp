@@ -32,7 +32,7 @@ import cv2
 import numpy as np
 from loguru import logger
 
-# ── Constants ─────────────────────────────────────────────────────────────
+# -- Constants -------------------------------------------------------------
 
 DEFAULT_DATA_ROOT = "data/raw/cityflowv2"
 DEFAULT_OUTPUT = "data/processed/cityflowv2_reid"
@@ -45,15 +45,15 @@ MIN_AREA = 2000           # minimum bbox area (pixels)
 MAX_CROPS_PER_ID_CAM = 15 # max crops per vehicle per camera
 MIN_BBOX_SIDE = 30        # minimum width/height in pixels
 TRAIN_RATIO = 0.7         # fraction of multi-cam IDs used for training
-MIN_CAMS_FOR_EVAL = 2     # vehicle must appear in ≥N cameras for query/gallery
+MIN_CAMS_FOR_EVAL = 2     # vehicle must appear in >=N cameras for query/gallery
 SEED = 42
 
 
-# ── GT parsing ────────────────────────────────────────────────────────────
+# -- GT parsing ------------------------------------------------------------
 
 
 def load_gt(gt_path: str) -> List[Tuple[int, int, int, int, int, int]]:
-    """Load MOT-format GT file → list of (frame, track_id, x, y, w, h)."""
+    """Load MOT-format GT file -> list of (frame, track_id, x, y, w, h)."""
     rows = []
     with open(gt_path) as f:
         for line in f:
@@ -66,7 +66,7 @@ def load_gt(gt_path: str) -> List[Tuple[int, int, int, int, int, int]]:
     return rows
 
 
-# ── Crop extraction from video ────────────────────────────────────────────
+# -- Crop extraction from video --------------------------------------------
 
 
 def extract_crops_from_camera(
@@ -104,7 +104,7 @@ def extract_crops_from_camera(
     for frame, tid, x, y, w, h in gt:
         id_dets[tid].append((frame, x, y, w, h))
 
-    # Build frame→detections map with uniform sampling per ID
+    # Build frame->detections map with uniform sampling per ID
     frame_to_dets: Dict[int, List] = defaultdict(list)
     for tid, dets in id_dets.items():
         if len(dets) <= max_crops:
@@ -197,7 +197,7 @@ def extract_all_crops(
     return dict(all_crops)
 
 
-# ── Split creation ────────────────────────────────────────────────────────
+# -- Split creation --------------------------------------------------------
 
 
 def create_splits(
@@ -210,9 +210,9 @@ def create_splits(
     """Organise crops into train/query/gallery splits.
 
     Strategy:
-      - Multi-camera IDs (appear in ≥min_cams cameras): split into train/eval sets
-      - Train set: train_ratio of multi-cam IDs → all crops go to train/
-      - Eval set: remaining multi-cam IDs →
+      - Multi-camera IDs (appear in >=min_cams cameras): split into train/eval sets
+      - Train set: train_ratio of multi-cam IDs -> all crops go to train/
+      - Eval set: remaining multi-cam IDs ->
           query: 1 crop per camera per vehicle
           gallery: remaining crops per vehicle
       - Single-camera IDs: added as distractors to gallery (never in query)
@@ -226,7 +226,7 @@ def create_splits(
     multi_cam_ids = sorted(tid for tid, cams in all_crops.items() if len(cams) >= min_cams)
     single_cam_ids = sorted(tid for tid, cams in all_crops.items() if len(cams) < min_cams)
 
-    logger.info(f"Multi-camera IDs (≥{min_cams} cams): {len(multi_cam_ids)}")
+    logger.info(f"Multi-camera IDs (>={min_cams} cams): {len(multi_cam_ids)}")
     logger.info(f"Single-camera IDs: {len(single_cam_ids)}")
 
     # Shuffle and split multi-cam IDs
@@ -275,7 +275,7 @@ def create_splits(
                     shutil.copy2(src_path, os.path.join(gallery_dir, fname))
                     stats["gallery"] += 1
 
-    # 3. Single-camera IDs → gallery as distractors
+    # 3. Single-camera IDs -> gallery as distractors
     for tid in sorted(single_cam_ids):
         for cam_name, paths in all_crops[tid].items():
             for src_path in paths:
@@ -288,7 +288,7 @@ def create_splits(
     return stats
 
 
-# ── Main ──────────────────────────────────────────────────────────────────
+# -- Main ------------------------------------------------------------------
 
 
 def main():

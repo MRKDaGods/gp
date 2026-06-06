@@ -77,7 +77,7 @@ def test_bridge_pruning_keeps_strong_bridges():
     similarities = {(0, 1): 0.8, (1, 2): 0.7, (2, 3): 0.9}
     clusters = solver.solve(similarities, num_nodes=4)
     multi = [c for c in clusters if len(c) > 1]
-    # All connected — bridge is strong enough
+    # All connected - bridge is strong enough
     assert len(multi) == 1
     assert multi[0] == {0, 1, 2, 3}
 

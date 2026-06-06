@@ -37,7 +37,7 @@ export const useKaggleCredentialsStore = create<KaggleCredentialsState>()(
     {
       name: 'mtmc-kaggle-credentials',
       version: 1,
-      // Persist only the credentials. `modalOpen` is transient UI state — persisting
+      // Persist only the credentials. `modalOpen` is transient UI state - persisting
       // it would reopen the modal on every reload if it happened to be open.
       partialize: (s) => ({ credentials: s.credentials }),
     },

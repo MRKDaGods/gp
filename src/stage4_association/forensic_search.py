@@ -71,7 +71,7 @@ class WatchlistHit:
 
     @property
     def alert_level(self) -> str:
-        """Operational alert level based on similarity × trajectory confidence."""
+        """Operational alert level based on similarity x trajectory confidence."""
         score = self.similarity * self.trajectory_confidence
         if score >= 0.60:
             return "HIGH"
@@ -127,11 +127,11 @@ class ForensicSearchEngine:
         self.trajectories = trajectories
         self.faiss_index = faiss_index
 
-        # Build reverse lookup: (camera_id, track_id) → global_id + confidence
+        # Build reverse lookup: (camera_id, track_id) -> global_id + confidence
         self._tracklet_to_traj: Dict[Tuple[str, int], Tuple[int, float]] = {}
-        # Pre-built time lookup: (camera_id, track_id) → (start_time, end_time)
+        # Pre-built time lookup: (camera_id, track_id) -> (start_time, end_time)
         self._tracklet_times: Dict[Tuple[str, int], Tuple[float, float]] = {}
-        # Pre-built trajectory lookup: global_id → GlobalTrajectory
+        # Pre-built trajectory lookup: global_id -> GlobalTrajectory
         self._traj_by_id: Dict[int, GlobalTrajectory] = {}
         for traj in trajectories:
             self._traj_by_id[traj.global_id] = traj
@@ -218,7 +218,7 @@ class ForensicSearchEngine:
         """Extract embedding from a BGR crop and search the gallery.
 
         Args:
-            image_bgr: H×W×3 uint8 BGR image of the probe vehicle/person.
+            image_bgr: HxWx3 uint8 BGR image of the probe vehicle/person.
             reid_model: ReIDModel instance (from stage2_features.reid_model).
             top_k: Maximum results.
             min_similarity: Minimum cosine similarity threshold.
@@ -248,7 +248,7 @@ class ForensicSearchEngine:
         any watchlist entry triggers a hit.
 
         Args:
-            watchlist: Mapping of subject_id → L2-normalised query embedding (D,).
+            watchlist: Mapping of subject_id -> L2-normalised query embedding (D,).
             threshold: Minimum cosine similarity to report a hit.
 
         Returns:

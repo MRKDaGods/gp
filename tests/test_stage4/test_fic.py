@@ -32,7 +32,7 @@ class TestPerCameraWhiten:
         emb /= np.linalg.norm(emb, axis=1, keepdims=True)
         cams = ["cam1"] * 8 + ["cam2"] * 2
         out = per_camera_whiten(emb, cams, min_samples=5)
-        # cam2 has only 2 samples → should be unchanged (just L2-normed original)
+        # cam2 has only 2 samples -> should be unchanged (just L2-normed original)
         np.testing.assert_allclose(out[8:], emb[8:], atol=1e-6)
 
     def test_cross_camera_similarity_changes(self):
@@ -83,7 +83,7 @@ class TestCrossCameraAugment:
         np.testing.assert_allclose(norms, 1.0, atol=1e-5)
 
     def test_single_camera_unchanged(self):
-        """With only one camera, no cross-camera neighbours exist → unchanged."""
+        """With only one camera, no cross-camera neighbours exist -> unchanged."""
         emb = np.random.randn(10, 32).astype(np.float32)
         emb /= np.linalg.norm(emb, axis=1, keepdims=True)
         cams = ["cam1"] * 10
@@ -100,7 +100,7 @@ class TestCrossCameraAugment:
         assert not np.allclose(out, emb, atol=1e-3)
 
     def test_learning_rate_zero_no_change(self):
-        """lr=0 means no blending → output should equal input."""
+        """lr=0 means no blending -> output should equal input."""
         emb = np.random.randn(20, 32).astype(np.float32)
         emb /= np.linalg.norm(emb, axis=1, keepdims=True)
         cams = ["cam1"] * 10 + ["cam2"] * 10

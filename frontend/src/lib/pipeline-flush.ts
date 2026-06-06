@@ -15,7 +15,7 @@ const MANUAL_STAGES: StageNumber[] = [2, 5];
  * Reset pipeline progress for this stage and all later stages, clear timeline/refinement/output session data,
  * and bump `downstreamInvalidateGeneration` so Stage 4 reloads even if selection/run ids match prior values.
  *
- * @param firstPipelineStageToInvalidate — 0–6; this stage and all higher-numbered stages return to idle defaults.
+ * @param firstPipelineStageToInvalidate - 0-6; this stage and all higher-numbered stages return to idle defaults.
  */
 export function flushPipelineFromStage(firstPipelineStageToInvalidate: StageNumber): void {
   usePipelineStore.setState((state) => ({

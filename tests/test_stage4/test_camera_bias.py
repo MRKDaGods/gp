@@ -58,7 +58,7 @@ class TestCameraDistanceBias:
         sims, cams, clusters = self._make_test_data()
         bias.learn_from_matches(sims, cams, clusters)
 
-        # Similarity equal to bias → should map to global_mean
+        # Similarity equal to bias -> should map to global_mean
         adjusted = bias.adjust_similarity(0.75, "cam01", "cam02", global_mean=0.5)
         assert abs(adjusted - 0.5) < 0.01
 
@@ -134,11 +134,11 @@ class TestZoneTransitionModel:
         # Right zone
         model.add_zone("cam01", "right", (0.7, 0.0, 1.0, 1.0))
 
-        # Point at (0.15, 0.5) → should be in "left" zone
+        # Point at (0.15, 0.5) -> should be in "left" zone
         zone = model.classify_zone("cam01", 0.15, 0.5)
         assert zone == "left"
 
-        # Point at (0.85, 0.3) → should be in "right" zone
+        # Point at (0.85, 0.3) -> should be in "right" zone
         zone = model.classify_zone("cam01", 0.85, 0.3)
         assert zone == "right"
 

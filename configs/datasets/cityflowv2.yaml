@@ -1,14 +1,14 @@
-# CityFlowV2 — AI City Challenge 2022 Track 1
+# CityFlowV2 - AI City Challenge 2022 Track 1
 # Multi-Camera Multi-Target Vehicle Tracking
 #
 # 6 cameras across 2 scenes, 960p+ resolution
 # Source: https://www.aicitychallenge.org/2022-data-and-evaluation/
 #
 # Published baselines (AIC 2022 leaderboard):
-#   IDF1 ≈ 70-84%    MOTA ≈ 60-78%    HOTA ≈ 50-65%
+#   IDF1 ~ 70-84%    MOTA ~ 60-78%    HOTA ~ 50-65%
 #
 # Key characteristics:
-#   - Intersection cameras → vehicles transit between scenes
+#   - Intersection cameras -> vehicles transit between scenes
 #   - Significant viewpoint / lighting differences between cameras
 #   - Larger objects but high intra-class similarity (same-model cars)
 
@@ -25,13 +25,13 @@ dataset:
 
   camera_transitions: null   # learn from data
 
-  target_classes: [2, 5, 7]  # car, bus, truck — vehicles only
+  target_classes: [2, 5, 7]  # car, bus, truck - vehicles only
   class_mapping:
     2: "car"
     5: "bus"
     7: "truck"
 
-# ─── Pipeline overrides ──────────────────────────────────────────────────
+# --- Pipeline overrides --------------------------------------------------
 
 stage0:
   input_dir: "data/raw/cityflowv2"
@@ -47,15 +47,15 @@ stage1:
     # CRITICAL: track_high_thresh and new_track_thresh MUST match confidence_threshold.
     # BotSort uses track_high_thresh as the split between "high-conf" and "low-conf"
     # detections. Detections below track_high_thresh can only EXTEND existing tracks
-    # (secondary matching) — they will NOT start new tracks. Setting confidence_threshold
+    # (secondary matching) - they will NOT start new tracks. Setting confidence_threshold
     # lower than track_high_thresh wastes detections that never help start new tracks.
     #
     # v11: lowered 0.60->0.40 now that ROI masks eliminate off-road false positives.
     # Reference notebooks use 0.25 with ROI masks.
-    # v14: lowered 0.40->0.25 — ROI masks are active and working; S02 cameras
+    # v14: lowered 0.40->0.25 - ROI masks are active and working; S02 cameras
     #   lose ~30% of GT vehicles at 0.40 (small/distant vehicles at intersections).
-    confidence_threshold: 0.25  # v14: 0.25 (was 0.40) — matches reference; ROI masks handle FP
-    iou_threshold: 0.65        # v4: raised 0.45->0.65 — S02 intersection cameras have dense vehicle overlap;
+    confidence_threshold: 0.25  # v14: 0.25 (was 0.40) - matches reference; ROI masks handle FP
+    iou_threshold: 0.65        # v4: raised 0.45->0.65 - S02 intersection cameras have dense vehicle overlap;
                                # 0.45 NMS suppresses genuine detections when IoU with neighbours is 0.45-0.65.
     agnostic_nms: true         # class-agnostic NMS: prevents bus/truck from suppressing partially-overlapping cars
     img_size: 1280             # high-res traffic camera footage
@@ -63,13 +63,13 @@ stage1:
     algorithm: "botsort"
     track_buffer: 450          # THE actual death timer: max_time_lost = int(frame_rate/30 * track_buffer).
                                # With frame_rate=30 (BotSort default): max_time_lost = 450 frames = 45s at 10fps.
-                               # Red-light stops in S02 last 20-60s → need ≥ 300 frames.
-                               # Default=30 → 30 frames = 3s at 10fps (kills all stopped vehicles!).
-    max_age: 450               # BaseTracker observation buffer sizing: must be set ≥ track_buffer
+                               # Red-light stops in S02 last 20-60s -> need >= 300 frames.
+                               # Default=30 -> 30 frames = 3s at 10fps (kills all stopped vehicles!).
+    max_age: 450               # BaseTracker observation buffer sizing: must be set >= track_buffer
                                # to avoid max_obs being auto-bumped incorrectly. BaseTracker does NOT
                                # control the BotSort kill timer (only max_time_lost does).
     max_obs: 460               # Observation history. Must be > max_age + 5 per BaseTracker docs.
-    min_hits: 3                # v5: 3 (was 1) — require 3 consecutive detections to confirm track
+    min_hits: 3                # v5: 3 (was 1) - require 3 consecutive detections to confirm track
     track_high_thresh: 0.25    # v14: lowered from 0.40 to match confidence_threshold=0.25
     track_low_thresh: 0.05     # accept very weak dets for secondary (lost track) recovery
     match_thresh: 0.85
@@ -78,7 +78,7 @@ stage1:
     cmc_method: "sof"          # sparse optical flow CMC (lighter than ECC for mostly-static cameras)
   roi:
     enabled: true              # v11: load roi.jpg masks from camera dirs to eliminate non-road FPs
-  min_tracklet_length: 3       # v14: 3 (was 5) — min_hits=3 in tracker already ensures 3 consecutive
+  min_tracklet_length: 3       # v14: 3 (was 5) - min_hits=3 in tracker already ensures 3 consecutive
                                #   detections before confirm; keeping length >= min_hits recovers
                                #   short GT tracks on S02 cameras (c008 median=12f, many 3-5f tracks)
   min_tracklet_area: 800       # vehicles are large
@@ -87,7 +87,7 @@ stage1:
     max_gap: 30
   intra_merge:
     enabled: true
-    max_time_gap: 25.0   # v4: raised 10→25 s — vehicles at intersections can stop for a full light cycle
+    max_time_gap: 25.0   # v4: raised 10->25 s - vehicles at intersections can stop for a full light cycle
                          # before the fragment from the same vehicle re-enters the detection zone.
     max_iou_distance: 0.7
   ssa:
@@ -168,7 +168,7 @@ stage2:
   # --- Camera-specific Test-Time Adaptation (CamTTA) ---
   # Adapts BNNeck running stats to each camera's appearance distribution.
   camera_tta:
-    enabled: false  # v49: implemented, off by default — test with 384px features
+    enabled: false  # v49: implemented, off by default - test with 384px features
 
 stage4:
   association:
@@ -196,14 +196,14 @@ stage4:
       beta: 0.08
     # Exhaustive cross-camera pair generation: compute ALL cross-camera pairwise
     # cosine similarities instead of relying on FAISS top-K retrieval.
-    # SOTA practice for MTMC with <2000 tracklets — no missed matches from top-K truncation.
+    # SOTA practice for MTMC with <2000 tracklets - no missed matches from top-K truncation.
     exhaustive_cross_camera: true
     exhaustive_min_similarity: 0.1  # v22: SOTA uses 0.1 (SCORE_THR); drop weak pairs early
     query_expansion:
       enabled: true
       k: 2  # 14e B1 baseline: optimal on TTA-smoothed features
       # alpha controls original embedding weight: orig_weight = alpha / (alpha + k_valid)
-      # alpha=1.0 → 16.7% original (over-smoothed); alpha=5.0 → 50% (Radenović et al. standard)
+      # alpha=1.0 -> 16.7% original (over-smoothed); alpha=5.0 -> 50% (Radenović et al. standard)
       alpha: 5.0
       # DBA: rebuild FAISS index with expanded embeddings for symmetric retrieval.
       # Ensures expanded queries search an expanded gallery, not the original vectors.
@@ -231,16 +231,16 @@ stage4:
       length_weight_power: 0.3  # 14e B1 baseline
       vehicle:
         appearance: 0.70       # 14e B1 baseline
-        hsv: 0.00              # v48: HSV disabled — hurts vehicles with strong appearance features
+        hsv: 0.00              # v48: HSV disabled - hurts vehicles with strong appearance features
         spatiotemporal: 0.30   # 14e B1 baseline
     spatiotemporal:
       max_time_gap: 300        # vehicles transition within 5 min within a scene
       min_time_gap: 0          # allow overlapping camera views
       # Empirically calibrated from CityFlowV2 GT annotation timing.
-      # All cameras share overlapping FOVs → min_time=0 for all pairs.
+      # All cameras share overlapping FOVs -> min_time=0 for all pairs.
       # max_time = 1.6x observed max (robustness buffer).
-      # mean/std computed from the actual gap distribution (N≥46 shared vehicles per pair).
-      # S01 ↔ S02 cross-scene pairs are intentionally absent (different locations).
+      # mean/std computed from the actual gap distribution (N>=46 shared vehicles per pair).
+      # S01 <-> S02 cross-scene pairs are intentionally absent (different locations).
       camera_transitions:
         S01_c001: {S01_c002: {min_time: 0, max_time: 20, mean_time: 1.9, std_time: 3.4},
                    S01_c003: {min_time: 0, max_time:  5, mean_time: 0.5, std_time: 0.9}}
@@ -256,7 +256,7 @@ stage4:
                    S02_c007: {min_time: 0, max_time: 20, mean_time: 5.8, std_time: 5.1}}
     graph:
       similarity_threshold: 0.48  # 14e B1 baseline with DINOv2 tertiary fusion
-      algorithm: "conflict_free_cc"  # v48: switched from connected_components — prevents false transitive chains
+      algorithm: "conflict_free_cc"  # v48: switched from connected_components - prevents false transitive chains
       louvain_resolution: 0.70     # v5: kept for fallback if switching back to Louvain
       louvain_seed: 42             # deterministic community detection
       bridge_prune_margin: 0.0     # 14e B1 baseline
@@ -273,16 +273,16 @@ stage4:
       min_connectivity: 0.30
     # --- Sub-cluster temporal splitting (AIC21 technique) ---
     # Splits clusters with >min_gap silence AND low cross-gap similarity.
-    # max_time (S01: 20s, S02: 30s) → 60s gap is safely above any valid transition.
+    # max_time (S01: 20s, S02: 30s) -> 60s gap is safely above any valid transition.
     temporal_split:
-      enabled: false  # v49: implemented, off by default — test with baseline features
-      min_gap: 60.0         # > max transition time (30s for S02_c006→S02_c008)
+      enabled: false  # v49: implemented, off by default - test with baseline features
+      min_gap: 60.0         # > max transition time (30s for S02_c006->S02_c008)
       split_threshold: 0.50  # conservative: same as graph threshold (0.53 baseline)
     gallery_expansion:
       enabled: true
       threshold: 0.48             # 14e B1 baseline
       max_rounds: 2
-      # Second pass: link orphan↔orphan pairs at a lower threshold.
+      # Second pass: link orphan<->orphan pairs at a lower threshold.
       orphan_match_threshold: 0.38  # 14e B1 baseline
     # Camera-aware distance bias (Liu et al. AIC21 technique):
     # learns per-camera-pair similarity offset from initial clusters,
@@ -347,8 +347,8 @@ stage5:
   cross_id_nms_iou: 0.40  # 14e B1 baseline
   # --- Non-GT stationary vehicle filter ---
   # Removes trajectories where ALL tracklets have near-zero displacement.
-  # Parked cars produce long-lived detections → guaranteed FP in MTMC eval.
-  # No GT information used — purely motion-based.
+  # Parked cars produce long-lived detections -> guaranteed FP in MTMC eval.
+  # No GT information used - purely motion-based.
   stationary_filter:
     enabled: true  # 14e B1 baseline
     min_displacement_px: 150  # 14e B1 baseline
@@ -360,11 +360,11 @@ stage5:
     mode: "confidence"  # "confidence" = trim below-median edges; "fraction" = fixed %
     trim_fraction: 0.10
   # --- Track smoothing (Savitzky-Golay) ---
-  # Smooths bbox trajectories to reduce detection jitter → better IoU with GT.
+  # Smooths bbox trajectories to reduce detection jitter -> better IoU with GT.
   # AIC21 1st place used post-trajectory smoothing for +1-2% IDF1.
   track_smoothing:
     enabled: false  # 14e B1 baseline
-    window: 7        # Savitzky-Golay window (must be odd, ≥ polyorder+2)
+    window: 7        # Savitzky-Golay window (must be odd, >= polyorder+2)
     polyorder: 2     # polynomial order (2=quadratic, smooth but preserves turns)
   # --- GT-assisted post-processing (DISABLED for fair SOTA comparison) ---
   # These use test-time GT to filter predictions, which inflates metrics vs.

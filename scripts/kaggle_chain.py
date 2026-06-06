@@ -1,6 +1,6 @@
 """Auto-chain monitor for the 3-notebook MTMC pipeline.
 
-Polls 10a → once complete, pushes 10b → polls 10b → pushes 10c → polls 10c → shows results.
+Polls 10a -> once complete, pushes 10b -> polls 10b -> pushes 10c -> polls 10c -> shows results.
 
 Usage:
     python scripts/kaggle_chain.py              # start from monitoring 10a (already running)
@@ -139,10 +139,10 @@ def wait_for(notebook_id: str, poll: int, owner: str) -> bool:
     while True:
         status = get_status(owner, notebook_id)
         if status in ("COMPLETE", "SUCCESS"):
-            print(f"\n[{ts()}] ✓ {notebook_id} COMPLETE")
+            print(f"\n[{ts()}] [OK] {notebook_id} COMPLETE")
             return True
         if status in ("ERROR", "CANCEL", "CANCELLED"):
-            print(f"\n[{ts()}] ✗ {notebook_id} FAILED with status: {status}")
+            print(f"\n[{ts()}] [X] {notebook_id} FAILED with status: {status}")
             print(f"  Fetch logs: python scripts/kaggle_logs.py {kernel_ref} --tail 100")
             return False
         dots += 1
@@ -198,7 +198,7 @@ def main():
         if args.logs:
             fetch_logs("10a", owner)
         if not ok:
-            print("Aborting chain — fix 10a errors first.")
+            print("Aborting chain - fix 10a errors first.")
             sys.exit(1)
 
     # --- 10b ---
@@ -209,7 +209,7 @@ def main():
         if args.logs:
             fetch_logs("10b", owner)
         if not ok:
-            print("Aborting chain — fix 10b errors first.")
+            print("Aborting chain - fix 10b errors first.")
             sys.exit(1)
 
     # --- 10c ---
@@ -219,10 +219,10 @@ def main():
     if args.logs:
         fetch_logs("10c", owner, tail=150)
     if not ok:
-        print("10c failed — fetch logs above for details.")
+        print("10c failed - fetch logs above for details.")
         sys.exit(1)
 
-    print(f"\n[{ts()}] ✓ Full pipeline complete!")
+    print(f"\n[{ts()}] [OK] Full pipeline complete!")
     print(f"  To re-run 10c with different params:")
     print(f"    edit notebooks/kaggle/10c_stages45/{SLUG_10C}.ipynb (tuning cell)")
     print(f"    then: python scripts/kaggle_chain.py --owner {owner} --from 10c")

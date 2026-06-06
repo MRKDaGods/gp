@@ -63,7 +63,7 @@ const STAGE_DOT_STYLES: Record<RunStageState, string> = {
 
 const STAGE_DOT_TITLES: Record<RunStageState, string> = {
   done: "done",
-  running: "running…",
+  running: "running...",
   error: "failed",
   idle: "not run",
 };
@@ -211,7 +211,7 @@ export function RunManagerDialog({ open, onOpenChange }: { open: boolean; onOpen
       await deleteRun(run.runId);
       useManualStageStore.getState().clearRun(run.runId);
       if (run.runId === activeRunId) {
-        // The active run was deleted — clear the workspace.
+        // The active run was deleted - clear the workspace.
         resetPipeline();
         clearRunScopedSelection();
         setVideos([]);
@@ -421,7 +421,7 @@ export function RunManagerDialog({ open, onOpenChange }: { open: boolean; onOpen
                             <Loader2 className="h-3 w-3 animate-spin" />
                             <span className="truncate">
                               {run.currentStageName ? `${run.currentStageName}` : "Running"}
-                              {typeof run.progress === "number" ? ` · ${Math.round(run.progress)}%` : ""}
+                              {typeof run.progress === "number" ? ` * ${Math.round(run.progress)}%` : ""}
                             </span>
                           </p>
                         )}

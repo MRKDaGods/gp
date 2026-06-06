@@ -78,7 +78,7 @@ def _finalize_run_failure(run_id: str, exc: BaseException, tb: str, label: str) 
     run["status"] = "error"
     run["error"] = full_error
     run["errorDetail"] = tb[-3000:]
-    run["message"] = f"{label} — {full_error[:300]}"
+    run["message"] = f"{label} - {full_error[:300]}"
 
 
 @dataclass(frozen=True)
@@ -321,7 +321,7 @@ def _wire_bundled_fusion_streams(
     `stage4.association.<slot>_embeddings.weight=W` overrides.
 
     For each slot with W>0 this appends a DYNAMIC, run-scoped Stage-4 embedding
-    path (so the stream actually loads — the YAML default `run_latest` path never
+    path (so the stream actually loads - the YAML default `run_latest` path never
     exists) and, when the stream needs its own Stage-2 extractor, the Stage-2
     enable overrides. A weight>0 stream that is neither wireable (no checkpoint
     architecture) nor already enabled in the pipeline_config raises rather than
@@ -374,7 +374,7 @@ def _wire_bundled_fusion_streams(
                 f"stream is not wired: no '{role}' checkpoint_ref with an architecture "
                 f"block, and pipeline_config '{model.pipeline_config}' does not enable "
                 f"stage2.reid.{stage2_slot}. Refusing to silently degrade to "
-                "primary-only — add the checkpoint architecture or enable the Stage-2 "
+                "primary-only - add the checkpoint architecture or enable the Stage-2 "
                 "slot in the pipeline_config."
             )
 
@@ -717,7 +717,7 @@ def describe_run(run_dir: Path) -> Dict[str, Any]:
         or _cameras_from_disk(run_dir)
     )
     # Recover the source folder from the run's merged config when run_context
-    # predates the inputDir field — so old runs can still restore their footage.
+    # predates the inputDir field - so old runs can still restore their footage.
     input_dir = ctx.get("inputDir") or _input_dir_from_config(run_dir)
     # Fall back to the directory's modified time when no context timestamps exist.
     try:
@@ -732,7 +732,7 @@ def describe_run(run_dir: Path) -> Dict[str, Any]:
         status = "ready" if any(present.values()) else "empty"
     # Per-stage status: a stage that wrote output is "done"; the in-flight stage
     # of a running/errored run is marked "running"/"error" even though it hasn't
-    # written artifacts yet — so the UI shows "Detect: running" instead of
+    # written artifacts yet - so the UI shows "Detect: running" instead of
     # misreporting the run as ingestion-only while detection is still working.
     active_stage = live.get("currentStageNum")
     stage_status: Dict[str, str] = {}
@@ -775,7 +775,7 @@ def describe_run(run_dir: Path) -> Dict[str, Any]:
 
 
 def _cleanup_empty_run_dirs() -> int:
-    """Remove orphan numeric run dirs that are completely empty — leftovers from a
+    """Remove orphan numeric run dirs that are completely empty - leftovers from a
     run id that was allocated (the allocator pre-creates the dir) but never wrote
     config/context (e.g. a request that failed validation after allocation). They
     don't show in the runs list but would otherwise accumulate as phantom ids."""
@@ -786,7 +786,7 @@ def _cleanup_empty_run_dirs() -> int:
                 continue
             try:
                 if any(child.iterdir()):
-                    continue  # has content — a real run
+                    continue  # has content - a real run
                 child.rmdir()
                 removed += 1
             except OSError:
@@ -798,11 +798,11 @@ def _cleanup_empty_run_dirs() -> int:
 
 def rehydrate_runs_from_disk() -> int:
     """Rebuild in-memory run state from disk on startup so runs survive a backend
-    restart. Registers light video records + video→run mapping (no video probing)
+    restart. Registers light video records + video->run mapping (no video probing)
     and a placeholder active_runs entry per run. Existing in-memory state wins."""
     _cleanup_empty_run_dirs()
     count = 0
-    # Process in id order so the most recent run wins the video→run mapping.
+    # Process in id order so the most recent run wins the video->run mapping.
     def _sort_key(d: Path):
         return (0, int(d.name)) if d.name.isdigit() else (1, d.name)
 
@@ -1007,7 +1007,7 @@ async def _run_pipeline_streaming(
 ) -> Dict[str, Any]:
     """Run a pipeline subprocess using threads so it works on any asyncio event loop."""
     total_stages = max(len(stage_nums), 1)
-    # Progress model: each stage owns an equal slice of the 0–95% bar. A stage
+    # Progress model: each stage owns an equal slice of the 0-95% bar. A stage
     # starts at its base and fills its slice as work streams in (per-frame for the
     # detection stage), so the bar advances smoothly instead of jumping milestones.
     span = 95.0 / total_stages
@@ -1072,7 +1072,7 @@ async def _run_pipeline_streaming(
             run["camerasProcessed"] = cam_index
             stage_name = run.get("currentStageName", "Processing")
             run["message"] = (
-                f"{stage_name} — camera {cam_id} ({cam_index} processed)"
+                f"{stage_name} - camera {cam_id} ({cam_index} processed)"
             )
 
         fm = _FRAME_LINE_RE.search(line)
@@ -1271,7 +1271,7 @@ async def _background_precompute_dataset() -> None:
                 app_state.video_to_latest_run[vid_id] = PRECOMPUTE_RUN_ID
 
         print(
-            f"[PRECOMPUTE] S01 pipeline complete — "
+            f"[PRECOMPUTE] S01 pipeline complete - "
             f"{len(list((run_dir / 'stage1').glob('tracklets_*.json')))} cameras processed"
         )
 
@@ -1541,7 +1541,7 @@ async def _execute_input_dir_pipeline(
     """Background task: run the selected stages directly against a source folder.
 
     Unlike `_execute_dataset_pipeline`, this does NOT copy videos into the run
-    dir — it points `stage0.input_dir` at the chosen folder. Stage 0's own video
+    dir - it points `stage0.input_dir` at the chosen folder. Stage 0's own video
     discovery handles both the per-camera (`<cam>/vdo.avi`) and flat
     (`C1.mp4`, `C2.mp4`, ...) layouts, so this works for every dataset.
 

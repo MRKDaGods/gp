@@ -28,7 +28,7 @@ sys.path.insert(0, str(project_root))
 
 console = Console()
 
-# ── Colour helpers ────────────────────────────────────────────────────────
+# -- Colour helpers --------------------------------------------------------
 
 OK = "[bold green]OK[/]"
 WARN = "[bold yellow]WARN[/]"
@@ -42,10 +42,10 @@ def grade(val: float, ok_lo: float, ok_hi: float, label: str = "") -> str:
     return f"{WARN}  {label}{val:.4f}" if isinstance(val, float) else f"{WARN}  {label}{val}"
 
 
-# ── Stage 0 ───────────────────────────────────────────────────────────────
+# -- Stage 0 ---------------------------------------------------------------
 
 def validate_stage0(run_dir: Path):
-    console.print(Panel("[bold cyan]Stage 0 — Ingestion & Pre-Processing[/]"))
+    console.print(Panel("[bold cyan]Stage 0 - Ingestion & Pre-Processing[/]"))
     stage_dir = run_dir / "stage0"
     manifest = stage_dir / "frames_manifest.json"
 
@@ -95,10 +95,10 @@ def validate_stage0(run_dir: Path):
                     console.print(f"    Luma mean={gray.mean():.1f}  std={gray.std():.1f}")
 
 
-# ── Stage 1 ───────────────────────────────────────────────────────────────
+# -- Stage 1 ---------------------------------------------------------------
 
 def validate_stage1(run_dir: Path):
-    console.print(Panel("[bold cyan]Stage 1 — Detection & Tracking[/]"))
+    console.print(Panel("[bold cyan]Stage 1 - Detection & Tracking[/]"))
     stage_dir = run_dir / "stage1"
 
     if not stage_dir.exists():
@@ -165,14 +165,14 @@ def validate_stage1(run_dir: Path):
         console.print(
             f"  Short tracklets (<10 frames): {short}/{total_tracklets} "
             f"({100 * short / total_tracklets:.0f}%) "
-            f"{'— high fragmentation!' if short > total_tracklets * 0.5 else ''}"
+            f"{'- high fragmentation!' if short > total_tracklets * 0.5 else ''}"
         )
 
 
-# ── Stage 2 ───────────────────────────────────────────────────────────────
+# -- Stage 2 ---------------------------------------------------------------
 
 def validate_stage2(run_dir: Path):
-    console.print(Panel("[bold cyan]Stage 2 — Feature Extraction[/]"))
+    console.print(Panel("[bold cyan]Stage 2 - Feature Extraction[/]"))
     stage_dir = run_dir / "stage2"
 
     emb_path = stage_dir / "embeddings.npy"
@@ -186,7 +186,7 @@ def validate_stage2(run_dir: Path):
     embeddings = np.load(emb_path)
     console.print(f"  Embedding matrix: shape={embeddings.shape}, dtype={embeddings.dtype}")
 
-    # Norm distribution — should be ~1.0 if L2-normalized
+    # Norm distribution - should be ~1.0 if L2-normalized
     norms = np.linalg.norm(embeddings, axis=1)
     console.print(
         f"  L2 norms: mean={norms.mean():.4f}  std={norms.std():.4f}  "
@@ -211,7 +211,7 @@ def validate_stage2(run_dir: Path):
         )
         # Ideal: mean ~0.2-0.4, good discrimination means wide spread
         if upper.std() < 0.05:
-            console.print(f"  {WARN}  Very low variance — embeddings may lack discriminability")
+            console.print(f"  {WARN}  Very low variance - embeddings may lack discriminability")
         elif upper.std() > 0.15:
             console.print(f"  {OK}  Good embedding spread (std={upper.std():.3f})")
         else:
@@ -247,10 +247,10 @@ def validate_stage2(run_dir: Path):
         console.print(f"  Per-class counts: {dict(sorted(classes.items()))}")
 
 
-# ── Stage 3 ───────────────────────────────────────────────────────────────
+# -- Stage 3 ---------------------------------------------------------------
 
 def validate_stage3(run_dir: Path):
-    console.print(Panel("[bold cyan]Stage 3 — Indexing[/]"))
+    console.print(Panel("[bold cyan]Stage 3 - Indexing[/]"))
     stage_dir = run_dir / "stage3"
 
     faiss_path = stage_dir / "faiss_index.bin"
@@ -275,21 +275,21 @@ def validate_stage3(run_dir: Path):
     emb_path = run_dir / "stage2" / "embeddings.npy"
     if emb_path.exists() and index.ntotal > 0:
         embeddings = np.load(emb_path).astype(np.float32)
-        # Query first 10 embeddings — top-1 should be themselves
+        # Query first 10 embeddings - top-1 should be themselves
         k = min(5, index.ntotal)
         q = embeddings[:min(10, len(embeddings))]
         D, I = index.search(q, k)
         self_hits = sum(1 for i, row in enumerate(I) if row[0] == i)
         console.print(
             f"  Self-retrieval: {self_hits}/{len(q)} "
-            f"{'— ' + OK if self_hits == len(q) else '— ' + WARN + ' index may be corrupt'}"
+            f"{'- ' + OK if self_hits == len(q) else '- ' + WARN + ' index may be corrupt'}"
         )
 
 
-# ── Stage 4 ───────────────────────────────────────────────────────────────
+# -- Stage 4 ---------------------------------------------------------------
 
 def validate_stage4(run_dir: Path):
-    console.print(Panel("[bold cyan]Stage 4 — Cross-Camera Association[/]"))
+    console.print(Panel("[bold cyan]Stage 4 - Cross-Camera Association[/]"))
     stage_dir = run_dir / "stage4"
 
     traj_path = stage_dir / "global_trajectories.json"
@@ -351,7 +351,7 @@ def validate_stage4(run_dir: Path):
         class_dist[cls] += 1
     console.print(f"  Class distribution: {dict(class_dist)}")
 
-    # Count total tracklets vs trajectories — fragmentation ratio
+    # Count total tracklets vs trajectories - fragmentation ratio
     total_tk = sum(tracklet_counts)
     # Load stage 1 tracklet count for comparison
     stage1_dir = run_dir / "stage1"
@@ -363,17 +363,17 @@ def validate_stage4(run_dir: Path):
     if stage1_count > 0:
         merge_ratio = stage1_count / max(n_traj, 1)
         console.print(
-            f"  Merge ratio: {stage1_count} tracklets → {n_traj} identities "
+            f"  Merge ratio: {stage1_count} tracklets -> {n_traj} identities "
             f"({merge_ratio:.1f}x compression)"
         )
         if merge_ratio < 2:
-            console.print(f"  {WARN}  Low merge ratio — association may be too conservative")
+            console.print(f"  {WARN}  Low merge ratio - association may be too conservative")
 
 
-# ── Stage 5 ───────────────────────────────────────────────────────────────
+# -- Stage 5 ---------------------------------------------------------------
 
 def validate_stage5(run_dir: Path):
-    console.print(Panel("[bold cyan]Stage 5 — Evaluation[/]"))
+    console.print(Panel("[bold cyan]Stage 5 - Evaluation[/]"))
     stage_dir = run_dir / "stage5"
 
     report_path = stage_dir / "evaluation_report.json"
@@ -435,7 +435,7 @@ def validate_stage5(run_dir: Path):
         console.print(cam_tbl)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────
+# -- Main ------------------------------------------------------------------
 
 @click.command()
 @click.option("--run-dir", "-r", required=True, type=click.Path(exists=True))

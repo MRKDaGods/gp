@@ -1,5 +1,5 @@
 """
-GP Pipeline Launcher — starts backend (port 8000) and frontend (port 3001).
+GP Pipeline Launcher - starts backend (port 8000) and frontend (port 3001).
 
 Usage:  python start.py
 Stop:   Ctrl+C
@@ -27,7 +27,7 @@ NPM_CMD       = "npm.cmd" if IS_WIN else "npm"
 _procs: list[subprocess.Popen] = []
 
 
-# ── Port management ───────────────────────────────────────────────────────
+# -- Port management -------------------------------------------------------
 
 def _pids_on_port(port: int) -> list[int]:
     pids: list[int] = []
@@ -65,7 +65,7 @@ def _kill_port(port: int) -> bool:
     if remaining:
         print(
             f"[launcher] ERROR: port {port} still occupied (PIDs: {remaining}).\n"
-            f"[launcher] Open Task Manager → end all python.exe processes, then retry.",
+            f"[launcher] Open Task Manager -> end all python.exe processes, then retry.",
             flush=True,
         )
         return False
@@ -90,7 +90,7 @@ def _clear_next_cache() -> None:
     next_dir = FRONTEND_DIR / ".next"
     if not next_dir.exists():
         return
-    print("[launcher] Clearing stale Next.js cache…", flush=True)
+    print("[launcher] Clearing stale Next.js cache...", flush=True)
     for _ in range(5):
         try:
             shutil.rmtree(next_dir)
@@ -112,10 +112,10 @@ def _stream(proc: subprocess.Popen, label: str) -> None:
         threading.Thread(target=_drain, args=(proc.stderr,), daemon=True).start()
 
 
-# ── Shutdown ──────────────────────────────────────────────────────────────
+# -- Shutdown --------------------------------------------------------------
 
 def _shutdown(signum=None, frame=None) -> None:
-    print("\n[launcher] Shutting down…", flush=True)
+    print("\n[launcher] Shutting down...", flush=True)
     for p in _procs:
         try: p.terminate()
         except Exception: pass
@@ -130,7 +130,7 @@ def _shutdown(signum=None, frame=None) -> None:
     sys.exit(0)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────
+# -- Main ------------------------------------------------------------------
 
 def main() -> None:
     signal.signal(signal.SIGINT, _shutdown)
@@ -140,21 +140,21 @@ def main() -> None:
 
     print("=" * 52, flush=True)
     print("  GP Pipeline Launcher")
-    print(f"  Backend  → http://localhost:{BACKEND_PORT}")
-    print(f"  Frontend → http://localhost:{FRONTEND_PORT}")
+    print(f"  Backend  -> http://localhost:{BACKEND_PORT}")
+    print(f"  Frontend -> http://localhost:{FRONTEND_PORT}")
     print("  Ctrl+C to stop")
     print("=" * 52, flush=True)
 
-    # ── 1. Free ports ─────────────────────────────────────────────────────
-    print("\n[launcher] Freeing ports…", flush=True)
+    # -- 1. Free ports -----------------------------------------------------
+    print("\n[launcher] Freeing ports...", flush=True)
     if not _kill_port(BACKEND_PORT):
         sys.exit(1)
     if not _kill_port(FRONTEND_PORT):
         sys.exit(1)
     _clear_next_cache()
 
-    # ── 2. Start backend ──────────────────────────────────────────────────
-    print(f"\n[launcher] Starting backend…", flush=True)
+    # -- 2. Start backend --------------------------------------------------
+    print(f"\n[launcher] Starting backend...", flush=True)
     backend = subprocess.Popen(
         [BACKEND_PY, "-m", "uvicorn", "backend_api:app",
          "--host", "0.0.0.0", "--port", str(BACKEND_PORT)],
@@ -168,10 +168,10 @@ def main() -> None:
     if not _wait_http(f"http://localhost:{BACKEND_PORT}/api/health", timeout=60):
         print("[launcher] ERROR: Backend did not become healthy within 60s.", flush=True)
         _shutdown()
-    print("[launcher] Backend ready ✓", flush=True)
+    print("[launcher] Backend ready [OK]", flush=True)
 
-    # ── 3. Start frontend ─────────────────────────────────────────────────
-    print(f"\n[launcher] Starting frontend…", flush=True)
+    # -- 3. Start frontend -------------------------------------------------
+    print(f"\n[launcher] Starting frontend...", flush=True)
     frontend = subprocess.Popen(
         [NPM_CMD, "run", "dev", "--", "--port", str(FRONTEND_PORT)],
         cwd=str(FRONTEND_DIR),
@@ -184,11 +184,11 @@ def main() -> None:
     if not _wait_http(f"http://localhost:{FRONTEND_PORT}", timeout=90):
         print("[launcher] ERROR: Frontend did not start within 90s.", flush=True)
         _shutdown()
-    print("[launcher] Frontend ready ✓", flush=True)
+    print("[launcher] Frontend ready [OK]", flush=True)
 
     print(f"\n[launcher] Open http://localhost:{FRONTEND_PORT} in your browser\n", flush=True)
 
-    # ── 4. Monitor: shut down if either server exits unexpectedly ─────────
+    # -- 4. Monitor: shut down if either server exits unexpectedly ---------
     while True:
         for p in list(_procs):
             if p.poll() is not None:

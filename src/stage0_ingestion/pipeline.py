@@ -1,4 +1,4 @@
-"""Stage 0 — Ingestion & Pre-Processing pipeline.
+"""Stage 0 - Ingestion & Pre-Processing pipeline.
 
 Reads raw videos, extracts frames at a target FPS, applies preprocessing,
 and writes frames + manifest to the stage output directory.
@@ -61,7 +61,7 @@ def run_stage0(
             v for v in video_paths
             if _camera_id_from_path(v, input_dir) in allowed
         ]
-        logger.info(f"Camera filter active — keeping {len(video_paths)} cameras: {sorted(allowed)}")
+        logger.info(f"Camera filter active - keeping {len(video_paths)} cameras: {sorted(allowed)}")
 
     logger.info(f"Processing {len(video_paths)} videos from {input_dir}")
 
@@ -122,7 +122,7 @@ def run_stage0(
             f"{failed_videos}"
         )
         if len(failed_videos) == len(video_paths):
-            raise RuntimeError("All videos failed to process — aborting stage 0")
+            raise RuntimeError("All videos failed to process - aborting stage 0")
 
     # Save manifest
     manifest_path = output_dir / FRAME_MANIFEST_FILE

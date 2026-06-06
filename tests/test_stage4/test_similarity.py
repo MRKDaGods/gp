@@ -1,4 +1,4 @@
-"""Tests for similarity module — length weighting and combined scoring."""
+"""Tests for similarity module - length weighting and combined scoring."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ class TestLengthWeighting:
         )
         score = result[(0, 1)]
         # min_len=100, confidence=100/110=0.909, w=0.953, score*=0.977
-        # So 0.8 * 0.977 ≈ 0.78
+        # So 0.8 * 0.977 ~ 0.78
         assert score > 0.75, f"Long+long should barely be penalized, got {score:.4f}"
 
     def test_asymmetric_tracklets_moderate_penalty(self):
@@ -72,7 +72,7 @@ class TestLengthWeighting:
         )
         score = result[(0, 1)]
         # min_len=12, confidence=12/22=0.545, w=0.739, score*=0.869
-        # So 0.8 * 0.869 ≈ 0.696
+        # So 0.8 * 0.869 ~ 0.696
         assert score > 0.65, f"Short+long should not be over-penalized, got {score:.4f}"
         # Old ratio formula: ratio=12/80=0.15, w=0.387, score*=0.694, result=0.555
         # New formula should be significantly less harsh
@@ -99,7 +99,7 @@ class TestLengthWeighting:
         )
         score = result[(0, 1)]
         # min_len=3, confidence=3/13=0.231, w=0.480, score*=0.740
-        # So 0.8 * 0.740 ≈ 0.592
+        # So 0.8 * 0.740 ~ 0.592
         assert score < 0.75, f"Very short should be penalized, got {score:.4f}"
 
     def test_no_length_weight_when_power_zero(self):

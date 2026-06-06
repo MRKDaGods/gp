@@ -161,8 +161,8 @@ export function FusionModelPanel() {
       </div>
 
       {/* Fusion is a score-level fusion of single-camera ReID streams, so only
-          offer single_cam_reid models. The MTMC presets (14e B1, 14k, …) are
-          complete multi-stream pipelines — they belong in the Single tab and
+          offer single_cam_reid models. The MTMC presets (14e B1, 14k, ...) are
+          complete multi-stream pipelines - they belong in the Single tab and
           fusing them would silently use only their primary ReID checkpoint. */}
       <ModelPicker
         selectedId={null}
@@ -192,7 +192,7 @@ export function FusionModelPanel() {
           <div><span className="text-muted-foreground">aqe_k </span>{activeFusion.aqeK}</div>
           <div><span className="text-muted-foreground">k1 </span>{activeFusion.k1}</div>
           <div><span className="text-muted-foreground">k2 </span>{activeFusion.k2}</div>
-          <div><span className="text-muted-foreground">λ </span>{activeFusion.lambda}</div>
+          <div><span className="text-muted-foreground">lambda </span>{activeFusion.lambda}</div>
           <div><span className="text-muted-foreground">rerank </span>{activeFusion.rerank ? "true" : "false"}</div>
         </div>
       </div>

@@ -4,5 +4,5 @@
 #
 # Run: python scripts/run_pipeline.py --config configs/default.yaml
 
-# No overrides needed — configs/default.yaml IS the baseline.
+# No overrides needed - configs/default.yaml IS the baseline.
 # This file exists for documentation and as a template for ablation configs.

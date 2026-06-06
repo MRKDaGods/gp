@@ -208,10 +208,10 @@ def main() -> int:
                 continue
             got = sha256_of(dest)
             if got != f["sha256"]:
-                print(f"{tag}: CHECKSUM MISMATCH (got {got[:12]}…, expected {f['sha256'][:12]}…)")
+                print(f"{tag}: CHECKSUM MISMATCH (got {got[:12]}..., expected {f['sha256'][:12]}...)")
                 failures.append(f["name"])
             else:
-                print(f"{tag}: OK (sha256 {got[:12]}…)")
+                print(f"{tag}: OK (sha256 {got[:12]}...)")
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
 

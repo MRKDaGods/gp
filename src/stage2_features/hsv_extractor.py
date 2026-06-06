@@ -3,7 +3,7 @@
 Implements horizontal-stripe spatial histograms: the crop is divided into
 *n_stripes* horizontal bands (e.g. 3 for head / torso / legs) and a
 separate HSV histogram is computed for each band.  The concatenated,
-L2-normalised vector preserves spatial colour layout — a red-top / blue-jeans
+L2-normalised vector preserves spatial colour layout - a red-top / blue-jeans
 person gets a different descriptor from blue-top / red-jeans.
 """
 

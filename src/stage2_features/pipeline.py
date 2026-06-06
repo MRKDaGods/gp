@@ -1,4 +1,4 @@
-"""Stage 2 — Feature Extraction & Refinement pipeline (SOTA).
+"""Stage 2 - Feature Extraction & Refinement pipeline (SOTA).
 
 Extracts ReID embeddings and spatial HSV histograms from quality-scored
 tracklet crops, applies flip augmentation, quality-weighted temporal
@@ -71,7 +71,7 @@ def _load_frames_for_camera(
 ) -> dict[int, np.ndarray]:
     """Load needed frames from Stage 0 extracted images on disk.
 
-    Falls back gracefully — returns only frames found on disk.
+    Falls back gracefully - returns only frames found on disk.
 
     Args:
         stage0_dir: Stage 0 output directory (contains per-camera subdirectories).
@@ -112,7 +112,7 @@ def run_stage2(
     Pipeline per tracklet:
     1. Quality-aware crop selection (sharpness, size, confidence)
     2. Flip-augmented ReID embedding extraction
-    3. Quality-weighted temporal attention pooling → single embedding
+    3. Quality-weighted temporal attention pooling -> single embedding
     4. Spatial (3-stripe) HSV histogram with quality weighting
 
     Global post-processing:
@@ -224,7 +224,7 @@ def run_stage2(
 
     # --- Optional second vehicle ReID model for ensemble (concatenated features) ---
     # SOTA: ensemble of TransReID (domain-specific fine-tuned) + OSNet (general, fast)
-    # produces complementary features → improved recall on hard cases (occlusion, viewpoint).
+    # produces complementary features -> improved recall on hard cases (occlusion, viewpoint).
     vehicle_reid2: Optional[ReIDModel] = None
     vehicle2_cfg = stage_cfg.reid.get("vehicle2", {})
     if vehicle2_cfg.get("enabled", False):
@@ -293,7 +293,7 @@ def run_stage2(
     if stage0_dir is not None:
         s0_dir = Path(stage0_dir)
     else:
-        # Auto-discover: output_dir is stage2 subdir → sibling stage0
+        # Auto-discover: output_dir is stage2 subdir -> sibling stage0
         candidate = output_dir.parent / "stage0"
         if candidate.is_dir():
             s0_dir = candidate
@@ -302,7 +302,7 @@ def run_stage2(
     if use_disk_frames:
         logger.info(f"Using extracted frames from disk: {s0_dir}")
     else:
-        logger.info("Reading frames from video (slow — consider keeping stage0 output)")
+        logger.info("Reading frames from video (slow - consider keeping stage0 output)")
 
     # --- Process all tracklets ---
     all_features: List[TrackletFeatures] = []

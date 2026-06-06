@@ -20,7 +20,7 @@ from backend.config import (
 from backend.state import app_state
 
 if _HAS_CV2:
-    import cv2  # noqa: F401 — imported for type-checker; used via _HAS_CV2 guard
+    import cv2  # noqa: F401 - imported for type-checker; used via _HAS_CV2 guard
 
 
 def _safe_reid_batch_size() -> int:

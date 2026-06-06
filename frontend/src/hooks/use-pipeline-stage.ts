@@ -30,7 +30,7 @@ const ACTIVE_STATUSES = new Set(["running", "queued", "pending", "processing", "
  *
  * Each stage runs incrementally against the same run_id (stages read prior
  * stages' outputs from outputs/<run_id>/stageN), so nothing cascades and
- * nothing auto-starts — a stage only runs when its own page invokes this.
+ * nothing auto-starts - a stage only runs when its own page invokes this.
  *
  * Returns the terminal status so callers can chain gating (await one stage,
  * then enable the next). Polling is owned by the call, not a standing effect,
@@ -60,7 +60,7 @@ export function useRunPipelineStage() {
       updateStageProgress(uiStage, {
         status: "running",
         progress: 0,
-        message: `Starting ${label}…`,
+        message: `Starting ${label}...`,
       });
       setActiveStage(pipelineStage);
       setRunTelemetry(null);
@@ -96,7 +96,7 @@ export function useRunPipelineStage() {
         return "error";
       }
 
-      // Poll loop — owned by this call; resolves on a terminal backend status.
+      // Poll loop - owned by this call; resolves on a terminal backend status.
       // eslint-disable-next-line no-constant-condition
       while (true) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -109,21 +109,21 @@ export function useRunPipelineStage() {
         try {
           data = (await getPipelineStatus(activeRunId)).data as Record<string, any>;
         } catch (err) {
-          // 404 = backend forgot this run (restart) — stop rather than loop forever.
+          // 404 = backend forgot this run (restart) - stop rather than loop forever.
           if (err instanceof ApiError && err.status === 404) {
             updateStageProgress(uiStage, { status: "idle", progress: 0, message: "Run not found" });
             setActiveStage(null);
             setRunTelemetry(null);
             return "error";
           }
-          // Transient error — keep polling.
+          // Transient error - keep polling.
           continue;
         }
 
         opts.onProgress?.(data ?? {});
         const status = String(data?.status ?? "");
         const progress = Number(data?.progress ?? 0);
-        const message = String(data?.message ?? `Running ${label}…`);
+        const message = String(data?.message ?? `Running ${label}...`);
 
         setRunTelemetry({
           stageLabel: data?.currentStageName ? String(data.currentStageName) : undefined,

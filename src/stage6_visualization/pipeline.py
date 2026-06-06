@@ -1,4 +1,4 @@
-"""Stage 6 — Visualization, Enhancement & Outputs pipeline.
+"""Stage 6 - Visualization, Enhancement & Outputs pipeline.
 
 Generates annotated videos, BEV maps, timeline views, and data exports.
 """

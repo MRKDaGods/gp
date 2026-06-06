@@ -57,7 +57,7 @@ CSV_COLUMNS = [
 RERANK_KEY = "aqe_k3_rerank_k1_80_k2_15_lambda_0_2"
 DATASET_SPLIT = "VeRi-776 standard split (37781/576 train, 1678 query, 11579 gallery / 200 test IDs)"
 SEED_VARIANCE_RECIPE = "A5alpha (CE-LS + Triplet + CenterLoss, LLRD=0.75)"
-NO_RESULTS_MESSAGE = "No eval_results.json files found yet — Wave 3 not ready to aggregate. Re-run after kernel outputs are downloaded."
+NO_RESULTS_MESSAGE = "No eval_results.json files found yet - Wave 3 not ready to aggregate. Re-run after kernel outputs are downloaded."
 
 
 @dataclass(frozen=True)
@@ -467,7 +467,7 @@ def build_report(records: list[ExperimentRecord]) -> str:
     variance = seed_variance(records)
     recommended = recommended_values(records)
     failures = [record for record in records if record.status != "completed"]
-    lines = ["# VeRi-776 Paper Campaign — Results Report", ""]
+    lines = ["# VeRi-776 Paper Campaign - Results Report", ""]
 
     lines.extend(["## Ablation Findings", ""])
     lines.append(table_row(["Experiment", "Status", "mAP", "Rank-1", "Delta mAP vs A1", "Delta Rank-1 vs A1", "Notes"]))

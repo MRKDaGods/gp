@@ -27,7 +27,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-# ── Kernel slugs ────────────────────────────────────────────────────────────
+# -- Kernel slugs ------------------------------------------------------------
 KERNEL_10A = "mrkdagods/mtmc-10a-stages-0-2-tracking-reid-features"
 KERNEL_10B = "mrkdagods/mtmc-10b-stage-3-faiss-indexing"
 KERNEL_10C = "mrkdagods/mtmc-10c-stages-4-5-association-eval"
@@ -38,7 +38,7 @@ NOTEBOOK_DIR_10C = Path("notebooks/kaggle/10c_stages45")
 
 LOG_DIR = Path("data/outputs")
 
-# ── State tracking ───────────────────────────────────────────────────────────
+# -- State tracking -----------------------------------------------------------
 # Format: {"kernel_slug": "version_tag"}
 pushed: dict[str, str] = {}
 
@@ -79,10 +79,10 @@ def kaggle_push(notebook_dir: Path, label: str) -> bool:
         log(f"  OK {label} pushed!")
         return True
     elif "maximum batch gpu session" in out.lower():
-        log(f"  ✗ {label}: max GPU sessions reached, will retry")
+        log(f"  [X] {label}: max GPU sessions reached, will retry")
         return False
     else:
-        log(f"  ✗ {label} push failed: {out.strip()[:200]}")
+        log(f"  [X] {label} push failed: {out.strip()[:200]}")
         return False
 
 
@@ -97,7 +97,7 @@ def download_logs(kernel: str, label: str) -> None:
         log(f"  OK Logs saved to {outfile}")
         _print_key_metrics(outfile)
     else:
-        log(f"  ✗ Log download failed: {r.stderr[:200]}")
+        log(f"  [X] Log download failed: {r.stderr[:200]}")
 
 
 def _print_key_metrics(logfile: Path) -> None:
@@ -150,7 +150,7 @@ def main() -> None:
     prev_10b = "UNKNOWN"
     prev_10c = "UNKNOWN"
 
-    # Completion events (count) — tracks transitions INTO "COMPLETE".
+    # Completion events (count) - tracks transitions INTO "COMPLETE".
     # NOTE: 10c v8 is COMPLETE at startup, so done_10c starts at 0 but will
     # immediately increment to 1 on the first poll. Thresholds:
     #   done_10a: 1=v3  done_10b: 1=v6, 2=v7
@@ -192,7 +192,7 @@ def main() -> None:
 
             log(f"Status: 10a={status_10a}  10b={status_10b}  10c={status_10c}")
 
-            # ── Detect new COMPLETE transitions ───────────────────────────────
+            # -- Detect new COMPLETE transitions -------------------------------
             if status_10a == "COMPLETE" and prev_10a != "COMPLETE":
                 done_10a += 1
                 log(f"-> 10a completion #{done_10a} detected!")
@@ -205,7 +205,7 @@ def main() -> None:
                 done_10c += 1
                 log(f"-> 10c completion #{done_10c} detected!")
 
-            # ── Arm flags: kernel transitioned away from COMPLETE (new run started)
+            # -- Arm flags: kernel transitioned away from COMPLETE (new run started)
             if pushed_10b_v7 and prev_10b == "COMPLETE" and status_10b != "COMPLETE":
                 armed_10b_v7 = True
                 log("  10b v7 now running/queued (armed for completion)")
@@ -226,7 +226,7 @@ def main() -> None:
                 armed_10c_v11 = True
                 log("  10c v11 now running/queued (armed for completion)")
 
-            # ── 10b v6 COMPLETE -> push 10c v9 ────────────────────────────────
+            # -- 10b v6 COMPLETE -> push 10c v9 --------------------------------
             if done_10b >= 1 and not pushed_10c_v9:
                 log("  <- 10b v6 done. Downloading logs ...")
                 download_logs(KERNEL_10B, "10b_v6")
@@ -235,7 +235,7 @@ def main() -> None:
                 if ok:
                     pushed_10c_v9 = True
 
-            # ── 10a v3 COMPLETE -> download logs + push 10b v7 ────────────────
+            # -- 10a v3 COMPLETE -> download logs + push 10b v7 ----------------
             if done_10a >= 1 and not pushed_10b_v7:
                 log("  <- 10a v3 done. Downloading logs ...")
                 download_logs(KERNEL_10A, "10a_v3")
@@ -244,7 +244,7 @@ def main() -> None:
                 if ok:
                     pushed_10b_v7 = True
 
-            # ── 10b v7 COMPLETE -> push 10c v10 ────────────────────────────────
+            # -- 10b v7 COMPLETE -> push 10c v10 --------------------------------
             # Detect via "armed" flag + new COMPLETE event
             if pushed_10b_v7:
                 if armed_10b_v7 and status_10b == "COMPLETE" and not pushed_10c_v10:
@@ -264,7 +264,7 @@ def main() -> None:
                     if ok:
                         pushed_10c_v10 = True
 
-            # ── 10c v9 COMPLETE -> download results (done_10c reaches 2) ──────
+            # -- 10c v9 COMPLETE -> download results (done_10c reaches 2) ------
             if pushed_10c_v9 and not pushed_10c_v10 and not logged_10c_v9:
                 v9_done = (armed_10c_v9 and status_10c == "COMPLETE") or (done_10c >= 2 and not armed_10c_v9)
                 if v9_done:
@@ -272,7 +272,7 @@ def main() -> None:
                     download_logs(KERNEL_10C, "10c_v9")
                     logged_10c_v9 = True
 
-            # ── 10c v10 COMPLETE -> download results + push 10a v4 (cycle 2) ──
+            # -- 10c v10 COMPLETE -> download results + push 10a v4 (cycle 2) --
             if pushed_10c_v10 and not logged_10c_v10:
                 v10_done = (armed_10c_v10 and status_10c == "COMPLETE") or (done_10c >= 3 and not armed_10c_v10)
                 if v10_done:
@@ -286,7 +286,7 @@ def main() -> None:
                         if ok:
                             pushed_10a_v4 = True
 
-            # ── Cycle 2: 10a v4 COMPLETE -> push 10b v8 ─────────────────────
+            # -- Cycle 2: 10a v4 COMPLETE -> push 10b v8 ---------------------
             if pushed_10a_v4 and not pushed_10b_v8:
                 v4_done = (armed_10a_v4 and status_10a == "COMPLETE") or (done_10a >= 2 and not armed_10a_v4)
                 if v4_done:
@@ -299,7 +299,7 @@ def main() -> None:
                     if ok:
                         pushed_10b_v8 = True
 
-            # ── Cycle 2: 10b v8 COMPLETE -> push 10c v11 ─────────────────────
+            # -- Cycle 2: 10b v8 COMPLETE -> push 10c v11 ---------------------
             if pushed_10b_v8 and not pushed_10c_v11:
                 v8_done = (armed_10b_v8 and status_10b == "COMPLETE") or (done_10b >= 3 and not armed_10b_v8)
                 if v8_done:
@@ -310,7 +310,7 @@ def main() -> None:
                     if ok:
                         pushed_10c_v11 = True
 
-            # ── Cycle 2: 10c v11 COMPLETE -> download results + exit ──────────
+            # -- Cycle 2: 10c v11 COMPLETE -> download results + exit ----------
             if pushed_10c_v11 and not logged_10c_v11:
                 v11_done = (armed_10c_v11 and status_10c == "COMPLETE") or (done_10c >= 4 and not armed_10c_v11)
                 if v11_done:
@@ -320,7 +320,7 @@ def main() -> None:
                     log("All two pipeline cycles complete! Exiting.")
                     break
 
-            # ── All done check ────────────────────────────────────────────────
+            # -- All done check ------------------------------------------------
             if (pushed_10c_v9 and pushed_10b_v7 and pushed_10c_v10
                     and logged_10c_v9 and logged_10c_v10
                     and pushed_10a_v4 and pushed_10b_v8 and pushed_10c_v11

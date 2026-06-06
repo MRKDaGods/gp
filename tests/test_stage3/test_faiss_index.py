@@ -15,7 +15,7 @@ def test_faiss_build_and_search():
     index.build(embeddings)
     assert index.size == 100
 
-    # Search with first vector — should find itself
+    # Search with first vector - should find itself
     distances, indices = index.search_single(embeddings[0], top_k=5)
     assert indices[0] == 0
     np.testing.assert_almost_equal(distances[0], 1.0, decimal=3)

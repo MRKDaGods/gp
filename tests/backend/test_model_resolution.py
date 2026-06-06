@@ -3,11 +3,11 @@
 Covers the fix for registered models that BUNDLE a multi-stream Stage-4 ensemble
 inside their `model_overrides` (one `model_id`, not a user FusionConfig):
 
-* `vehicle_mtmc_14e_b1` (production) — DINOv2 tertiary stream. Its Stage-4
+* `vehicle_mtmc_14e_b1` (production) - DINOv2 tertiary stream. Its Stage-4
   tertiary path must be wired DYNAMICALLY to the run-scoped stage2 output, not the
   stale `data/outputs/run_latest/...` path baked into cityflowv2.yaml (which never
   exists -> the tertiary silently dropped -> ensemble degraded to primary-only).
-* `vehicle_mtmc_14k_v1_k7` (research) — DINOv2 tertiary + FastReID R50-IBN
+* `vehicle_mtmc_14k_v1_k7` (research) - DINOv2 tertiary + FastReID R50-IBN
   quaternary. The quaternary stream must enable the Stage-2 vehicle2 slot and get
   a dynamic Stage-4 path; there is no vehicle4 slot, so quaternary reuses vehicle2
   -> embeddings_secondary.npy.
@@ -52,7 +52,7 @@ def _override_kv(overrides, dotted_key):
 
 
 # ---------------------------------------------------------------------------
-# 14e B1 (production) — dynamic tertiary path, no stale run_latest
+# 14e B1 (production) - dynamic tertiary path, no stale run_latest
 # ---------------------------------------------------------------------------
 
 def test_14e_b1_wires_dynamic_tertiary_path() -> None:
@@ -104,7 +104,7 @@ def test_14e_b1_does_not_emit_stage2_overrides_for_config_wired_stream() -> None
 
 
 # ---------------------------------------------------------------------------
-# K7 (research) — DINOv2 tertiary + R50-IBN quaternary
+# K7 (research) - DINOv2 tertiary + R50-IBN quaternary
 # ---------------------------------------------------------------------------
 
 def test_k7_wires_quaternary_r50ibn_stream() -> None:
@@ -152,7 +152,7 @@ def test_k7_fusion_resolved_has_both_streams() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Fail-loud guard — a weighted stream that cannot be wired must raise
+# Fail-loud guard - a weighted stream that cannot be wired must raise
 # ---------------------------------------------------------------------------
 
 def _synthetic_unwireable_model() -> ModelEntry:
@@ -206,7 +206,7 @@ def test_unwireable_stream_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_unwireable_stream_does_not_silently_degrade(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The guard must fire BEFORE returning — never return a primary-only
+    """The guard must fire BEFORE returning - never return a primary-only
     resolution that drops the weighted stream."""
     synthetic = _synthetic_unwireable_model()
     monkeypatch.setattr(

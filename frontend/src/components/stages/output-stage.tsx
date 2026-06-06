@@ -209,8 +209,8 @@ function applyTimelineSelectionToTrajectories(
   // Which rows define the identity set to show:
   //  - Once the user engages the per-clip filter (confirm/unconfirm), honor only
   //    confirmed clips and trim each path to those cameras (original behavior).
-  //  - Otherwise scope Output to whatever the timeline is showing — i.e. the
-  //    selected/matched vehicle, already capped upstream in Stage 4 — instead of
+  //  - Otherwise scope Output to whatever the timeline is showing - i.e. the
+  //    selected/matched vehicle, already capped upstream in Stage 4 - instead of
   //    silently rendering every trajectory in the run.
   const definingRows = timelineFilterEngaged ? tracks.filter((t) => t.confirmed) : tracks;
   if (definingRows.length === 0) return [];
@@ -242,7 +242,7 @@ function applyTimelineSelectionToTrajectories(
   return out;
 }
 
-/** Clip keys for stitched summary video API — must match matched/summary.json (camera + track). */
+/** Clip keys for stitched summary video API - must match matched/summary.json (camera + track). */
 function buildIncludeClipsForSummaryApi(
   tracks: TimelineTrack[],
   engaged: boolean
@@ -412,7 +412,7 @@ export function OutputStage() {
       timelineClipFilterEngaged
     );
 
-    // User is actively curating confirmed clips — respect their selection verbatim
+    // User is actively curating confirmed clips - respect their selection verbatim
     // (including an intentional empty set).
     if (timelineClipFilterEngaged) {
       return { displayTrajectories: selected, trajectoryOverflow: null };
@@ -1267,7 +1267,7 @@ function TrajectoryItem({ trajectory }: { trajectory: OutputTrajectory }) {
           {trajectory.cameras.map((cam, i) => (
             <div key={`${cam}-${i}`} className="flex items-center">
               <div className="h-2 w-2 rounded-full" style={{ backgroundColor: getCameraColor(cam) }} />
-              {i < trajectory.cameras.length - 1 && <span className="mx-0.5 text-muted-foreground">→</span>}
+              {i < trajectory.cameras.length - 1 && <span className="mx-0.5 text-muted-foreground">-></span>}
             </div>
           ))}
           <span className="ml-1.5 text-[10px] text-muted-foreground">{trajectory.cameras.length} cam</span>

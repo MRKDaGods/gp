@@ -4,7 +4,7 @@ The repo is cloned from GitHub automatically; CityFlowV2 is downloaded from
 Google Drive automatically.  Only model weights need to be uploaded manually.
 
 Creates:
-  dist/kaggle/mtmc_weights.zip   — all model weights (detection + reid + tracker)
+  dist/kaggle/mtmc_weights.zip   - all model weights (detection + reid + tracker)
 
 Usage:
     python scripts/prepare_kaggle_uploads.py
@@ -44,14 +44,14 @@ def build_weights(out: Path):
             zf.write(fp, arc)
             total += fp.stat().st_size
     size_mb = out.stat().st_size / 1024 ** 2
-    print(f"  ✓ {out.name}  ({size_mb:.0f} MB total)")
+    print(f"  [OK] {out.name}  ({size_mb:.0f} MB total)")
 
 
 def build_data(out: Path):
     """Zip: CityFlowV2 raw AVI + metadata (seqinfo.ini, gt.txt)."""
     data_dir = ROOT / "data" / "raw" / "cityflowv2"
     if not data_dir.exists():
-        print(f"  ERROR: {data_dir} not found — skipping data zip")
+        print(f"  ERROR: {data_dir} not found - skipping data zip")
         return
 
     print(f"Building: {out.name}  (this may take a few minutes...)")
@@ -62,7 +62,7 @@ def build_data(out: Path):
             arc = "cityflowv2/" + f.relative_to(data_dir).as_posix()
             zf.write(f, arc)
     size_mb = out.stat().st_size / 1024 ** 2
-    print(f"  ✓ {out.name}  ({size_mb:.0f} MB)")
+    print(f"  [OK] {out.name}  ({size_mb:.0f} MB)")
 
 
 def main():

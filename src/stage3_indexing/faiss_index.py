@@ -32,7 +32,7 @@ class FAISSIndex:
         n, d = embeddings.shape
         if n == 0:
             raise ValueError(
-                "Cannot build FAISS index with 0 embeddings — "
+                "Cannot build FAISS index with 0 embeddings - "
                 "check upstream stages for missing tracklet features"
             )
         embeddings = np.ascontiguousarray(embeddings, dtype=np.float32)
@@ -94,7 +94,7 @@ class FAISSIndex:
     def save(self, path: str | Path) -> None:
         """Save index to disk."""
         if self.index is None:
-            raise RuntimeError("Nothing to save — index not built.")
+            raise RuntimeError("Nothing to save - index not built.")
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         faiss.write_index(self.index, str(path))

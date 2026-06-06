@@ -234,17 +234,17 @@ After downloading, your structure should look like:
 
 ```
 data/
-├── samples/
-│   ├── cityflow/
-│   │   ├── S01_c001.mp4
-│   │   ├── S01_c002.mp4
-│   │   └── S01_c003.mp4
-│   ├── veri776/
-│   │   ├── image_train/
-│   │   ├── image_test/
-│   │   └── image_query/
-│   └── samples_info.json
-└── DATASET_LINKS.md (this file)
++-- samples/
+|   +-- cityflow/
+|   |   +-- S01_c001.mp4
+|   |   +-- S01_c002.mp4
+|   |   +-- S01_c003.mp4
+|   +-- veri776/
+|   |   +-- image_train/
+|   |   +-- image_test/
+|   |   +-- image_query/
+|   +-- samples_info.json
++-- DATASET_LINKS.md (this file)
 ```
 
 ## Using Your Videos

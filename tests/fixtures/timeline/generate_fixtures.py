@@ -18,10 +18,10 @@ Output layout:
 Design guarantees used in tests
 --------------------------------
 * Gallery rows 0-9 are **identical** to probe rows 0-9 (same L2-normed
-  vectors), so dot-product similarity ≈ 1.0 for those pairs.
+  vectors), so dot-product similarity ~ 1.0 for those pairs.
 * Gallery rows 10-19 are independent random vectors (different trajectories).
 * Probe tracks 1-5 map to gallery tracks 10-14 via the trajectory data,
-  ensuring test_query_visual_match sees mean_best ≥ 0.82 and p25_best ≥ 0.74.
+  ensuring test_query_visual_match sees mean_best >= 0.82 and p25_best >= 0.74.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def _l2(m: np.ndarray) -> np.ndarray:
 def generate() -> None:
     rng = np.random.default_rng(RNG_SEED)
 
-    # ── Probe: 10 rows — 2 rows per track, tracks 1-5, camera c001 ──────
+    # -- Probe: 10 rows - 2 rows per track, tracks 1-5, camera c001 ------
     probe_raw = rng.standard_normal((10, DIM)).astype(np.float32)
     probe_emb = _l2(probe_raw)
 
@@ -55,10 +55,10 @@ def generate() -> None:
         {"track_id": (i // 2) + 1, "camera_id": "c001", "class_id": 2}
         for i in range(10)
     ]
-    # track 1 → rows 0,1 | track 2 → rows 2,3 | … | track 5 → rows 8,9
+    # track 1 -> rows 0,1 | track 2 -> rows 2,3 | ... | track 5 -> rows 8,9
 
-    # ── Gallery: 20 rows ─────────────────────────────────────────────────
-    # Rows 0-9: identical copies of probe (will give similarity ≈ 1.0)
+    # -- Gallery: 20 rows -------------------------------------------------
+    # Rows 0-9: identical copies of probe (will give similarity ~ 1.0)
     # Rows 10-19: independent random vectors
     gallery_extra = _l2(rng.standard_normal((10, DIM)).astype(np.float32))
     gallery_emb   = np.vstack([probe_emb, gallery_extra])  # already L2-normed
@@ -68,17 +68,17 @@ def generate() -> None:
             {"track_id": (i // 2) + 10, "camera_id": "c002", "class_id": 2}
             for i in range(10)
         ]
-        # track 10 → rows 0,1 | track 11 → rows 2,3 | … | track 14 → rows 8,9
+        # track 10 -> rows 0,1 | track 11 -> rows 2,3 | ... | track 14 -> rows 8,9
         + [
             {"track_id": (i // 2) + 20, "camera_id": "c003", "class_id": 2}
             for i in range(10)
         ]
     )
 
-    # ── Trajectories: 3, each referencing gallery c002 tracks ───────────
-    # Trajectory 0: tracks 10 + 11  → gallery rows 0-3 → matches probe rows 0-3
-    # Trajectory 1: tracks 12 + 13  → gallery rows 4-7 → matches probe rows 4-7
-    # Trajectory 2: track  14       → gallery rows 8-9 → matches probe rows 8-9
+    # -- Trajectories: 3, each referencing gallery c002 tracks -----------
+    # Trajectory 0: tracks 10 + 11  -> gallery rows 0-3 -> matches probe rows 0-3
+    # Trajectory 1: tracks 12 + 13  -> gallery rows 4-7 -> matches probe rows 4-7
+    # Trajectory 2: track  14       -> gallery rows 8-9 -> matches probe rows 8-9
     trajectories = [
         {
             "global_id": 100,
@@ -110,7 +110,7 @@ def generate() -> None:
         },
     ]
 
-    # ── Write files ───────────────────────────────────────────────────────
+    # -- Write files -------------------------------------------------------
     for d in (PROBE_DIR, GALLERY_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
@@ -128,9 +128,9 @@ def generate() -> None:
         json.dumps(trajectories, indent=2), encoding="utf-8"
     )
 
-    print(f"Probe    : {probe_emb.shape}  → {PROBE_DIR}")
-    print(f"Gallery  : {gallery_emb.shape} → {GALLERY_DIR}")
-    print(f"Trajectories: {len(trajectories)} → {FIXTURE_DIR / 'global_trajectories.json'}")
+    print(f"Probe    : {probe_emb.shape}  -> {PROBE_DIR}")
+    print(f"Gallery  : {gallery_emb.shape} -> {GALLERY_DIR}")
+    print(f"Trajectories: {len(trajectories)} -> {FIXTURE_DIR / 'global_trajectories.json'}")
     print("Done.")
 
 

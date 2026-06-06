@@ -1,4 +1,4 @@
-"""TimelineService — business logic for the timeline query endpoint.
+"""TimelineService - business logic for the timeline query endpoint.
 
 Extracted from ``backend/routers/timeline.py`` (Phase 3).  The router
 retains only:
@@ -76,7 +76,7 @@ class TimelineService:
 
         selected_nums = _parse_selected_track_nums(request.selectedTrackIds)
 
-        # ── No-selection fast path ───────────────────────────────────────
+        # -- No-selection fast path ---------------------------------------
         if not selected_nums:
             return {
                 "success": True,
@@ -95,7 +95,7 @@ class TimelineService:
                 },
             }
 
-        # ── Resolve probe run ────────────────────────────────────────────
+        # -- Resolve probe run --------------------------------------------
         resolved_probe_run_id = _resolve_probe_run_id_for_video(
             request.videoId, selected_nums
         )
@@ -117,11 +117,11 @@ class TimelineService:
             "selectedTrackletsSourceRun": probe_run_id,
         }
 
-        # ── Determine gallery run (explicit galleryRunId or same-run) ────
+        # -- Determine gallery run (explicit galleryRunId or same-run) ----
         gallery_run_id = request.galleryRunId or request.runId
         diag["galleryRunId"] = gallery_run_id
 
-        # ── Stage-4 missing ──────────────────────────────────────────────
+        # -- Stage-4 missing ----------------------------------------------
         trajectories = self._repo.list_trajectories(gallery_run_id)
         if trajectories is None:
             selected_summaries, probe_run_id = self._resolve_selected_summaries(
@@ -143,7 +143,7 @@ class TimelineService:
 
         diag["trajectoryCount"] = len(trajectories)
 
-        # ── Visual ReID scoring ──────────────────────────────────────────
+        # -- Visual ReID scoring ------------------------------------------
         filtered: List[Dict[str, Any]] = []
         filtered, diag = self._run_visual_search(
             request, selected_nums, probe_run_id, gallery_run_id, trajectories, diag
@@ -157,7 +157,7 @@ class TimelineService:
             if filtered:
                 diag["search_mode"] = "exact_id_same_run"
 
-        # ── Resolve selected tracklet summaries ──────────────────────────
+        # -- Resolve selected tracklet summaries --------------------------
         selected_summaries, probe_run_id = self._resolve_selected_summaries(
             request, selected_nums, probe_run_id
         )
@@ -165,7 +165,7 @@ class TimelineService:
         diag["selectedTrackletsReturned"] = len(selected_summaries)
         diag["matchedTrajectoryCount"] = len(filtered)
 
-        # ── Build response ───────────────────────────────────────────────
+        # -- Build response -----------------------------------------------
         if filtered:
             mode = "matched"
             message = "Association loaded (query-matched)"
@@ -200,7 +200,7 @@ class TimelineService:
     ) -> Tuple[Dict[str, Any], List[Tuple[float, Dict[str, Any]]]]:
         """Like :meth:`query` but also returns ranked candidates for alternatives export.
 
-        The ``query()`` method is called internally — its signature and
+        The ``query()`` method is called internally - its signature and
         return value are completely unchanged.  This wrapper intercepts
         the ``_ranked_candidates_for_export`` stashed by
         ``_run_visual_search`` *before* ``query()`` pops it.
@@ -218,8 +218,8 @@ class TimelineService:
         #
         # Even simpler: since query() pops _ranked_candidates_for_export
         # from diag and never puts it back, we can reconstruct by looking
-        # at whether diag still has it (it won't — already popped).
-        # So instead we monkey-patch nothing — we just repeat the scoring.
+        # at whether diag still has it (it won't - already popped).
+        # So instead we monkey-patch nothing - we just repeat the scoring.
         #
         # Actually, the cleanest approach: temporarily stash via an
         # instance attribute.  _run_visual_search sets it; query() pops
@@ -345,7 +345,7 @@ class TimelineService:
         """
         extra: Dict[str, Any] = {}
 
-        # Build gallery row-index lookup: (cam, tid) → [row indices]
+        # Build gallery row-index lookup: (cam, tid) -> [row indices]
         gallery_map: Dict[Tuple[str, int], List[int]] = {}
         for i, x in enumerate(gallery.index):
             cam = _normalize_camera_id(str(x.get("camera_id", "")))

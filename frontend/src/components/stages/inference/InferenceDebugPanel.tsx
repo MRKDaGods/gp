@@ -90,25 +90,25 @@ export function InferenceDebugPanel({ runModelMetadata }: InferenceDebugPanelPro
                   </div>
                 ))}
                 <div className="text-muted-foreground">Fusion hyperparams</div>
-                <div className="font-mono">aqe_k={fusion.aqeK} · k1={fusion.k1} · k2={fusion.k2} · lambda={fusion.lambda} · rerank={fusion.rerank ? "true" : "false"}</div>
+                <div className="font-mono">aqe_k={fusion.aqeK} * k1={fusion.k1} * k2={fusion.k2} * lambda={fusion.lambda} * rerank={fusion.rerank ? "true" : "false"}</div>
               </>
             ) : null}
             <div className="text-muted-foreground">Detector</div>
-            <div className="font-mono">YOLOv26 · conf 0.25 · IoU 0.65</div>
+            <div className="font-mono">YOLOv26 * conf 0.25 * IoU 0.65</div>
             <div className="text-muted-foreground">Tracker</div>
-            <div className="font-mono">DeepOCSort · max_age 30</div>
+            <div className="font-mono">DeepOCSort * max_age 30</div>
             <div className="text-muted-foreground">ReID backbone</div>
-            <div className="font-mono">TransReID ViT-Base · 768D to 280D PCA</div>
+            <div className="font-mono">TransReID ViT-Base * 768D to 280D PCA</div>
             <div className="text-muted-foreground">Samples / tracklet</div>
-            <div className="font-mono">32 · flip_augment yes · cam_BN yes</div>
+            <div className="font-mono">32 * flip_augment yes * cam_BN yes</div>
             <div className="text-muted-foreground">Quality filter</div>
-            <div className="font-mono">Laplacian var &gt;= 15 · temp 3.0</div>
+            <div className="font-mono">Laplacian var &gt;= 15 * temp 3.0</div>
             <div className="text-muted-foreground">Matching</div>
-            <div className="font-mono">FAISS IndexFlatIP · threshold 0.60</div>
+            <div className="font-mono">FAISS IndexFlatIP * threshold 0.60</div>
             <div className="text-muted-foreground">Solver</div>
-            <div className="font-mono">conflict_free_cc · AQE k=5 alpha=5.0</div>
+            <div className="font-mono">conflict_free_cc * AQE k=5 alpha=5.0</div>
             <div className="text-muted-foreground">FIC whitening</div>
-            <div className="font-mono">reg 0.3 · gallery_expansion rounds=2</div>
+            <div className="font-mono">reg 0.3 * gallery_expansion rounds=2</div>
           </div>
         </div>
       </CardContent>

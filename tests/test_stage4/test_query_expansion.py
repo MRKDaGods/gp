@@ -16,7 +16,7 @@ def _make_embeddings(n=10, d=64, seed=42):
     norms = np.linalg.norm(raw, axis=1, keepdims=True)
     emb = raw / norms
 
-    # Simulate FAISS top-k indices (sorted by sim) — approximate by dot product
+    # Simulate FAISS top-k indices (sorted by sim) - approximate by dot product
     sims = emb @ emb.T
     indices = np.argsort(-sims, axis=1)  # (N, N)
     return emb, indices
@@ -63,7 +63,7 @@ def _average_query_expansion_loop_reference(
     return expanded
 
 
-# ── Basic smoke tests ───────────────────────────────────────────────────────
+# -- Basic smoke tests -------------------------------------------------------
 
 class TestAverageQueryExpansion:
     def test_output_shape(self):
@@ -110,7 +110,7 @@ class TestAverageQueryExpansion:
         """FAISS returns -1 for invalid entries."""
         emb, _ = _make_embeddings(n=5, d=16)
         indices = np.full((5, 10), -1, dtype=np.int64)
-        # All invalid indices → should return original embeddings
+        # All invalid indices -> should return original embeddings
         result = average_query_expansion(emb, indices, k=5)
         np.testing.assert_allclose(
             np.linalg.norm(result, axis=1), 1.0, atol=1e-6
@@ -144,7 +144,7 @@ class TestAverageQueryExpansion:
         assert after_intra >= before_intra - 0.01  # allow small tolerance
 
 
-# ── Batched variant ─────────────────────────────────────────────────────────
+# -- Batched variant ---------------------------------------------------------
 
 class TestAverageQueryExpansionBatched:
     def test_output_shape(self):
@@ -201,7 +201,7 @@ class TestAverageQueryExpansionBatched:
         assert not np.allclose(result, emb, atol=1e-6)
 
 
-# ── Integration test ────────────────────────────────────────────────────────
+# -- Integration test --------------------------------------------------------
 
 class TestQEIntegration:
     def test_pipeline_flow(self):
@@ -212,7 +212,7 @@ class TestQEIntegration:
         norms = np.linalg.norm(raw, axis=1, keepdims=True)
         embeddings = raw / norms
 
-        # Simulate FAISS search (inner product → cosine sim for L2-normed)
+        # Simulate FAISS search (inner product -> cosine sim for L2-normed)
         sims = embeddings @ embeddings.T
         top_k = 20
         indices = np.argsort(-sims, axis=1)[:, :top_k]

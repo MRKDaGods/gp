@@ -84,7 +84,7 @@ stage2:
       model_name: "transreid"
       weights_path: "models/reid/person_transreid_vit_base_market1501.pth"
       embedding_dim: 768
-      input_size: [256, 128]  # [H, W] — matches NB07 training
+      input_size: [256, 128]  # [H, W] - matches NB07 training
       vit_model: "vit_base_patch16_224"
       num_cameras: 6    # Market-1501 pretrained person weights were trained with 6 cameras
       clip_normalization: false
@@ -93,12 +93,12 @@ stage2:
       weights_path: "models/reid/transreid_cityflowv2_best.pth"
       weights_fallback: "models/reid/vehicle_transreid_vit_base_veri776.pth"
       embedding_dim: 768
-      input_size: [256, 256]  # [H, W] — matches CityFlowV2 fine-tuning
+      input_size: [256, 256]  # [H, W] - matches CityFlowV2 fine-tuning
       vit_model: "vit_base_patch16_clip_224.openai"
       num_cameras: 59   # CityFlowV2 training used 59 cameras; SIE pads
       clip_normalization: true
-      # SIE camera ID mapping: DISABLED — SIE hurts because training camera IDs
-      # don't correspond to test camera viewpoints (IDF1 dropped 0.777→0.699)
+      # SIE camera ID mapping: DISABLED - SIE hurts because training camera IDs
+      # don't correspond to test camera viewpoints (IDF1 dropped 0.777->0.699)
       sie_camera_map: {}
     vehicle2:
       enabled: false  # disabled by default; enabled per-dataset for ensemble runs
@@ -132,7 +132,7 @@ stage2:
     color_augment: false  # v27: tested, neutral-to-harmful
     # --- Multi-scale TTA: extract at multiple input sizes and average ---
     # Each entry is [H, W]. Empty list = disabled (use only input_size).
-    # For TransReID vehicle (256x256): try [[224, 224], [288, 288]] for ±1 patch row/col.
+    # For TransReID vehicle (256x256): try [[224, 224], [288, 288]] for +/-1 patch row/col.
     multiscale_sizes: []  # disabled by default; enable on Kaggle P100
     # --- Center-crop scale TTA: crop/pad center region before preprocessing ---
     center_crop_scales: []
@@ -145,7 +145,7 @@ stage2:
     n_stripes: 3       # spatial: 3 horizontal stripes (head/torso/legs)
   pca:
     enabled: true
-    n_components: 384  # v30: 768 → 280 PCA whitening (optimal dim, IDF1=0.795)
+    n_components: 384  # v30: 768 -> 280 PCA whitening (optimal dim, IDF1=0.795)
     pca_model_path: "models/reid/pca_transform.pkl"
     secondary_pca_model_path: "models/reid/pca_transform_secondary.pkl"
     tertiary_pca_model_path: "models/reid/pca_transform_tertiary.pkl"
@@ -174,7 +174,7 @@ stage2:
   # before feature extraction. Requires disk-based frames (stage0 output).
   # Only applies to TransReID models.
   camera_tta:
-    enabled: false  # v49: implemented, off by default — test with v48 features
+    enabled: false  # v49: implemented, off by default - test with v48 features
 
 stage3:
   faiss:
@@ -234,7 +234,7 @@ stage4:
       enabled: true
       top_k_per_query: 20
     reranking:
-      enabled: false     # v25: disabled — hurts vehicles with 512D PCA (compresses similarity range)
+      enabled: false     # v25: disabled - hurts vehicles with 512D PCA (compresses similarity range)
       k1: 30           # broader neighbourhood for CLIP embeddings
       k2: 10           # deeper expansion
       lambda_value: 0.4  # blend: 60% Jaccard + 40% original cosine
@@ -244,19 +244,19 @@ stage4:
       spatiotemporal: 0.05
       # --- Per-class weight overrides (SOTA TransReID CLIP) ---
       person:
-        appearance: 0.70   # TransReID CLIP person: mAP 90.5% — very strong
+        appearance: 0.70   # TransReID CLIP person: mAP 90.5% - very strong
         hsv: 0.05          # clothing colour less reliable across cameras
         spatiotemporal: 0.25
       vehicle:
         appearance: 0.75   # TransReID CLIP vehicle: dominant signal
-        hsv: 0.00          # HSV hurts — removed after ablation sweep
+        hsv: 0.00          # HSV hurts - removed after ablation sweep
         spatiotemporal: 0.25
       length_weight_power: 0.3  # mild preference for longer tracklets
     spatiotemporal:
       max_time_gap: 300  # seconds
       min_time_gap: 0    # allow overlapping-FOV camera pairs (CityFlowV2)
       # Per-pair learned priors from CityFlowV2 GT annotation timing.
-      # S01↔S02 cross-scene pairs intentionally absent → blocked.
+      # S01<->S02 cross-scene pairs intentionally absent -> blocked.
       camera_transitions:
         S01_c001: {S01_c002: {min_time: 0, max_time: 20, mean_time: 1.9, std_time: 3.4},
                    S01_c003: {min_time: 0, max_time:  5, mean_time: 0.5, std_time: 0.9}}
@@ -283,7 +283,7 @@ stage4:
     # they're linked even if below the graph threshold.  Rank-based,
     # works despite compressed similarity distributions.
     reciprocal_best_match:
-      enabled: false  # v27: hurts MTMC badly (0.684→0.665, IDSw 33→208)
+      enabled: false  # v27: hurts MTMC badly (0.684->0.665, IDSw 33->208)
       min_similarity: 0.20   # absolute floor (prevent garbage links)
     # --- CSLS hubness reduction ---
     # Penalizes embeddings with high average similarity to their neighbors.
@@ -293,7 +293,7 @@ stage4:
       k: 10
     # --- Cluster post-verification ---
     # After graph clustering, ejects members whose mean similarity to the cluster
-    # is below min_connectivity.  Catches false transitive merges (A→B→C, A≁C).
+    # is below min_connectivity.  Catches false transitive merges (A->B->C, A!~C).
     cluster_verify:
       enabled: false
       min_connectivity: 0.30
@@ -304,7 +304,7 @@ stage4:
     # into one trajectory.  Conservative: only splits when both gap and similarity
     # criteria are met simultaneously.
     temporal_split:
-      enabled: false  # v49: implemented, off by default — test with min_gap=60
+      enabled: false  # v49: implemented, off by default - test with min_gap=60
       min_gap: 60.0         # minimum silence duration (seconds) to consider split
       split_threshold: 0.50  # split if cross-gap avg cosine sim < this
     # --- Iterative gallery expansion for orphan tracklets (legacy, disabled when hierarchical is on) ---
@@ -336,9 +336,9 @@ stage4:
     # Replaces gallery_expansion when enabled.
     hierarchical:
       enabled: false
-      centroid_threshold: 0.35  # orphan → cluster centroid similarity threshold
-      merge_threshold: 0.35    # cluster ↔ cluster centroid similarity threshold
-      orphan_threshold: 0.30   # orphan ↔ orphan cosine threshold (final pass)
+      centroid_threshold: 0.35  # orphan -> cluster centroid similarity threshold
+      merge_threshold: 0.35    # cluster <-> cluster centroid similarity threshold
+      orphan_threshold: 0.30   # orphan <-> orphan cosine threshold (final pass)
       max_merge_size: 12       # prevent oversized clusters
     # --- Camera-aware distance bias (AIC21 technique) ---
     camera_bias:
@@ -357,8 +357,8 @@ stage4:
     camera_pair_boost:
       enabled: false  # v30: hurts with 280D PCA
       boosts:
-        S02_c006-S02_c008: 0.08  # 38 TP below threshold, 0 FP above — safe to boost
-        S01_c001-S01_c003: 0.04  # 15 TP below, 1 FP above — moderate boost
+        S02_c006-S02_c008: 0.08  # 38 TP below threshold, 0 FP above - safe to boost
+        S01_c001-S01_c003: 0.04  # 15 TP below, 1 FP above - moderate boost
         S01_c002-S01_c003: 0.04  # 6 TP below, 0 FP above
 
 stage5:

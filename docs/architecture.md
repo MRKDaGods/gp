@@ -4,7 +4,7 @@
 
 Multi-camera multi-target (MTMC) tracking pipeline for vehicles and humans across city-wide camera networks. Processes video offline through 7 stages: ingestion, tracking, feature extraction, indexing, cross-camera association, evaluation, and visualization. Built with modularity for a 4-person team.
 
-**Primary dataset:** CityFlowV2 (AI City Challenge 2022 Track 1) — 46 physical cameras, 880 globally-consistent vehicle IDs, real urban intersections.
+**Primary dataset:** CityFlowV2 (AI City Challenge 2022 Track 1) - 46 physical cameras, 880 globally-consistent vehicle IDs, real urban intersections.
 
 **Key achievement:** TransReID ViT-Base/16 (CLIP) trained on Kaggle achieves **mAP=81.53%, R1=92.41%** on CityFlowV2 (deployed checkpoint), and the end-to-end MTMC system reaches **0.77936 cross-camera IDF1** (14e B1). See [performance-state.md](performance-state.md) for the authoritative current metrics and headline config.
 
@@ -114,21 +114,21 @@ flowchart TD
 - Keeps top-quality crops for embedding inference.
 
 **ReID embeddings:**
-- **Vehicles:** TransReID ViT-Base/16 (CLIP) at 256×256, SIE-aware (per-camera embeddings), JPM (Jigsaw Patch) for training.
-- **Persons:** TransReID ViT-Base/16 (CLIP) at 256×128, with OSNet only as a lightweight fallback.
+- **Vehicles:** TransReID ViT-Base/16 (CLIP) at 256x256, SIE-aware (per-camera embeddings), JPM (Jigsaw Patch) for training.
+- **Persons:** TransReID ViT-Base/16 (CLIP) at 256x128, with OSNet only as a lightweight fallback.
 - **Flip augmentation:** Each crop processed twice (original + horizontally flipped), embeddings averaged.
 - **Quality-weighted pooling:** Tracklet embedding = weighted mean of crop embeddings, temperature-scaled by quality scores.
 
 **Color features:**
-- HSV histograms (32H × 16S × 16V bins, 3-stripe spatial: head/torso/legs or front/middle/rear).
+- HSV histograms (32H x 16S x 16V bins, 3-stripe spatial: head/torso/legs or front/middle/rear).
 - L2-normalized for cosine similarity.
 
 **Global refinement:**
 - Camera-aware batch normalization: Per-camera mean/variance alignment to handle lighting/exposure differences.
-- PCA whitening: 768D → 384D.
+- PCA whitening: 768D -> 384D.
 - L2 normalization: Final unit-norm embeddings for cosine distance = inner product.
 
-**At eval time:** Query expansion (top-5 AQE, α=0.5) — averages query with top-K neighbors before gallery search (+1-2% R1).
+**At eval time:** Query expansion (top-5 AQE, alpha=0.5) - averages query with top-K neighbors before gallery search (+1-2% R1).
 
 **Output:** `List[TrackletFeatures]` with `embedding` (384D PCA-whitened, L2-normed), `hsv_histogram`, raw metadata.
 
@@ -171,11 +171,11 @@ Data flows between stages using file-based communication, enabling independent e
 
 | Transition | Data Format |
 |------------|-------------|
-| Stage 0 → 1 | `FrameInfo` list (JSON manifest) |
-| Stage 1 → 2 | Tracklets by camera (JSON per camera) |
-| Stage 2 → 3 | `TrackletFeatures` (embeddings `.npy` + features JSON) |
-| Stage 3 → 4 | FAISS index (`.bin`) + SQLite (`.db`) |
-| Stage 4 → 5, 6 | `GlobalTrajectory` list (JSON) |
+| Stage 0 -> 1 | `FrameInfo` list (JSON manifest) |
+| Stage 1 -> 2 | Tracklets by camera (JSON per camera) |
+| Stage 2 -> 3 | `TrackletFeatures` (embeddings `.npy` + features JSON) |
+| Stage 3 -> 4 | FAISS index (`.bin`) + SQLite (`.db`) |
+| Stage 4 -> 5, 6 | `GlobalTrajectory` list (JSON) |
 
 ## Configuration System
 
@@ -188,11 +188,11 @@ Data flows between stages using file-based communication, enabling independent e
 
 ## Key Design Decisions
 
-1. **TransReID ViT-Base/16 (CLIP) as primary vehicle ReID model.** Kaggle training achieves 78% mAP on CityFlowV2 in 3-4 hours (120 epochs, T4x2). Superior to OSNet for domain adaptation (CLIP → VeRi-776 → CityFlowV2). Supports per-camera SIE (Side Information Embedding) for camera-aware features.
-2. **Query expansion (AQE) at eval time.** Top-5 average expansion on the fly — no retraining required, +1-2% recall gain.
+1. **TransReID ViT-Base/16 (CLIP) as primary vehicle ReID model.** Kaggle training achieves 78% mAP on CityFlowV2 in 3-4 hours (120 epochs, T4x2). Superior to OSNet for domain adaptation (CLIP -> VeRi-776 -> CityFlowV2). Supports per-camera SIE (Side Information Embedding) for camera-aware features.
+2. **Query expansion (AQE) at eval time.** Top-5 average expansion on the fly - no retraining required, +1-2% recall gain.
 3. **Camera-aware batch normalization in Stage 2.** Aligns embeddings across cameras before cross-camera matching, handles systematic lighting/exposure differences.
-4. **BoxMOT over hardcoded tracker.** Unified API enables swapping (BoT-SORT → Deep-OCSORT → StrongSort) via config.
-5. **k-reciprocal as post-hoc step.** Re-rank only FAISS top-K candidates, not entire gallery — balances recall/speed.
+4. **BoxMOT over hardcoded tracker.** Unified API enables swapping (BoT-SORT -> Deep-OCSORT -> StrongSort) via config.
+5. **k-reciprocal as post-hoc step.** Re-rank only FAISS top-K candidates, not entire gallery - balances recall/speed.
 6. **Transition time priors over geometric calibration.** Public datasets lack camera calibration; learned per-camera-pair transition statistics from ground truth.
 7. **File-based inter-stage communication.** Stages run independently, supports checkpointing and resume from failures.
 8. **SQLite over external DB.** Zero setup, sufficient for offline processing with millions of tracklets.

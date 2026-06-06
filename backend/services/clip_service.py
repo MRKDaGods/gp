@@ -106,7 +106,7 @@ def _resolve_stage0_camera_dir(run_id: str, camera_id: str) -> Optional[Path]:
     short id (e.g. ``c002``). ``_normalize_camera_id`` collapses ``S01_c002`` -> ``c002``,
     so resolving by the normalized id alone 404s when the dir on disk keeps the scene
     prefix. Try the raw id first (matches what the crops endpoint does), then the
-    normalized id, then any sibling whose normalized name matches — so this works
+    normalized id, then any sibling whose normalized name matches - so this works
     regardless of the on-disk naming convention.
     """
     raw = str(camera_id or "").strip()
@@ -155,7 +155,7 @@ def _export_tracklet_clip(
     """Export a cropped mp4 clip for a tracklet from stage0 frame artifacts."""
     # Skip re-encoding when a non-empty clip already exists. Tracklet clips are
     # deterministic within a run, so re-running ffmpeg on every timeline query (e.g.
-    # each Stage-4 refresh) is pure waste — return the cached file instead.
+    # each Stage-4 refresh) is pure waste - return the cached file instead.
     try:
         if out_path.exists() and out_path.stat().st_size > 0:
             return True, "exists (cached)"
@@ -439,7 +439,7 @@ def _generate_annotated_summary_video(
                     _cv2.putText(img, label, (lx + 2, ly - baseline), FONT, font_scale, LABEL_FG, thickness, _cv2.LINE_AA)
 
                     # Persistent camera label, fixed at the bottom-left with a solid black
-                    # background, so EVERY frame clearly states which camera it is — not just
+                    # background, so EVERY frame clearly states which camera it is - not just
                     # a one-off separator card between segments.
                     cam_label = f"Camera: {camera_id}"
                     cl_scale = max(0.6, min(vid_w, vid_h) / 900.0)
@@ -657,7 +657,7 @@ def _export_matched_clips(
         "clips": clips,
     }
 
-    # ── Export top-k "near miss" alternatives ──────────────────────────
+    # -- Export top-k "near miss" alternatives --------------------------
     matched_keys = {
         (_normalize_camera_id(str(c.get("camera_id", ""))), int(c.get("track_id", -1)))
         for c in clips

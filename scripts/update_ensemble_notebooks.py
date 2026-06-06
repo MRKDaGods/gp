@@ -130,7 +130,7 @@ def update_10c() -> list[str]:
     param_replacements = [
         ([
             '# v46 optimized config (local best: IDF1=0.8297)',
-            '# v75: CONSOLIDATED OPTIMAL — all params from v62-v73 sweeps',
+            '# v75: CONSOLIDATED OPTIMAL - all params from v62-v73 sweeps',
             '# v80 best + ensemble configuration',
         ], '# v80 best + ensemble configuration'),
         ([
