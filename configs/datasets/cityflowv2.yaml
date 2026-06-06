@@ -306,19 +306,6 @@ stage4:
       enabled: true  # 14e B1 baseline
       bonus: 0.05  # 14e B1 baseline
       max_mean_time: 5.0  # 14e B1 baseline
-    # --- Learned edge classifier / re-ranker (default OFF; 14o de-risk eval) ---
-    # Rescores combined_sim with a learned per-edge P(same-vehicle) model
-    # (LightGBM on the ~20 build_edge_pairs.py features) immediately after
-    # combined_sim is built, before the graph solve. blend_lambda=0 +
-    # prob_threshold<=0 is a provable no-op (bit-identical to 14e B1).
-    # See docs/subagent-specs/edge-classifier-association.md sections 5-7.
-    edge_classifier:
-      enabled: false                                  # default OFF — 14e B1 unchanged
-      model_path: "models/association/edge_clf_lgbm.pkl"
-      mode: "blend"                                   # blend | replace | gate
-      blend_lambda: 0.5                               # score' = (1-l)*combined + l*P
-      prob_threshold: 0.0                             # secondary gate: drop edges with P < thr (0 = off)
-      feature_version: 1
     camera_pair_norm:
       enabled: false  # 14e B1 baseline
     zone_model:

@@ -327,25 +327,6 @@ stage4:
       enabled: true
       bonus: 0.05            # additive bonus to combined score, scaled by temporal overlap ratio
       max_mean_time: 5.0     # only apply to camera pairs with mean transit time < this (seconds)
-    # --- Learned edge classifier / re-ranker (default OFF) ---
-    # Rescores combined_sim with a learned per-edge P(same-vehicle) model
-    # (LightGBM on ~20 engineered edge features) right after combined_sim is
-    # built, before the graph solve. mode=blend keeps the FIC-calibrated cosine
-    # ordering dominant while P breaks ties / re-gates borderline edges:
-    #   score' = (1 - blend_lambda) * combined_sim + blend_lambda * P_same
-    # An optional secondary gate drops edges with P < prob_threshold.
-    # blend_lambda=0 + prob_threshold<=0 is a PROVABLE no-op (bit-identical).
-    # model_path payload may be a single fitted model OR a leak-free fold dict
-    # {"feature_names": [...], "models_by_train_scene": {"S02": m, "S01": m}}
-    # (a scene-X pair is then scored by the model whose train-scene != X).
-    # See docs/subagent-specs/edge-classifier-association.md sections 5-7.
-    edge_classifier:
-      enabled: false
-      model_path: "models/association/edge_clf_lgbm.pkl"
-      mode: "blend"            # blend | replace | gate
-      blend_lambda: 0.5
-      prob_threshold: 0.0
-      feature_version: 1
     # --- Per-camera-pair similarity normalization (distribution-based) ---
     camera_pair_norm:
       enabled: false
