@@ -22,8 +22,8 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-echo [1/4] Installing backend dependencies...
-pip install -r backend_requirements.txt -q
+echo [1/4] Installing Python dependencies...
+pip install -r requirements.txt -q
 
 echo [2/4] Installing frontend dependencies...
 cd frontend

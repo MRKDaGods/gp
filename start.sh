@@ -22,8 +22,8 @@ if ! command -v node &> /dev/null; then
     exit 1
 fi
 
-echo -e "${BLUE} Installing backend dependencies...${NC}"
-pip install -r backend_requirements.txt -q
+echo -e "${BLUE} Installing Python dependencies...${NC}"
+pip install -r requirements.txt -q
 
 echo -e "${BLUE} Installing frontend dependencies...${NC}"
 cd frontend
