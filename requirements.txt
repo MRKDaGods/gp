@@ -27,3 +27,18 @@ timm>=0.9
 open-clip-torch>=2.26
 scikit-learn>=1.3
 motmetrics>=1.4
+
+# -- Backend web service (FastAPI app: `uvicorn backend_api:app`) --
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+pydantic>=2.0
+
+# -- Directly imported in backend/src, previously only pulled in transitively --
+PyYAML>=6.0
+
+# -- Stage-5 evaluation + extra Re-ID backbones (lazy-imported by src/) --
+trackeval>=1.0           # HOTA / IDF1 / MOTA scorer (src/stage5_evaluation)
+torchreid>=0.2.5         # OSNet / ResNet-IBN reid backbones (src/stage2_features, src/training)
+tensorboard>=2.10        # required by torchreid's engine import
+pretrainedmodels>=0.7.4  # CLIP-SENet appearance branch (src/stage2_features)
