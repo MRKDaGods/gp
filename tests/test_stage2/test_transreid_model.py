@@ -1,12 +1,4 @@
-"""Tests for TransReID model and ReIDModel TransReID integration.
-
-Tests cover:
-- CLIP ViT-Base architecture (default) with norm_pre, SIE all tokens
-- Weight key naming matching NB08 training checkpoint
-- Identity projection when embed_dim == vit_dim
-- Backward compatibility with ViT-Small
-- ReIDModel CLIP normalization detection
-"""
+"""Tests for TransReID model and ReIDModel TransReID integration."""
 
 from __future__ import annotations
 

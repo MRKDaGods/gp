@@ -1,8 +1,4 @@
-"""FastAPI application factory for the MTMC Tracker backend.
-
-All routers are registered here. The startup event initialises the
-in-memory video catalogue and optionally triggers the S01 precompute.
-"""
+"""FastAPI application factory for the MTMC Tracker backend."""
 import asyncio
 import sys as _sys
 from pathlib import Path

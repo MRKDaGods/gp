@@ -1,8 +1,4 @@
-"""Debug/logging helpers for the timeline query system.
-
-This module is a dependency leaf - it imports only from backend.config
-so other service modules can import _timeline_debug without circular deps.
-"""
+"""Debug/logging helpers for the timeline query system."""
 from datetime import datetime
 from typing import Any, Dict, Optional
 

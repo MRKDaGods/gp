@@ -101,11 +101,7 @@ def _persist_probe_link(video_id: str, run_id: str) -> None:
 
 
 def _confidence_for_tracklet_frame(frame: Dict[str, Any], tracklet: Dict[str, Any]) -> float:
-    """Return detection confidence for API/UI.
-
-    Interpolated gap-fill frames are stored with confidence 0 in stage1 JSON; for display
-    we substitute the mean confidence of real (non-zero) frames in the same tracklet.
-    """
+    """Return detection confidence for API/UI."""
     c = float(frame.get("confidence", 0.0))
     if c > 1e-6:
         return c
@@ -158,9 +154,7 @@ def _tracklets_to_detections(
 def _build_selected_tracklet_summaries(
     probe_run_id: str, selected_nums: set
 ) -> List[Dict[str, Any]]:
-    """Load stage-1 tracklets for *probe_run_id* and return summary dicts for
-    any tracklet whose track_id is in *selected_nums*.  The shape matches what
-    ``buildTracksFromSummary`` in the frontend expects."""
+    """Load stage-1 tracklets for *probe_run_id* and return summary dicts for"""
     run_dir = OUTPUT_DIR / probe_run_id
     tracklets = _load_all_stage1_tracklets(run_dir)
     _timeline_debug(
@@ -220,10 +214,7 @@ def _build_selected_tracklet_summaries(
 def _resolve_probe_run_id_for_video(
     video_id: str, selected_nums: set
 ) -> Optional[str]:
-    """Resolve the best probe run for a video id.
-    Prefers a run that actually contains the selected track ids in stage-1
-    tracklets. This avoids stale in-memory mappings after backend restarts.
-    """
+    """Resolve the best probe run for a video id."""
     _timeline_debug(
         "[Timeline Resolve] Resolving probe run:",
         {"videoId": video_id, "selectedNums": sorted(list(selected_nums))},

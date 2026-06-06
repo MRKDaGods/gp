@@ -1,19 +1,4 @@
-"""k-Reciprocal re-ranking for ReID (Zhong et al., 2017).
-
-Refines initial similarity scores using local neighbourhood information.
-Applied as a post-processing step on FAISS retrieval results.
-
-Improvements over baseline
---------------------------
-* **Sparse computation** - instead of an O(N^2) full similarity matrix we use
-  the FAISS index that already exists upstream to compute per-node
-  neighbourhoods.  When no FAISS index is available we fall back to a
-  *local* similarity matrix built only from the nodes that appear in the
-  candidate set, which is typically << N.
-* **Weighted Jaccard** - the k-reciprocal overlap is weighted by the actual
-  cosine similarity of the shared neighbours rather than treating every
-  neighbour as binary.
-"""
+"""k-Reciprocal re-ranking for ReID (Zhong et al., 2017)."""
 
 from __future__ import annotations
 
@@ -33,21 +18,7 @@ def k_reciprocal_rerank(
     lambda_value: float = 0.3,
     faiss_index=None,
 ) -> Dict[Tuple[int, int], float]:
-    """Apply k-reciprocal re-ranking to refine appearance similarities.
-
-    Args:
-        embeddings: (N, D) L2-normalized embedding matrix.
-        candidate_pairs: List of (i, j, initial_similarity) tuples.
-        k1: Number of nearest neighbours for k-reciprocal set.
-        k2: Number of nearest neighbours for expanded set (unused in
-            weighted variant but controls expansion breadth).
-        lambda_value: Blending factor (0 = only Jaccard, 1 = only original).
-        faiss_index: Optional FAISS index over *embeddings* - if supplied
-            the expensive argsort is replaced with a fast ANN lookup.
-
-    Returns:
-        Dict[(i, j)] -> re-ranked similarity score.
-    """
+    """Apply k-reciprocal re-ranking to refine appearance similarities."""
     if not candidate_pairs:
         return {}
 
@@ -172,12 +143,7 @@ def _build_local_topk(
     topk_map: Dict[int, np.ndarray],
     sim_cache: Dict[int, np.ndarray],
 ) -> None:
-    """Build top-k neighbours using a *local* similarity matrix.
-
-    We only compute similarities among the active node set + a 1-hop expansion
-    (all nodes that appear in any candidate pair). This is O(M^2) where
-    M = |active_nodes| << N.
-    """
+    """Build top-k neighbours using a *local* similarity matrix."""
     active_list = sorted(active_nodes)
     n_active = len(active_list)
 

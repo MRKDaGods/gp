@@ -1,10 +1,4 @@
-"""Entry point: run the full MTMC tracking pipeline or selected stages.
-
-Usage:
-    python scripts/run_pipeline.py --config configs/default.yaml
-    python scripts/run_pipeline.py --config configs/default.yaml --stages 0,1,2
-    python scripts/run_pipeline.py --config configs/default.yaml --smoke-test
-"""
+"""Entry point: run the full MTMC tracking pipeline or selected stages."""
 
 from __future__ import annotations
 

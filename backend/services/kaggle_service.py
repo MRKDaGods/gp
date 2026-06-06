@@ -154,13 +154,7 @@ def kaggle_env(
     username: Optional[str] = None,
     key: Optional[str] = None,
 ) -> Iterator[Dict[str, str]]:
-    """Yield environment variables suitable for Kaggle CLI subprocesses.
-
-    If both `username` and `key` are provided, a temporary `kaggle.json` is created
-    and `KAGGLE_CONFIG_DIR` points at its parent directory. If neither value is
-    provided, the current process environment is passed through so Kaggle can use
-    `~/.kaggle/kaggle.json`. The temporary directory is removed on exit.
-    """
+    """Yield environment variables suitable for Kaggle CLI subprocesses."""
     if (username and not key) or (key and not username):
         raise KaggleAuthError("Kaggle username and key must be provided together.")
 
@@ -333,12 +327,7 @@ def push_kernel(
     username: Optional[str] = None,
     key: Optional[str] = None,
 ) -> KernelPushResult:
-    """Run `kaggle kernels push -p <metadata_dir>` and return parsed push details.
-
-    Raises `KaggleValidationError` for invalid dataset-source warnings,
-    `KaggleConcurrencyError` for slot-limit failures, `KaggleAuthError` for 401-style
-    responses, and `KaggleCliError` for other non-zero exits.
-    """
+    """Run `kaggle kernels push -p <metadata_dir>` and return parsed push details."""
     with kaggle_env(username=username, key=key) as env:
         result = _run_kaggle_cli(["kernels", "push", "-p", str(metadata_dir)], env)
 
@@ -404,12 +393,7 @@ def cancel_kernel(
     username: Optional[str] = None,
     key: Optional[str] = None,
 ) -> KernelCancelResult:
-    """Cancel a running kernel, falling back to status polling if cancel is unsupported.
-
-    Newer Kaggle CLI versions support `kaggle kernels cancel <slug>`. Older versions
-    such as 2.0.1 do not; for those, this function polls `kernel_status` until the
-    kernel reaches a terminal state.
-    """
+    """Cancel a running kernel, falling back to status polling if cancel is unsupported."""
     with kaggle_env(username=username, key=key) as env:
         result = _run_kaggle_cli(["kernels", "cancel", slug], env)
 
@@ -448,11 +432,7 @@ def cancel_kernel(
 
 
 def count_active_kernels(*, username: Optional[str] = None, key: Optional[str] = None) -> int:
-    """Query Kaggle for the user's currently running GPU kernels.
-
-    Uses `kaggle kernels list --mine --status running -v`. If parsing fails, returns
-    0 so the eventual push remains the authoritative concurrency check.
-    """
+    """Query Kaggle for the user's currently running GPU kernels."""
     with kaggle_env(username=username, key=key) as env:
         result = _run_kaggle_cli(["kernels", "list", "--mine", "--status", "running", "-v"], env)
     if result.returncode != 0:
@@ -506,13 +486,7 @@ def dataset_create_or_update(
     username: Optional[str] = None,
     key: Optional[str] = None,
 ) -> DatasetPushResult:
-    """Create a Kaggle dataset or push a new version of an existing dataset.
-
-    The function checks for an existing dataset with `kaggle datasets list --mine -s
-    <slug>`. It writes Kaggle's `dataset-metadata.json` schema into `files_dir`, runs
-    either `datasets create` or `datasets version`, and restores or removes the
-    metadata shim after the CLI call.
-    """
+    """Create a Kaggle dataset or push a new version of an existing dataset."""
     metadata_path = files_dir / "dataset-metadata.json"
     previous_metadata = metadata_path.read_bytes() if metadata_path.exists() else None
     metadata = {

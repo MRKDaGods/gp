@@ -13,28 +13,7 @@ from src.core.data_models import GlobalTrajectory
 
 
 def export_json(trajectories: List[GlobalTrajectory], output_path: str | Path) -> None:
-    """Export trajectories as a structured JSON file.
-
-    JSON structure per trajectory:
-    {
-        "global_id": int,
-        "class": str,
-        "num_cameras": int,
-        "camera_sequence": [str],
-        "time_span": [float, float],
-        "total_duration": float,
-        "tracklets": [
-            {
-                "camera_id": str,
-                "track_id": int,
-                "start_time": float,
-                "end_time": float,
-                "num_frames": int,
-                "bbox_samples": [[x1, y1, x2, y2], ...]
-            }
-        ]
-    }
-    """
+    """Export trajectories as a structured JSON file."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -73,11 +52,7 @@ def export_json(trajectories: List[GlobalTrajectory], output_path: str | Path) -
 
 
 def export_csv(trajectories: List[GlobalTrajectory], output_path: str | Path) -> None:
-    """Export trajectories as a flat CSV file.
-
-    One row per tracklet:
-        global_id, class, camera_id, track_id, start_time, end_time, duration, num_frames
-    """
+    """Export trajectories as a flat CSV file."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

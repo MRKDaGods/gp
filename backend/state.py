@@ -1,27 +1,10 @@
-"""Global in-memory state for the MTMC Tracker backend.
-
-Phase 4: All mutable state is encapsulated in ``AppState``.  The
-module-level names ``active_runs``, ``uploaded_videos``,
-``video_to_latest_run``, and ``RUN_ID_LOCK`` remain importable and
-point to the **same** dict / lock objects held by the singleton
-``app_state``.  Existing code that mutates these references in-place
-(``d[key] = ...``, ``.clear()``, ``.pop()``) continues to work
-unchanged.
-
-For router-level dependency injection see ``backend.dependencies``.
-"""
+"""Global in-memory state for the MTMC Tracker backend."""
 import threading
 from typing import Any, Dict
 
 
 class AppState:
-    """Injectable container for all mutable in-process pipeline state.
-
-    One singleton (``app_state``) is created at import time.  Routers
-    receive it via ``Depends(get_app_state)`` from ``backend.dependencies``.
-    Tests can instantiate a fresh ``AppState()`` and install it as an
-    override or call ``app_state.reset()`` to clear all state in-place.
-    """
+    """Injectable container for all mutable in-process pipeline state."""
 
     def __init__(self) -> None:
         # Active pipeline runs keyed by run_id
@@ -37,11 +20,7 @@ class AppState:
         self.run_id_lock: threading.Lock = threading.Lock()
 
     def reset(self) -> None:
-        """Clear all state dicts in-place.  Safe to call between tests.
-
-        The lock is intentionally preserved - resetting it while another
-        thread holds it would cause a deadlock.
-        """
+        """Clear all state dicts in-place.  Safe to call between tests."""
         self.active_runs.clear()
         self.run_processes.clear()
         self.uploaded_videos.clear()

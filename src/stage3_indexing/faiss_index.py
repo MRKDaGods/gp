@@ -11,11 +11,7 @@ from loguru import logger
 
 
 class FAISSIndex:
-    """Wraps a FAISS index for building, searching, and persisting embedding indices.
-
-    Uses IndexFlatIP (inner product) by default, which is equivalent to
-    cosine similarity when embeddings are L2-normalized.
-    """
+    """Wraps a FAISS index for building, searching, and persisting embedding indices."""
 
     def __init__(self, index_type: str = "flat_ip"):
         self.index_type = index_type
@@ -23,12 +19,7 @@ class FAISSIndex:
         self.id_map: Optional[List[int]] = None
 
     def build(self, embeddings: np.ndarray, ids: Optional[List[int]] = None) -> None:
-        """Build the FAISS index from a matrix of embeddings.
-
-        Args:
-            embeddings: (N, D) float32 matrix (should be L2-normalized for cosine).
-            ids: Optional list of integer IDs mapping to each row. If None, uses 0..N-1.
-        """
+        """Build the FAISS index from a matrix of embeddings."""
         n, d = embeddings.shape
         if n == 0:
             raise ValueError(
@@ -54,16 +45,7 @@ class FAISSIndex:
         query: np.ndarray,
         top_k: int = 100,
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Search for the top-K nearest neighbors.
-
-        Args:
-            query: (Q, D) float32 query matrix.
-            top_k: Number of results per query.
-
-        Returns:
-            (distances, indices) both of shape (Q, top_k).
-            For IndexFlatIP, distances are similarity scores (higher = more similar).
-        """
+        """Search for the top-K nearest neighbors."""
         if self.index is None:
             raise RuntimeError("Index not built. Call build() first.")
 
@@ -78,15 +60,7 @@ class FAISSIndex:
         query_vec: np.ndarray,
         top_k: int = 100,
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Search with a single query vector.
-
-        Args:
-            query_vec: (D,) float32 vector.
-            top_k: Number of results.
-
-        Returns:
-            (distances, indices) both of shape (top_k,).
-        """
+        """Search with a single query vector."""
         query = query_vec.reshape(1, -1)
         distances, indices = self.search(query, top_k)
         return distances[0], indices[0]

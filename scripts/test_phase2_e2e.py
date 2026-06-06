@@ -1,10 +1,4 @@
-"""Phase 2 end-to-end HTTP integration test harness.
-
-This script starts the local FastAPI backend and Next.js frontend, then
-exercises the Phase 2 endpoints using the same JSON shapes as the frontend.
-It intentionally avoids running local GPU-heavy MTMC stages: pipeline checks
-submit only CPU stage-4 shape requests without a video, then cancel the run.
-"""
+"""Phase 2 end-to-end HTTP integration test harness."""
 
 from __future__ import annotations
 

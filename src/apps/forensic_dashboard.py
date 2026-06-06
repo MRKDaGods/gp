@@ -1,16 +1,4 @@
-"""MTMC Forensic Dashboard - Multi-Dataset Tracker.
-
-Compact, multi-dataset forensic dashboard for cross-camera identity tracking.
-Key features:
-  - Dataset-aware: switch between WILDTRACK / CityFlowV2 / EPFL etc.
-  - Compact identity grid: pick any person or vehicle, see them across all cameras
-  - Cross-camera timeline: Gantt-style bars showing when/where an identity appears
-  - Surveillance replay, identity corrections, audit log
-
-Run:
-    streamlit run src/apps/forensic_dashboard.py
-    streamlit run src/apps/forensic_dashboard.py -- --run-dir data/outputs/run_XXX
-"""
+"""MTMC Forensic Dashboard - Multi-Dataset Tracker."""
 
 from __future__ import annotations
 

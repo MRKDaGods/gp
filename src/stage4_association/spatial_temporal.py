@@ -1,13 +1,4 @@
-"""Spatio-temporal validation for cross-camera tracklet matching.
-
-Uses transition time priors between camera pairs to gate impossible matches
-and score plausible ones.  The scoring now uses a *log-normal*-inspired
-Gaussian in log-space for the global prior so that short transitions are
-favoured over long ones (real-world transition times are right-skewed).
-
-Per-pair learned priors store mean **and** std so the Gaussian width adapts
-to observed data rather than assuming a fixed fraction of the range.
-"""
+"""Spatio-temporal validation for cross-camera tracklet matching."""
 
 from __future__ import annotations
 
@@ -19,21 +10,7 @@ from loguru import logger
 
 
 class SpatioTemporalValidator:
-    """Validates and scores temporal plausibility of cross-camera transitions.
-
-    If camera transition priors are provided, uses them for strict gating.
-    Otherwise, uses configurable min/max time gaps as a global prior.
-
-    Scoring improvements over the baseline:
-    * **Per-pair priors** now store ``std_time`` (learned from GT) for a
-      properly-fit Gaussian instead of a heuristic ``(max-min)/4`` width.
-    * **Global fallback** centres the Gaussian at ``min_time_gap`` (the
-      earliest plausible transition) rather than midway through the
-      validity window, because shorter re-appearances are overwhelmingly
-      more likely in real surveillance footage.
-    * When ``min_time_gap == 0`` (overlapping FOV), a half-Gaussian
-      monotonically decreasing from 0 is used.
-    """
+    """Validates and scores temporal plausibility of cross-camera transitions."""
 
     def __init__(
         self,
@@ -41,14 +18,7 @@ class SpatioTemporalValidator:
         max_time_gap: float = 300.0,
         camera_transitions: Optional[Dict] = None,
     ):
-        """
-        Args:
-            min_time_gap: Minimum seconds between tracklet end and next start.
-            max_time_gap: Maximum seconds between tracklet end and next start.
-            camera_transitions: Optional per-pair priors, e.g.:
-                {"cam01": {"cam02": {"min_time": 5, "max_time": 60,
-                                     "mean_time": 30, "std_time": 10}}}
-        """
+        """Args:"""
         self.min_time_gap = min_time_gap
         self.max_time_gap = max_time_gap
         self.camera_transitions = camera_transitions or {}
@@ -62,13 +32,7 @@ class SpatioTemporalValidator:
         time_a: float,
         time_b: float,
     ) -> bool:
-        """Check if a transition from cam_a to cam_b is temporally plausible.
-
-        When ``camera_transitions`` is provided and cam_a is listed in it,
-        only explicitly listed target cameras are allowed.  Unlisted targets
-        are blocked (return False).  This enforces scene topology constraints
-        (e.g. S01 cameras never link to S02 cameras in CityFlowV2).
-        """
+        """Check if a transition from cam_a to cam_b is temporally plausible."""
         time_diff = time_b - time_a
         abs_diff = abs(time_diff)  # direction-agnostic: pairs are ordered by FAISS index, not time
 
@@ -96,11 +60,7 @@ class SpatioTemporalValidator:
         time_a: float,
         time_b: float,
     ) -> float:
-        """Compute a transition plausibility score in [0, 1].
-
-        Uses a Gaussian centred on the expected transition time.
-        Returns 0 for invalid transitions.
-        """
+        """Compute a transition plausibility score in [0, 1]."""
         if not self.is_valid_transition(cam_a, cam_b, time_a, time_b):
             return 0.0
 
@@ -122,14 +82,7 @@ class SpatioTemporalValidator:
 
     @staticmethod
     def _score_with_prior(abs_diff: float, prior: Dict) -> float:
-        """Score using a per-pair learned prior.
-
-        Uses Gaussian centered on mean_time with sigma = max(learned_std,
-        (max_time - min_time) / 3) to ensure wide coverage of the valid
-        time range - overlapping-FOV cameras have very low mean_time but
-        legitimate transitions can be much longer (vehicles re-entering
-        the FOV after a red light, etc.).
-        """
+        """Score using a per-pair learned prior."""
         min_t = prior["min_time"]
         max_t = prior["max_time"]
         mean_t = prior.get("mean_time", (min_t + max_t) / 2)
@@ -147,13 +100,7 @@ class SpatioTemporalValidator:
         return math.exp(-0.5 * ((abs_diff - mean_t) / sigma) ** 2)
 
     def _global_score(self, abs_diff: float) -> float:
-        """Score using the global min/max time gap as a prior.
-
-        Design: favour *shorter* re-appearance times.
-        * ``min_time_gap == 0`` -> overlapping FOV; peak at 0, half-Gaussian.
-        * Otherwise -> Gaussian centred at ``min_time_gap`` with sigma chosen
-          so that score ~ 0.01 at ``max_time_gap``.
-        """
+        """Score using the global min/max time gap as a prior."""
         if self.min_time_gap == 0:
             # Half-Gaussian peaking at 0, dropping to ~0.01 at max
             sigma = self.max_time_gap / math.sqrt(2 * math.log(100))
@@ -189,17 +136,7 @@ class SpatioTemporalValidator:
         self,
         camera_pairs: List[Tuple[str, str, float]],
     ) -> Dict:
-        """Learn transition priors from labeled data.
-
-        Now computes ``std_time`` in addition to mean so the Gaussian width
-        adapts to the actual distribution instead of a heuristic.
-
-        Args:
-            camera_pairs: List of (cam_a, cam_b, time_diff) from ground truth.
-
-        Returns:
-            Camera transition dictionary.
-        """
+        """Learn transition priors from labeled data."""
         from collections import defaultdict
         pair_times: Dict[Tuple[str, str], list] = defaultdict(list)
 

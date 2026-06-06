@@ -1,9 +1,4 @@
-"""ReID dataset loaders for Market-1501, VeRi-776, and CityFlowV2.
-
-Handles the standard train/query/gallery splits and provides
-PyTorch Dataset and DataLoader with identity-balanced sampling
-(PK sampler: P identities x K instances per identity per batch).
-"""
+"""ReID dataset loaders for Market-1501, VeRi-776, and CityFlowV2."""
 
 from __future__ import annotations
 
@@ -24,12 +19,7 @@ from src.training.seed import seed_worker, make_generator
 
 
 def parse_market1501(root: str) -> Tuple[List, List, List]:
-    """Parse Market-1501 dataset.
-
-    Filename format: XXXX_cYsZ_NNNNNN_NN.jpg
-      XXXX = person_id (-1 = junk, 0 = distractor)
-      Y = camera_id (1-6)
-    """
+    """Parse Market-1501 dataset."""
     train, query, gallery = [], [], []
 
     for split_name, split_list in [
@@ -60,12 +50,7 @@ def parse_market1501(root: str) -> Tuple[List, List, List]:
 
 
 def parse_veri776(root: str) -> Tuple[List, List, List]:
-    """Parse VeRi-776 dataset.
-
-    Filename format: XXXX_cYYY_NNNNNNNN_N.jpg
-      XXXX = vehicle_id
-      YYY = camera_id
-    """
+    """Parse VeRi-776 dataset."""
     train, query, gallery = [], [], []
 
     for split_name, split_list in [
@@ -95,17 +80,7 @@ def parse_veri776(root: str) -> Tuple[List, List, List]:
 
 
 def parse_cityflowv2(root: str) -> Tuple[List, List, List]:
-    """Parse CityFlowV2 ReID crops.
-
-    Expected structure (created by scripts/extract_cityflowv2_crops.py):
-        root/
-          train/   XXXX_SCENE_cNNN_fFFFFFF.jpg
-          query/   XXXX_SCENE_cNNN_fFFFFFF.jpg
-          gallery/ XXXX_SCENE_cNNN_fFFFFFF.jpg
-
-    Filename: {vehicle_id:04d}_{scene}_{camera}_f{frame:06d}.jpg
-    Camera ID is extracted as scene_camera (e.g. S01_c001).
-    """
+    """Parse CityFlowV2 ReID crops."""
     train, query, gallery = [], [], []
 
     for split_name, split_list in [
@@ -222,11 +197,7 @@ class ReIDDataset(Dataset):
 
 
 class PKSampler(Sampler):
-    """PK sampler: P identities x K instances per identity per batch.
-
-    Used for triplet loss training to ensure meaningful positive/negative
-    pairs exist in each batch.
-    """
+    """PK sampler: P identities x K instances per identity per batch."""
 
     def __init__(
         self,
@@ -287,11 +258,7 @@ def build_dataloader(
     color_jitter: bool = False,
     seed: Optional[int] = None,
 ) -> Tuple[DataLoader, DataLoader, DataLoader, int, int]:
-    """Build train/query/gallery dataloaders.
-
-    Returns:
-        (train_loader, query_loader, gallery_loader, num_classes, num_cameras)
-    """
+    """Build train/query/gallery dataloaders."""
     parser = DATASET_PARSERS.get(dataset_name)
     if parser is None:
         raise ValueError(

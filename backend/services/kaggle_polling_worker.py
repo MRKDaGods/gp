@@ -19,17 +19,7 @@ TERMINAL_STATUSES = {"complete", "error", "cancelled"}
 
 
 class KagglePollingWorker:
-    """Poll active Kaggle jobs and integrate completed outputs.
-
-    Jobs are discovered from ``kaggle_job.json`` files under
-    ``data/outputs/<run_id>/``. The worker does not read request-time Kaggle
-    credentials from disk because Phase 10 deliberately never persists them;
-    polling and output download therefore use server-default Kaggle credentials
-    from ``~/.kaggle/kaggle.json`` after a backend restart.
-
-    Idempotent: a job in terminal status with ``outputs_downloaded_to`` already
-    set is skipped.
-    """
+    """Poll active Kaggle jobs and integrate completed outputs."""
 
     POLL_INTERVAL_SECONDS = 60
     BACKOFF_MAX_RETRIES = 5
@@ -96,12 +86,7 @@ class KagglePollingWorker:
         return status_changes
 
     async def _poll_job(self, run_id: str, state: Dict[str, Any]) -> Optional[str]:
-        """Poll one job with server-default Kaggle credentials.
-
-        Credentials are not stored in ``kaggle_job.json``. If the original push
-        used request-scoped credentials, this polling pass still uses the
-        backend server's ``~/.kaggle/kaggle.json`` fallback.
-        """
+        """Poll one job with server-default Kaggle credentials."""
         status = await asyncio.to_thread(
             kaggle_service.kernel_status,
             str(state["kernel_slug"]),

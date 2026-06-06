@@ -61,16 +61,7 @@ def read_video_frames(
     target_fps: Optional[float] = None,
     max_frames: Optional[int] = None,
 ) -> Iterator[Tuple[int, float, np.ndarray]]:
-    """Yield (frame_index, timestamp_seconds, frame_bgr) from a video.
-
-    Args:
-        video_path: Path to the video file.
-        target_fps: If set, subsample to this frame rate. None = use native FPS.
-        max_frames: Stop after this many yielded frames. None = read all.
-
-    Yields:
-        (frame_index, timestamp_sec, frame) where frame is BGR uint8 numpy array.
-    """
+    """Yield (frame_index, timestamp_seconds, frame_bgr) from a video."""
     video_path = str(video_path)
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -128,15 +119,7 @@ def write_video(
     codec: str = "mp4v",
     size: Optional[Tuple[int, int]] = None,
 ) -> None:
-    """Write frames to a video file.
-
-    Args:
-        frames: Iterator of BGR uint8 numpy arrays.
-        output_path: Output video file path.
-        fps: Output frame rate.
-        codec: FourCC codec string.
-        size: (width, height). If None, inferred from first frame.
-    """
+    """Write frames to a video file."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

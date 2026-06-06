@@ -11,22 +11,14 @@ from sklearn.decomposition import PCA
 
 
 class PCAWhitener:
-    """PCA dimensionality reduction and whitening for ReID embeddings.
-
-    Fits PCA on gallery embeddings and transforms query/gallery embeddings
-    to a lower-dimensional, decorrelated space.
-    """
+    """PCA dimensionality reduction and whitening for ReID embeddings."""
 
     def __init__(self, n_components: int = 512):
         self.n_components = n_components
         self.pca: PCA | None = None
 
     def fit(self, embeddings: np.ndarray) -> None:
-        """Fit PCA on a matrix of embeddings.
-
-        Args:
-            embeddings: (N, D) float32 matrix where N >= n_components.
-        """
+        """Fit PCA on a matrix of embeddings."""
         n_samples, n_features = embeddings.shape
         actual_components = min(self.n_components, n_features, n_samples)
 
@@ -46,14 +38,7 @@ class PCAWhitener:
         )
 
     def transform(self, embeddings: np.ndarray) -> np.ndarray:
-        """Transform embeddings using the fitted PCA.
-
-        Args:
-            embeddings: (N, D) float32 matrix.
-
-        Returns:
-            (N, n_components) transformed embeddings.
-        """
+        """Transform embeddings using the fitted PCA."""
         if self.pca is None:
             raise RuntimeError("PCA not fitted. Call fit() first or load() a saved model.")
         return self.pca.transform(embeddings).astype(np.float32)

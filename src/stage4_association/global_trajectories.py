@@ -16,19 +16,7 @@ def merge_tracklets_to_trajectories(
     embeddings: Optional[np.ndarray] = None,
     combined_sim: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> List[GlobalTrajectory]:
-    """Convert identity clusters to GlobalTrajectory objects with forensic metadata.
-
-    Args:
-        clusters: List of sets, each containing feature indices for one identity.
-        feature_to_tracklet_key: Maps feature index -> (camera_id, track_id).
-        tracklet_lookup: Maps (camera_id, track_id) -> Tracklet object.
-        embeddings: Optional (N, D) L2-normed embedding matrix for confidence scoring.
-        combined_sim: Optional pre-computed pairwise similarity dict for evidence records.
-
-    Returns:
-        List of GlobalTrajectory sorted by global_id, each with confidence +
-        evidence audit trail populated.
-    """
+    """Convert identity clusters to GlobalTrajectory objects with forensic metadata."""
     trajectories = []
 
     for global_id, cluster in enumerate(clusters):

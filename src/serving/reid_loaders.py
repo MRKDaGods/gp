@@ -1,9 +1,4 @@
-"""Shared VeRi-776 ReID model loading and feature extraction helpers.
-
-This module is intentionally importable from both FastAPI services and the
-standalone verifier scripts. It avoids backend package imports so Kaggle/local
-CLI evaluation environments do not need the backend dependency set.
-"""
+"""Shared VeRi-776 ReID model loading and feature extraction helpers."""
 
 from __future__ import annotations
 

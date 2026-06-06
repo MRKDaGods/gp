@@ -1,8 +1,4 @@
-"""Data models for inter-stage communication.
-
-All stages read/write these dataclasses. They define the contract between
-pipeline stages so each module can be developed and tested independently.
-"""
+"""Data models for inter-stage communication."""
 
 from __future__ import annotations
 
@@ -107,28 +103,7 @@ class TrackletFeatures:
 
 @dataclass
 class GlobalTrajectory:
-    """A cross-camera trajectory: multiple tracklets linked to one identity.
-
-    Forensic / intelligence metadata
-    ---------------------------------
-    confidence : mean pairwise cosine similarity between all tracklet pairs in
-        the cluster, in [0, 1].  A score >= 0.7 indicates a high-confidence
-        identity match suitable for operational decisions.  Scores below 0.5
-        should be treated as tentative.
-
-    evidence : ordered list of merge evidence records, each containing::
-
-        {
-          "tracklet_a": "(cam_id, track_id)",
-          "tracklet_b": "(cam_id, track_id)",
-          "similarity": float,   # appearance cosine similarity
-          "merge_stage": str,    # "graph" | "gallery_expansion" | "orphan_pair"
-        }
-
-    This provides a full, reproducible audit trail for every cross-camera link
-    so forensic analysts and intelligence analysts can trace exactly why two
-    sightings were attributed to the same vehicle / person.
-    """
+    """A cross-camera trajectory: multiple tracklets linked to one identity."""
 
     global_id: int
     tracklets: List[Tracklet] = field(default_factory=list)

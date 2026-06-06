@@ -45,14 +45,7 @@ class Detector:
         )
 
     def detect(self, frame: np.ndarray) -> List[Detection]:
-        """Run detection on a single BGR frame.
-
-        Args:
-            frame: BGR uint8 numpy array (H, W, 3).
-
-        Returns:
-            List of Detection objects.
-        """
+        """Run detection on a single BGR frame."""
         results = self.model.predict(
             frame,
             conf=self.confidence_threshold,
@@ -88,12 +81,7 @@ class Detector:
         return detections
 
     def detect_to_array(self, frame: np.ndarray) -> np.ndarray:
-        """Run detection and return as numpy array for BoxMOT.
-
-        Returns:
-            np.ndarray of shape (N, 6): [x1, y1, x2, y2, confidence, class_id]
-            Returns empty array with shape (0, 6) if no detections.
-        """
+        """Run detection and return as numpy array for BoxMOT."""
         detections = self.detect(frame)
         if not detections:
             return np.empty((0, 6), dtype=np.float32)

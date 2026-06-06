@@ -22,17 +22,7 @@ def run_stage3(
     tracklets_by_camera: Dict[str, List[Tracklet]],
     output_dir: str | Path,
 ) -> Tuple[FAISSIndex, MetadataStore]:
-    """Build FAISS index and metadata store.
-
-    Args:
-        cfg: Full pipeline config (uses cfg.stage3).
-        features: TrackletFeatures from Stage 2.
-        tracklets_by_camera: Tracklets from Stage 1 for metadata.
-        output_dir: Directory for stage3 outputs.
-
-    Returns:
-        (FAISSIndex, MetadataStore) tuple.
-    """
+    """Build FAISS index and metadata store."""
     stage_cfg = cfg.stage3
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

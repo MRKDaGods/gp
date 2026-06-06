@@ -1,9 +1,4 @@
-"""Multi-modal similarity computation for cross-camera association.
-
-Supports class-adaptive weighting (person vs vehicle), mutual
-nearest-neighbor filtering, and temporal overlap bonus for
-overlapping-FOV camera pairs.
-"""
+"""Multi-modal similarity computation for cross-camera association."""
 
 from __future__ import annotations
 
@@ -14,6 +9,7 @@ import numpy as np
 from loguru import logger
 
 from src.core.constants import PERSON_CLASSES
+from src.stage4_association.geospatial import GeoSpatialConstraint
 from src.stage4_association.spatial_temporal import SpatioTemporalValidator
 
 
@@ -31,15 +27,7 @@ def compute_temporal_overlap_ratio(
     start_j: float,
     end_j: float,
 ) -> float:
-    """Compute temporal IoU between two tracklets.
-
-    Returns the fraction of temporal overlap relative to the shorter tracklet's
-    duration.  This is more informative than IoU for asymmetric durations -
-    a short tracklet fully contained in a long one should get score ~ 1.0.
-
-    Returns:
-        Ratio in [0, 1].  0 means no temporal overlap.
-    """
+    """Compute temporal IoU between two tracklets."""
     overlap_start = max(start_i, start_j)
     overlap_end = min(end_i, end_j)
     overlap = max(0.0, overlap_end - overlap_start)
@@ -55,18 +43,7 @@ def mutual_nearest_neighbor_filter(
     candidate_pairs: List[Tuple[int, int, float]],
     top_k_per_query: int = 10,
 ) -> List[Tuple[int, int, float]]:
-    """Filter candidate pairs to mutual nearest neighbors.
-
-    A pair (i, j) is kept only if j is in i's top-K *and* i is in j's top-K.
-    This dramatically reduces false-positive edges in the similarity graph.
-
-    Args:
-        candidate_pairs: List of (i, j, similarity) tuples.
-        top_k_per_query: How many top matches per query to consider.
-
-    Returns:
-        Filtered list of mutual-NN pairs.
-    """
+    """Filter candidate pairs to mutual nearest neighbors."""
     # Build top-K sets for each node
     from collections import defaultdict
     neighbors: Dict[int, List[Tuple[int, float]]] = defaultdict(list)
@@ -107,38 +84,11 @@ def compute_combined_similarity(
     temporal_overlap_cfg: Optional[dict] = None,
     occluded_flags: Optional[List[bool]] = None,
     occ_penalty: float = 1.0,
+    geo_constraint: Optional[GeoSpatialConstraint] = None,
+    geo_gate: bool = True,
+    geo_weight: float = 0.0,
 ) -> Dict[Tuple[int, int], float]:
-    """Compute weighted combined similarity with class-adaptive weights.
-
-    Uses different weight profiles for persons vs vehicles:
-    - **Persons**: Higher appearance weight, lower HSV (clothing vs. lighting).
-    - **Vehicles**: Higher HSV weight (more stable colour across cameras).
-
-    Length weighting (when *num_frames* is provided): edges between longer
-    tracklets receive a confidence boost.  The geometric mean of the two
-    tracklet lengths, normalised by the max length, produces a factor in
-    (0, 1] that is mixed 50/50 with 1.0 so short-tracklet pairs are only
-    mildly penalised (factor range [0.5, 1.0]).  This is the same approach
-    used in SOTA MTMC systems (cf. reference Stage 4 pipeline).
-
-    Args:
-        appearance_sim: Dict[(i, j)] -> appearance similarity score.
-        hsv_features: (N, bins) HSV histogram matrix.
-        start_times: Start timestamp for each tracklet.
-        end_times: End timestamp for each tracklet.
-        camera_ids: Camera ID for each tracklet.
-        class_ids: Class ID for each tracklet.
-        st_validator: Spatio-temporal validator instance.
-        weights: Dict with keys 'appearance', 'hsv', 'spatiotemporal',
-                 and optionally 'person' / 'vehicle' sub-dicts.
-        num_frames: Optional frame count per tracklet for length weighting.
-        temporal_overlap_cfg: Optional config for overlapping-FOV bonus/filtering.
-        occluded_flags: Optional per-tracklet occlusion flags aligned to features.
-        occ_penalty: Similarity multiplier for pairs involving occluded tracklets.
-
-    Returns:
-        Dict[(i, j)] -> combined similarity score.
-    """
+    """Compute weighted combined similarity with class-adaptive weights."""
     # Default weights
     default_w = {
         "appearance": weights.get("appearance", 0.6),
@@ -175,6 +125,9 @@ def compute_combined_similarity(
     to_min_ratio = float(to_cfg.get("min_ratio", 0.0))
     to_count = 0
 
+    geo_active = geo_constraint is not None and geo_constraint.is_active
+    geo_gated = 0
+
     combined: Dict[Tuple[int, int], float] = {}
 
     for (i, j), app_sim in appearance_sim.items():
@@ -209,6 +162,18 @@ def compute_combined_similarity(
 
         if st_score <= 0:
             continue  # Invalid transition (e.g. cross-scene), skip
+
+        # Geospatial reachability gate + plausibility factor (pairs are same-class).
+        geo_factor = 1.0
+        if geo_active and is_cross_camera:
+            if geo_gate and not geo_constraint.is_reachable(
+                cam_a, cam_b, min_gap, class_ids[i]
+            ):
+                geo_gated += 1
+                continue
+            if geo_weight > 0:
+                gscore = geo_constraint.geo_score(cam_a, cam_b, min_gap, class_ids[i])
+                geo_factor = (1.0 - geo_weight) + geo_weight * gscore
 
         # HSV similarity
         hsv_sim = compute_hsv_similarity(hsv_features[i], hsv_features[j])
@@ -257,6 +222,9 @@ def compute_combined_similarity(
         if occluded_flags is not None and (occluded_flags[i] or occluded_flags[j]):
             score *= occ_penalty
 
+        if geo_factor != 1.0:
+            score *= geo_factor
+
         combined[(i, j)] = score
 
     if to_enabled and to_count > 0:
@@ -264,5 +232,8 @@ def compute_combined_similarity(
             f"Temporal overlap bonus applied to {to_count} pairs "
             f"(bonus={to_bonus}, max_mean_time={to_max_mean_time}s)"
         )
+
+    if geo_active and geo_gate and geo_gated > 0:
+        logger.info(f"Geospatial gate: dropped {geo_gated} unreachable cross-camera pairs")
 
     return combined

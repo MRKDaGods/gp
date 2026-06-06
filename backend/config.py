@@ -1,9 +1,4 @@
-"""Centralised configuration constants for the backend package.
-
-All path constants, environment flags, and shared regex patterns live here.
-Nothing in this module imports from other backend/ modules - it is a pure
-dependency leaf.
-"""
+"""Centralised configuration constants for the backend package."""
 import os
 import re
 import shutil as _shutil
@@ -109,11 +104,7 @@ def resolve_run_dir(run_id: str) -> Optional[Path]:
 
 
 def list_run_dirs() -> List[Path]:
-    """All run directories across known output roots, deduped by name.
-
-    A directory counts as a run if it has a `run_context.json` or any stage
-    output (so ingestion-only runs are visible too, not just stage1+ runs).
-    """
+    """All run directories across known output roots, deduped by name."""
     def _is_run(d: Path) -> bool:
         if (d / "run_context.json").exists():
             return True

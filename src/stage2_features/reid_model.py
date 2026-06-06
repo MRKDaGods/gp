@@ -1,11 +1,4 @@
-"""ReID model wrapper with flip augmentation and quality-weighted pooling.
-
-Features:
-- Flip-augmented feature extraction (original + horizontal flip, averaged)
-- Quality-weighted temporal attention pooling for tracklet embedding
-- Supports OSNet, ResNet50-IBN, TransReID (ViT/CLIP), and other torchreid architectures
-- CLIP normalization for CLIP-pretrained ViT backbones
-"""
+"""ReID model wrapper with flip augmentation and quality-weighted pooling."""
 
 from __future__ import annotations
 
@@ -29,12 +22,7 @@ _IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
 class ReIDModel:
-    """Wraps a ReID model for feature extraction.
-
-    Supports OSNet, ResNet50-IBN, TransReID (ViT/CLIP), and other torchreid
-    architectures.  Includes flip augmentation and quality-weighted temporal
-    attention pooling.
-    """
+    """Wraps a ReID model for feature extraction."""
 
     # Model names routed to TransReID instead of torchreid
     _TRANSREID_NAMES = {"transreid", "vit_small", "vit_base", "transreid_vit", "eva02_vit"}
@@ -423,14 +411,7 @@ class ReIDModel:
         return model
 
     def _preprocess(self, crops: List[np.ndarray]) -> torch.Tensor:
-        """Preprocess crops for the ReID model.
-
-        Args:
-            crops: List of BGR uint8 numpy arrays of varying sizes.
-
-        Returns:
-            Batched tensor of shape (N, 3, H, W), normalized.
-        """
+        """Preprocess crops for the ReID model."""
         h, w = self.input_size
         processed = []
 
@@ -510,15 +491,7 @@ class ReIDModel:
 
     @torch.no_grad()
     def _extract_batch(self, batch_crops: List[np.ndarray], cam_id: Optional[int] = None) -> np.ndarray:
-        """Extract embeddings for a single batch with optional augmentation.
-
-        Args:
-            batch_crops: List of BGR uint8 crops.
-            cam_id: Optional integer camera ID for SIE (TransReID).
-
-        Returns:
-            (N, D) float32 numpy array.
-        """
+        """Extract embeddings for a single batch with optional augmentation."""
         cam_tensor = self._make_cam_tensor(len(batch_crops), cam_id)
         views = [self._forward_crops(batch_crops, cam_tensor)]
 
@@ -573,20 +546,7 @@ class ReIDModel:
 
     @torch.no_grad()
     def extract_features(self, crops: List[np.ndarray], batch_size: int = 64, cam_id: Optional[int] = None) -> np.ndarray:
-        """Extract embeddings from a list of crops with optional flip augmentation.
-
-        When ``flip_augment`` is True, each crop is processed twice (original +
-        horizontally flipped) and the two embeddings are averaged.  This is a
-        standard ReID trick that improves robustness to left-right orientation.
-
-        Args:
-            crops: List of BGR uint8 crops.
-            batch_size: Batch size for inference.
-            cam_id: Optional integer camera ID for SIE (TransReID).
-
-        Returns:
-            (N, D) float32 numpy array of embeddings.
-        """
+        """Extract embeddings from a list of crops with optional flip augmentation."""
         if not crops:
             return np.empty((0, self.embedding_dim), dtype=np.float32)
 
@@ -627,23 +587,7 @@ class ReIDModel:
         cam_id: Optional[int] = None,
         quality_temperature: float = 3.0,
     ) -> Optional[np.ndarray]:
-        """Extract a single embedding for a tracklet using quality-weighted attention.
-
-        Instead of naive mean pooling, weights each crop's embedding by its
-        quality score (from :class:`QualityScoredCrop`), producing an embedding
-        biased toward sharper, larger, higher-confidence crops.
-
-        Args:
-            crops: List of BGR uint8 crops from the tracklet.
-            quality_scores: Per-crop quality scores in [0, 1]. If None,
-                falls back to uniform weighting (simple average).
-            cam_id: Optional integer camera ID for SIE (TransReID).
-            quality_temperature: Exponent for softmax quality weighting.
-                Higher = sharper (more weight on best crops). 0 = uniform.
-
-        Returns:
-            (D,) embedding vector, or None if no valid crops.
-        """
+        """Extract a single embedding for a tracklet using quality-weighted attention."""
         if not crops:
             return None
 
@@ -667,16 +611,7 @@ class ReIDModel:
         cam_id: Optional[int] = None,
         quality_temperature: float = 3.0,
     ) -> Optional[np.ndarray]:
-        """Convenience wrapper that accepts QualityScoredCrop objects directly.
-
-        Args:
-            scored_crops: List of QualityScoredCrop from CropExtractor.
-            cam_id: Optional integer camera ID for SIE (TransReID).
-            quality_temperature: Exponent for softmax quality weighting.
-
-        Returns:
-            (D,) quality-weighted embedding, or None.
-        """
+        """Convenience wrapper that accepts QualityScoredCrop objects directly."""
         if not scored_crops:
             return None
         crops = [sc.image for sc in scored_crops]
@@ -690,13 +625,7 @@ class ReIDModel:
         cam_id: Optional[int] = None,
         quality_temperature: float = 3.0,
     ) -> Optional[np.ndarray]:
-        """Extract top-K representative crop embeddings for a tracklet.
-
-        Selection is quality-based: the highest-quality crops are retained.
-        If the tracklet has fewer than K crops, the remaining rows are padded
-        with the tracklet's pooled embedding so Stage 4 can load a dense
-        ``(N, K, D)`` tensor without special-casing variable-length tracks.
-        """
+        """Extract top-K representative crop embeddings for a tracklet."""
         if not scored_crops or k <= 0:
             return None
 
@@ -725,11 +654,7 @@ class ReIDModel:
     # Camera-specific Test-Time Adaptation (CamTTA)
 
     def save_bn_state(self) -> dict:
-        """Save BNNeck running statistics for later restoration.
-
-        Returns an opaque dict that can be passed to :meth:`restore_bn_state`.
-        Returns an empty dict for non-TransReID models.
-        """
+        """Save BNNeck running statistics for later restoration."""
         if not self.is_transreid or not hasattr(self.model, "bn"):
             return {}
         bn = self.model.bn
@@ -741,11 +666,7 @@ class ReIDModel:
         }
 
     def restore_bn_state(self, state: dict) -> None:
-        """Restore BNNeck running statistics from a previously saved state.
-
-        Args:
-            state: Dict returned by :meth:`save_bn_state`.
-        """
+        """Restore BNNeck running statistics from a previously saved state."""
         if not state or not self.is_transreid or not hasattr(self.model, "bn"):
             return
         bn = self.model.bn
@@ -756,24 +677,7 @@ class ReIDModel:
 
     def warmup_camera_bn(self, crops: List[np.ndarray], batch_size: int = 64) -> None:
         """Adapt BNNeck statistics to a specific camera's appearance distribution.
-
-        Runs all provided crops through the BNNeck in training mode (updating
-        ``running_mean`` / ``running_var``), then restores eval mode.  After
-        calling this, subsequent ``extract_features`` calls will use the
         camera-adapted statistics for BN normalisation.
-
-        Uses cumulative moving average (``momentum=None``) so the running
-        statistics converge to the exact per-camera batch statistics after
-        all warmup crops are processed, producing a stable estimate regardless
-        of the number of crops.
-
-        Only applies to TransReID models (BNNeck is ``BatchNorm1d``).  Returns
-        immediately for other architectures.
-
-        Args:
-            crops: All BGR uint8 crops available for this camera.  More crops
-                produce a more accurate per-camera BN estimate.
-            batch_size: Forward-pass batch size for the warmup loop.
         """
         if not self.is_transreid or not hasattr(self.model, "bn") or len(crops) < 2:
             return

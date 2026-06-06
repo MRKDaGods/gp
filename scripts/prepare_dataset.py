@@ -1,13 +1,4 @@
-"""Dataset preparation utility.
-
-Converts raw downloaded datasets into the unified format expected by the pipeline.
-
-Usage:
-    python scripts/prepare_dataset.py --dataset market1501 --root data/raw/market1501
-    python scripts/prepare_dataset.py --dataset veri776 --root data/raw/veri776
-    python scripts/prepare_dataset.py --dataset cityflowv2 --root data/raw/cityflowv2
-    python scripts/prepare_dataset.py --dataset wildtrack --root data/raw/wildtrack
-"""
+"""Dataset preparation utility."""
 
 from __future__ import annotations
 
@@ -124,16 +115,7 @@ def _write_manifest(rows, path):
 
 
 def prepare_cityflowv2(root: Path, output: Path):
-    """Prepare CityFlowV2 dataset - verify structure and list cameras.
-
-    After download_datasets.py, CityFlowV2 is organised as:
-        data/raw/cityflowv2/S001_c001/vdo.avi + gt.txt
-        data/raw/cityflowv2/S001_c002/vdo.avi + gt.txt
-        ...
-
-    This function verifies the structure and prints a summary.
-    The pipeline reads videos directly from these camera folders.
-    """
+    """Prepare CityFlowV2 dataset - verify structure and list cameras."""
     cameras = []
     total_gt_tracks = 0
 
@@ -172,11 +154,7 @@ def prepare_cityflowv2(root: Path, output: Path):
 
 
 def prepare_wildtrack(root: Path, output: Path):
-    """Prepare WILDTRACK dataset - convert JSON annotations to MOT format.
-
-    Converts the WILDTRACK per-frame JSON annotations into per-camera
-    MOTChallenge-format gt.txt files that the evaluation stage can use.
-    """
+    """Prepare WILDTRACK dataset - convert JSON annotations to MOT format."""
     ann_dir = root / "annotations_positions"
     if not ann_dir.exists():
         print(f"  Warning: annotations_positions/ not found in {root}")

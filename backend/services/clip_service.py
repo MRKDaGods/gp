@@ -100,15 +100,7 @@ def _stage0_frame_path(run_id: str, camera_id: str, frame_id: int) -> Optional[P
 
 
 def _resolve_stage0_camera_dir(run_id: str, camera_id: str) -> Optional[Path]:
-    """Directory with extracted stage0 frames for a camera.
-
-    Stage0 dirs may be named with the FULL camera id (e.g. ``S01_c002``) or a normalized
-    short id (e.g. ``c002``). ``_normalize_camera_id`` collapses ``S01_c002`` -> ``c002``,
-    so resolving by the normalized id alone 404s when the dir on disk keeps the scene
-    prefix. Try the raw id first (matches what the crops endpoint does), then the
-    normalized id, then any sibling whose normalized name matches - so this works
-    regardless of the on-disk naming convention.
-    """
+    """Directory with extracted stage0 frames for a camera."""
     raw = str(camera_id or "").strip()
     cam = _normalize_camera_id(raw)
     names = [n for n in (raw, cam) if n]
@@ -278,14 +270,7 @@ def _generate_annotated_summary_video(
     target_fps: float = 10.0,
     include_clips: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Path]:
-    """Generate a stitched full-frame annotated video for a run's matched trajectory.
-
-    Reads matched/summary.json, loads stage1 tracklets, draws bounding boxes
-    on stage0 frames, and concatenates all camera segments with transition cards.
-    Saves to stage6/summary.mp4 (full) or stage6/summary_sel_<hash>.mp4 (subset).
-    Optional ``include_clips`` limits which cameras/tracks are stitched (timeline selection).
-    Returns the path on success, None on failure.
-    """
+    """Generate a stitched full-frame annotated video for a run's matched trajectory."""
     if not _HAS_CV2:
         return None
     import cv2 as _cv2

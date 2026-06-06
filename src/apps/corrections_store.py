@@ -1,8 +1,4 @@
-"""Corrections database for forensic identity reassignment.
-
-Stores analyst corrections (reassign, merge, split) with audit trail
-in a SQLite database alongside the pipeline run outputs.
-"""
+"""Corrections database for forensic identity reassignment."""
 
 from __future__ import annotations
 

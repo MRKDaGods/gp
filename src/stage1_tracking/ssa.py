@@ -54,11 +54,7 @@ def _best_recent_detection(
 
 
 def apply_ssa(tracklets: List[Tracklet], cfg: Any) -> List[Tracklet]:
-    """Freeze stationary tracklet boxes to recent high-confidence detections.
-
-    This is a default-off Stage 1 post-processing pass. Interpolated boxes
-    (confidence == 0) can be overwritten, but they are never used as anchors.
-    """
+    """Freeze stationary tracklet boxes to recent high-confidence detections."""
     if not bool(_cfg_get(cfg, "enabled", True)):
         return tracklets
 

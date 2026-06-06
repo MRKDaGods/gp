@@ -8,42 +8,19 @@ import numpy as np
 
 
 def l2_normalize(embeddings: np.ndarray) -> np.ndarray:
-    """L2-normalize each row of an embedding matrix.
-
-    Args:
-        embeddings: (N, D) float array.
-
-    Returns:
-        (N, D) L2-normalized array (each row has unit norm).
-    """
+    """L2-normalize each row of an embedding matrix."""
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
     norms = np.clip(norms, a_min=1e-8, a_max=None)
     return (embeddings / norms).astype(np.float32)
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Compute cosine similarity matrix between two sets of L2-normed embeddings.
-
-    Args:
-        a: (N, D) L2-normalized embeddings.
-        b: (M, D) L2-normalized embeddings.
-
-    Returns:
-        (N, M) similarity matrix with values in [-1, 1].
-    """
+    """Compute cosine similarity matrix between two sets of L2-normed embeddings."""
     return np.dot(a, b.T).astype(np.float32)
 
 
 def cosine_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Compute cosine distance (1 - similarity) between two sets of embeddings.
-
-    Args:
-        a: (N, D) L2-normalized embeddings.
-        b: (M, D) L2-normalized embeddings.
-
-    Returns:
-        (N, M) distance matrix with values in [0, 2].
-    """
+    """Compute cosine distance (1 - similarity) between two sets of embeddings."""
     return (1.0 - cosine_similarity(a, b)).astype(np.float32)
 
 
@@ -52,23 +29,7 @@ def camera_aware_batch_normalize(
     camera_ids: List[str],
     epsilon: float = 1e-6,
 ) -> np.ndarray:
-    """Per-camera batch normalization of embeddings.
-
-    Different cameras have different illumination, exposure, and colour
-    profiles.  Embeddings from a dark camera tend to cluster separately
-    from those of a bright camera even for the same person.  This function
-    zero-means and unit-variances each embedding dimension **per camera**,
-    aligning the distributions before cross-camera matching.
-
-    Args:
-        embeddings: (N, D) float32 matrix.
-        camera_ids: Camera ID string for each of the N embeddings.
-        epsilon: Small constant to avoid division by zero.
-
-    Returns:
-        (N, D) camera-BN'd embeddings (not yet L2-normalized -
-        caller should apply ``l2_normalize`` afterwards).
-    """
+    """Per-camera batch normalization of embeddings."""
     result = embeddings.copy()
     unique_cameras = set(camera_ids)
 

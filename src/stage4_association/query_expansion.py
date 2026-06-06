@@ -1,15 +1,5 @@
 """Average Query Expansion (AQE) for ReID feature refinement.
-
-Implements the query expansion technique that averages each embedding
-with its top-K nearest neighbours from the gallery, then re-normalises
-to unit length.  This smooths noise and makes embeddings more robust
-to viewpoint / lighting changes.
-
-Reference:
-    Chum et al., "Total Recall: Automatic Query Expansion with a
-    Generative Feature Model for Object Retrieval", ICCV 2007.
-
-Used in gp-stage-2 (FastReID baseline) with k=5.
+Reference:; Chum et al., "Total Recall: Automatic Query Expansion with a; Generative Feature Model for Object Retrieval", ICCV 2007.
 """
 
 from __future__ import annotations
@@ -26,31 +16,7 @@ def average_query_expansion(
     alpha: float = 1.0,
     faiss_index=None,
 ) -> np.ndarray:
-    """Apply Average Query Expansion (AQE) to embeddings.
-
-    For each embedding, averages it with its top-*k* nearest neighbours
-    (weighted equally), then L2-normalises the result.  This 'smooths'
-    embeddings toward their local neighbourhood, amplifying genuine
-    similarity and suppressing noise.
-
-    Args:
-        embeddings: (N, D) L2-normalised embedding matrix.
-        indices: (N, K) FAISS nearest-neighbour indices from initial retrieval.
-            Each row contains the top-K neighbour IDs for the corresponding
-            embedding.  Negative values (FAISS sentinel) are ignored.
-        k: Number of neighbours to include in expansion.  Must be
-            <= indices.shape[1].
-        alpha: Weight for the original embedding vs neighbours.
-            With alpha=1.0, the original query counts as 1 vote among
-            k+1 total (uniform averaging).  Higher alpha increases the
-            original query's weight relative to neighbours.
-        faiss_index: Optional FAISS index for a second-pass retrieval
-            when *indices* doesn't have enough valid columns.  Unused
-            if indices already has >= k valid neighbours per row.
-
-    Returns:
-        (N, D) L2-normalised expanded embedding matrix.
-    """
+    """Apply Average Query Expansion (AQE) to embeddings."""
     n, d = embeddings.shape
     k_available = indices.shape[1] if indices.ndim == 2 else 0
 
@@ -95,20 +61,7 @@ def average_query_expansion_batched(
     k: int = 5,
     alpha: float = 1.0,
 ) -> np.ndarray:
-    """Vectorised variant of AQE - faster for large N.
-
-    Semantics match :func:`average_query_expansion` (same weighting, same
-    handling of invalid indices and of rows with no valid neighbours).
-
-    Args:
-        embeddings: (N, D) L2-normalised embedding matrix.
-        indices: (N, K) neighbour indices, first *k* columns used (after k_use).
-        k: Neighbours per query.
-        alpha: Original-query weight.
-
-    Returns:
-        (N, D) L2-normalised expanded embedding matrix.
-    """
+    """Vectorised variant of AQE - faster for large N."""
     n, d = embeddings.shape
     k_available = indices.shape[1] if indices.ndim == 2 else 0
 

@@ -1,9 +1,4 @@
-"""Entry point: run a single pipeline stage.
-
-Usage:
-    python scripts/run_stage.py --config configs/default.yaml --stage 0
-    python scripts/run_stage.py --config configs/default.yaml --stage 1 --smoke-test
-"""
+"""Entry point: run a single pipeline stage."""
 
 from __future__ import annotations
 

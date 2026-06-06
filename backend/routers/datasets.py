@@ -64,15 +64,7 @@ def _load_camera_coordinates(dataset_path: Path) -> Dict[str, Any]:
 
 
 def _scan_input_dir_cameras(input_dir: Path) -> Tuple[str, List[Dict[str, Any]]]:
-    """Inspect a folder and report its layout + cameras.
-
-    Returns (layout, cameras) where layout is one of:
-      - "per_camera": subfolders each containing a video (CityFlow: <cam>/vdo.avi)
-      - "flat":       video files directly inside (WILDTRACK: C1.mp4, C2.mp4, ...)
-      - "empty":      a real folder with no videos
-      - "missing":    the folder does not exist
-    cameras: [{id, hasVideo, file}]
-    """
+    """Inspect a folder and report its layout + cameras."""
     if not input_dir.exists() or not input_dir.is_dir():
         return ("missing", [])
 
@@ -108,9 +100,7 @@ def _dataset_video_records(
     cameras: List[Dict[str, Any]],
     selected: Optional[List[str]],
 ) -> List[Dict[str, Any]]:
-    """Build {id, cameraId, path, name} for each (selected) camera video. Ids are
-    the same deterministic uuid5(path) used everywhere, so a run rebuilt from
-    these records resolves to the same videos."""
+    """Build {id, cameraId, path, name} for each (selected) camera video. Ids are"""
     selected_set = set(selected) if selected else None
     records: List[Dict[str, Any]] = []
     for cam in cameras:
@@ -149,11 +139,7 @@ def _first_video_path(
 
 @router.get("/api/datasets/available")
 async def available_datasets():
-    """List selectable tracking datasets, read from configs/datasets/*.yaml.
-
-    Each dataset's `stage0.input_dir` is resolved and scanned so the UI can show
-    its cameras and whether the footage is actually present on disk.
-    """
+    """List selectable tracking datasets, read from configs/datasets/*.yaml."""
     out: List[Dict[str, Any]] = []
     if not DATASET_CONFIG_DIR.exists():
         return {"success": True, "data": out}
@@ -267,12 +253,7 @@ async def browse_datasets(path: str = ""):
 
 @router.get("/api/datasets/videos")
 async def dataset_videos(inputDir: str, state: AppState = Depends(get_app_state)):
-    """Return the camera videos inside a chosen dataset/folder as gallery records.
-
-    Each video is registered into the in-memory catalogue (stable id) so it is
-    immediately streamable and usable by the Stage 1 flow. This lets the gallery
-    reflect the *selected* dataset instead of a fixed startup scan.
-    """
+    """Return the camera videos inside a chosen dataset/folder as gallery records."""
     resolved = Path(inputDir).resolve()
     root = DATASET_BROWSE_ROOT.resolve()
     if resolved != root and root not in resolved.parents:
@@ -309,11 +290,7 @@ async def run_dataset_input(
     payload: Dict[str, Any] = Body(...),
     state: AppState = Depends(get_app_state),
 ):
-    """Start a pipeline run against a chosen input folder (dataset or custom).
-
-    Body: { inputDir: str, name?: str, stages?: str (default "0"), smoke?: bool }
-    The folder must resolve under the browse root or an existing dataset input.
-    """
+    """Start a pipeline run against a chosen input folder (dataset or custom)."""
     input_dir = str(payload.get("inputDir") or "").strip()
     if not input_dir:
         raise HTTPException(status_code=422, detail="inputDir is required")

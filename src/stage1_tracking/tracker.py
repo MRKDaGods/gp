@@ -14,12 +14,7 @@ from src.core.data_models import Detection
 
 
 def _patch_boxmot_unfreeze_for_numpy_arrays() -> None:
-    """Patch DeepOCSORT KF unfreeze to handle vector-shaped history entries.
-
-    BoxMOT 16 can raise:
-    "TypeError: only 0-dimensional arrays can be converted to Python scalars"
-    when historical measurements are stored as (4, 1) arrays.
-    """
+    """Patch DeepOCSORT KF unfreeze to handle vector-shaped history entries."""
     try:
         from boxmot.motion.kalman_filters.aabb.xysr_kf import KalmanFilterXYSR
     except Exception:
@@ -151,17 +146,7 @@ class TrackerWrapper:
     def update(
         self, detections: list[Detection] | np.ndarray, frame: np.ndarray
     ) -> np.ndarray:
-        """Update tracker with new detections for one frame.
-
-        Args:
-            detections: Either a list of Detection objects or a (N, 6) numpy array
-                       [x1, y1, x2, y2, confidence, class_id].
-            frame: BGR uint8 numpy array (H, W, 3).
-
-        Returns:
-            np.ndarray of shape (M, 8): [x1, y1, x2, y2, track_id, confidence, class_id, det_idx]
-            Returns empty array (0, 8) if no active tracks.
-        """
+        """Update tracker with new detections for one frame."""
         if isinstance(detections, list):
             if not detections:
                 dets = np.empty((0, 6), dtype=np.float32)

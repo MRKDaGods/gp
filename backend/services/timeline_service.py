@@ -1,12 +1,4 @@
-"""TimelineService - business logic for the timeline query endpoint.
-
-Extracted from ``backend/routers/timeline.py`` (Phase 3).  The router
-retains only:
-  - FastAPI boundary concerns (HTTP 404 guard, response shaping)
-  - I/O side-effects (debug bundle export, clip exports)
-
-This module raises ``ValueError`` on invalid input; never ``HTTPException``.
-"""
+"""TimelineService - business logic for the timeline query endpoint."""
 
 from __future__ import annotations
 
@@ -38,13 +30,7 @@ from backend.services.video_service import (
 
 
 class TimelineService:
-    """Resolves Stage-2 tracklets into Stage-4 matched trajectories.
-
-    Args:
-        repo: Repository used to read pipeline artefacts.  In production
-              this is an ``InMemoryDatasetRepository``; in tests it is
-              a mock that returns fixture data.
-    """
+    """Resolves Stage-2 tracklets into Stage-4 matched trajectories."""
 
     def __init__(self, repo: DatasetRepository) -> None:
         self._repo = repo
@@ -56,18 +42,7 @@ class TimelineService:
         request: TimelineQueryRequest,
         uploaded_videos: Dict[str, Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Execute the timeline query and return the response payload.
-
-        Args:
-            request:         Validated query request.
-            uploaded_videos: Current in-memory video catalogue.
-
-        Returns:
-            Response payload dict with keys ``success`` and ``data``.
-
-        Raises:
-            ValueError: If the requested video_id is not in uploaded_videos.
-        """
+        """Execute the timeline query and return the response payload."""
         if request.videoId not in uploaded_videos:
             raise ValueError(f"Video not found: {request.videoId!r}")
 
@@ -195,16 +170,7 @@ class TimelineService:
         request: TimelineQueryRequest,
         uploaded_videos: Dict[str, Dict[str, Any]],
     ) -> Tuple[Dict[str, Any], List[Tuple[float, Dict[str, Any]]]]:
-        """Like :meth:`query` but also returns ranked candidates for alternatives export.
-
-        The ``query()`` method is called internally - its signature and
-        return value are completely unchanged.  This wrapper intercepts
-        the ``_ranked_candidates_for_export`` stashed by
-        ``_run_visual_search`` *before* ``query()`` pops it.
-
-        Returns:
-            ``(response_payload, ranked_candidates)``
-        """
+        """Like :meth:`query` but also returns ranked candidates for alternatives export."""
         # We need the ranked candidates that _run_visual_search stashes in
         # diag *before* query() pops them.  The simplest, non-invasive way
         # is to re-run the same logic that query() runs, but capture the
@@ -238,12 +204,7 @@ class TimelineService:
         probe_run_id: str,
         gallery_run_id: str,
     ) -> Tuple[Optional[EmbeddingArtifact], Optional[EmbeddingArtifact]]:
-        """Load probe and gallery embedding artefacts from the repository.
-
-        For cross-run queries (probe != gallery), loads raw (pre-BN, pre-PCA)
-        probe embeddings and applies only PCA to avoid camera-BN distribution
-        mismatch between the two runs.
-        """
+        """Load probe and gallery embedding artefacts from the repository."""
         gallery = self._repo.load_embedding_artifact(gallery_run_id)
 
         if gallery_run_id == probe_run_id:
@@ -298,11 +259,7 @@ class TimelineService:
         probe: EmbeddingArtifact,
         gallery: EmbeddingArtifact,
     ) -> EmbeddingArtifact:
-        """Project probe embeddings to gallery dimensionality using the saved PCA.
-
-        Returns the (possibly unchanged) probe artifact.  Only applies when
-        ``probe.dim > gallery.dim`` and PCA model file exists.
-        """
+        """Project probe embeddings to gallery dimensionality using the saved PCA."""
         if probe.dim <= gallery.dim:
             return probe
         pca_path = PCA_MODEL_PATH
@@ -331,11 +288,7 @@ class TimelineService:
         selected_nums: set,
         trajectories: List[Dict[str, Any]],
     ) -> Tuple[List[Tuple[float, Dict[str, Any]]], Dict[str, Any]]:
-        """Cosine similarity scoring of trajectories against selected probes.
-
-        Returns ``(scored_trajectories, extra_diag_fields)`` where
-        ``scored_trajectories`` is sorted descending by score.
-        """
+        """Cosine similarity scoring of trajectories against selected probes."""
         extra: Dict[str, Any] = {}
 
         # Build gallery row-index lookup: (cam, tid) -> [row indices]

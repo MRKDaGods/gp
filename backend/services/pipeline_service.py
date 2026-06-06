@@ -243,10 +243,7 @@ def _append_stage2_checkpoint_overrides(
     checkpoint: CheckpointRef,
     architecture: ModelArchitecture,
 ) -> Dict[str, Any]:
-    """Emit the Stage-2 enable overrides for a bundled stream described by a
-    per-checkpoint architecture block. Mirrors _append_stage2_fusion_overrides
-    but sources the weights from the checkpoint_ref (not the primary checkpoint)
-    and translates the registry arch name to the Stage-2 builder's model_name."""
+    """Emit the Stage-2 enable overrides for a bundled stream described by a"""
     model_name = _ARCH_TO_STAGE2_MODEL_NAME.get(architecture.arch, architecture.arch)
     slot_config: Dict[str, Any] = {
         "enabled": True,
@@ -314,19 +311,7 @@ def _wire_bundled_fusion_streams(
     model: ModelEntry,
     overrides: List[str],
 ) -> Optional[Dict[str, Any]]:
-    """Wire the Stage-4 ensemble streams that a single bundled model declares via
-    `stage4.association.<slot>_embeddings.weight=W` overrides.
-
-    For each slot with W>0 this appends a DYNAMIC, run-scoped Stage-4 embedding
-    path (so the stream actually loads - the YAML default `run_latest` path never
-    exists) and, when the stream needs its own Stage-2 extractor, the Stage-2
-    enable overrides. A weight>0 stream that is neither wireable (no checkpoint
-    architecture) nor already enabled in the pipeline_config raises rather than
-    silently degrading to primary-only.
-
-    Returns a fusion_resolved dict (so callers no longer report these as single),
-    or None when the model declares no ensemble streams.
-    """
+    """Wire the Stage-4 ensemble streams that a single bundled model declares via"""
     slot_weights = _parse_ensemble_slot_weights(list(model.model_overrides))
     active = {slot: w for slot, w in slot_weights.items() if w > 0.0}
     if not active:
@@ -502,12 +487,7 @@ def resolve_pipeline_model(
     *,
     _wire_bundled_streams: bool = True,
 ) -> PipelineModelResolution:
-    """Resolve an optional registry model selection into pipeline run settings.
-
-    `_wire_bundled_streams` is an internal flag: the FusionConfig path reuses this
-    function to build the primary's base resolution and re-wires the ensemble
-    itself, so it disables the bundled-stream wiring to avoid double-wiring.
-    """
+    """Resolve an optional registry model selection into pipeline run settings."""
     requested_dataset = _normalise_dataset(dataset)
 
     if fusion is not None:
@@ -608,10 +588,7 @@ def _resolve_run_id(requested_run_id: Optional[str]) -> str:
 
 
 def _write_run_context(run_id: str, payload: Dict[str, Any]) -> None:
-    """Persist lightweight run metadata to help auditing and dataset discovery.
-
-    Merges into any existing context so per-stage runs don't drop fields written
-    at run creation (videos, inputDir, etc.)."""
+    """Persist lightweight run metadata to help auditing and dataset discovery."""
     try:
         run_dir = OUTPUT_DIR / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -772,10 +749,7 @@ def describe_run(run_dir: Path) -> Dict[str, Any]:
 
 
 def _cleanup_empty_run_dirs() -> int:
-    """Remove orphan numeric run dirs that are completely empty - leftovers from a
-    run id that was allocated (the allocator pre-creates the dir) but never wrote
-    config/context (e.g. a request that failed validation after allocation). They
-    don't show in the runs list but would otherwise accumulate as phantom ids."""
+    """Remove orphan numeric run dirs that are completely empty - leftovers from a"""
     removed = 0
     try:
         for child in OUTPUT_DIR.iterdir():
@@ -794,9 +768,7 @@ def _cleanup_empty_run_dirs() -> int:
 
 
 def rehydrate_runs_from_disk() -> int:
-    """Rebuild in-memory run state from disk on startup so runs survive a backend
-    restart. Registers light video records + video->run mapping (no video probing)
-    and a placeholder active_runs entry per run. Existing in-memory state wins."""
+    """Rebuild in-memory run state from disk on startup so runs survive a backend"""
     _cleanup_empty_run_dirs()
     count = 0
     # Process in id order so the most recent run wins the video->run mapping.
@@ -944,6 +916,7 @@ def _build_pipeline_cmd(
     dataset: Optional[str] = None,
     pipeline_config: Optional[str] = None,
     model_overrides: Optional[List[str]] = None,
+    camera_coordinates_path: Optional[str] = None,
 ) -> list:
     """Build the subprocess command for run_pipeline.py."""
     effective_use_cpu = use_cpu or not _cuda_available_for_pipeline()
@@ -966,6 +939,12 @@ def _build_pipeline_cmd(
     ]
     for override in model_overrides or []:
         cmd.extend(["--override", override])
+    if camera_coordinates_path:
+        # Point the geospatial constraint at this dataset's coordinates.
+        cmd.extend([
+            "--override",
+            f"stage4.association.geospatial.camera_coordinates_path={camera_coordinates_path}",
+        ])
     if camera_id:
         cmd.extend(["--override", f"stage0.cameras=[{camera_id}]"])
     if smoke_test:
@@ -1470,10 +1449,14 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
         app_state.active_runs[run_id]["progress"] = 1
         input_dir = _prepare_dataset_input_for_run(run_id, dataset_path)
 
+        coords_file = dataset_path / "camera_coordinates.json"
         cmd = _build_pipeline_cmd(
             stages="0,1,2,3,4",
             run_id=run_id,
             input_dir=input_dir.as_posix(),
+            camera_coordinates_path=(
+                coords_file.as_posix() if coords_file.exists() else None
+            ),
         )
 
         app_state.active_runs[run_id]["message"] = "Running Ingestion & Pre-Processing..."
@@ -1535,26 +1518,21 @@ async def _execute_input_dir_pipeline(
     label: str,
     cameras: Optional[List[str]] = None,
 ):
-    """Background task: run the selected stages directly against a source folder.
-
-    Unlike `_execute_dataset_pipeline`, this does NOT copy videos into the run
-    dir - it points `stage0.input_dir` at the chosen folder. Stage 0's own video
-    discovery handles both the per-camera (`<cam>/vdo.avi`) and flat
-    (`C1.mp4`, `C2.mp4`, ...) layouts, so this works for every dataset.
-
-    If `cameras` is given, only those cameras are processed (via a
-    `stage0.cameras=[...]` override), enabling multi-camera subset selection.
-    """
+    """Background task: run the selected stages directly against a source folder."""
     try:
         stage_nums = [int(s) for s in stages.split(",") if s.strip().isdigit()]
         app_state.active_runs[run_id]["message"] = f"Running ingestion on {label}..."
         app_state.active_runs[run_id]["progress"] = 2
 
+        coords_file = Path(input_dir) / "camera_coordinates.json"
         cmd = _build_pipeline_cmd(
             stages=stages,
             run_id=run_id,
             input_dir=Path(input_dir).as_posix(),
             smoke_test=smoke_test,
+            camera_coordinates_path=(
+                coords_file.as_posix() if coords_file.exists() else None
+            ),
         )
         if cameras:
             cam_list = ",".join(cameras)

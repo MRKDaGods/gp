@@ -1,8 +1,4 @@
-"""Multi-camera synchronized grid video renderer.
-
-Generates an MP4 showing all cameras side-by-side with a highlighted
-global trajectory, allowing visual verification of cross-camera tracking.
-"""
+"""Multi-camera synchronized grid video renderer."""
 
 from __future__ import annotations
 
@@ -90,11 +86,7 @@ class FrameReader:
     """Reads stage-0 extracted JPEG frames, resizing on the fly."""
 
     def __init__(self, stage0_dir: Path, target_size: Tuple[int, int]):
-        """
-        Args:
-            stage0_dir: Directory containing per-camera frame folders.
-            target_size: (width, height) to resize each frame to.
-        """
+        """Args:"""
         self.stage0_dir = Path(stage0_dir)
         self.target_size = target_size
         self._frame_range: Optional[Tuple[int, int]] = None

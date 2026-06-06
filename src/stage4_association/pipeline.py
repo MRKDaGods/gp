@@ -1,14 +1,4 @@
-"""Stage 4 - Multi-Camera Association pipeline.
-
-Performs cross-camera tracklet association using appearance, color, and
-spatio-temporal cues. Produces global trajectories with unified IDs.
-
-Improvements over baseline:
-* Mutual nearest-neighbour filtering before re-ranking.
-* FAISS index passed to sparse re-ranking (avoids full N^2).
-* Class-adaptive similarity weights (person vs vehicle).
-* Iterative gallery expansion for orphan tracklets.
-"""
+"""Stage 4 - Multi-Camera Association pipeline."""
 
 from __future__ import annotations
 
@@ -28,6 +18,10 @@ from src.stage3_indexing.metadata_store import MetadataStore
 from src.stage4_association.camera_bias import CameraDistanceBias
 from src.stage4_association.aflink import aflink_post_association
 from src.stage4_association.fic import per_camera_whiten, cross_camera_augment, iterative_fac
+from src.stage4_association.geospatial import (
+    build_geo_constraint_from_config,
+    prune_unreachable_pairs,
+)
 from src.stage4_association.global_trajectories import merge_tracklets_to_trajectories
 from src.stage4_association.graph_solver import GraphSolver
 from src.stage4_association.query_expansion import average_query_expansion_batched
@@ -120,20 +114,7 @@ def run_stage4(
     output_dir: str | Path,
     query_cameras: Optional[Set[str]] = None,
 ) -> List[GlobalTrajectory]:
-    """Run cross-camera association.
-
-    Args:
-        cfg: Full pipeline config (uses cfg.stage4).
-        faiss_index: Built FAISS index from Stage 3.
-        metadata_store: Populated metadata store from Stage 3.
-        features: TrackletFeatures from Stage 2.
-        tracklets_by_camera: Tracklets from Stage 1.
-        output_dir: Directory for stage4 outputs.
-        query_cameras: If provided, filter final trajectories to only those involving these cameras.
-
-    Returns:
-        List of GlobalTrajectory objects.
-    """
+    """Run cross-camera association."""
     stage_cfg = cfg.stage4.association
     solver_algorithm = _resolve_stage4_solver(stage_cfg)
     output_dir = Path(output_dir)
@@ -356,6 +337,22 @@ def run_stage4(
             f"temporal analysis may be degraded"
         )
 
+    # Geospatial reachability constraint (reused for candidate pruning and
+    # scoring). None unless enabled and the dataset has camera coordinates.
+    geo_cfg = stage_cfg.get("geospatial", {})
+    geo_constraint = None
+    geo_gate = bool(geo_cfg.get("gate", True))
+    geo_weight = float(geo_cfg.get("weight", 0.0))
+    if geo_cfg.get("enabled", False):
+        geo_constraint = build_geo_constraint_from_config(geo_cfg)
+        if geo_constraint is not None:
+            logger.info(
+                f"Geospatial constraint active: {len(geo_constraint.coordinates)} "
+                f"cameras (gate={geo_gate}, weight={geo_weight:.2f})"
+            )
+        else:
+            logger.info("Geospatial enabled but <2 cameras have coordinates; skipping")
+
     # Step 1: FAISS top-K retrieval
     # If FIC/FAC modified embeddings, rebuild FAISS from the updated features
     # so KNN retrieval (used by QE and reranking) is consistent.
@@ -460,6 +457,21 @@ def run_stage4(
             f"overlapping pairs (impossible same-identity links)"
         )
 
+    # Step 2a-geo: Geospatial reachability pre-filter. Drop cross-camera pairs
+    # too far apart to be reached in the elapsed time, before re-ranking and
+    # similarity, to keep the search area small.
+    if geo_constraint is not None and geo_gate:
+        pre_geo = len(candidate_pairs)
+        candidate_pairs, geo_removed = prune_unreachable_pairs(
+            candidate_pairs, camera_ids, class_ids, start_times, end_times,
+            geo_constraint,
+        )
+        if geo_removed > 0:
+            logger.info(
+                f"Geospatial pre-filter: removed {geo_removed} unreachable "
+                f"cross-camera pairs ({pre_geo} -> {len(candidate_pairs)})"
+            )
+
     # Step 2b: Mutual nearest-neighbour filter
     mutual_nn_cfg = stage_cfg.get("mutual_nn", {})
     if mutual_nn_cfg.get("enabled", True):
@@ -533,6 +545,9 @@ def run_stage4(
         temporal_overlap_cfg=stage_cfg.get("temporal_overlap"),
         occluded_flags=occluded_flags,
         occ_penalty=float(occ_cfg.get("penalty", 1.0)),
+        geo_constraint=geo_constraint,
+        geo_gate=geo_gate,
+        geo_weight=geo_weight,
     )
 
     logger.info(f"Combined similarity pairs: {len(combined_sim)}")
@@ -1074,6 +1089,7 @@ def run_stage4(
             index_map=[{"camera_id": f.camera_id, "track_id": f.track_id, "class_id": f.class_id}
                        for f in features],
             trajectories=trajectories,
+            geo_constraint=geo_constraint,
         )
         engine.export_forensic_report(output_dir, min_confidence=0.0, min_cameras=1)
     except Exception as exc:
@@ -1115,12 +1131,7 @@ def _build_candidate_pairs(
 
 
 def _extract_scene(camera_id: str) -> str:
-    """Extract scene prefix from camera ID.
-
-    E.g. 'S01_c001' -> 'S01', 'cam1' -> '' (no scene prefix).
-    Used for scene blocking: cameras from different scenes should never
-    be linked (they are physically separate locations).
-    """
+    """Extract scene prefix from camera ID."""
     parts = camera_id.split("_")
     if len(parts) >= 2 and parts[0][:1].upper() == "S" and parts[0][1:].isdigit():
         return parts[0]
@@ -1135,31 +1146,7 @@ def _build_all_cross_camera_pairs(
     min_similarity: float = 0.0,
 ) -> List[Tuple[int, int, float]]:
     """Exhaustive cross-camera candidate pair generation via brute-force cosine similarity.
-
     This is SOTA practice for MTMC with <=2000 tracklets: compute ALL cross-camera
-    pairwise cosine similarities rather than relying on FAISS top-K retrieval.
-    FAISS top-K can miss true matches when many visually-similar vehicles push
-    genuine cross-camera pairs below the top-K cutoff.
-
-    **Scene blocking**: Camera pairs from different scenes (e.g. S01 vs S02) are
-    skipped entirely.  This prevents cross-scene vehicles from contaminating
-    the mutual-NN neighbourhoods, which would otherwise displace valid same-scene
-    matches from the top-K slots.
-
-    Handles the matrix computation camera-pair-by-camera-pair to keep peak memory
-    usage proportional to the largest camera's tracklet count (not N^2).
-
-    Args:
-        n: Total number of tracklets.
-        embeddings: (N, D) L2-normalised embedding matrix.
-        camera_ids: Camera ID for each tracklet.
-        class_ids: Class ID for each tracklet.
-        min_similarity: Pairs below this threshold are discarded (reduces downstream
-            memory; 0.0 keeps everything and lets the mutual-NN filter decide).
-
-    Returns:
-        List of (i, j, similarity) tuples, one per cross-camera same-class pair
-        with similarity >= min_similarity.
     """
     # Group tracklet indices by camera
     from collections import defaultdict
@@ -1229,12 +1216,7 @@ def _build_all_cross_camera_pairs_multi_query(
     min_similarity: float = 0.0,
     mq_weight: float = 0.5,
 ) -> List[Tuple[int, int, float]]:
-    """Exhaustive cross-camera candidate generation with MQ-aware appearance.
-
-    Each pair blends the original averaged similarity with a max-of-KxK
-    multi-query similarity. If only one side has MQ embeddings, the MQ branch
-    falls back to a Kx1 max against the other tracklet's averaged embedding.
-    """
+    """Exhaustive cross-camera candidate generation with MQ-aware appearance."""
     from collections import defaultdict
 
     cam_to_idxs: Dict[str, List[int]] = defaultdict(list)
@@ -1307,27 +1289,7 @@ def _reciprocal_best_match(
     st_validator: SpatioTemporalValidator,
     min_similarity: float = 0.20,
 ) -> Dict[Tuple[int, int], float]:
-    """Find reciprocal best-match pairs across cameras (threshold-free).
-
-    For each tracklet i, find its highest-similarity match j in each other
-    camera.  If j's best match in camera(i) is also i, and the similarity
-    exceeds a loose floor, they form a reciprocal best-match pair.
-
-    This is robust to absolute similarity compression because it's rank-based:
-    even if max cross-camera similarity is only 0.35, that's still good enough
-    if it's the BEST match on both sides.
-
-    Args:
-        combined_sim: Pairwise combined similarity scores.
-        camera_ids: Camera ID for each tracklet.
-        class_ids: Class ID for each tracklet.
-        start_times, end_times: Temporal bounds per tracklet.
-        st_validator: Spatio-temporal validator.
-        min_similarity: Absolute floor - pairs below this are never linked.
-
-    Returns:
-        Dict of reciprocal best-match pairs and their similarities.
-    """
+    """Find reciprocal best-match pairs across cameras (threshold-free)."""
     from collections import defaultdict
 
     # Build per-tracklet best match in each other camera
@@ -1380,14 +1342,7 @@ def _compute_cluster_centroids(
     clusters: List[Set[int]],
     embeddings: np.ndarray,
 ) -> np.ndarray:
-    """Compute L2-normalised centroid for each cluster.
-
-    Centroids average out viewpoint-specific noise, making them more
-    discriminative than individual embeddings for cross-camera matching.
-
-    Returns:
-        (C, D) matrix of cluster centroids, one per cluster.
-    """
+    """Compute L2-normalised centroid for each cluster."""
     centroids = np.zeros((len(clusters), embeddings.shape[1]), dtype=np.float32)
     for ci, cluster in enumerate(clusters):
         members = list(cluster)
@@ -1413,19 +1368,7 @@ def _hierarchical_centroid_expansion(
     combined_sim: Dict[Tuple[int, int], float],
     hierarch_cfg: dict,
 ) -> List[Set[int]]:
-    """Hierarchical multi-pass association (AIC21/22 SOTA technique).
-
-    After initial graph clustering:
-    1. **Centroid expansion**: Compute cluster centroids (averaged embeddings),
-       then absorb orphans whose centroid similarity exceeds a lower threshold.
-       Centroids are more robust because noise averages out across viewpoints.
-    2. **Cluster-to-cluster merging**: Try to merge small clusters together
-       using centroid-to-centroid cosine similarity.
-    3. **Orphan-to-orphan recovery**: Link remaining orphans at the loosest
-       threshold with strict constraints.
-
-    Each pass resolves same-camera conflicts before proceeding to the next.
-    """
+    """Hierarchical multi-pass association (AIC21/22 SOTA technique)."""
     centroid_threshold = float(hierarch_cfg.get("centroid_threshold", 0.35))
     merge_threshold = float(hierarch_cfg.get("merge_threshold", 0.35))
     orphan_threshold = float(hierarch_cfg.get("orphan_threshold", 0.30))
@@ -1773,24 +1716,7 @@ def _try_temporal_split(
     min_gap: float,
     split_threshold: float,
 ) -> List[Set[int]]:
-    """Recursively split a member group at the largest temporal silence gap.
-
-    A silence gap is a time interval [gap_start, gap_end] where every member
-    that started before gap_start has also ended before gap_start (i.e., no
-    member is active during the gap).  The gap is found via a start-time-sorted
-    sweep: after processing member m_i, ``max_end_so_far`` is the latest end
-    time of all members m_0..m_i.  If m_{i+1}.start > max_end_so_far, the
-    interval [max_end_so_far, m_{i+1}.start] is a true silence gap.
-
-    A split is only applied when:
-    1. The largest silence gap >= min_gap seconds.
-    2. The average cross-gap cosine similarity between group_a (members that
-       ended before the gap) and group_b (members that start after the gap)
-       is strictly less than split_threshold.  High similarity means same
-       vehicle - in that case we keep the cluster intact.
-
-    Returns a list of sub-cluster sets (possibly [set(members)] if no split).
-    """
+    """Recursively split a member group at the largest temporal silence gap."""
     if len(members) < 2:
         return [set(members)]
 
@@ -1855,23 +1781,7 @@ def _temporal_split_clusters(
     min_gap: float = 60.0,
     split_threshold: float = 0.50,
 ) -> List[Set[int]]:
-    """Apply sub-cluster temporal splitting to all clusters.
-
-    For each cluster, attempts to split at temporal silence gaps using
-    `_try_temporal_split`.  Single-member clusters are passed through unchanged.
-
-    Args:
-        clusters: List of cluster sets.
-        start_times: Tracklet start times.
-        end_times: Tracklet end times.
-        embeddings: L2-normalised embedding matrix (N, D).
-        min_gap: Minimum silence duration in seconds to trigger a split check.
-        split_threshold: Maximum average cross-gap cosine similarity to allow a
-            split.  Pairs above this are assumed to be the same vehicle.
-
-    Returns:
-        Updated cluster list (may contain more clusters than input).
-    """
+    """Apply sub-cluster temporal splitting to all clusters."""
     new_clusters: List[Set[int]] = []
     for cluster in clusters:
         if len(cluster) < 2:
@@ -1901,19 +1811,7 @@ def _gallery_expansion(
     orphan_match_threshold: float = 0.0,
     combined_sim: Dict[Tuple[int, int], float] | None = None,
 ) -> List[Set[int]]:
-    """Iteratively absorb orphan (singleton) tracklets into existing clusters.
-
-    Phase 1 (orphan -> cluster): For each orphan, compute average cosine
-    similarity to every cluster centroid.  If the best match exceeds
-    *threshold* and passes spatio-temporal + same-class + cross-camera checks,
-    merge the orphan.  Runs for up to *max_rounds* iterations.
-
-    Phase 2 (orphan <-> orphan): After phase 1, attempt to link remaining orphans
-    *to each other* at the lower *orphan_match_threshold*.  This catches medium-
-    confidence cross-camera pairs whose similarity score fell below the main
-    similarity_threshold (0.45) but still exceed a loose lower bound.
-    Only cross-camera, same-class, ST-valid pairs are accepted.
-    """
+    """Iteratively absorb orphan (singleton) tracklets into existing clusters."""
     for round_idx in range(max_rounds):
         # Identify orphans (singleton clusters)
         assigned = set()
@@ -2169,16 +2067,7 @@ def _resolve_same_camera_conflicts(
     end_times: List[float],
     similarities: Dict[Tuple[int, int], float],
 ) -> List[Set[int]]:
-    """Split clusters that contain temporally-overlapping same-camera tracklets.
-
-    Two tracklets from the same camera whose time spans overlap cannot be the
-    same person. When Louvain merges them transitively (A-cam0 ~ B-cam1 ~ C-cam0),
-    we need to split the cluster so A and C end up in separate identities.
-
-    Uses graph coloring on the conflict sub-graph: nodes that conflict (same-camera
-    temporal overlap) get different colors, and each color group becomes its own
-    sub-cluster. Similarity-based ordering ensures the strongest links are preserved.
-    """
+    """Split clusters that contain temporally-overlapping same-camera tracklets."""
     refined: List[Set[int]] = []
     total_splits = 0
 

@@ -1,11 +1,4 @@
-"""Spatial HSV color histogram extraction for tracklet crops.
-
-Implements horizontal-stripe spatial histograms: the crop is divided into
-*n_stripes* horizontal bands (e.g. 3 for head / torso / legs) and a
-separate HSV histogram is computed for each band.  The concatenated,
-L2-normalised vector preserves spatial colour layout - a red-top / blue-jeans
-person gets a different descriptor from blue-top / red-jeans.
-"""
+"""Spatial HSV color histogram extraction for tracklet crops."""
 
 from __future__ import annotations
 
@@ -19,11 +12,7 @@ if TYPE_CHECKING:
 
 
 class HSVExtractor:
-    """Extracts spatial HSV colour histograms from object crops.
-
-    Produces a concatenated histogram of H, S, V channels per horizontal stripe,
-    L2-normalised for use as a similarity feature.
-    """
+    """Extracts spatial HSV colour histograms from object crops."""
 
     def __init__(
         self,
@@ -40,17 +29,7 @@ class HSVExtractor:
         self.total_bins = self.bins_per_stripe * n_stripes
 
     def extract_histogram(self, crop: np.ndarray) -> np.ndarray:
-        """Extract spatial HSV histogram from a single BGR crop.
-
-        The crop is split into *n_stripes* equal horizontal bands and each
-        band gets its own histogram.  The results are concatenated.
-
-        Args:
-            crop: BGR uint8 image.
-
-        Returns:
-            Concatenated normalised histogram, shape (total_bins,).
-        """
+        """Extract spatial HSV histogram from a single BGR crop."""
         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
         h_crop = hsv.shape[0]
         stripe_h = max(h_crop // self.n_stripes, 1)
@@ -88,15 +67,7 @@ class HSVExtractor:
         crops: List[np.ndarray],
         quality_scores: List[float] | None = None,
     ) -> np.ndarray:
-        """Extract quality-weighted average spatial HSV histogram.
-
-        Args:
-            crops: List of BGR uint8 crops.
-            quality_scores: Optional per-crop quality weights.
-
-        Returns:
-            Averaged, L2-normalised histogram, shape (total_bins,).
-        """
+        """Extract quality-weighted average spatial HSV histogram."""
         if not crops:
             return np.zeros(self.total_bins, dtype=np.float32)
 
@@ -120,14 +91,7 @@ class HSVExtractor:
         self,
         scored_crops: List["QualityScoredCrop"],
     ) -> np.ndarray:
-        """Convenience wrapper accepting QualityScoredCrop objects.
-
-        Args:
-            scored_crops: List of QualityScoredCrop from CropExtractor.
-
-        Returns:
-            Quality-weighted spatial HSV histogram.
-        """
+        """Convenience wrapper accepting QualityScoredCrop objects."""
         if not scored_crops:
             return np.zeros(self.total_bins, dtype=np.float32)
         crops = [sc.image for sc in scored_crops]

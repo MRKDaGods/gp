@@ -1,8 +1,4 @@
-"""Tracklet builder: converts raw per-frame tracker outputs into Tracklet objects.
-
-Includes linear bounding-box interpolation to fill detection gaps and
-intra-camera tracklet merging to reduce fragmentation.
-"""
+"""Tracklet builder: converts raw per-frame tracker outputs into Tracklet objects."""
 
 from __future__ import annotations
 
@@ -21,20 +17,7 @@ def interpolate_tracklet_frames(
     frames: List[TrackletFrame],
     max_gap: int = 30,
 ) -> List[TrackletFrame]:
-    """Fill temporal gaps in a tracklet with linearly-interpolated bboxes.
-
-    If two consecutive observations are separated by <= *max_gap* frames,
-    intermediate ``TrackletFrame`` entries are synthesised with linearly
-    interpolated bounding boxes and confidence = 0 (so downstream stages
-    can distinguish real vs. interpolated detections).
-
-    Args:
-        frames: Sorted list of TrackletFrame (by frame_id).
-        max_gap: Maximum frame gap to interpolate across.
-
-    Returns:
-        New list with original + interpolated frames, sorted by frame_id.
-    """
+    """Fill temporal gaps in a tracklet with linearly-interpolated bboxes."""
     if len(frames) <= 1:
         return list(frames)
 
@@ -75,21 +58,7 @@ def merge_intra_camera_tracklets(
     max_time_gap: float = 5.0,
     max_iou_distance: float = 0.7,
 ) -> List[Tracklet]:
-    """Merge same-camera tracklets that are temporally close and spatially overlapping.
-
-    When the tracker loses an object and re-acquires it shortly after, two
-    separate tracklets are created for the same identity.  This function
-    greedily merges pairs whose temporal gap is <= *max_time_gap* seconds and
-    whose last/first bounding boxes have IoU >= (1 - *max_iou_distance*).
-
-    Args:
-        tracklets: List of tracklets from the same camera, sorted by start_time.
-        max_time_gap: Maximum seconds between end of A and start of B.
-        max_iou_distance: Maximum (1 - IoU) to consider a merge.
-
-    Returns:
-        Merged list of tracklets.
-    """
+    """Merge same-camera tracklets that are temporally close and spatially overlapping."""
     if len(tracklets) <= 1:
         return tracklets
 
@@ -165,15 +134,7 @@ def _compute_iou(
 
 
 class TrackletBuilder:
-    """Accumulates per-frame tracking outputs and builds Tracklet objects.
-
-    Usage:
-        builder = TrackletBuilder(camera_id="cam01")
-        for frame_info in frames:
-            tracks = tracker.update(dets, img)
-            builder.add_frame(tracks, frame_info.frame_id, frame_info.timestamp)
-        tracklets = builder.finalize()
-    """
+    """Accumulates per-frame tracking outputs and builds Tracklet objects."""
 
     def __init__(
         self,
@@ -186,17 +147,7 @@ class TrackletBuilder:
         merge_max_time_gap: float = 5.0,
         merge_max_iou_distance: float = 0.7,
     ):
-        """
-        Args:
-            camera_id: Camera identifier for all tracklets.
-            min_length: Minimum number of frames for a valid tracklet.
-            min_area: Minimum average bounding box area to keep a tracklet.
-            interpolate: Whether to interpolate missing frames in tracklets.
-            interpolation_max_gap: Maximum frame gap to interpolate across.
-            intra_merge: Whether to merge same-camera fragmented tracklets.
-            merge_max_time_gap: Max seconds gap for intra-camera merge.
-            merge_max_iou_distance: Max (1-IoU) for intra-camera merge.
-        """
+        """Args:"""
         self.camera_id = camera_id
         self.min_length = min_length
         self.min_area = min_area
@@ -217,14 +168,7 @@ class TrackletBuilder:
         frame_id: int,
         timestamp: float,
     ) -> None:
-        """Add one frame's worth of tracker output.
-
-        Args:
-            tracks: (M, 8) array: [x1, y1, x2, y2, track_id, conf, class_id, det_idx]
-                    or (M, 7) array: [x1, y1, x2, y2, track_id, conf, class_id]
-            frame_id: Frame index.
-            timestamp: Frame timestamp in seconds.
-        """
+        """Add one frame's worth of tracker output."""
         if tracks is None or len(tracks) == 0:
             return
 
@@ -249,13 +193,7 @@ class TrackletBuilder:
             self._track_classes[track_id].append(class_id)
 
     def finalize(self) -> List[Tracklet]:
-        """Build and filter Tracklet objects from accumulated data.
-
-        Filters out tracklets that are too short or have too-small bounding boxes.
-
-        Returns:
-            List of valid Tracklets, sorted by start time.
-        """
+        """Build and filter Tracklet objects from accumulated data."""
         tracklets = []
 
         for track_id, frames in self._tracks.items():

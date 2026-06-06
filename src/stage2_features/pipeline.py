@@ -1,10 +1,4 @@
-"""Stage 2 - Feature Extraction & Refinement pipeline (SOTA).
-
-Extracts ReID embeddings and spatial HSV histograms from quality-scored
-tracklet crops, applies flip augmentation, quality-weighted temporal
-attention pooling, camera-aware batch normalisation, PCA whitening,
-and L2 normalisation to produce refined feature vectors.
-"""
+"""Stage 2 - Feature Extraction & Refinement pipeline (SOTA)."""
 
 from __future__ import annotations
 
@@ -69,18 +63,7 @@ def _restore_multi_query_embeddings(
 def _load_frames_for_camera(
     stage0_dir: Path, camera_id: str, needed_frame_ids: set[int],
 ) -> dict[int, np.ndarray]:
-    """Load needed frames from Stage 0 extracted images on disk.
-
-    Falls back gracefully - returns only frames found on disk.
-
-    Args:
-        stage0_dir: Stage 0 output directory (contains per-camera subdirectories).
-        camera_id: Camera identifier (subdirectory name).
-        needed_frame_ids: Set of frame_id values to load.
-
-    Returns:
-        Dict[frame_id, BGR image].
-    """
+    """Load needed frames from Stage 0 extracted images on disk."""
     cam_dir = stage0_dir / camera_id
     if not cam_dir.exists():
         return {}
@@ -107,29 +90,7 @@ def run_stage2(
     smoke_test: bool = False,
     stage0_dir: str | Path | None = None,
 ) -> List[TrackletFeatures]:
-    """Run feature extraction on all tracklets.
-
-    Pipeline per tracklet:
-    1. Quality-aware crop selection (sharpness, size, confidence)
-    2. Flip-augmented ReID embedding extraction
-    3. Quality-weighted temporal attention pooling -> single embedding
-    4. Spatial (3-stripe) HSV histogram with quality weighting
-
-    Global post-processing:
-    5. Camera-aware batch normalisation (optional)
-    6. PCA whitening
-    7. L2 normalisation
-
-    Args:
-        cfg: Full pipeline config (uses cfg.stage2).
-        tracklets_by_camera: Dict[camera_id, List[Tracklet]] from Stage 1.
-        video_paths: Dict[camera_id, video_file_path] for crop extraction.
-        output_dir: Directory for stage2 outputs.
-        smoke_test: If True, process only first 3 tracklets per camera.
-
-    Returns:
-        List of TrackletFeatures for all processed tracklets.
-    """
+    """Run feature extraction on all tracklets."""
     stage_cfg = cfg.stage2
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

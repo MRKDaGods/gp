@@ -10,11 +10,7 @@ import numpy as np
 
 
 class MetadataStore:
-    """SQLite-backed storage for tracklet metadata.
-
-    Stores track IDs, camera IDs, timestamps, class labels, and HSV histograms
-    for each tracklet. Used by Stage 4 for spatio-temporal gating.
-    """
+    """SQLite-backed storage for tracklet metadata."""
 
     def __init__(self, db_path: str | Path):
         self.db_path = str(db_path)

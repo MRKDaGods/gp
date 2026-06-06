@@ -1,8 +1,4 @@
-"""Stage 0 - Ingestion & Pre-Processing pipeline.
-
-Reads raw videos, extracts frames at a target FPS, applies preprocessing,
-and writes frames + manifest to the stage output directory.
-"""
+"""Stage 0 - Ingestion & Pre-Processing pipeline."""
 
 from __future__ import annotations
 
@@ -23,16 +19,7 @@ def run_stage0(
     output_dir: str | Path,
     smoke_test: bool = False,
 ) -> List[FrameInfo]:
-    """Run the full ingestion pipeline.
-
-    Args:
-        cfg: Full pipeline config (uses cfg.stage0).
-        output_dir: Directory for this run's stage0 outputs.
-        smoke_test: If True, process only the first 10 frames per video.
-
-    Returns:
-        List of FrameInfo for all extracted frames across all cameras.
-    """
+    """Run the full ingestion pipeline."""
     stage_cfg = cfg.stage0
     input_dir = Path(stage_cfg.input_dir)
     output_dir = Path(output_dir)
@@ -134,11 +121,7 @@ def run_stage0(
 def _discover_videos(
     input_dir: Path, extensions: List[str]
 ) -> List[Path]:
-    """Find all video files in the input directory (recursive).
-
-    Uses explicit iteration instead of rglob so that symlinked
-    subdirectories (e.g. Kaggle dataset mounts) are followed.
-    """
+    """Find all video files in the input directory (recursive)."""
     ext_set = {e.lower() for e in extensions}
     videos = []
     for child in input_dir.iterdir():
@@ -152,11 +135,7 @@ def _discover_videos(
 
 
 def _camera_id_from_path(video_path: Path, root_dir: Path) -> str:
-    """Derive camera ID from the video's relative path.
-
-    Uses the parent directory name if nested (e.g., cam001/video.mp4 -> cam001),
-    otherwise uses the video filename stem.
-    """
+    """Derive camera ID from the video's relative path."""
     relative = video_path.relative_to(root_dir)
     if len(relative.parts) > 1:
         return relative.parts[-2]

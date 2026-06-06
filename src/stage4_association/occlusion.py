@@ -34,12 +34,7 @@ def compute_tracklet_occlusion(
     tracklets_by_camera: Dict[str, List[Tracklet]],
     cfg: Any,
 ) -> Dict[TrackletKey, bool]:
-    """Flag tracklets whose real detections are frequently occluded.
-
-    Per-frame occlusion is the maximum IoU against any other real detection in
-    the same camera/frame. Interpolated frames are excluded from both the target
-    count and the same-frame occluder set.
-    """
+    """Flag tracklets whose real detections are frequently occluded."""
     occ_box_thresh = float(_cfg_get(cfg, "occ_box_thresh", 0.6))
     occ_frac_thresh = float(_cfg_get(cfg, "occ_frac_thresh", 0.3))
 

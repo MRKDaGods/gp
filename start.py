@@ -1,9 +1,4 @@
-"""
-GP Pipeline Launcher - starts backend (port 8000) and frontend (port 3001).
-
-Usage:  python start.py
-Stop:   Ctrl+C
-"""
+"""GP Pipeline Launcher - starts backend (port 8000) and frontend (port 3001)."""
 
 import os
 import signal

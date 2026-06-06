@@ -1,10 +1,4 @@
-"""MVDeTr integration for WILDTRACK.
-
-This stage consumes MVDeTr ground-plane detections, runs simple frame-to-frame
-Hungarian tracking in world coordinates, projects the tracked positions back to
-camera views, and saves both projected per-camera tracklets and one-track-per-
-identity global trajectories for Stage 5 evaluation.
-"""
+"""MVDeTr integration for WILDTRACK."""
 
 from __future__ import annotations
 
@@ -260,13 +254,7 @@ def load_mvdetr_ground_plane_detections(
     detections_path: str | Path,
     normalize_wildtrack_frames: bool = True,
 ) -> List[GroundPlaneDetection]:
-    """Load MVDeTr detections from txt/csv/json exports.
-
-    Supported formats:
-    - MVDeTr `test.txt`: `frame grid_x grid_y`
-    - CSV with `frame_id`, `x_world_cm`, `y_world_cm` or `x_grid`, `y_grid`
-    - JSON list of dicts with the same fields
-    """
+    """Load MVDeTr detections from txt/csv/json exports."""
     detections_path = Path(detections_path)
     suffix = detections_path.suffix.lower()
     detections: List[GroundPlaneDetection] = []

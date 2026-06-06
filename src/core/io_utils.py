@@ -1,8 +1,4 @@
-"""Serialization utilities for inter-stage data exchange.
-
-Each stage writes its outputs to disk so stages can be run independently.
-Tracklets and trajectories use JSON; embeddings use numpy .npy files.
-"""
+"""Serialization utilities for inter-stage data exchange."""
 
 from __future__ import annotations
 
@@ -135,13 +131,7 @@ def save_embeddings(
     index_map: List[Dict[str, Any]],
     output_dir: str | Path,
 ) -> None:
-    """Save embedding matrix and index mapping.
-
-    Args:
-        embeddings: (N, D) float32 array of embeddings.
-        index_map: List of dicts with {track_id, camera_id, class_id} for each row.
-        output_dir: Directory to write files to.
-    """
+    """Save embedding matrix and index mapping."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     np.save(output_dir / "embeddings.npy", embeddings)
@@ -174,12 +164,7 @@ def save_multi_query_embeddings(
     mq_embeddings: List[np.ndarray],
     output_dir: str | Path,
 ) -> None:
-    """Save dense multi-query embeddings as a compressed NPZ artifact.
-
-    Args:
-        mq_embeddings: List of (K, D) arrays, one per tracklet.
-        output_dir: Directory to write the artifact to.
-    """
+    """Save dense multi-query embeddings as a compressed NPZ artifact."""
     if not mq_embeddings:
         return
 

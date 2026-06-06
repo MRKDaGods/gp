@@ -60,23 +60,7 @@ def aflink_post_association(
     min_velocity_ratio: float = 0.5,
     velocity_window: int = 5,
 ) -> List[GlobalTrajectory]:
-    """Merge additional cross-camera trajectories using motion consistency.
-
-    Args:
-        trajectories: Stage 4 trajectories after graph-based association.
-        feature_to_tracklet_key: Feature index to (camera_id, track_id) mapping.
-        tracklet_lookup: Lookup for full Tracklet objects.
-        embeddings: Optional embedding matrix used to recompute trajectory confidence.
-        combined_sim: Optional appearance similarity matrix used for audit evidence.
-        max_time_gap_frames: Maximum allowed gap between trajectory endpoints.
-        max_spatial_gap_px: Maximum allowed pixel distance between endpoints.
-        min_direction_cos: Minimum cosine similarity between endpoint velocity vectors.
-        min_velocity_ratio: Minimum ratio between endpoint speeds.
-        velocity_window: Number of detections used to estimate endpoint velocity.
-
-    Returns:
-        Updated list of GlobalTrajectory objects with AFLink merges applied.
-    """
+    """Merge additional cross-camera trajectories using motion consistency."""
     if len(trajectories) < 2:
         return trajectories
 

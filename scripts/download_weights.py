@@ -1,30 +1,6 @@
 #!/usr/bin/env python
 """Download pipeline + VeRi-776 model weights from the public Kaggle dataset.
-
-All required checkpoints are consolidated into ONE public Kaggle dataset
-(see ``configs/weights_manifest.yaml``). This script lets you fetch a single
-model set or everything, then verifies each file against its pinned SHA-256.
-
-Model sets:
-  vehicle-mtmc-14e   Vehicle MTMC 14e B1 production (CityFlowV2)
-  vehicle-mtmc-14k   Vehicle MTMC 14k v1 K7 R50-IBN research (superset of 14e)
-  person-mtmc        Person MTMC 12b (WILDTRACK MVDeTr)
-  veri               VeRi-776 paper two-stream fusion (93.32% mAP)
-  all                Everything above
-
-Usage:
-    python scripts/download_weights.py                 # interactive picker
-    python scripts/download_weights.py --set all
-    python scripts/download_weights.py --set veri --set person-mtmc
-    python scripts/download_weights.py --list          # show sets + files, no download
-    python scripts/download_weights.py --set all --dry-run
-    python scripts/download_weights.py --set veri --force   # re-download even if present
-
-Requirements:
-  - A (free) Kaggle account and API token at ~/.kaggle/kaggle.json
-    (https://www.kaggle.com/docs/api). The dataset is public but the Kaggle
-    API still requires an authenticated token.
-  - The ``kaggle`` CLI (installed via requirements.txt) and PyYAML.
+python scripts/download_weights.py --set all; python scripts/download_weights.py --set all --dry-run; (https://www.kaggle.com/docs/api). The dataset is public but the Kaggle
 """
 from __future__ import annotations
 

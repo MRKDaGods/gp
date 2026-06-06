@@ -1,18 +1,4 @@
-"""Download and verify external datasets for local setup, and fetch model weights.
-
-The repo intentionally does not store model weights or raw datasets.
-
-Model weights now live in ONE consolidated public Kaggle dataset and are fetched
-by ``scripts/download_weights.py`` (set-aware, SHA-256 verified). This script
-delegates all model-weight downloads to it and additionally handles the optional
-public *datasets* (VeRi-776 eval data; CityFlowV2 is manual).
-
-  python scripts/download_assets.py --all          # weights (all sets) + datasets
-  python scripts/download_assets.py --datasets      # only the public datasets
-  python scripts/download_weights.py                # granular model-set picker
-
-See ``configs/weights_manifest.yaml`` for the weight manifest and model sets.
-"""
+"""Download and verify external datasets for local setup, and fetch model weights."""
 
 from __future__ import annotations
 

@@ -19,13 +19,7 @@ def is_torch_cuda_available() -> bool:
 
 
 def apply_cpu_when_no_cuda(cfg: DictConfig) -> bool:
-    """If CUDA is not available, set stage1/stage2 torch devices to CPU and disable half.
-
-    Mutates cfg in place. Call after load_config (and after CLI overrides are merged).
-
-    Returns:
-        True if the config was modified.
-    """
+    """If CUDA is not available, set stage1/stage2 torch devices to CPU and disable half."""
     if is_torch_cuda_available():
         return False
 
@@ -53,16 +47,7 @@ def load_config(
     overrides: Optional[Sequence[str]] = None,
     dataset_config: Optional[str | Path] = None,
 ) -> DictConfig:
-    """Load YAML configuration with optional overrides and dataset config merge.
-
-    Args:
-        config_path: Path to the main YAML config file.
-        overrides: List of dotlist overrides, e.g. ["stage1.detector.model=yolo26s.pt"].
-        dataset_config: Optional path to a dataset-specific YAML to merge in.
-
-    Returns:
-        Merged OmegaConf DictConfig.
-    """
+    """Load YAML configuration with optional overrides and dataset config merge."""
     cfg = OmegaConf.load(config_path)
 
     if dataset_config is not None:

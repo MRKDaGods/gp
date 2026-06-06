@@ -1,10 +1,4 @@
-"""DatasetRepository - protocol and in-memory implementation.
-
-The protocol defines the read-only view over pipeline artefacts needed by
-``TimelineService`` and other query-time services.  The in-memory
-implementation delegates directly to the global state dicts and the
-filesystem under ``OUTPUT_DIR``.
-"""
+"""DatasetRepository - protocol and in-memory implementation."""
 
 from __future__ import annotations
 
@@ -17,12 +11,7 @@ from backend.models.embedding import EmbeddingArtifact
 
 @runtime_checkable
 class DatasetRepository(Protocol):
-    """Read-only interface over pipeline artefacts for query-time services.
-
-    Implementations must be safe to call from both sync and async contexts.
-    All methods that touch the filesystem should be inexpensive enough to
-    call inline (they read small JSON/npy files, not large videos).
-    """
+    """Read-only interface over pipeline artefacts for query-time services."""
 
     def get_video(self, video_id: str) -> Optional[Dict[str, Any]]:
         """Return the video record for *video_id*, or ``None`` if unknown."""
@@ -36,14 +25,7 @@ class DatasetRepository(Protocol):
         ...
 
     def list_trajectories(self, run_id: str) -> Optional[List[Dict[str, Any]]]:
-        """Load global trajectories for *run_id* from Stage-4 output.
-
-        Returns:
-            ``None``  - if ``outputs/{run_id}/stage4/global_trajectories.json``
-                        does not exist (Stage 4 has not run for this run).
-            ``[]``    - if the file exists but is empty or non-list.
-            List[...]  - parsed trajectory list otherwise.
-        """
+        """Load global trajectories for *run_id* from Stage-4 output."""
         ...
 
     def load_embedding_artifact(self, run_id: str) -> Optional[EmbeddingArtifact]:
@@ -55,16 +37,7 @@ class DatasetRepository(Protocol):
 
 
 class InMemoryDatasetRepository:
-    """Concrete ``DatasetRepository`` backed by the in-memory state dicts.
-
-    The three constructor arguments correspond directly to the module-level
-    globals in ``backend.state`` and the constant in ``backend.config``.
-
-    Args:
-        uploaded_videos:     Mapping of ``video_id`` -> video-record dict.
-        video_to_latest_run: Mapping of ``video_id`` -> latest ``run_id``.
-        output_dir:          Root outputs directory (``backend.config.OUTPUT_DIR``).
-    """
+    """Concrete ``DatasetRepository`` backed by the in-memory state dicts."""
 
     def __init__(
         self,

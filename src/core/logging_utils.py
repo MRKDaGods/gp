@@ -14,13 +14,7 @@ def setup_logging(
     log_file: Optional[str | Path] = None,
     rotation: str = "10 MB",
 ) -> None:
-    """Configure loguru logger for the pipeline.
-
-    Args:
-        level: Logging level (DEBUG, INFO, WARNING, ERROR).
-        log_file: Optional file path for log output. None = console only.
-        rotation: Log file rotation size.
-    """
+    """Configure loguru logger for the pipeline."""
     # Remove default handler
     logger.remove()
 

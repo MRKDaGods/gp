@@ -14,19 +14,7 @@ def create_timeline(
     max_trajectories: int = 50,
     title: str = "Trajectory Timeline",
 ) -> go.Figure:
-    """Create an interactive Gantt-chart timeline of trajectories.
-
-    Each row is a global identity. Each bar segment shows when that identity
-    was visible on a particular camera.
-
-    Args:
-        trajectories: Global trajectories.
-        max_trajectories: Maximum number of trajectories to display.
-        title: Chart title.
-
-    Returns:
-        Plotly Figure.
-    """
+    """Create an interactive Gantt-chart timeline of trajectories."""
     # Sort by duration (longest first) and limit
     sorted_traj = sorted(trajectories, key=lambda t: t.total_duration, reverse=True)
     sorted_traj = sorted_traj[:max_trajectories]

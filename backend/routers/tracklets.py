@@ -23,12 +23,7 @@ async def get_tracklets(
     allCameras: bool = False,
     state: AppState = Depends(get_app_state),
 ):
-    """Get tracklets from latest real stage1 output.
-
-    When ``allCameras`` is set, return tracklets for EVERY camera in the run
-    (each item carries its own ``cameraId``) so the selection UI can show and
-    filter the whole run, not just the currently-viewed camera.
-    """
+    """Get tracklets from latest real stage1 output."""
     print(f"\n[UI Request] Get Tracklets: cameraId={cameraId}, videoId={videoId}, allCameras={allCameras}")
     if not videoId:
         return {"success": True, "data": []}
@@ -95,11 +90,7 @@ async def get_tracklets(
 
 @router.get("/api/trajectories/{run_id}")
 async def get_trajectories(run_id: str):
-    """Get global trajectories from stage4 artifact if available.
-
-    Resolves the run across all output roots (`outputs/` and `data/outputs/`)
-    so completed offline / Kaggle-imported runs are visible to the UI.
-    """
+    """Get global trajectories from stage4 artifact if available."""
     run_dir = resolve_run_dir(run_id)
     if run_dir is None:
         return {"success": True, "data": []}

@@ -28,26 +28,7 @@ def extract_frames_from_video(
     time_offset: float = 0.0,
     lossless: bool = False,
 ) -> List[FrameInfo]:
-    """Extract frames from a single video and save as images.
-
-    Args:
-        video_path: Path to the source video.
-        output_dir: Directory to write extracted frames.
-        camera_id: Camera identifier for this video.
-        target_fps: Target frame rate for extraction.
-        target_size: (width, height) to resize to, or None for original.
-        normalize: Whether to apply pixel normalization.
-        denoise: Whether to apply denoising.
-        denoise_strength: Bilateral filter d parameter.
-        max_frames: Maximum frames to extract (for smoke tests).
-        clahe: Whether to apply CLAHE enhancement.
-        clahe_clip_limit: CLAHE contrast clip limit.
-        time_offset: Camera-specific time offset in seconds for synchronization.
-        lossless: If True, save as PNG (lossless) instead of JPEG.
-
-    Returns:
-        List of FrameInfo for each extracted frame.
-    """
+    """Extract frames from a single video and save as images."""
     video_path = Path(video_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

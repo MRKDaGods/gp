@@ -1,10 +1,4 @@
-"""Zone-based transition scoring for cross-camera association.
-
-Assigns entry/exit zones to tracklets based on their bounding box positions,
-then scores candidate pairs based on whether their zone transition matches
-learned ground-truth transition patterns. This is a key technique from
-AIC21/22 top solutions.
-"""
+"""Zone-based transition scoring for cross-camera association."""
 
 from __future__ import annotations
 
@@ -50,11 +44,7 @@ class ZoneScorer:
         exit_positions: List[Optional[Tuple[float, float]]],
         camera_ids: List[str],
     ) -> Tuple[List[int], List[int]]:
-        """Assign entry and exit zone IDs to each tracklet.
-
-        Returns:
-            (entry_zones, exit_zones) - zone IDs per tracklet (-1 if unknown).
-        """
+        """Assign entry and exit zone IDs to each tracklet."""
         n = len(camera_ids)
         entry_zones = [-1] * n
         exit_zones = [-1] * n
@@ -94,14 +84,7 @@ class ZoneScorer:
         cam_i: str, entry_zone_i: int, exit_zone_i: int,
         cam_j: str, entry_zone_j: int, exit_zone_j: int,
     ) -> float:
-        """Compute zone transition score for a pair of tracklets.
-
-        Checks both directions (i exits -> j enters, j exits -> i enters)
-        and returns the max score. Returns:
-          1.0 if a valid transition exists
-          0.0 if no zone info available (either zone == -1)
-         -1.0 if zones are assigned but transition is invalid
-        """
+        """Compute zone transition score for a pair of tracklets."""
         if exit_zone_i < 0 or entry_zone_j < 0 or exit_zone_j < 0 or entry_zone_i < 0:
             return 0.0  # Unknown - don't penalise
 

@@ -13,11 +13,7 @@ from src.core.data_models import EvaluationResult
 
 
 class AblationRunner:
-    """Runs the pipeline with different config variants and collects metrics.
-
-    Each variant is a dict of config overrides (dotlist format).
-    Results are collected into a DataFrame for comparison.
-    """
+    """Runs the pipeline with different config variants and collects metrics."""
 
     def __init__(self, base_config: DictConfig):
         self.base_config = base_config
@@ -51,11 +47,7 @@ class AblationRunner:
 
     @staticmethod
     def get_standard_variants() -> Dict[str, List[str]]:
-        """Get standard ablation study config variants.
-
-        Returns:
-            Dict[variant_name, list_of_config_overrides].
-        """
+        """Get standard ablation study config variants."""
         return {
             "baseline": [],
             "tracker_deepocsort": ["stage1.tracker.algorithm=deepocsort"],

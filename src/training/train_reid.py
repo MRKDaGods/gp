@@ -1,20 +1,4 @@
-"""BoT ReID trainer: Train strong ReID models with Bag-of-Tricks recipe.
-
-Usage:
-    python -m src.training.train_reid --dataset market1501 --root data/raw/market1501
-    python -m src.training.train_reid --dataset veri776 --root data/raw/veri776 --height 224 --width 224
-    python -m src.training.train_reid --dataset market1501 --root data/raw/market1501 --loss circle
-
-Implements:
-    - ResNet50-IBN-a with last_stride=1
-    - BNNeck (batch normalization neck)
-    - ID loss (cross-entropy with label smoothing) + Triplet loss (hard mining)
-    - Optional: Center loss, Circle loss
-    - Warm-up learning rate schedule
-    - Random erasing augmentation
-    - Mixed precision training (fp16/bf16)
-    - Evaluation with re-ranking
-"""
+"""BoT ReID trainer: Train strong ReID models with Bag-of-Tricks recipe."""
 
 from __future__ import annotations
 

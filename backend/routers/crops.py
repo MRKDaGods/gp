@@ -82,12 +82,7 @@ def _resolve_camera_id(state: AppState, video_id: str) -> str:
 
 def _load_frame_bgr_aligned_to_tracklets(
     state: AppState, video_id: str, video_path: Path, frame_id: int):
-    """Prefer stage-0 PNG/JPG (same pixel space as tracklet bboxes); else raw video.
-
-    Stage 1 bboxes are in the resolution of extracted frames (often resized in
-    stage 0).  Cropping the *uploaded* video at full resolution misaligns
-    coordinates -> garbage / grey / white smears in thumbnails.
-    """
+    """Prefer stage-0 PNG/JPG (same pixel space as tracklet bboxes); else raw video."""
     run_id = state.video_to_latest_run.get(video_id)
     cam = _resolve_camera_id(state, video_id)
     if run_id and cam:

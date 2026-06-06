@@ -1,9 +1,4 @@
-"""Multi-camera synchronized grid viewer for cross-camera tracking verification.
-
-Usage:
-    python scripts/view_multicam.py --run-dir data/outputs/run_XXX --global-id 5
-    python scripts/view_multicam.py --run-dir data/outputs/run_XXX --gallery --top-n 10
-"""
+"""Multi-camera synchronized grid viewer for cross-camera tracking verification."""
 
 from __future__ import annotations
 

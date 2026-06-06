@@ -1,9 +1,4 @@
-"""Quality-aware crop extraction from tracklets using video frames.
-
-Scores each candidate crop by sharpness (Laplacian variance), bounding-box
-area, aspect ratio, and detection confidence.  Returns top-quality crops
-together with a per-crop quality score used for downstream attention pooling.
-"""
+"""Quality-aware crop extraction from tracklets using video frames."""
 
 from __future__ import annotations
 
@@ -34,17 +29,7 @@ def compute_crop_quality(
     confidence: float = 1.0,
     target_area: float = 20_000,
 ) -> float:
-    """Compute a composite quality score for a single crop.
-
-    Components (each normalised to [0, 1]):
-    - **Sharpness**: Laplacian variance (higher = sharper).
-    - **Size**: Area relative to *target_area*.
-    - **Aspect ratio**: Penalty for extreme ratios (< 0.25 or > 4.0).
-    - **Confidence**: Detection confidence from the tracker.
-
-    Returns:
-        A float in [0, 1].
-    """
+    """Compute a composite quality score for a single crop."""
     h, w = crop.shape[:2]
     area = h * w
 
@@ -95,19 +80,7 @@ class CropExtractor:
         tracklet: Tracklet,
         video_path: str,
     ) -> List[QualityScoredCrop]:
-        """Extract quality-scored crops from a tracklet.
-
-        Selects evenly-spaced frames, scores each crop, discards low-quality
-        ones, and returns the best *samples_per_tracklet* crops sorted by
-        quality (descending).
-
-        Args:
-            tracklet: Tracklet with frame-level bounding boxes.
-            video_path: Path to the source video.
-
-        Returns:
-            List of QualityScoredCrop, sorted by quality descending.
-        """
+        """Extract quality-scored crops from a tracklet."""
         n_frames = len(tracklet.frames)
         if n_frames == 0:
             return []
@@ -183,15 +156,7 @@ class CropExtractor:
         tracklet: Tracklet,
         frame_images: dict[int, np.ndarray],
     ) -> List[QualityScoredCrop]:
-        """Extract quality-scored crops when frames are already in memory.
-
-        Args:
-            tracklet: Tracklet with bounding boxes.
-            frame_images: Dict[frame_id, BGR image].
-
-        Returns:
-            List of QualityScoredCrop, sorted by quality descending.
-        """
+        """Extract quality-scored crops when frames are already in memory."""
         n_frames = len(tracklet.frames)
         if n_frames == 0:
             return []
@@ -247,14 +212,7 @@ class CropExtractor:
         max_crops: int,
         total_frames: int,
     ) -> List[QualityScoredCrop]:
-        """Select crops with temporal diversity guarantee.
-
-        Divides the tracklet timeline into temporal strata and picks the
-        best-quality crop from each stratum first, then fills remaining
-        slots with the globally best remaining crops.  This ensures
-        viewpoint diversity - vehicles changing angle/size across a
-        long tracklet will be represented throughout.
-        """
+        """Select crops with temporal diversity guarantee."""
         if len(candidates) <= max_crops:
             candidates.sort(key=lambda c: c.quality, reverse=True)
             return candidates

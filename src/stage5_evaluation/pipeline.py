@@ -1,8 +1,4 @@
-"""Stage 5 - System Evaluation & Quality Assessment pipeline.
-
-Evaluates tracking results against ground truth using standard metrics
-(HOTA, IDF1, MOTA) and generates evaluation reports.
-"""
+"""Stage 5 - System Evaluation & Quality Assessment pipeline."""
 
 from __future__ import annotations
 
@@ -26,17 +22,7 @@ def run_stage5(
     output_dir: str | Path,
     ground_truth_dir: Optional[str | Path] = None,
 ) -> EvaluationResult:
-    """Run evaluation on tracking results.
-
-    Args:
-        cfg: Full pipeline config (uses cfg.stage5).
-        trajectories: Global trajectories from Stage 4.
-        output_dir: Directory for stage5 outputs.
-        ground_truth_dir: Path to ground truth annotations. Overrides config.
-
-    Returns:
-        EvaluationResult with computed metrics.
-    """
+    """Run evaluation on tracking results."""
     stage_cfg = cfg.stage5
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -332,24 +318,7 @@ def _apply_gt_frame_clip(
     gt_dir: Path,
     min_iou: float = 0.0,
 ) -> None:
-    """Drop individual prediction rows (frames) that don't overlap any GT box.
-
-    For each camera, loads the GT file and, for every row in the prediction
-    file, checks if the predicted box has IoU > *min_iou* with ANY GT box in
-    the same frame.  Rows that fail are removed - they correspond to frames
-    where the vehicle is outside the GT annotation zone (before/after the
-    intersection crossing).
-
-    Converting these IDFP rows to non-submissions does NOT create new IDFN:
-    motmetrics only penalises non-submission of GT-annotated frames, and
-    these frames have no GT annotation, so removal is metric-neutral on the
-    IDFN side while directly reducing IDFP.
-
-    Args:
-        pred_dir:  Directory containing per-camera prediction txt files.
-        gt_dir:    Directory containing per-camera GT txt files.
-        min_iou:   Minimum IoU to count as a match (default 0.0 = any overlap).
-    """
+    """Drop individual prediction rows (frames) that don't overlap any GT box."""
     from src.stage5_evaluation.metrics import _find_gt_file
 
     total_before = 0
@@ -499,14 +468,7 @@ def _smooth_prediction_tracks(
     window: int = 7,
     polyorder: int = 2,
 ) -> None:
-    """Apply Savitzky-Golay smoothing to per-track bounding box trajectories.
-
-    For each camera prediction file, groups rows by track ID, sorts by frame,
-    and smooths (cx, cy, w, h) using scipy's Savitzky-Golay filter.  Short
-    tracks (< window) are left unchanged.
-
-    This reduces detection jitter -> better IoU with GT -> improved MOTA/IDF1.
-    """
+    """Apply Savitzky-Golay smoothing to per-track bounding box trajectories."""
     try:
         from scipy.signal import savgol_filter
     except ImportError:
@@ -584,20 +546,7 @@ def _apply_gt_zone_filter(
     min_iou: float = 0.0,
     min_overlap_frames: int = 1,
 ) -> None:
-    """Filter per-camera prediction files: drop tracks that NEVER overlap any GT box.
-
-    A prediction track that overlaps at least one GT box (any frame, any GT
-    vehicle, IoU > min_iou for at least min_overlap_frames frames) corresponds
-    to a real vehicle in the GT zone.  Tracks with zero GT overlap are non-GT
-    vehicles (parked cars, wrong direction, etc.) and are guaranteed IDFP.
-
-    Args:
-        pred_dir:             Directory containing per-camera txt prediction files.
-        gt_dir:               Directory containing per-camera GT files.
-        margin_frac:          Not used for IoU filter (kept for API compatibility).
-        min_iou:              Minimum IoU to count as an overlap (default 0.0 = any).
-        min_overlap_frames:   Minimum number of frames with IoU > min_iou.
-    """
+    """Filter per-camera prediction files: drop tracks that NEVER overlap any GT box."""
     from src.stage5_evaluation.metrics import _find_gt_file
 
     total_before = 0
@@ -695,16 +644,7 @@ def _filter_stationary(
     min_displacement_px: float = 50.0,
     max_mean_velocity_px: float = 0.0,
 ) -> List[GlobalTrajectory]:
-    """Remove trajectories where ALL tracklets show near-zero displacement.
-
-    A stationary vehicle (parked car) will have bounding boxes that barely
-    move across its entire track.  We check:
-      1. Endpoint displacement: Euclidean distance between first/last bbox centre.
-      2. Mean per-frame velocity (if max_mean_velocity_px > 0): catches parked
-         cars that oscillate enough for endpoint displacement > threshold.
-
-    This is a **non-GT filter** - no ground truth information is used.
-    """
+    """Remove trajectories where ALL tracklets show near-zero displacement."""
     import math
 
     kept = []
@@ -761,18 +701,7 @@ def _trim_track_edges(
     mode: str = "confidence",
     trim_fraction: float = 0.10,
 ) -> None:
-    """Trim low-confidence frames at the start/end of each per-camera track.
-
-    CityFlowV2 GT only annotates vehicles in the intersection zone.  Track
-    "tails" (approach/departure) are pure FP.  This trims frames at track
-    edges where the detector was least confident - a GT-free proxy for the
-    annotation boundary.
-
-    Modes:
-        confidence: For each track, compute median confidence.  Remove frames
-            at the leading/trailing edges that are below median confidence.
-        fraction: Remove a fixed fraction from each end of the track.
-    """
+    """Trim low-confidence frames at the start/end of each per-camera track."""
     total_trimmed = 0
     total_rows = 0
 

@@ -24,15 +24,7 @@ def run_stage6(
     video_paths: Dict[str, str],
     output_dir: str | Path,
 ) -> None:
-    """Run visualization and export pipeline.
-
-    Args:
-        cfg: Full pipeline config (uses cfg.stage6).
-        trajectories: Global trajectories from Stage 4.
-        tracklets_by_camera: Per-camera tracklets from Stage 1.
-        video_paths: Dict[camera_id, video_file_path].
-        output_dir: Directory for stage6 outputs.
-    """
+    """Run visualization and export pipeline."""
     stage_cfg = cfg.stage6
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

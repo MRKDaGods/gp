@@ -1,16 +1,4 @@
-"""Ground-plane evaluation for multi-view overlapping camera datasets.
-
-WILDTRACK and similar multi-view benchmarks evaluate on the **ground plane**:
-- GT: 3D ground positions per person per frame (from annotations_positions JSON)
-- Pred: Back-projected foot positions from per-camera tracklets
-- Matching: L2 distance on ground plane (typically <=50cm)
-- Metrics: MODA, MODP, Precision, Recall (via motmetrics)
-
-This is the correct evaluation protocol used by published SOTA methods
-(MVDet MODA=88.2%, MVDeTr MODA=91.5%).
-
-For city-wide MTMC (CityFlowV2, VeRi, Market), use per-camera 2D MOT eval instead.
-"""
+"""Ground-plane evaluation for multi-view overlapping camera datasets."""
 
 from __future__ import annotations
 
@@ -221,20 +209,7 @@ def build_pred_ground_positions(
     gp_bounds: Optional[Tuple[float, float, float, float]] = None,
     gp_margin: float = 150.0,
 ) -> Dict[int, List[Tuple[int, float, float]]]:
-    """Build ground-plane predictions from global trajectories.
-
-    For each trajectory at each frame, back-projects foot positions from
-    all available cameras and averages them.
-
-    Args:
-        trajectories: Global trajectories from Stage 4.
-        calibrations: Per-camera calibration dicts.
-        conf_threshold: Minimum detection confidence.
-        gp_bounds: (xmin, ymin, xmax, ymax) in cm for ground-plane filtering.
-        gp_margin: Extra margin around bounds (cm).
-
-    Returns: {frame_id: [(global_id, avg_gx, avg_gy), ...]}
-    """
+    """Build ground-plane predictions from global trajectories."""
     if gp_bounds is None:
         gp_bounds = (GP_XMIN, GP_YMIN, 900.0, 2700.0)
 
@@ -316,16 +291,7 @@ def evaluate_ground_plane(
     pred_positions: Dict[int, List[Tuple[int, float, float]]],
     threshold_cm: float = 50.0,
 ) -> Dict[str, Any]:
-    """Evaluate ground-plane detections using motmetrics with L2 matching.
-
-    Args:
-        gt_positions: {frame_id: [(pid, gx, gy), ...]}
-        pred_positions: {frame_id: [(tid, gx, gy), ...]}
-        threshold_cm: L2 distance threshold for matching (standard: 50cm).
-
-    Returns:
-        Dict with MODA, MODP, IDF1, Precision, Recall, etc.
-    """
+    """Evaluate ground-plane detections using motmetrics with L2 matching."""
     import motmetrics as mm
 
     acc = mm.MOTAccumulator(auto_id=True)
@@ -392,23 +358,7 @@ def evaluate_wildtrack_ground_plane(
     nms_radius_cm: float = 50.0,
     frame_range: Optional[Tuple[int, int]] = None,
 ) -> EvaluationResult:
-    """Full WILDTRACK ground-plane evaluation pipeline.
-
-    This is the evaluation protocol used by published SOTA methods.
-
-    Args:
-        trajectories: Global trajectories from Stage 4.
-        annotations_dir: Path to WILDTRACK annotations_positions/ directory.
-        calibrations_dir: Path to WILDTRACK calibrations/ directory.
-        conf_threshold: Min detection confidence for predictions.
-        match_threshold_cm: L2 distance threshold for GT-pred matching.
-        nms_radius_cm: DBSCAN radius for merging overlapping ground-plane predictions.
-        frame_range: Optional inclusive frame range (min_frame, max_frame) to
-            evaluate against. When omitted, evaluates all GT frames.
-
-    Returns:
-        EvaluationResult with ground-plane metrics.
-    """
+    """Full WILDTRACK ground-plane evaluation pipeline."""
     annotations_dir = Path(annotations_dir)
     calibrations_dir = Path(calibrations_dir)
 

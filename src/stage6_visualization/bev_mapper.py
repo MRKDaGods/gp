@@ -12,11 +12,7 @@ from src.core.data_models import GlobalTrajectory
 
 
 class BEVMapper:
-    """Generates bird's-eye-view trajectory maps.
-
-    Projects tracklet bounding box centers onto a 2D plane and draws
-    trajectories color-coded by global identity.
-    """
+    """Generates bird's-eye-view trajectory maps."""
 
     def __init__(
         self,
@@ -34,19 +30,7 @@ class BEVMapper:
         camera_positions: Optional[Dict[str, Tuple[float, float]]] = None,
         title: str = "Bird's-Eye View - Global Trajectories",
     ) -> plt.Figure:
-        """Plot BEV trajectory map.
-
-        Without geometric calibration, uses bbox bottom-center as a proxy
-        for ground-plane position within each camera's local coordinate system.
-
-        Args:
-            trajectories: Global trajectories to visualize.
-            camera_positions: Optional dict[camera_id, (x, y)] for camera layout.
-            title: Plot title.
-
-        Returns:
-            matplotlib Figure.
-        """
+        """Plot BEV trajectory map."""
         fig, ax = plt.subplots(1, 1, figsize=self.figsize)
 
         if self.map_image:

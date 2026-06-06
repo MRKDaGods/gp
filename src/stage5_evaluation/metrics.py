@@ -1,16 +1,4 @@
-"""Tracking metrics computation using py-motmetrics or TrackEval.
-
-Improvements over baseline
---------------------------
-* **Per-camera accumulators** - motmetrics creates one ``MOTAccumulator``
-  per camera sequence then merges them with
-  ``mm.utils.merge_event_dataframes`` for a proper overall score.
-  The old code used a single accumulator mixing all cameras together,
-  which incorrectly matched GT/predicted IDs across different cameras.
-* **Per-camera breakdown** in ``EvaluationResult.details``.
-* **Proper seqmap handling** for TrackEval.
-* **Additional metrics**: Rank-1 accuracy, mAP when applicable.
-"""
+"""Tracking metrics computation using py-motmetrics or TrackEval."""
 
 from __future__ import annotations
 
@@ -37,14 +25,7 @@ from src.core.data_models import EvaluationResult
 
 
 def _analyze_mtmc_errors(acc) -> Dict:
-    """Analyze fragmentation (under-merging) vs conflation (over-merging).
-
-    Extracts frame-level GT<->pred matches from the motmetrics accumulator
-    to identify:
-    - Fragmented GT IDs: one GT identity matched to multiple predicted IDs
-    - Conflated pred IDs: one predicted ID matched to multiple GT identities
-    - Unmatched GT/pred IDs
-    """
+    """Analyze fragmentation (under-merging) vs conflation (over-merging)."""
     try:
         events = acc.mot_events
         matches = events[events["Type"] == "MATCH"]
@@ -104,29 +85,7 @@ def evaluate_mtmc(
     pred_dir: str,
     iou_threshold: float = 0.5,
 ) -> EvaluationResult:
-    """Evaluate **MTMC IDF1** using a single global accumulator.
-
-    Unlike per-camera evaluation, this merges all cameras into one
-    accumulator with globally-unique GT IDs and globally-unique predicted
-    IDs.  A vehicle tracked with the same global_id across cameras is
-    treated as one identity - matching the AI City Challenge protocol.
-
-    IDF1 = 2*IDTP / (2*IDTP + IDFP + IDFN)
-
-    CityFlowV2 GT includes both multi-camera and single-camera vehicles.
-    GT IDs are globally unique per scenario (S01: 1-95, S02: 96-240)
-    so using one accumulator over all cameras correctly rewards
-    cross-camera re-identification without double-counting.
-    This matches the AI City Challenge Track 1 evaluation protocol.
-
-    Args:
-        gt_dir: Directory with per-camera GT files (CityFlowV2 format).
-        pred_dir: Directory with per-camera prediction files.
-        iou_threshold: Minimum IoU for a detection to be considered a match.
-
-    Returns:
-        EvaluationResult with globally-computed IDF1 and per-camera details.
-    """
+    """Evaluate **MTMC IDF1** using a single global accumulator."""
     import motmetrics as mm
 
     gt_dir_p = Path(gt_dir)
@@ -232,19 +191,7 @@ def evaluate_mot(
     metrics: Optional[List[str]] = None,
     iou_threshold: float = 0.5,
 ) -> EvaluationResult:
-    """Evaluate tracking predictions against ground truth.
-
-    Attempts to use TrackEval first, falls back to py-motmetrics.
-
-    Args:
-        gt_dir: Directory with ground truth files in MOT format.
-        pred_dir: Directory with prediction files in MOT format.
-        metrics: List of metrics to compute.
-        iou_threshold: Minimum IoU for a detection to be considered a match.
-
-    Returns:
-        EvaluationResult with computed metrics.
-    """
+    """Evaluate tracking predictions against ground truth."""
     metrics = metrics or ["HOTA", "MOTA", "IDF1"]
 
     try:
@@ -259,14 +206,7 @@ def evaluate_mot(
 # TrackEval path
 
 def _remap_class1_in_dir(src_dir: Path, dst_dir: Path, glob: str = "*.txt") -> None:
-    """Copy tracking files replacing class field (col 7) with 1 (pedestrian).
-
-    TrackEval's MotChallenge2DBox evaluates class=1 (pedestrian) only.
-    CityFlowV2 uses class=-1 in GT (unclassified vehicle) and class 2/5/7 in
-    predictions.  Remapping both GT and predictions to class=1 ensures TrackEval
-    places them in the same "pedestrian" bucket and can compute HOTA correctly.
-    Without this fix GT class=-1 ends up in a separate bucket -> HOTA=0.
-    """
+    """Copy tracking files replacing class field (col 7) with 1 (pedestrian)."""
     dst_dir.mkdir(parents=True, exist_ok=True)
     for src_file in src_dir.glob(glob):
         lines = []
@@ -318,20 +258,7 @@ def _evaluate_with_trackeval(
 
 
 def _remap_gt_class1(gt_path: Path, dst_root: Path) -> Path:
-    """Build a lightweight GT directory tree with class column remapped to 1.
-
-    Copies only what TrackEval needs (``gt/gt.txt`` and ``seqinfo.ini``),
-    avoiding copying large video files.  Remaps class=-1 (CityFlowV2
-    unclassified vehicle) to class=1 so TrackEval can match them against
-    the remapped pedestrian predictions.
-
-    TrackEval expects:
-        {gt_folder}/{seq}/gt/gt.txt
-        {gt_folder}/{seq}/seqinfo.ini   (optional but needed for HOTA)
-
-    Returns:
-        Path to the remapped GT root directory.
-    """
+    """Build a lightweight GT directory tree with class column remapped to 1."""
     dst_root.mkdir(parents=True, exist_ok=True)
 
     for seq_dir in sorted(gt_path.iterdir()):
@@ -472,14 +399,7 @@ def _mean_of(per_camera: Dict[str, Dict[str, float]], key: str) -> float:
 # GT file resolution
 
 def _find_gt_file(gt_dir: Path, cam_id: str) -> Optional[Path]:
-    """Resolve ground truth file for a camera using multiple naming patterns.
-
-    Tries (in order):
-      1. gt_dir/cam_id.txt          - flat directory, matching name
-      2. gt_dir/cam_id_gt.txt       - flat directory with _gt suffix
-      3. gt_dir/cam_id/gt.txt       - per-camera subdirectory (CityFlowV2 style)
-      4. gt_dir/cam_id/gt/gt.txt    - MOTChallenge style
-    """
+    """Resolve ground truth file for a camera using multiple naming patterns."""
     candidates = [
         gt_dir / f"{cam_id}.txt",
         gt_dir / f"{cam_id}_gt.txt",
@@ -499,11 +419,7 @@ def _evaluate_with_motmetrics(
     pred_dir: str,
     iou_threshold: float = 0.5,
 ) -> EvaluationResult:
-    """Evaluate using py-motmetrics with **one accumulator per camera**.
-
-    The accumulators are merged via ``mm.utils.merge_event_dataframes``
-    which correctly handles cross-camera ID disambiguation.
-    """
+    """Evaluate using py-motmetrics with **one accumulator per camera**."""
     import motmetrics as mm
 
     gt_dir_p = Path(gt_dir)
@@ -621,12 +537,7 @@ def _evaluate_with_motmetrics(
 # MOT format loader
 
 def _load_mot_file(path: Path) -> Dict[int, list]:
-    """Load MOT format file into dict[frame_id -> list of (track_id, bbox)].
-
-    MOT format: frame, id, x, y, w, h, conf, x_world, y_world, z_world
-    Rows with conf=0 are ignore regions and are skipped.
-    For GT files with all-1 confidence (CityFlowV2), this is a no-op.
-    """
+    """Load MOT format file into dict[frame_id -> list of (track_id, bbox)]."""
     data: Dict[int, list] = {}
     with open(path) as f:
         for line in f:

@@ -1,9 +1,4 @@
-"""Streamlit web dashboard for the MTMC tracking system.
-
-Multi-page app with: Overview, Search, Video Playback, NL Query, 3D View, Evaluation.
-
-Run: streamlit run src/apps/web_dashboard.py -- --run-dir data/outputs/run_XXXX
-"""
+"""Streamlit web dashboard for the MTMC tracking system."""
 
 from __future__ import annotations
 

@@ -1,8 +1,4 @@
-"""Stage 1 - Per-Camera Detection & Tracking pipeline.
-
-Runs YOLO detection and BoxMOT tracking on extracted frames for each camera,
-producing per-camera Tracklet lists.
-"""
+"""Stage 1 - Per-Camera Detection & Tracking pipeline."""
 
 from __future__ import annotations
 
@@ -23,11 +19,7 @@ from src.stage1_tracking.tracklet_builder import TrackletBuilder
 
 
 def _load_roi_mask(cfg: DictConfig, camera_id: str) -> Optional[np.ndarray]:
-    """Load ROI mask for a camera if available.
-
-    Looks for roi.jpg in the camera's data directory.
-    Returns a single-channel binary mask (uint8, 0 or 255), or None.
-    """
+    """Load ROI mask for a camera if available."""
     data_root = Path(cfg.stage0.input_dir)
     roi_path = data_root / camera_id / "roi.jpg"
     if not roi_path.exists():
@@ -58,17 +50,7 @@ def run_stage1(
     output_dir: str | Path,
     smoke_test: bool = False,
 ) -> Dict[str, List[Tracklet]]:
-    """Run detection and tracking on all cameras.
-
-    Args:
-        cfg: Full pipeline config (uses cfg.stage1).
-        frames: List of FrameInfo from Stage 0.
-        output_dir: Directory for this run's stage1 outputs.
-        smoke_test: If True, process only first 10 frames per camera.
-
-    Returns:
-        Dict mapping camera_id to list of Tracklets.
-    """
+    """Run detection and tracking on all cameras."""
     stage_cfg = cfg.stage1
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

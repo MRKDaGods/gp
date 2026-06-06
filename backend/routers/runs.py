@@ -38,11 +38,7 @@ router = APIRouter()
 
 @router.get("/api/runs")
 async def list_runs():
-    """List all discoverable pipeline runs across output roots, newest first.
-
-    Each entry carries metadata (name, cameras, input dir), which stages produced
-    artifacts, status, and size - enough for the UI to list, load, or delete runs.
-    """
+    """List all discoverable pipeline runs across output roots, newest first."""
     runs = [describe_run(d) for d in list_run_dirs()]
 
     def _sort_key(r: Dict[str, Any]):
