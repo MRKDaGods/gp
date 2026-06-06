@@ -3,8 +3,8 @@
 Source notebook: notebooks/kaggle/09v_veri776_eval/09v-veri776-eval.ipynb.
 
 The notebook title drifted toward 256x256, but the executable 09v v17 cells
-pin IMG_SIZE=(224, 224); docs/findings.md records the same 224x224 ceiling.
-This script keeps the notebook's CLIP normalization, SIE camera mapping
+pin IMG_SIZE=(224, 224). This script keeps the notebook's CLIP normalization,
+SIE camera mapping
 (`parsed_camid - 1`), TTA view ordering, concat-patch GeM pooling, AQE, and
 15-row rerank grid intact, with CLI and JSON plumbing around them.
 """

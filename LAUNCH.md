@@ -90,5 +90,5 @@ python scripts/test_phase2_e2e.py
 
 - [README.md](README.md) - project overview
 - [SETUP.md](SETUP.md) - detailed setup
-- [docs/findings.md](docs/findings.md) - research log
-- [docs/subagent-specs/phase2-app-integration.md](docs/subagent-specs/phase2-app-integration.md) - Phase 2 design
+- [docs/architecture.md](docs/architecture.md) - system architecture
+- [docs/model-cards.md](docs/model-cards.md) - model provenance and metrics

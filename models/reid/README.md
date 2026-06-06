@@ -28,4 +28,4 @@ The manual source notes below are retained as a fallback when Kaggle access or a
 
 `scripts/eval/eval_14t_fusion_veri776.py` evaluates a single-camera VeRi-776 score-level fusion of CLIP-SENet v6 and TransReID 09v v17. The expected verifier target is mAP 0.9330 and R1 0.9845 with CLIP-SENet weight 0.7, TransReID weight 0.3, AQE k=3, and rerank k1=80/k2=15/lambda=0.2.
 
-This fusion is not a CityFlow MTMC feature stream or a replacement for `transreid_cityflowv2_best.pth`. The CityFlow port was tested separately in 14u and documented as a dead end in `docs/findings.md`; keep this model path limited to VeRi-776 single-camera evaluation and verification.
+This fusion is not a CityFlow MTMC feature stream or a replacement for `transreid_cityflowv2_best.pth`. The CityFlow port was tested separately and did not transfer; keep this model path limited to VeRi-776 single-camera evaluation and verification.

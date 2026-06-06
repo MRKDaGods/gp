@@ -43,7 +43,7 @@ Datasets for training ReID models (on Kaggle) and evaluating the full MTMC pipel
 ### CityFlowV2 ReID Crops (Primary - Multi-Camera)
 - **Source**: AI City Challenge 2022 Track 1 (46 cameras, city intersections)
 - **Type**: Real multi-camera vehicle tracking with cross-camera identity labels
-- **Crops extracted from**: GT annotations + video frames via `scripts/extract_cityflowv2_crops.py`
+- **Crops extracted from**: GT annotations + video frames during dataset preparation
 - **Structure**: data/processed/cityflowv2_reid/ -> train/, query/, gallery/
 - **Filename format**: `XXXX_SCENE_cNNN_fFFFFFF.jpg` (vehicle_id, scene_camera, frame)
 - **Used for**: Fine-tuning vehicle ReID (NB09) + full MTMC evaluation (IDF1, HOTA, MOTA)
