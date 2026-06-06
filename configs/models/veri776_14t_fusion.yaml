@@ -1,6 +1,6 @@
 # 14t VeRi-776 single-camera fusion config
 # This is NOT a CityFlow MTMC pipeline override. The fusion is single-cam-only.
-# See docs/findings.md section 14t (WIN) and section 14u (CityFlow DEAD END).
+# See docs/model-cards.md section 14t (WIN) and section 14u (CityFlow DEAD END).
 
 veri776_14t_fusion:
   task_type: single_cam_reid
@@ -31,10 +31,10 @@ veri776_14t_fusion:
     tolerance: 0.005
   provenance:
     source_kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
-    docs: docs/findings.md  # section 14t
-    spec: docs/subagent-specs/14t-veri-clipsenet-transreid-fusion.md# 14t VeRi-776 single-camera fusion config
+    docs: docs/model-cards.md  # section 14t
+    spec: docs/model-cards.md# 14t VeRi-776 single-camera fusion config
 # This is NOT a CityFlow MTMC pipeline override. The fusion is single-cam-only.
-# See docs/findings.md section 14t (WIN) and section 14u (CityFlow DEAD END).
+# See docs/model-cards.md section 14t (WIN) and section 14u (CityFlow DEAD END).
 
 veri776_14t_fusion:
   task_type: single_cam_reid
@@ -65,5 +65,5 @@ veri776_14t_fusion:
     tolerance: 0.005
   provenance:
     source_kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
-    docs: docs/findings.md  # section 14t
-    spec: docs/subagent-specs/14t-veri-clipsenet-transreid-fusion.md
+    docs: docs/model-cards.md  # section 14t
+    spec: docs/model-cards.md

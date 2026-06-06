@@ -18,9 +18,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/models.md
-          kernel: yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep
-          line_ref: L138
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: TTA Stage-2 features plus aqe_k=2, w_tertiary=0.525, similarity_threshold=0.48, fic_regularisation=0.5.
     pipeline_config: configs/datasets/cityflowv2.yaml
     model_overrides:
@@ -88,7 +88,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: yahiaakhalafallah/14e-tta-fusion-aqe-fic-sweep
-      verified_by: docs/models.md
+      verified_by: docs/model-cards.md
     tombstone: null
 
   - id: cityflow_transreid
@@ -102,18 +102,18 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
-          kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
-          line_ref: L748
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: CityFlowV2 ad-hoc ReID benchmark mAP for the augoverhaul + EMA training run.
       - name: r1
         value: 0.9241
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
-          kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
-          line_ref: L748
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: CityFlowV2 ad-hoc ReID benchmark Rank-1 for the base model in the augoverhaul + EMA run.
     pipeline_config: null
     model_overrides: []
@@ -148,7 +148,7 @@ models:
     provenance:
       created_at: '2026-05-17'
       created_by_kernel: gumfreddy/09-vehicle-reid-cityflowv2-augoverhaul-ema
-      verified_by: docs/findings.md
+      verified_by: docs/model-cards.md
     tombstone: null
 
   - id: vehicle_mtmc_14k_v1_k7
@@ -162,9 +162,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/models.md
+          path: docs/model-cards.md
           kernel: null
-          line_ref: L139
+          line_ref: null
         note: K7 with w_primary=0.10, w_tertiary=0.45, w_quaternary=0.45, similarity_threshold=0.46.
     pipeline_config: configs/datasets/cityflowv2.yaml
     model_overrides:
@@ -244,7 +244,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: null
-      verified_by: docs/models.md
+      verified_by: docs/model-cards.md
     tombstone: null
 
   - id: person_mtmc_12b
@@ -258,18 +258,18 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/paper-draft.md
-          kernel: gumfreddy/12b-wildtrack-mvdetr-tracking-reid
-          line_ref: L198
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: Rounded headline; findings record the converged 0.9467 cluster.
       - name: moda_groundplane
         value: 0.903
         verified: true
         source:
           kind: docs
-          path: docs/paper-draft.md
+          path: docs/model-cards.md
           kernel: null
-          line_ref: L198
+          line_ref: null
         note: Ground-plane MODA reported for the WILDTRACK person pipeline.
     pipeline_config: configs/datasets/wildtrack.yaml
     model_overrides:
@@ -297,7 +297,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: gumfreddy/12b-wildtrack-mvdetr-tracking-reid
-      verified_by: docs/models.md
+      verified_by: docs/model-cards.md
     tombstone: null
 
   - id: person_detector_12a_mvdetr
@@ -311,27 +311,27 @@ models:
         verified: false
         source:
           kind: docs
-          path: docs/models.md
-          kernel: gumfreddy/12a-wildtrack-mvdetr-training
-          line_ref: L129
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: Epoch-20 detector quality claim, not the final exported-checkpoint line.
       - name: precision
         value: 0.947
         verified: true
         source:
           kind: docs
-          path: docs/models.md
-          kernel: gumfreddy/12a-wildtrack-mvdetr-training
-          line_ref: L129
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: Reported for the MVDeTr detector reference.
       - name: recall
         value: 0.966
         verified: true
         source:
           kind: docs
-          path: docs/models.md
-          kernel: gumfreddy/12a-wildtrack-mvdetr-training
-          line_ref: L129
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: Reported for the MVDeTr detector reference.
     pipeline_config: null
     model_overrides: []
@@ -356,7 +356,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: gumfreddy/12a-wildtrack-mvdetr-training
-      verified_by: docs/paper-draft.md
+      verified_by: docs/model-cards.md
     tombstone: null
 
   - id: veri776_14t_fusion
@@ -370,18 +370,18 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/models.md
-          kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
-          line_ref: L77
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: Rounded registry value for the 14t score-fusion high-water mark.
       - name: r1
         value: 0.9845
         verified: true
         source:
           kind: docs
-          path: docs/models.md
-          kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
-          line_ref: L77
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: First real Rank-1 result at this level in the checkpoint family.
     pipeline_config: configs/models/veri776_14t_fusion.yaml
     model_overrides: []
@@ -417,7 +417,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: yahiaakhalafallah/14t-veri-fusion-clip-senet-x-transreid
-      verified_by: docs/models.md
+      verified_by: docs/model-cards.md
     tombstone: null
 
   - id: veri776_09v_v17_transreid
@@ -431,18 +431,18 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/models.md
-          kernel: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
-          line_ref: L92
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: Best verified mAP for the 09v v17 TransReID checkpoint.
       - name: r1
         value: 0.9833
         verified: true
         source:
           kind: docs
-          path: docs/models.md
-          kernel: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
-          line_ref: L92
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: Best verified Rank-1 ceiling for the 09v v17 TransReID checkpoint.
     pipeline_config: null
     model_overrides: []
@@ -475,7 +475,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: yahiaakhalafallah/09v-veri-776-eval-transreid-rerank
-      verified_by: docs/models.md
+      verified_by: docs/model-cards.md
     tombstone: null
 
   - id: veri776_clipsenet_v6
@@ -489,18 +489,18 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/models.md
-          kernel: yahiaakhalafallah/13-clip-senet-train
-          line_ref: L100
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: Post-rerank mAP used in 14t comparison.
       - name: r1
         value: 0.9732
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
-          kernel: yahiaakhalafallah/13-clip-senet-train
-          line_ref: L346
+          path: docs/model-cards.md
+          kernel: null
+          line_ref: null
         note: Post-rerank Rank-1 used in 14t comparison.
     pipeline_config: null
     model_overrides: []
@@ -530,7 +530,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: yahiaakhalafallah/13-clip-senet-train
-      verified_by: docs/models.md
+      verified_by: docs/model-cards.md
     tombstone: null
 
   - id: deadend_vehicle_csls
@@ -544,9 +544,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/model-cards.md
           kernel: null
-          line_ref: L1003
+          line_ref: null
         note: Catastrophic penalty; penalizes genuine vehicle-type hubs.
     pipeline_config: null
     model_overrides: []
@@ -562,7 +562,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: null
-      verified_by: docs/models.md
+      verified_by: docs/model-cards.md
     tombstone:
       reason: CSLS penalized genuine vehicle-type hubs and caused a -34.7pp MTMC IDF1 regression.
       superseded_by_id: vehicle_mtmc_14e_b1
@@ -578,9 +578,9 @@ models:
         verified: true
         source:
           kind: docs
-          path: docs/findings.md
+          path: docs/model-cards.md
           kernel: null
-          line_ref: L1050
+          line_ref: null
         note: Tight controlled retest penalty; broader gaps degrade further to -13.20pp.
     pipeline_config: null
     model_overrides: []
@@ -596,7 +596,7 @@ models:
     provenance:
       created_at: '2026-05-15'
       created_by_kernel: null
-      verified_by: docs/models.md
+      verified_by: docs/model-cards.md
     tombstone:
       reason: AFLink false merges dominate because cross-camera motion consistency is unreliable in non-overlapping CityFlowV2 cameras.
       superseded_by_id: vehicle_mtmc_14e_b1
