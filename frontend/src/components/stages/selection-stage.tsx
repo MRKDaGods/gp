@@ -187,9 +187,6 @@ export function SelectionStage() {
     }
     // The selection is consumed ONLY by the Stage-4 timeline query - feature
     // extraction (Stage 2) and indexing (Stage 3) run over the whole run and never
-    // receive the selection. So invalidate from Timeline onward (4 -> Refinement ->
-    // Output) and keep Inference intact, instead of forcing a needless (and on real
-    // data, GPU-expensive) re-extraction every time the picked vehicle changes.
     flushPipelineFromStage(4);
   }, [selectionSig]);
 
@@ -392,7 +389,6 @@ export function SelectionStageActions() {
   const handleContinue = () => {
     // Selection is a manual pick with no pipeline run of its own - stamp it done when the
     // user finishes and moves on, so the nav reflects it (mirrors Refinement), and record it
-    // per-run so loading the run later restores the checkmark.
     updateStageProgress(2, { status: "completed", progress: 100, message: "Tracklets selected" });
     if (runId) markManualStageDone(runId, 2);
     setCurrentStage(3);
@@ -458,8 +454,6 @@ function TrackletCard({
 
   // Scrub through the sample frames ONLY while hovered. Inactive stages stay mounted in
   // this dashboard (hidden via CSS), so an always-on interval kept re-fetching crops
-  // forever after leaving Selection. A hidden card can't be hovered, so gating on hover
-  // both kills the idle flood and stops it entirely once you navigate away.
   useEffect(() => {
     if (!hovered || cropUrls.length <= 1) {
       setFrameIdx(0);

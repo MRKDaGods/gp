@@ -20,8 +20,7 @@ import { type AppDataset, useDatasetStore } from "@/lib/store";
 import { useDetectionStore, usePipelineStore, useSessionStore, useTimelineStore, useVideoStore } from "@/store";
 import type { VideoFile } from "@/types";
 
-/** Map a loaded dataset/folder name to the vehicle/person model family so the
- *  inference-stage model picker stays consistent with what was loaded. */
+/** Map a loaded dataset/folder name to the vehicle/person model family so the */
 function inferAppDataset(name: string): AppDataset | null {
   const n = name.toLowerCase();
   if (/cityflow|aic|veri/.test(n)) return "cityflowv2";
@@ -48,7 +47,6 @@ export function UploadStage() {
 
   // Once a run exists (ingestion has created it), lock the input so the user
   // can't swap the dataset/cameras out from under the downstream per-stage runs.
-  // Reset clears the run and unlocks.
   const stage0Status = toStageStatus(pipelineStages.find((s) => s.stage === 0));
   const inputLocked = Boolean(runId);
 
@@ -77,8 +75,6 @@ export function UploadStage() {
         if (response.success && response.data) {
           // Show genuine user uploads on mount. Dataset footage is loaded on
           // demand via the picker - BUT keep any persisted dataset cameras (from
-          // a prior run restored after reload) so re-opening a run still shows its
-          // footage. Merge uploads with the persisted dataset videos.
           const uploadsOnly = response.data.filter((v) =>
             v.path.replace(/\\/g, "/").includes("/uploads/")
           );
@@ -211,7 +207,6 @@ export function UploadStage() {
     resetPipeline();
     // Clear the current video too: DetectionStage stays mounted and will
     // auto-load on-disk artifacts (and re-mark stage 1 "done") for whatever
-    // video is still selected. Dropping it keeps the input genuinely unlocked.
     setCurrentVideo(null);
     setSelectedIds(new Set());
     // The run narrowed the gallery to its selected cameras; restore the dataset's
@@ -256,7 +251,6 @@ export function UploadStage() {
 
   // Stage 0 only: ingest the selected cameras and CREATE the run. Detection,
   // features, indexing, and association are NOT cascaded - each runs from its
-  // own stage page against this run. Nothing downstream auto-starts.
   const handleStartRun = useCallback(async () => {
     if (!activeInputDir) return;
     const chosen = datasetCameraVideos.filter((v) => selectedIds.has(v.id));
@@ -279,8 +273,6 @@ export function UploadStage() {
     });
     // Restrict the workspace to ONLY the selected cameras so every downstream
     // stage (detection viewer, camera switcher, etc.) shows/uses exactly what's
-    // being processed - not every camera in the dataset folder. Mirrors what
-    // loading an existing run does (useLoadRun also scopes to the run's cameras).
     setVideos(chosen);
     setCurrentVideo(chosen[0] ?? null);
     try {
@@ -463,7 +455,7 @@ export function UploadStage() {
                 <div className="flex h-[300px] flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
                   <AlertCircle className="h-8 w-8" />
                   <p>No videos loaded</p>
-                  <p className="text-sm">Pick a dataset with "Load videos" above, or upload your own.</p>
+                  <p className="text-sm">Pick a dataset with &quot;Load videos&quot; above, or upload your own.</p>
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -543,7 +535,6 @@ export function UploadStageActions() {
   const stages = usePipelineStore((s) => s.stages);
   // Navigation only - Stage 1 detection is started from the Detection page's own
   // Run button. Stays disabled until ingestion (stage 0) has actually finished,
-  // not merely when the run id is allocated at ingestion start.
   const ingestDone = toStageStatus(stages.find((s) => s.stage === 0)) === "done";
 
   return (

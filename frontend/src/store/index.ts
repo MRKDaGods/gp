@@ -45,8 +45,7 @@ export interface PipelineFusionConfig {
   lambda: number;
 }
 
-/** Source context for the active run, captured at ingestion (Stage 0) so every
- *  downstream stage can run incrementally against the same run dir + cameras. */
+/** Source context for the active run, captured at ingestion (Stage 0) so every */
 export interface RunInputContext {
   inputDir: string;
   cameras: string[];
@@ -76,8 +75,7 @@ interface PipelineState {
   galleryRunId: string | null;
   /** Source folder/cameras/smoke for the active run; set at Stage 0 ingestion. */
   runInput: RunInputContext | null;
-  /** Pipeline stage number currently executing (0-6), or null when idle. Lets the
-   *  central poller attribute live progress to the correct UI stage. */
+  /** Pipeline stage number currently executing (0-6), or null when idle. Lets the */
   activeStage: number | null;
   /** Live telemetry for the in-flight stage run (camera, frame counts, etc.). */
   runTelemetry: RunTelemetry | null;
@@ -283,7 +281,6 @@ export const usePipelineStore = create<PipelineState>()(
     {
       // Persist the run identity + per-stage status so a browser reload re-opens
       // the active run instead of dropping it. Only stable fields are saved;
-      // transient run state (polling/telemetry) is reset on rehydrate.
       name: 'mtmc-pipeline-run',
       partialize: (s) => ({
         runId: s.runId,
@@ -427,8 +424,7 @@ interface DetectionState {
   /** Toggle selection by trackId (persistent across frames) */
   toggleTrackSelection: (trackId: number) => void;
   selectAll: () => void;
-  /** Replace the selected-track set with an explicit list (e.g. select all tracks
-   *  across the whole run, not just the current frame). */
+  /** Replace the selected-track set with an explicit list (e.g. select all tracks */
   selectTrackIds: (trackIds: number[]) => void;
   deselectAll: () => void;
   setMultiSelectMode: (enabled: boolean) => void;
@@ -538,7 +534,6 @@ export const useDetectionStore = create<DetectionState>()(
     {
       // Persist only the user's tracking selection so it survives a page
       // refresh. Without this, Stage 4 loses the picked vehicle and falls
-      // back to rendering EVERY trajectory. Sets are stored as arrays.
       name: 'detection-selection',
       partialize: (s) => ({
         selectedTrackIds: Array.from(s.selectedTrackIds),
@@ -626,8 +621,7 @@ interface TimelineState {
   confirmedTracks: Set<string>;
   /** Once true (user confirmed/unconfirmed any clip), output filters to confirmed clips only. */
   timelineClipFilterEngaged: boolean;
-  /** The timeline-load key (video/run/selection) the current `tracks` were matched for.
-   *  Persisted so a refresh can restore the result instead of re-running the association query. */
+  /** The timeline-load key (video/run/selection) the current `tracks` were matched for. */
   tracksContextKey: string | null;
 
   // Actions
@@ -768,7 +762,6 @@ export const useTimelineStore = create<TimelineState>()(
     {
       // Persist the matched timeline result so refreshing Stage 4 restores it instead of
       // re-running the cross-camera association query. Upstream edits (selection change,
-      // run switch, re-inference) clear `tracksContextKey`, so stale results never linger.
       name: 'mtmc-timeline',
       partialize: (s) => ({
         tracks: s.tracks,
@@ -802,7 +795,6 @@ export const useTimelineStore = create<TimelineState>()(
 
 // Manual Stage Store - per-run completion of stages that run no pipeline
 // (Selection / Refinement). Persisted by runId so loading a run restores their
-// "done" checkmarks, which can't be inferred from disk artifacts.
 
 interface ManualStageState {
   completedByRun: Record<string, number[]>;
@@ -964,8 +956,6 @@ export const useSessionStore = create<SessionStore>()(
           locationFilter: state.locationFilter,
           // Persist the active stage so a refresh keeps you where you were
           // (e.g. a loaded run on Detection stays on Detection, instead of
-          // snapping back to Upload). Mirrors the pipeline store, which already
-          // persists its run state (runId, stages, runInput, currentVideo).
           currentStage: state.currentStage,
         }),
       }

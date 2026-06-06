@@ -10,9 +10,7 @@ import { useStageExecutionStore } from "@/store";
 
 export interface ExecutionTargetToggleProps {
   stage: number;
-  /** Optionally drive several pipeline stages from one switch (e.g. [2, 3] for
-   *  the inference page, which runs Features + Index together). The displayed
-   *  state reflects the first stage; toggling applies to all of them. */
+  /** Optionally drive several pipeline stages from one switch (e.g. [2, 3] for */
   stages?: number[];
   variant?: "full" | "compact";
   className?: string;

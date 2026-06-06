@@ -23,10 +23,7 @@ function pickEvenlySpacedIndices(total: number, pickCount: number): number[] {
   return [...new Set(idxs)].sort((a, b) => a - b);
 }
 
-/**
- * Multi-stop driving directions (numbered stops in Google Maps).
- * @see https://developers.google.com/maps/documentation/urls/get-started
- */
+/** Multi-stop driving directions (numbered stops in Google Maps). @see https://developers.google.com/maps/documentation/urls/get-started */
 export function buildGoogleMapsDirectionsParamsUrl(coordSegments: string[]): string {
   const origin = coordSegments[0];
   const destination = coordSegments[coordSegments.length - 1];
@@ -65,9 +62,7 @@ function shortenGoogleMapsCoordSegments(segments: string[]): string[] {
   return [first, last];
 }
 
-/**
- * QR / share: built from ordered path coordinates (e.g. full vehicle path).
- */
+/** QR / share: built from ordered path coordinates (e.g. full vehicle path). */
 export function buildGoogleMapsPathShareUrl(pathSlice: MapsPathCoordinate[]): string | null {
   if (pathSlice.length === 0) return null;
 
@@ -94,9 +89,7 @@ export function buildGoogleMapsPathShareUrl(pathSlice: MapsPathCoordinate[]): st
   return buildGoogleMapsDirectionsParamsUrl(segments);
 }
 
-/**
- * Driving directions to one point. Google Maps uses the user's current location (or prompts) when origin is omitted.
- */
+/** Driving directions to one point. Google Maps uses the user's current location (or prompts) when origin is omitted. */
 export function buildGoogleMapsDirectionsToDestination(lat: number, lng: number): string {
   const params = new URLSearchParams();
   params.set("api", "1");

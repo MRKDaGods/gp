@@ -124,11 +124,6 @@ export function RefinementStage() {
 
   // If the user comes back and changes their reference frames (or a re-search / clear empties
   // them), Refinement is being re-worked - un-mark it done (and drop its per-run completion
-  // marker) so it isn't shown as finished while edits are pending.
-  //
-  // CRITICAL: depend ONLY on `refinementFrames`, and read runId/stores via getState. Listing
-  // `runId` as a dep made this fire when a run is LOADED (runId changes) and wipe the done
-  // status that useLoadRun had just restored - making Refinement go stale on open-run/refresh.
   const skipFramesInvalidateRef = useRef(true);
   useEffect(() => {
     if (skipFramesInvalidateRef.current) {
@@ -325,7 +320,6 @@ export function RefinementStageActions() {
   const handleContinue = () => {
     // Refinement is a manual review with no pipeline run of its own, so nothing else marks
     // it complete. Stamp it done when the user finishes and moves on, so the nav reflects it,
-    // and record it per-run so loading the run later restores the checkmark.
     updateStageProgress(5, { status: "completed", progress: 100, message: "Refinement reviewed" });
     if (runId) markManualStageDone(runId, 5);
     setCurrentStage(6);

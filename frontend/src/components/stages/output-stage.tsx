@@ -45,8 +45,7 @@ import {
 const API_BASE = apiBase();
 const outputPalette = ["#22c55e", "#3b82f6", "#f97316", "#e11d48", "#06b6d4", "#8b5cf6", "#f59e0b"];
 const OUTPUT_EXPORT_EVENT = "mtmc:stage6:export";
-/** With no timeline context (e.g. Output opened directly / after a refresh), cap how many
- *  trajectories the map + counts render so Stage 6 never dumps the entire association. */
+/** With no timeline context (e.g. Output opened directly / after a refresh), cap how many */
 const OUTPUT_MAX_TRAJECTORIES = 20;
 
 const VehiclePathMap = dynamic(() => import("@/components/maps/vehicle-path-map"), { ssr: false });
@@ -193,10 +192,7 @@ function trajectoryOwnsRow(traj: OutputTrajectory, row: TimelineTrack): boolean 
   return false;
 }
 
-/**
- * Timeline has one checkbox per camera clip. Trim each trajectory's camera path to
- * **confirmed** segments only so unchecking a camera removes it from output (path, map, counts).
- */
+/** Timeline has one checkbox per camera clip. Trim each trajectory's camera path to */
 function applyTimelineSelectionToTrajectories(
   all: OutputTrajectory[],
   tracks: TimelineTrack[],
@@ -208,10 +204,6 @@ function applyTimelineSelectionToTrajectories(
 
   // Which rows define the identity set to show:
   //  - Once the user engages the per-clip filter (confirm/unconfirm), honor only
-  //    confirmed clips and trim each path to those cameras (original behavior).
-  //  - Otherwise scope Output to whatever the timeline is showing - i.e. the
-  //    selected/matched vehicle, already capped upstream in Stage 4 - instead of
-  //    silently rendering every trajectory in the run.
   const definingRows = timelineFilterEngaged ? tracks.filter((t) => t.confirmed) : tracks;
   if (definingRows.length === 0) return [];
 
@@ -424,7 +416,6 @@ export function OutputStage() {
 
     // No usable context (Output opened directly, after a refresh, or a stale context that
     // doesn't match the loaded trajectories): bound the full association so the map +
-    // counts stay usable instead of dumping every trajectory (or showing nothing).
     if (trajectories.length > OUTPUT_MAX_TRAJECTORIES) {
       const capped = [...trajectories]
         .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
@@ -1263,7 +1254,7 @@ function TrajectoryItem({ trajectory }: { trajectory: OutputTrajectory }) {
           {trajectory.cameras.map((cam, i) => (
             <div key={`${cam}-${i}`} className="flex items-center">
               <div className="h-2 w-2 rounded-full" style={{ backgroundColor: getCameraColor(cam) }} />
-              {i < trajectory.cameras.length - 1 && <span className="mx-0.5 text-muted-foreground">-></span>}
+              {i < trajectory.cameras.length - 1 && <span className="mx-0.5 text-muted-foreground">-&gt;</span>}
             </div>
           ))}
           <span className="ml-1.5 text-[10px] text-muted-foreground">{trajectory.cameras.length} cam</span>

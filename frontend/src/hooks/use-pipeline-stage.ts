@@ -25,17 +25,7 @@ export interface RunPipelineStageOptions {
 const POLL_INTERVAL_MS = 1200;
 const ACTIVE_STATUSES = new Set(["running", "queued", "pending", "processing", "starting"]);
 
-/**
- * Run ONE pipeline stage against the active run and poll it to completion.
- *
- * Each stage runs incrementally against the same run_id (stages read prior
- * stages' outputs from outputs/<run_id>/stageN), so nothing cascades and
- * nothing auto-starts - a stage only runs when its own page invokes this.
- *
- * Returns the terminal status so callers can chain gating (await one stage,
- * then enable the next). Polling is owned by the call, not a standing effect,
- * so simultaneously-mounted stage pages never fight over the shared run status.
- */
+/** Run ONE pipeline stage against the active run and poll it to completion. */
 export function useRunPipelineStage() {
   const setRunId = usePipelineStore((s) => s.setRunId);
   const setActiveStage = usePipelineStore((s) => s.setActiveStage);

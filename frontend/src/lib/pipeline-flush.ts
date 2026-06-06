@@ -7,16 +7,10 @@ import {
   useTimelineStore,
 } from "@/store";
 
-/** Manual UI stages (no pipeline run) whose per-run completion markers must be cleared
- *  when an upstream stage at-or-before them is invalidated. */
+/** Manual UI stages (no pipeline run) whose per-run completion markers must be cleared */
 const MANUAL_STAGES: StageNumber[] = [2, 5];
 
-/**
- * Reset pipeline progress for this stage and all later stages, clear timeline/refinement/output session data,
- * and bump `downstreamInvalidateGeneration` so Stage 4 reloads even if selection/run ids match prior values.
- *
- * @param firstPipelineStageToInvalidate - 0-6; this stage and all higher-numbered stages return to idle defaults.
- */
+/** Reset pipeline progress for this stage and all later stages, clear timeline/refinement/output session data, */
 export function flushPipelineFromStage(firstPipelineStageToInvalidate: StageNumber): void {
   usePipelineStore.setState((state) => ({
     downstreamInvalidateGeneration: state.downstreamInvalidateGeneration + 1,

@@ -55,8 +55,7 @@ const TIMELINE_PLAYHEAD_FPS = 12;
 /** Tracklet full-frame picks/sec while playing (lower than playhead to limit image decode load). */
 const TRACKLET_PICK_FPS = 15;
 const TRACKLET_PICK_BUCKET_SEC = 1 / TRACKLET_PICK_FPS;
-/** When no vehicle is selected, cap how many global trajectories the overview renders
- *  so Stage 4 never dumps the entire association (hundreds of rows / a multi-hour ruler). */
+/** When no vehicle is selected, cap how many global trajectories the overview renders */
 const NON_QUERY_MAX_TRAJECTORIES = 20;
 const TIMELINE_SHOW_ALTERNATIVES_EVENT = "mtmc:timeline:show-alternatives";
 const TIMELINE_RERUN_ASSOCIATION_EVENT = "mtmc:timeline:rerun-association";
@@ -159,8 +158,7 @@ export function TimelineStage() {
     [galleryRunId, resolvedProbeRunId, runId]
   );
 
-  /** Update local resolved probe from timeline diagnostics. Do not call setRunId here - that would
-   *  change the loadTracks effect deps mid-await and cancel the in-flight loader (blank timeline). */
+  /** Update local resolved probe from timeline diagnostics. Do not call setRunId here - that would */
   const applyTimelineResolvedProbe = useCallback(
     (diagnostics: Record<string, unknown> | null | undefined): string | null => {
       const d = diagnostics ?? {};
@@ -219,7 +217,6 @@ export function TimelineStage() {
 
   // Ruler 0...T where T is the sum of every tracklet segment duration. Segments are placed
   // end-to-end in wall-clock order (per global sort by segment start). Playhead value is
-  // that combined time; sumOffsetToVideoTime maps it back to source video time for previews.
   const {
     cameraLanes,
     totalDuration,
@@ -299,9 +296,6 @@ export function TimelineStage() {
 
     // Wall-clock timeline. Lay every segment at its REAL time, relative to the vehicle's
     // first appearance, so a car seen in two overlapping cameras (e.g. cam A 0:15-0:17 and
-    // cam B 0:16-0:18) shows in BOTH at once during the overlap. The previous model
-    // concatenated segments end-to-end, which replayed the overlapping camera's last
-    // second when the playhead reached the next segment ("video 1 loops").
     const allSegs = lanesDraft.flatMap((lane) => lane.segments);
     const wallStart = Math.min(...allSegs.map((s) => s.start));
     const wallEnd = Math.max(...allSegs.map((s) => s.end));
@@ -367,10 +361,7 @@ export function TimelineStage() {
     });
   };
 
-  /**
-   * Build timeline tracks from the matched/summary.json fallback.
-   * Used when normal trajectory rendering fails or returns empty rows.
-   */
+  /** Build timeline tracks from the matched/summary.json fallback. */
   const buildTracksFromMatchedSummary = (summary: any): TimelineTrack[] => {
     const clips: any[] = Array.isArray(summary?.clips) ? summary.clips.filter((c: any) => c.ok) : [];
     if (clips.length === 0) return [];
@@ -407,16 +398,11 @@ export function TimelineStage() {
     return rows;
   };
 
-  /**
-   * Notebook-aligned: one row per global trajectory.
-   * Each row carries a `segments[]` array - one colored block per camera,
-   * matching the `gp-stage-4.ipynb` multi-camera timeline visualization.
-   */
+  /** Notebook-aligned: one row per global trajectory. */
   const buildTracksFromTrajectories = (
     trajectories: any[],
     selectedTrackKeys?: Set<string>,
-    /** Cap the number of distinct global trajectories rendered (best-scoring first).
-     *  Used in query mode so picking one vehicle shows that vehicle, not every look-alike. */
+    /** Cap the number of distinct global trajectories rendered (best-scoring first). */
     maxTrajectories?: number
   ): TimelineTrack[] => {
     if (!Array.isArray(trajectories) || trajectories.length === 0) return [];
@@ -453,7 +439,6 @@ export function TimelineStage() {
 
     // In query mode, keep only the top-N best-matching global trajectories so a
     // single-vehicle pick renders that one vehicle (across its cameras) instead of
-    // every visually-similar car. The remainder remain reachable via "Alternatives".
     const cappedFiltered =
       typeof maxTrajectories === "number" && maxTrajectories > 0
         ? sortedFiltered.slice(0, maxTrajectories)
@@ -549,8 +534,6 @@ export function TimelineStage() {
 
     // Refresh restore: if a matched result is already persisted for this exact context,
     // show it WITHOUT re-running the association query. Upstream edits (selection change,
-    // run switch, re-inference, manual "Run Association") clear `tracksContextKey`, so this
-    // only short-circuits a genuine no-op reload such as a page refresh.
     {
       const tl = useTimelineStore.getState();
       if (tl.tracks.length > 0 && tl.tracksContextKey === timelineLoadKey) {
@@ -718,9 +701,6 @@ export function TimelineStage() {
 
           // NOTE: association is NEVER re-run automatically here. Cross-camera
           // association runs only when the user presses "Run Association" on this
-          // page. If stage-4 artifacts are stale/empty, we fall through to showing
-          // whatever single-camera tracklets exist (below) and leave the stage
-          // status as-is so the user can choose to re-run.
 
           // stage4 exists but no match; show selected single-camera tracklets if available.
           if (q1Selected.length > 0) {
@@ -740,7 +720,6 @@ export function TimelineStage() {
 
           // Critical: if query mode was requested but backend returned neither
           // matches nor selected fallback, do NOT fall through to the non-query
-          // path that loads all trajectories.
           finalTracksSet = true;
           if (seq !== loadTracksSeqRef.current) return;
           setTracks([]);
@@ -945,7 +924,6 @@ export function TimelineStage() {
 
   // Pause playback when this stage isn't visible. All stages stay mounted (hidden via
   // CSS), so a running playhead would otherwise keep advancing and the hidden camera grid
-  // would keep fetching crops/clips after the user navigates away.
   useEffect(() => {
     if (currentStage !== 4 && isPlaying) setIsPlaying(false);
   }, [currentStage, isPlaying]);
@@ -1321,7 +1299,6 @@ export function TimelineStage() {
 
   // For the selected trajectory, find which cameras are active at currentTime.
   // Also determine "past" cameras (ended) and "next" cameras (not started yet)
-  // to mirror the notebook visualization.
   const absCurrentTime =
     tracks.length > 0 ? sumOffsetToVideoTime(currentTime) : timelineStart + currentTime;
 

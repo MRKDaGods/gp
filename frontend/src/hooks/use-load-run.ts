@@ -7,8 +7,7 @@ import { getDatasetVideos, getRunDetail, type RunStageMap } from "@/lib/api";
 import { useDetectionStore, useManualStageStore, usePipelineStore, useSessionStore, useTimelineStore, useVideoStore } from "@/store";
 import type { StageNumber, VideoFile } from "@/types";
 
-/** Re-open an existing run from disk: restore run id, input context, per-stage
- *  status, and the camera footage, then navigate to a sensible stage. */
+/** Re-open an existing run from disk: restore run id, input context, per-stage */
 export function useLoadRun() {
   const setRunId = usePipelineStore((s) => s.setRunId);
   const setRunInput = usePipelineStore((s) => s.setRunInput);
@@ -103,7 +102,6 @@ export function useLoadRun() {
 
       // Land on the furthest meaningful stage: Detection if tracking ran, else Upload.
       // Land on the furthest useful UI stage for what's on disk:
-      // assoc -> Timeline, index/features -> Inference, tracking/ingestion -> Detection.
       const s = detail.stages;
       const target: StageNumber = s.stage4 ? 4 : (s.stage3 || s.stage2) ? 3 : (s.stage1 || s.stage0) ? 1 : 0;
       setSessionStage(target);

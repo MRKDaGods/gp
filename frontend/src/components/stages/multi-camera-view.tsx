@@ -213,7 +213,7 @@ const CameraPane = memo(function CameraPane({
         {outOfRange && (
           <div className="absolute inset-0 z-[6] flex items-center justify-center bg-black/70">
             <span className="rounded bg-black/60 px-2 py-1 text-[11px] text-white/70">
-              outside this camera's range
+              outside this camera&apos;s range
             </span>
           </div>
         )}
@@ -268,12 +268,7 @@ function gridColsClass(n: number): string {
   return "grid-cols-4";
 }
 
-/**
- * Synchronized multi-camera "video wall". A single master clock (global seconds)
- * drives every visible camera; each maps masterTime -> its own local time minus a
- * per-camera offset, clamped to its duration - so cameras of different lengths or
- * start times stay aligned (and out-of-range cameras simply freeze).
- */
+/** Synchronized multi-camera "video wall". A single master clock (global seconds) */
 export function MultiCameraView({
   videos,
   detectionsReady,
@@ -282,8 +277,7 @@ export function MultiCameraView({
   videos: VideoFile[];
   /** Whether detection has finished for this run (gates overlay loading). */
   detectionsReady: boolean;
-  /** External "jump to this camera's frame" request (from the sidebar). The
-   *  token forces a re-seek even when videoId/frame repeat. */
+  /** External "jump to this camera's frame" request (from the sidebar). The */
   seekRequest?: { videoId: string; frame: number; token: number } | null;
 }) {
   // Which cameras are tiled in the grid (VSCode-style tabs toggle these).
@@ -451,9 +445,6 @@ export function MultiCameraView({
 
   // Master-driven playback loop. Instead of a free-running wall clock (which
   // outruns buffering videos and triggers seek-storms), we read the master
-  // tile's REAL currentTime as the clock, so the scrubber can never get ahead of
-  // the footage. Other tiles converge via small playbackRate trims and only
-  // hard-seek when wildly off - which avoids the constant re-buffering.
   useEffect(() => {
     if (!isPlaying) return;
     if (globalDuration <= 0) return;
@@ -493,8 +484,6 @@ export function MultiCameraView({
 
       // Smoothness gate: if any in-range tile hasn't buffered enough to play
       // forward (readyState < HAVE_FUTURE_DATA), hold the shared clock - park the
-      // ready tiles so they don't run ahead, and keep the laggards loading until
-      // everyone can advance together. This trades a brief wait for zero tearing.
       const gNow = gRef.current;
       const inRangeIds = ids.filter((id) => {
         const el = elRefs.current[id];
@@ -598,7 +587,6 @@ export function MultiCameraView({
 
   // Pausing must actually stop native playback (and clear any rate trim). The
   // master loop only advances time while playing; without this the <video>
-  // elements keep playing (so the tiles look "unpausable") after pause.
   useEffect(() => {
     if (isPlaying) return;
     for (const id of Object.keys(elRefs.current)) {
@@ -622,7 +610,6 @@ export function MultiCameraView({
 
   // External "jump to vehicle" - park the wall at the global time where the
   // requested camera shows `frame` (frame -> local time -> +offset), staying in
-  // the grid. Pauses so the vehicle is held on screen. Token de-dupes requests.
   const lastSeekTokenRef = useRef(0);
   useEffect(() => {
     if (!seekRequest || seekRequest.token === lastSeekTokenRef.current) return;

@@ -446,9 +446,7 @@ export async function getDetections(
   };
 }
 
-/**
- * Fetch ALL detections for every frame at once. Returns a Map keyed by frame number.
- */
+/** Fetch ALL detections for every frame at once. Returns a Map keyed by frame number. */
 export async function getAllDetections(
   videoId: string
 ): Promise<Map<number, Detection[]>> {
@@ -943,8 +941,7 @@ export async function runDatasetInput(payload: {
   smoke?: boolean;
   /** Optional subset of camera ids to process (multi-camera selection). */
   cameras?: string[];
-  /** Reuse an existing run so a single pipeline stage runs incrementally
-   *  against the same run dir. Omit to allocate a fresh run. */
+  /** Reuse an existing run so a single pipeline stage runs incrementally */
   runId?: string | null;
 }): Promise<ApiResponse<any>> {
   return fetchApi<ApiResponse<any>>('/datasets/run', {
@@ -966,8 +963,7 @@ export interface RunStageMap {
 
 export type RunStageState = "idle" | "running" | "done" | "error";
 
-/** Per-stage status that merges disk artifacts with the in-flight run's live
- *  stage - so a running/failed stage shows even before it writes output. */
+/** Per-stage status that merges disk artifacts with the in-flight run's live */
 export type RunStageStatusMap = Record<keyof RunStageMap, RunStageState>;
 
 export interface RunVideoRecord {

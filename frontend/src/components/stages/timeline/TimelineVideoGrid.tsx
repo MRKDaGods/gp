@@ -247,7 +247,6 @@ function CameraPreview({
     if (!video || !clipUrl) return;
     // Only the camera that currently holds the vehicle plays. Otherwise every tile with a
     // clip plays at once, so a past camera's clip keeps replaying ("looping") after the
-    // vehicle has already handed off to the next camera.
     if (isPlaying && isActive) {
       video.play().catch(() => {});
     } else {

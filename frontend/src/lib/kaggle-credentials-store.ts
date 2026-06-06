@@ -17,13 +17,7 @@ export interface KaggleCredentialsState {
   openCredentialsModal: () => void;
 }
 
-/**
- * Browser-only Kaggle credentials cache.
- *
- * The project intentionally allows localStorage persistence for user-supplied Kaggle tokens:
- * they stay in this browser, will be sent to the backend per request in Phase 13, and are
- * never written to backend disk. Keep this aligned with the Settings modal warning text.
- */
+/** Browser-only Kaggle credentials cache. */
 export const useKaggleCredentialsStore = create<KaggleCredentialsState>()(
   persist(
     (set) => ({

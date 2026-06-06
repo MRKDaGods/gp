@@ -62,8 +62,7 @@ function detectionCropUrl(
   return apiUrl(`/crops/${encodeURIComponent(videoId)}?frameId=${frameId}&x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&quality=${quality}&minEdge=${minEdge}&pad=0.12`);
 }
 
-/** Frames per camera a quick-test run ingests/processes - mirrors the pipeline's
- *  smoke-test cap (stage0 max_frames / stage1 cam_frames[:10]). */
+/** Frames per camera a quick-test run ingests/processes - mirrors the pipeline's */
 const SMOKE_FRAME_LIMIT = 10;
 
 /** A whole tracked vehicle across the run (aggregated from per-frame detections). */
@@ -117,11 +116,7 @@ function summariseTracks(
   );
 }
 
-/**
- * First frame each track appears - used for sidebar thumbs only.
- * Playback updates overlay boxes every frame; if thumbs used that data, the
- * crop URL would change ~30x/s and flood `/api/crops` (freezing the video).
- */
+/** First frame each track appears - used for sidebar thumbs only. */
 function buildTrackThumbnailSources(
   frameMap: Map<number, Detection[]>
 ): Map<number, { frameId: number; bbox: BoundingBox }> {
@@ -220,9 +215,7 @@ function ClassIconFallback({
   return <Car className={cls} />;
 }
 
-/**
- * Sidebar crop thumbnails: stable crop URL per track + load only when in view.
- */
+/** Sidebar crop thumbnails: stable crop URL per track + load only when in view. */
 const DetectionCropThumb = memo(function DetectionCropThumb({
   videoId,
   classId,
@@ -545,8 +538,7 @@ function DetectionProgressPanel({
   );
 }
 
-/** Camera tab bar - switch which camera's footage + detections are displayed.
- *  Only rendered for multi-camera runs (a single-camera run has nothing to switch). */
+/** Camera tab bar - switch which camera's footage + detections are displayed. */
 function CameraSwitcher({
   videos,
   currentId,
@@ -620,7 +612,6 @@ export function DetectionStage() {
   const [totalFrames, setTotalFrames] = useState(100);
   // Highest frame id that actually has detections - i.e. how far detection was
   // run. For a quick-test (10-frame) run this is ~9, so the scrubber/playback are
-  // bounded to the processed range instead of spanning the whole source video.
   const [detectedMaxFrame, setDetectedMaxFrame] = useState<number | null>(null);
   // All tracked vehicles across the run (not just the current frame).
   const [tracks, setTracks] = useState<TrackSummary[]>([]);
@@ -641,7 +632,6 @@ export function DetectionStage() {
 
   // Cameras in this run, scoped to the run's SELECTED cameras and ordered by
   // camera id. Scoping defends against a store that still holds other dataset
-  // cameras, so detection only ever shows what's actually being processed.
   const runCameraKey = (runInput?.cameras ?? []).join(",");
   const sortedVideos = useMemo(() => {
     const cams = runCameraKey ? runCameraKey.split(",").filter(Boolean) : [];
@@ -656,7 +646,6 @@ export function DetectionStage() {
 
   // If the selected video isn't one of the run's cameras (e.g. a stale value
   // persisted from before), snap to the first in-scope camera so the viewer
-  // never shows footage outside the run.
   useEffect(() => {
     if (!runInput || sortedVideos.length === 0) return;
     if (currentVideo && sortedVideos.some((v) => v.id === currentVideo.id)) return;
@@ -679,9 +668,6 @@ export function DetectionStage() {
 
   // Navigable frame count. The <video> element always streams the FULL source
   // file, but for a quick-test run only the first SMOKE_FRAME_LIMIT frames are
-  // ingested/processed, so we cap the scrubber to that scope - both before
-  // detection runs (via runInput.smoke) and after (via the detected range).
-  // frame<->time mapping always uses the full `totalFrames` so seeks stay accurate.
   const navTotalFrames = (() => {
     let cap = totalFrames;
     if (detectedMaxFrame != null) cap = Math.min(cap, detectedMaxFrame + 1);
@@ -709,8 +695,6 @@ export function DetectionStage() {
       prevDetectionVideoIdRef.current = id;
       // In a multi-camera dataset run every camera belongs to ONE run, so
       // switching the *viewed* camera is just a view change - it must not flush
-      // downstream stage progress. Only flush in the single-upload flow where a
-      // different video genuinely means a different source.
       if (!usePipelineStore.getState().runInput) {
         flushPipelineFromStage(id ? 2 : 1);
       }
@@ -719,8 +703,6 @@ export function DetectionStage() {
 
   // DISPLAY ONLY. Show detection artifacts for the current video, but ONLY once
   // detection has actually finished for this run (stage 1 === "done"). This never
-  // starts a run and never changes the stage status. Gating on "done" prevents
-  // surfacing stale detections from a PRIOR run before the user runs detection.
   useEffect(() => {
     let cancelled = false;
 
@@ -745,7 +727,6 @@ export function DetectionStage() {
 
       // Only show detections once THIS run's detection has completed. Before that
       // (idle / running / error) the viewer stays empty - we never display stale
-      // artifacts left over from a previous run on the same source video.
       if (stage1Status !== "done") {
         detectionCacheRef.current = new Map();
         trackThumbByTrackRef.current = new Map();
@@ -828,7 +809,6 @@ export function DetectionStage() {
 
   // Pause playback when this stage isn't visible. All stages stay mounted (hidden via
   // CSS), so a running video/frame-fallback loop would otherwise keep playing - and
-  // fetching frames - after the user navigates away from Detection.
   useEffect(() => {
     if (currentStage !== 1 && isPlaying) setIsPlaying(false);
   }, [currentStage, isPlaying, setIsPlaying]);
@@ -948,7 +928,6 @@ export function DetectionStage() {
 
   // Jump to a tracked vehicle's frame. In multi-view we seek the grid's shared
   // clock (staying in the wall); in single view we pause + seek the player. The
-  // sidebar tracks belong to the currently-viewed camera (currentVideo).
   const jumpToVehicle = useCallback(
     (frame: number) => {
       if (viewMode === "grid" && sortedVideos.length > 1 && currentVideo) {
@@ -1056,7 +1035,7 @@ export function DetectionStage() {
                 />
               ) : (
                 <span className="text-xs text-muted-foreground">
-                  One scrubber drives all tiles * nudge a camera's offset to align it
+                  One scrubber drives all tiles * nudge a camera&apos;s offset to align it
                 </span>
               )}
             </div>

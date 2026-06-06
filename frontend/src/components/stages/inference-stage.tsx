@@ -262,7 +262,6 @@ export function InferenceActions() {
   const runBackendStage = useCallback(async (stage: 2 | 3) => {
     // Per-stage dataset flow: a run was created at ingestion (Stage 0). Run this
     // pipeline stage incrementally against the same run - nothing cascades and
-    // it only fires from this button press.
     if (runInput) {
       setError(null);
       resetRunArtifacts();
@@ -397,7 +396,6 @@ export function InferenceActions() {
 
   // Cancel a specific stage's run. The run is incremental against one run_id, so
   // cancelling terminates the active subprocess; the poll loop then settles the
-  // stage back to idle. We also optimistically mark it idle for instant feedback.
   const handleCancelStage = async (stage: 2 | 3) => {
     if (!runId) return;
     try {
