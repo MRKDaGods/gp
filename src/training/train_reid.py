@@ -205,7 +205,7 @@ def train_one_epoch(
 def main():
     parser = argparse.ArgumentParser(description="BoT ReID Training")
     parser.add_argument("--dataset", type=str, default="market1501",
-                        choices=["market1501", "veri776", "msmt17"])
+                        choices=["market1501", "veri776", "cityflowv2"])
     parser.add_argument("--root", type=str, required=True,
                         help="Path to dataset root")
     parser.add_argument("--output-dir", type=str, default="models/reid/trained",

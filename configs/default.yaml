@@ -274,7 +274,8 @@ stage4:
     # Gates unreachable cross-camera pairs and favours near-camera near-time
     # matches, using per-camera coordinates. No-op when <2 cameras have coords.
     geospatial:
-      enabled: true
+      enabled: false        # off by default: matches the validated baseline; inert anyway
+                            # until a camera_coordinates.json exists. Set true to use it.
       gate: true            # drop cross-camera pairs unreachable in the elapsed time
       weight: 0.15          # 0..1: how strongly geo plausibility modulates the score
       camera_coordinates_path: ""   # path to camera_coordinates.json (else from dataset)
