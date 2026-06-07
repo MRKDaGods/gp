@@ -762,7 +762,9 @@ export const useTimelineStore = create<TimelineState>()(
     {
       // Persist the matched timeline result so refreshing Stage 4 restores it instead of
       // re-running the cross-camera association query. Upstream edits (selection change,
-      name: 'mtmc-timeline',
+      // -v2: bumped to discard older caches that wrongly stored the single-camera "no
+      // association yet" fallback, which blocked the auto-run-association-on-load path.
+      name: 'mtmc-timeline-v2',
       partialize: (s) => ({
         tracks: s.tracks,
         tracksContextKey: s.tracksContextKey,

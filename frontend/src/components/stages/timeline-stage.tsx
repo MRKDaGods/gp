@@ -137,14 +137,11 @@ export function TimelineStage() {
     return [currentVideo?.id ?? "", runId ?? "", galleryRunId ?? "", ...ids.map(String)].join("\u0001");
   }, [currentVideo?.id, runId, galleryRunId, selectedTrackIdSet]);
 
+  // Reset the once-per-video auto-association guard only when the video changes. (It must NOT
+  // reset on `triggerReload`, or the auto-run below would loop when association yields nothing.)
   useEffect(() => {
     autoAssociationRefreshForVideoRef.current = null;
   }, [currentVideo?.id]);
-
-  /** Let "Rerun association" (`triggerReload`) attempt auto Stage-4 refresh again on the next load. */
-  useEffect(() => {
-    autoAssociationRefreshForVideoRef.current = null;
-  }, [triggerReload]);
 
   /** Backend-resolved probe run (session `runId` can be stale vs disk outputs). */
   const [resolvedProbeRunId, setResolvedProbeRunId] = useState<string | null>(null);
@@ -688,19 +685,32 @@ export function TimelineStage() {
             } catch (_) { /* summary not available, continue */ }
           }
 
-          // Stage-4 artifacts missing for this run: do NOT auto-run association.
-          // Leave the stage idle so the user starts it from "Run Association".
+          // Stage-4 artifacts missing for this run. Auto-run association ONCE per video so the
+          // selected vehicle is found across cameras without the user having to press "Run
+          // Association". (Persisting the selection means we're always in query mode now, which
+          // — unlike the old no-selection path — never auto-ran association, so a fresh run only
+          // ever showed the single selected tracklet.) The per-video guard prevents a loop if
+          // association genuinely produces nothing.
           if (!q1Data.stage4Available) {
+            if (autoAssociationRefreshForVideoRef.current !== currentVideo.id) {
+              autoAssociationRefreshForVideoRef.current = currentVideo.id;
+              if (seq === loadTracksSeqRef.current) {
+                updateStageProgress(4, { status: "running", progress: 5, message: "Running cross-camera association…" });
+                // Reuse the canonical run path (handles both dataset and probe flows); it runs
+                // pipeline stage 4 then bumps triggerReload, which re-enters this loader.
+                window.dispatchEvent(new Event(TIMELINE_RERUN_ASSOCIATION_EVENT));
+              }
+              console.info("decision", "stage4 missing — auto-running association once for video", { video: currentVideo.id });
+              console.groupEnd();
+              return;
+            }
             updateStageProgress(4, {
               status: "idle",
               progress: 0,
               message: "Cross-camera association hasn't run yet - press Run Association.",
             });
-            // Fall through to render single-camera tracklets below, if any.
+            // Already auto-ran once and still nothing — fall through to the single tracklet.
           }
-
-          // NOTE: association is NEVER re-run automatically here. Cross-camera
-          // association runs only when the user presses "Run Association" on this
 
           // stage4 exists but no match; show selected single-camera tracklets if available.
           if (q1Selected.length > 0) {
