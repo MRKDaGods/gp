@@ -121,26 +121,44 @@ class TrackerWrapper:
 
     @staticmethod
     def _get_tracker_class(algorithm: str):
-        """Dynamically import the tracker class from boxmot."""
+        """Dynamically import the tracker class from boxmot.
+
+        boxmot renames its tracker classes across versions (e.g. DeepOcSort vs
+        DeepOCSORT, BotSort vs BoTSORT). Match case-insensitively against whatever
+        the installed build actually exposes so a version bump doesn't break Stage 1.
+        """
         import boxmot
 
-        candidates = {
+        # Preferred exact names first (fast path + disambiguation), then a
+        # case-insensitive scan of boxmot's exports as a version-proof fallback.
+        preferred = {
             "botsort": ("BotSort", "BoTSORT", "BOTSORT"),
-            "deepocsort": ("DeepOcSort", "DeepOCSort", "DEEPOCSORT"),
+            "deepocsort": ("DeepOcSort", "DeepOCSORT", "DeepOCSort", "DEEPOCSORT"),
             "strongsort": ("StrongSort", "StrongSORT", "STRONGSORT"),
             "bytetrack": ("ByteTrack", "BYTETrack", "BYTETRACK"),
             "ocsort": ("OcSort", "OCSort", "OCSORT"),
             "hybridsort": ("HybridSort", "HybridSORT", "HYBRIDSORT"),
         }
-
-        for class_name in candidates[algorithm]:
+        for class_name in preferred.get(algorithm, ()):
             tracker_cls = getattr(boxmot, class_name, None)
-            if tracker_cls is not None:
+            if isinstance(tracker_cls, type):
                 return tracker_cls
 
+        target = algorithm.replace("-", "").replace("_", "").lower()
+        for name in dir(boxmot):
+            if name.startswith("_"):
+                continue
+            obj = getattr(boxmot, name, None)
+            if isinstance(obj, type) and name.replace("_", "").lower() == target:
+                return obj
+
+        available = sorted(
+            n for n in dir(boxmot)
+            if not n.startswith("_") and isinstance(getattr(boxmot, n, None), type)
+        )
         raise ImportError(
-            f"boxmot does not expose a supported class for '{algorithm}'. "
-            f"Tried: {candidates[algorithm]}"
+            f"boxmot {getattr(boxmot, '__version__', '?')} does not expose a tracker class "
+            f"for '{algorithm}'. Available tracker classes: {available}"
         )
 
     def update(

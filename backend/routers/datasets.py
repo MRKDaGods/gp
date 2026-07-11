@@ -16,6 +16,7 @@ from backend.config import (
 )
 from backend.dependencies import get_app_state
 from backend.services.pipeline_service import (
+    DEFAULT_DATASET_KEY,
     _execute_dataset_pipeline,
     _execute_input_dir_pipeline,
     _resolve_run_id,
@@ -317,11 +318,11 @@ async def run_dataset_input(
 
     # Which dataset drives detection classes (vehicles vs people). Prefer an explicit
     # hint from the client, else the dataset name, else infer from the input path.
-    # None -> configs/default.yaml (vehicles). Without this, a WILDTRACK run detected
-    # only vehicle classes and never produced any people.
+    # Custom/unrecognized folders fall back to the CityFlow config (YOLO + BoT-SORT,
+    # vehicle classes) rather than configs/default.yaml.
     dataset_key = resolve_dataset_key(
         str(payload.get("dataset") or payload.get("name") or ""), _norm(resolved)
-    )
+    ) or DEFAULT_DATASET_KEY
 
     # Optional subset of cameras to track. Validate against what's on disk.
     requested = payload.get("cameras") or []

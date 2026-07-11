@@ -51,6 +51,12 @@ DATASET_TASK_BY_NAME = {
     "veri776": "single_cam_reid",
 }
 
+# Config used for custom / unrecognized dataset folders. Traffic-style vehicle
+# footage is the common case, so default to the CityFlowV2 config (YOLO + BoT-SORT,
+# vehicle classes) instead of configs/default.yaml. Overridable via MTMC_DEFAULT_DATASET.
+_env_default_dataset = os.environ.get("MTMC_DEFAULT_DATASET", "cityflowv2").strip().lower()
+DEFAULT_DATASET_KEY = _env_default_dataset if _env_default_dataset in DATASET_CONFIG_BY_NAME else "cityflowv2"
+
 
 class RunCancelled(RuntimeError):
     """Raised when a pipeline run is cancelled by the user mid-execution."""
@@ -1507,7 +1513,8 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
         input_dir = _prepare_dataset_input_for_run(run_id, dataset_path)
 
         coords_file = dataset_path / "camera_coordinates.json"
-        dataset_key = resolve_dataset_key(folder_name, str(dataset_path))
+        # Custom/unrecognized folders fall back to the CityFlow config (not default.yaml).
+        dataset_key = resolve_dataset_key(folder_name, str(dataset_path)) or DEFAULT_DATASET_KEY
         if dataset_key:
             app_state.active_runs[run_id]["dataset"] = dataset_key
         cmd = _build_pipeline_cmd(
@@ -1610,8 +1617,9 @@ async def _execute_input_dir_pipeline(
     try:
         stage_nums = [int(s) for s in stages.split(",") if s.strip().isdigit()]
         # Resolve which dataset config drives detection classes (vehicles vs people).
-        # Prefer an explicit hint, else infer from the input path; None -> default.yaml.
-        dataset_key = resolve_dataset_key(dataset, input_dir)
+        # Prefer an explicit hint, else infer from the input path; custom/unknown
+        # folders fall back to the CityFlow config (YOLO + BoT-SORT), not default.yaml.
+        dataset_key = resolve_dataset_key(dataset, input_dir) or DEFAULT_DATASET_KEY
         app_state.active_runs[run_id]["message"] = f"Running ingestion on {label}..."
         app_state.active_runs[run_id]["progress"] = 2
         if dataset_key:
