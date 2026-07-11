@@ -124,41 +124,36 @@ class TrackerWrapper:
         """Dynamically import the tracker class from boxmot.
 
         boxmot renames its tracker classes across versions (e.g. DeepOcSort vs
-        DeepOCSORT, BotSort vs BoTSORT). Match case-insensitively against whatever
-        the installed build actually exposes so a version bump doesn't break Stage 1.
+        DeepOCSORT). Try the known casings for the requested tracker only, and
+        tolerate a getattr that raises: newer boxmot builds lazily import
+        submodules on attribute access, so we must NOT scan the whole namespace
+        (that triggers EVERY lazy import, including unrelated ones that may be
+        broken) and must catch import errors per-candidate rather than crash.
         """
         import boxmot
 
-        # Preferred exact names first (fast path + disambiguation), then a
-        # case-insensitive scan of boxmot's exports as a version-proof fallback.
-        preferred = {
-            "botsort": ("BotSort", "BoTSORT", "BOTSORT"),
-            "deepocsort": ("DeepOcSort", "DeepOCSORT", "DeepOCSort", "DEEPOCSORT"),
-            "strongsort": ("StrongSort", "StrongSORT", "STRONGSORT"),
-            "bytetrack": ("ByteTrack", "BYTETrack", "BYTETRACK"),
-            "ocsort": ("OcSort", "OCSort", "OCSORT"),
-            "hybridsort": ("HybridSort", "HybridSORT", "HYBRIDSORT"),
+        candidates = {
+            "botsort": ("BotSort", "BoTSORT", "BOTSORT", "BotSORT", "Botsort"),
+            "deepocsort": ("DeepOcSort", "DeepOCSORT", "DeepOCSort", "DEEPOCSORT", "DeepOcSORT", "Deepocsort"),
+            "strongsort": ("StrongSort", "StrongSORT", "STRONGSORT", "Strongsort"),
+            "bytetrack": ("ByteTrack", "BYTETrack", "BYTETRACK", "Bytetrack"),
+            "ocsort": ("OcSort", "OCSort", "OCSORT", "Ocsort"),
+            "hybridsort": ("HybridSort", "HybridSORT", "HYBRIDSORT", "Hybridsort"),
         }
-        for class_name in preferred.get(algorithm, ()):
-            tracker_cls = getattr(boxmot, class_name, None)
+        for class_name in candidates.get(algorithm, ()):
+            try:
+                tracker_cls = getattr(boxmot, class_name)
+            except Exception:
+                # Lazy-import of this attribute failed in this boxmot build - skip it.
+                continue
             if isinstance(tracker_cls, type):
                 return tracker_cls
 
-        target = algorithm.replace("-", "").replace("_", "").lower()
-        for name in dir(boxmot):
-            if name.startswith("_"):
-                continue
-            obj = getattr(boxmot, name, None)
-            if isinstance(obj, type) and name.replace("_", "").lower() == target:
-                return obj
-
-        available = sorted(
-            n for n in dir(boxmot)
-            if not n.startswith("_") and isinstance(getattr(boxmot, n, None), type)
-        )
         raise ImportError(
-            f"boxmot {getattr(boxmot, '__version__', '?')} does not expose a tracker class "
-            f"for '{algorithm}'. Available tracker classes: {available}"
+            f"boxmot {getattr(boxmot, '__version__', '?')} does not expose a class for "
+            f"tracker '{algorithm}'. This project targets boxmot 10-12; a newer boxmot "
+            "restructured its API. Reinstall a compatible version with:\n"
+            "    pip install \"boxmot>=10.0,<13\""
         )
 
     def update(
