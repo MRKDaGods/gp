@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -11,11 +13,16 @@ from loguru import logger
 from omegaconf import DictConfig
 
 from src.core.data_models import FrameInfo, Tracklet
+from src.core.gpu_utils import effective_half
 from src.core.io_utils import save_tracklets_by_camera
 from src.stage1_tracking.detector import Detector
 from src.stage1_tracking.ssa import apply_ssa
 from src.stage1_tracking.tracker import TrackerWrapper
 from src.stage1_tracking.tracklet_builder import TrackletBuilder
+
+# Ultralytics logs a noisy "'half' is deprecated" warning on every predict() call.
+# We already choose precision deliberately (see effective_half); silence the spam.
+logging.getLogger("ultralytics").setLevel(logging.ERROR)
 
 
 def _load_roi_mask(cfg: DictConfig, camera_id: str) -> Optional[np.ndarray]:
@@ -64,17 +71,31 @@ def run_stage1(
     for cam_id in frames_by_camera:
         frames_by_camera[cam_id].sort(key=lambda f: f.frame_id)
 
-    # Initialize detector
+    # Initialize detector. FP16 is honored only on GPUs where it's actually fast
+    # (Volta+); on Pascal/Maxwell (e.g. GTX 1050 Ti) it silently uses FP32.
     detector = Detector(
         model_path=stage_cfg.detector.model,
         confidence_threshold=stage_cfg.detector.confidence_threshold,
         iou_threshold=stage_cfg.detector.iou_threshold,
         classes=list(stage_cfg.detector.classes),
         device=stage_cfg.detector.device,
-        half=stage_cfg.detector.get("half", True),
+        half=effective_half(stage_cfg.detector.get("half", True), str(stage_cfg.detector.device)),
         img_size=stage_cfg.detector.get("img_size", 640),
         agnostic_nms=stage_cfg.detector.get("agnostic_nms", True),
     )
+
+    # Detection batch size - process this many frames per GPU call so the GPU
+    # stays fed instead of idling between single-frame inferences. Batching only
+    # helps once a single frame no longer saturates the GPU, so scale the default
+    # by resolution: a 1280px frame already maxes a modest GPU (batch=1, no
+    # regression), while 640px leaves headroom (batch=4, ~1.4x). Override via
+    # MTMC_DET_BATCH.
+    _imgsz = int(stage_cfg.detector.get("img_size", 640))
+    _default_batch = 4 if _imgsz <= 768 else (2 if _imgsz <= 1024 else 1)
+    try:
+        det_batch = max(1, int(os.environ.get("MTMC_DET_BATCH", str(_default_batch))))
+    except ValueError:
+        det_batch = _default_batch
 
     min_tracklet_length = stage_cfg.get("min_tracklet_length", 5)
     min_tracklet_area = stage_cfg.get("min_tracklet_area", 500)
@@ -107,12 +128,12 @@ def run_stage1(
         if roi_cfg.get("enabled", True):
             roi_mask = _load_roi_mask(cfg, camera_id)
 
-        # Initialize tracker for this camera
+        # Initialize tracker for this camera (FP16 only where it's fast).
         tracker = TrackerWrapper(
             algorithm=stage_cfg.tracker.algorithm,
             reid_weights=stage_cfg.tracker.get("reid_weights"),
             device=stage_cfg.tracker.device,
-            half=stage_cfg.tracker.get("half", True),
+            half=effective_half(stage_cfg.tracker.get("half", True), str(stage_cfg.tracker.device)),
             tracker_config=stage_cfg.tracker,
         )
 
@@ -132,39 +153,41 @@ def run_stage1(
         # Throttle progress logs to ~every 1% (min 1 frame) to keep stdout light
         # while still giving the backend a smooth per-frame signal to interpolate.
         progress_every = max(1, cam_total // 100)
-        for frame_pos, frame_info in enumerate(cam_frames):
-            import cv2
 
-            if frame_pos % progress_every == 0 or frame_pos == cam_total - 1:
-                logger.info(
-                    f"[PROGRESS] camera={camera_id} frame={frame_pos + 1} total={cam_total}"
-                )
+        # Process frames in batches: detection runs on the whole batch in one GPU
+        # call (high utilization), then tracking is applied sequentially in frame
+        # order (the tracker is stateful and must stay ordered).
+        for batch_start in range(0, cam_total, det_batch):
+            batch_infos = cam_frames[batch_start:batch_start + det_batch]
 
-            frame = cv2.imread(frame_info.frame_path)
-            if frame is None:
-                logger.warning(f"Cannot read frame: {frame_info.frame_path}")
-                failed_frames += 1
+            loaded: List[tuple] = []  # (frame_info, original_frame, masked_frame)
+            for frame_info in batch_infos:
+                frame = cv2.imread(frame_info.frame_path)
+                if frame is None:
+                    logger.warning(f"Cannot read frame: {frame_info.frame_path}")
+                    failed_frames += 1
+                    continue
+                # ROI mask (non-road -> black) before detection; the tracker still
+                # gets the original frame so ReID appearance features are clean.
+                masked = cv2.bitwise_and(frame, frame, mask=roi_mask) if roi_mask is not None else frame
+                loaded.append((frame_info, frame, masked))
+
+            if not loaded:
                 continue
 
-            # Apply ROI mask before detection (mask non-road regions to black).
-            # The tracker still receives the original frame for ReID features.
-            if roi_mask is not None:
-                frame_masked = cv2.bitwise_and(frame, frame, mask=roi_mask)
-            else:
-                frame_masked = frame
+            batch_dets = detector.detect_batch([m for (_, _, m) in loaded])
 
-            # Detect on masked frame (or original if no ROI)
-            detections = detector.detect(frame_masked)
+            for (frame_info, frame, _), detections in zip(loaded, batch_dets):
+                tracks = tracker.update(detections, frame)
+                builder.add_frame(
+                    tracks=tracks,
+                    frame_id=frame_info.frame_id,
+                    timestamp=frame_info.timestamp,
+                )
 
-            # Track on original frame (unmasked for ReID appearance)
-            tracks = tracker.update(detections, frame)
-
-            # Accumulate
-            builder.add_frame(
-                tracks=tracks,
-                frame_id=frame_info.frame_id,
-                timestamp=frame_info.timestamp,
-            )
+            done = min(batch_start + det_batch, cam_total)
+            if batch_start % max(progress_every, det_batch) < det_batch or done == cam_total:
+                logger.info(f"[PROGRESS] camera={camera_id} frame={done} total={cam_total}")
 
         # Finalize tracklets
         tracklets = builder.finalize()

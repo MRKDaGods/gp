@@ -7,15 +7,21 @@ import {
   Download,
   Camera,
   Maximize2,
-  Car,
-  Truck,
-  Bus,
   TrendingUp,
   Gauge,
   Copy,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { getCameraColor, formatDuration } from "@/lib/utils";
+import {
+  classIconForName,
+  classIdFromName,
+  domainIcon,
+  domainNoun,
+  resolveDomain,
+  type TrackingDomain,
+} from "@/lib/class-meta";
+import { useDatasetStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -270,7 +276,7 @@ function trajectoryFromGlobal(item: Record<string, unknown>, index: number): Out
 
   const t0 = item.tracklets as { class_name?: string; className?: string }[] | undefined;
   const vehicleType = String(
-    item.className ?? item.class ?? item.class_name ?? t0?.[0]?.className ?? t0?.[0]?.class_name ?? "sedan"
+    item.className ?? item.class ?? item.class_name ?? t0?.[0]?.className ?? t0?.[0]?.class_name ?? "object"
   ).toLowerCase();
 
   const confidence = Number(item.confidence ?? 0.8);
@@ -295,7 +301,7 @@ function trajectoryFromTrackletSummary(item: any, index: number): OutputTrajecto
     cameras: [cameraId],
     cameraSequence: [cameraId],
     duration: Number(item.duration ?? 0),
-    vehicleType: String(item.className ?? "sedan").toLowerCase(),
+    vehicleType: String(item.className ?? "object").toLowerCase(),
     confidence: Number(item.confidence ?? 0.8),
     color: outputPalette[index % outputPalette.length],
   };
@@ -329,6 +335,9 @@ function trajectoriesFromMatchedSummary(summary: any): OutputTrajectory[] {
       ordered.map((clip: any) => clip.camera_id ?? clip.cameraId ?? "")
     );
     const cameras = Array.from(new Set(cameraSequence));
+    const groupClassName = String(
+      ordered[0]?.class_name ?? ordered[0]?.className ?? "object"
+    ).toLowerCase();
 
     const starts = ordered.map((clip: any) => Number(clip.start_time_s ?? clip.startTime ?? 0));
     const ends = ordered.map((clip: any) => Number(clip.end_time_s ?? clip.endTime ?? 0));
@@ -349,7 +358,7 @@ function trajectoriesFromMatchedSummary(summary: any): OutputTrajectory[] {
       cameras,
       cameraSequence,
       duration,
-      vehicleType: "vehicle",
+      vehicleType: groupClassName,
       confidence,
       color: outputPalette[index % outputPalette.length],
     };
@@ -432,6 +441,15 @@ export function OutputStage() {
     () => displayTrajectories.filter((trajectory) => !hiddenTrajectoryIds.has(trajectory.id)),
     [displayTrajectories, hiddenTrajectoryIds]
   );
+
+  // Vehicles vs people - prefer the actual trajectory classes, fall back to the dataset.
+  const selectedDataset = useDatasetStore((s) => s.selectedDataset);
+  const domain: TrackingDomain = useMemo(() => {
+    const classIds = visibleTrajectories
+      .map((t) => classIdFromName(t.vehicleType))
+      .filter((x): x is number => x != null);
+    return resolveDomain(selectedDataset, classIds);
+  }, [selectedDataset, visibleTrajectories]);
 
   const summaryVideoPayload = useMemo(():
     | { includeClips: { camera_id: string; track_id: number }[] }
@@ -1028,7 +1046,7 @@ export function OutputStage() {
                   <Label className="text-xs">Visible trajectories</Label>
                   {trajectoryOverflow ? (
                     <p className="text-[11px] leading-tight text-muted-foreground">
-                      Showing top {trajectoryOverflow.shown} of {trajectoryOverflow.total}. Pick a vehicle in Selection (or confirm clips in Timeline) to scope the output.
+                      Showing top {trajectoryOverflow.shown} of {trajectoryOverflow.total}. Pick a {domainNoun(domain)} in Selection (or confirm clips in Timeline) to scope the output.
                     </p>
                   ) : null}
                   <div className="max-h-36 space-y-1 overflow-auto rounded border bg-muted/20 p-2">
@@ -1059,7 +1077,7 @@ export function OutputStage() {
             <DisclosurePanel title="Debug" tier="debug" description="Raw counts and export readiness.">
               <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                 <StatRow icon={Camera} label="Cameras" value={String(outputStats.camerasAnalyzed)} />
-                <StatRow icon={Car} label="Vehicles" value={String(outputStats.uniqueVehicles)} />
+                <StatRow icon={domainIcon(domain)} label={domainNoun(domain, { plural: true, cap: true })} value={String(outputStats.uniqueVehicles)} />
                 <StatRow icon={TrendingUp} label="Cross-cam" value={String(outputStats.crossCameraMatches)} />
                 <StatRow icon={Gauge} label="Avg. Conf." value={`${(outputStats.avgConfidence * 100).toFixed(0)}%`} />
                 <div className="break-all font-mono sm:col-span-2 lg:col-span-4">runId: {effectiveRunId ?? "none"}</div>
@@ -1072,9 +1090,9 @@ export function OutputStage() {
             {hasMapLayer ? (
               <Card>
               <CardHeader className="space-y-1">
-                <CardTitle className="text-sm">Vehicle Path Map</CardTitle>
+                <CardTitle className="text-sm">{domain === "people" ? "People" : domainNoun(domain, { cap: true })} Path Map</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Colored pins are on the vehicle track; gray pins are other cameras.{" "}
+                  Colored pins are on the {domainNoun(domain)} track; gray pins are other cameras.{" "}
                   <strong className="font-medium text-foreground">Click any pin</strong> to open Google Maps with driving
                   directions (multi-stop along the track to that camera, or to that location if it is off-track). Use
                   the dropdown to change which part of the track is highlighted here; the QR code still shares the{" "}
@@ -1083,7 +1101,7 @@ export function OutputStage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-2">
-                  <Label className="text-xs">Tracked vehicle</Label>
+                  <Label className="text-xs">Tracked {domainNoun(domain)}</Label>
                   <select
                     className="w-full rounded border bg-background px-3 py-2 text-sm"
                     value={selectedTrajectoryId ?? ""}
@@ -1232,8 +1250,7 @@ export function OutputStageActions() {
 // Sub-components
 
 function TrajectoryItem({ trajectory }: { trajectory: OutputTrajectory }) {
-  const vt = trajectory.vehicleType;
-  const Icon = vt.includes("truck") ? Truck : vt.includes("bus") ? Bus : Car;
+  const Icon = classIconForName(trajectory.vehicleType);
 
   return (
     <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-3 transition-colors hover:bg-muted">

@@ -20,6 +20,7 @@ from backend.services.pipeline_service import (
     _execute_input_dir_pipeline,
     _resolve_run_id,
     _write_run_context,
+    resolve_dataset_key,
 )
 from backend.services.video_service import _probe_video_metadata, _register_video_path
 from backend.state import AppState
@@ -277,8 +278,12 @@ async def dataset_videos(inputDir: str, state: AppState = Depends(get_app_state)
         vid_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(vpath.resolve())))
         rec = state.uploaded_videos.get(vid_id)
         if rec:
+            # Persist the real camera id on the stored record so run-linking and the
+            # detections endpoint can resolve it (e.g. WILDTRACK "C1", which the
+            # CityFlow S##_c### regex can't recover from the filename).
+            rec["cameraId"] = cam["id"]
+            rec["_camera_id"] = cam["id"]
             payload = dict(rec)
-            payload["cameraId"] = cam["id"]
             payload["latestRunId"] = state.video_to_latest_run.get(vid_id)
             videos.append(payload)
     return {"success": True, "data": videos}
@@ -310,6 +315,14 @@ async def run_dataset_input(
     stages = str(payload.get("stages") or "0")
     smoke = bool(payload.get("smoke") or False)
 
+    # Which dataset drives detection classes (vehicles vs people). Prefer an explicit
+    # hint from the client, else the dataset name, else infer from the input path.
+    # None -> configs/default.yaml (vehicles). Without this, a WILDTRACK run detected
+    # only vehicle classes and never produced any people.
+    dataset_key = resolve_dataset_key(
+        str(payload.get("dataset") or payload.get("name") or ""), _norm(resolved)
+    )
+
     # Optional subset of cameras to track. Validate against what's on disk.
     requested = payload.get("cameras") or []
     available_ids = {c["id"] for c in cameras}
@@ -337,6 +350,7 @@ async def run_dataset_input(
         "startedAt": datetime.now().isoformat(),
         "datasetFolder": name,
         "inputDir": _norm(resolved),
+        "dataset": dataset_key,
         "cameraCount": len(selected) if selected else len(cameras),
         "selectedCameras": selected or None,
         "stages": stages,
@@ -346,6 +360,7 @@ async def run_dataset_input(
         {
             "source": "dataset-input",
             "datasetName": name,
+            "dataset": dataset_key,
             "inputDir": _norm(resolved),
             "layout": layout,
             "selectedCameras": selected or None,
@@ -355,7 +370,7 @@ async def run_dataset_input(
     )
     background_tasks.add_task(
         _execute_input_dir_pipeline,
-        run_id, _norm(resolved), stages, smoke, name, selected or None,
+        run_id, _norm(resolved), stages, smoke, name, selected or None, dataset_key,
     )
     return {"success": True, "data": state.active_runs[run_id]}
 

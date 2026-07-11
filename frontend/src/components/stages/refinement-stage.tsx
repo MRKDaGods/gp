@@ -377,7 +377,7 @@ function buildRefinedTrack(alt: any, avgScore: number, index: number): TimelineT
     segments: [segment],
     label: alt.label ?? `Refined * ${alt.cameraId} * track ${alt.trackId}`,
     confidence: avgScore,
-    className: alt.className ?? "vehicle",
+    className: alt.className ?? "object",
   };
 }
 

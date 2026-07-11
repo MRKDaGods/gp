@@ -1,6 +1,7 @@
 """Pipeline subprocess orchestration, run ID allocation, and background tasks."""
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -110,6 +111,35 @@ def resolve_pipeline_config_path(dataset: Optional[str] = None) -> str:
 def _normalise_dataset(dataset: Optional[str]) -> Optional[str]:
     value = (dataset or "").strip().lower()
     return value or None
+
+
+def resolve_dataset_key(
+    hint: Optional[str] = None, input_dir: Optional[str] = None
+) -> Optional[str]:
+    """Resolve a known dataset key (cityflowv2/wildtrack/...) from an explicit hint
+    or the input directory path. Returns None when it can't be determined, so the
+    caller falls back to configs/default.yaml. Never raises - unknown hints are
+    ignored rather than rejected (custom folders are valid input).
+
+    This is what makes the *folder-run* path (POST /api/datasets/run) dataset-aware:
+    without it every run used configs/default.yaml (vehicle classes only), so a
+    WILDTRACK (person) run never detected people.
+    """
+    normalised = _normalise_dataset(hint)
+    if normalised and normalised in DATASET_CONFIG_BY_NAME:
+        return normalised
+    if input_dir:
+        low = str(input_dir).replace("\\", "/").lower()
+        # Direct dataset-key match (covers data/raw/<key>/... and run-local copies).
+        for key in DATASET_CONFIG_BY_NAME:
+            if key in low:
+                return key
+        # Common aliases for the two supported task families.
+        if "wildtrack" in low:
+            return "wildtrack"
+        if "cityflow" in low or "/aic" in low:
+            return "cityflowv2"
+    return None
 
 
 def _lookup_registry_model(model_id: str):
@@ -960,6 +990,17 @@ def _build_pipeline_cmd(
             "--override", "stage2.reid.batch_size=4",
         ])
     else:
+        # CUDA is available and CPU wasn't forced: explicitly pin every
+        # GPU-capable stage to the GPU so a stray `device: cpu` in a dataset/model
+        # config can't silently run detection, tracking, or ReID on the CPU.
+        # (Stage 0 frame decode/encode is OpenCV + disk-bound with no working GPU
+        # path on this build; stage 3 FAISS is a CPU-only wheel; stage 4/5 are
+        # numpy graph + CPU metrics - none of those can use the GPU here.)
+        cmd.extend([
+            "--override", "stage1.detector.device=cuda:0",
+            "--override", "stage1.tracker.device=cuda:0",
+            "--override", "stage2.reid.device=cuda:0",
+        ])
         if sys.platform == "win32":
             cmd.extend([
                 "--override", "stage2.reid.half=false",
@@ -973,6 +1014,13 @@ def _build_pipeline_cmd(
         cmd.extend([
             "--override", f"stage1.tracker.type={tracker}",
         ])
+    # Detection input resolution is the single biggest speed lever. The dataset
+    # configs use 1280 (accuracy-tuned for strong GPUs); on a modest local GPU
+    # that's slow. MTMC_LOCAL_IMGSZ lets the user trade accuracy for speed
+    # (e.g. 960 ~1.8x, 640 ~4x faster) without editing YAML.
+    local_imgsz = os.environ.get("MTMC_LOCAL_IMGSZ", "").strip()
+    if local_imgsz.isdigit():
+        cmd.extend(["--override", f"stage1.detector.img_size={int(local_imgsz)}"])
     return cmd
 
 
@@ -1271,6 +1319,15 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
         pipeline_config = config.get("resolvedConfig")
         model_overrides = list(config.get("appliedOverrides") or [])
 
+        # If the caller didn't pin a dataset/config, inherit the one this run was
+        # created with (set by the dataset-folder run) so every stage uses the same
+        # class config (vehicles vs people) as detection did - not configs/default.yaml.
+        if not dataset and not pipeline_config:
+            run_ctx = app_state.active_runs.get(run_id, {})
+            inherited = resolve_dataset_key(run_ctx.get("dataset"), run_ctx.get("inputDir"))
+            if inherited:
+                dataset = inherited
+
         if not video_id or video_id not in app_state.uploaded_videos:
             raise RuntimeError(f"Stage {stage} requires a valid videoId")
 
@@ -1450,10 +1507,14 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
         input_dir = _prepare_dataset_input_for_run(run_id, dataset_path)
 
         coords_file = dataset_path / "camera_coordinates.json"
+        dataset_key = resolve_dataset_key(folder_name, str(dataset_path))
+        if dataset_key:
+            app_state.active_runs[run_id]["dataset"] = dataset_key
         cmd = _build_pipeline_cmd(
             stages="0,1,2,3,4",
             run_id=run_id,
             input_dir=input_dir.as_posix(),
+            dataset=dataset_key,
             camera_coordinates_path=(
                 coords_file.as_posix() if coords_file.exists() else None
             ),
@@ -1480,6 +1541,23 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
         _finalize_run_failure(run_id, e, _traceback.format_exc(), "Error")
 
 
+def _camera_id_from_path_under(root: Path, vpath: Path) -> Optional[str]:
+    """Derive a camera id from a video path relative to the dataset input dir, the
+    same way the folder scanner does: parent-dir name for a per-camera layout
+    (S01_c001/vdo.avi), filename stem for a flat layout (C1.mp4). Handles datasets
+    whose camera ids don't match the CityFlow S##_c### pattern (e.g. WILDTRACK)."""
+    try:
+        rel = vpath.resolve().relative_to(root)
+    except Exception:
+        return None
+    parts = rel.parts
+    if len(parts) >= 2:
+        return parts[-2]
+    if parts:
+        return Path(parts[-1]).stem
+    return None
+
+
 def _link_input_dir_videos_to_run(
     run_id: str, input_dir: str, cameras: Optional[List[str]]
 ) -> None:
@@ -1503,8 +1581,17 @@ def _link_input_dir_videos_to_run(
         if resolved != root and root not in resolved.parents:
             continue
         if selected_norm is not None:
-            cam = _extract_camera_id(vpath) or _extract_camera_id(str(vid_meta.get("name", "")))
-            if cam is None or _normalize_camera_id(cam) not in selected_norm:
+            # Prefer the stored camera id (e.g. WILDTRACK "C1"), then the path relative
+            # to the input dir, then the CityFlow S##_c### regex. Without this, cameras
+            # that don't match the regex are never linked and their detections never show.
+            cam = (
+                vid_meta.get("cameraId")
+                or vid_meta.get("_camera_id")
+                or _camera_id_from_path_under(root, resolved)
+                or _extract_camera_id(vpath)
+                or _extract_camera_id(str(vid_meta.get("name", "")))
+            )
+            if cam is None or _normalize_camera_id(str(cam)) not in selected_norm:
                 continue
         app_state.video_to_latest_run[vid_id] = run_id
         _persist_probe_link(vid_id, run_id)
@@ -1517,12 +1604,18 @@ async def _execute_input_dir_pipeline(
     smoke_test: bool,
     label: str,
     cameras: Optional[List[str]] = None,
+    dataset: Optional[str] = None,
 ):
     """Background task: run the selected stages directly against a source folder."""
     try:
         stage_nums = [int(s) for s in stages.split(",") if s.strip().isdigit()]
+        # Resolve which dataset config drives detection classes (vehicles vs people).
+        # Prefer an explicit hint, else infer from the input path; None -> default.yaml.
+        dataset_key = resolve_dataset_key(dataset, input_dir)
         app_state.active_runs[run_id]["message"] = f"Running ingestion on {label}..."
         app_state.active_runs[run_id]["progress"] = 2
+        if dataset_key:
+            app_state.active_runs[run_id]["dataset"] = dataset_key
 
         coords_file = Path(input_dir) / "camera_coordinates.json"
         cmd = _build_pipeline_cmd(
@@ -1530,6 +1623,7 @@ async def _execute_input_dir_pipeline(
             run_id=run_id,
             input_dir=Path(input_dir).as_posix(),
             smoke_test=smoke_test,
+            dataset=dataset_key,
             camera_coordinates_path=(
                 coords_file.as_posix() if coords_file.exists() else None
             ),

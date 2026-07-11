@@ -1,17 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Car, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { TrackletFrameView } from "@/components/ui/double-buffered-img";
 import { apiUrl, getRunFullFrameUrl, getTrackletSequence, type TrackletSequenceFrame } from "@/lib/api";
 import { cn, formatDuration } from "@/lib/utils";
+import { classIconForName, domainFromDataset, domainIcon } from "@/lib/class-meta";
+import { useDatasetStore } from "@/lib/store";
 
 import type { TimelinePreviewCamera } from "./types";
 
 function shouldUseRunCropsForCamera(runId: string | undefined, _cameraId: string): boolean {
   if (!runId) return false;
   return true;
+}
+
+/** Placeholder glyph for an active camera with no clip yet - class/domain aware (person vs vehicle). */
+function ActiveTrackGlyph({ trackClassName }: { trackClassName?: string | null }) {
+  const selectedDataset = useDatasetStore((s) => s.selectedDataset);
+  const Icon = trackClassName
+    ? classIconForName(trackClassName)
+    : domainIcon(domainFromDataset(selectedDataset));
+  return <Icon className="h-4 w-4 text-white" />;
 }
 
 export interface TimelineVideoGridProps {
@@ -363,7 +374,7 @@ function CameraPreview({
                     backgroundColor: camera.activeTrack.color ? `${camera.activeTrack.color}33` : "hsl(var(--success) / 0.2)",
                   }}
                 >
-                  <Car className="h-4 w-4 text-white" />
+                  <ActiveTrackGlyph trackClassName={camera.activeTrack.className} />
                 </div>
               </div>
             )}

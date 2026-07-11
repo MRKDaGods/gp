@@ -2,12 +2,52 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Optional, Tuple
 
 import cv2
 import numpy as np
+from loguru import logger
+
+# Stage 0 frame decode: use the GPU's hardware video decoder (NVDEC / DXVA /
+# VAAPI) when the OpenCV+FFmpeg build exposes it, so ingestion isn't pinned to
+# CPU decode. VIDEO_ACCELERATION_ANY negotiates HW if available and transparently
+# falls back to software otherwise (same BGR frames either way), so it's a safe
+# default. Set MTMC_DISABLE_HW_DECODE=1 to force plain CPU decode.
+_HW_DECODE_AVAILABLE = hasattr(cv2, "CAP_PROP_HW_ACCELERATION") and hasattr(
+    cv2, "VIDEO_ACCELERATION_ANY"
+)
+_HW_DECODE_ENABLED = _HW_DECODE_AVAILABLE and os.environ.get(
+    "MTMC_DISABLE_HW_DECODE", ""
+).lower() not in ("1", "true", "yes")
+_hw_decode_logged = False
+
+
+def _open_capture(video_path: str) -> cv2.VideoCapture:
+    """Open a video, preferring GPU-accelerated decode with a CPU fallback."""
+    global _hw_decode_logged
+    if _HW_DECODE_ENABLED:
+        try:
+            cap = cv2.VideoCapture(
+                video_path,
+                cv2.CAP_FFMPEG,
+                [int(cv2.CAP_PROP_HW_ACCELERATION), int(cv2.VIDEO_ACCELERATION_ANY)],
+            )
+            if cap.isOpened():
+                if not _hw_decode_logged:
+                    _hw_decode_logged = True
+                    negotiated = cap.get(cv2.CAP_PROP_HW_ACCELERATION)
+                    logger.info(
+                        "Stage 0 decode: hardware acceleration "
+                        f"{'ACTIVE' if negotiated and negotiated > 0 else 'requested (FFmpeg negotiated software on this build)'}"
+                    )
+                return cap
+            cap.release()
+        except cv2.error:
+            pass  # HW path unsupported by this build - fall back to plain decode
+    return cv2.VideoCapture(video_path)
 
 
 @dataclass
@@ -26,7 +66,7 @@ class VideoInfo:
 def get_video_info(video_path: str | Path) -> VideoInfo:
     """Read video metadata without decoding frames."""
     video_path = str(video_path)
-    cap = cv2.VideoCapture(video_path)
+    cap = _open_capture(video_path)
     if not cap.isOpened():
         raise IOError(f"Cannot open video: {video_path}")
 
@@ -63,7 +103,7 @@ def read_video_frames(
 ) -> Iterator[Tuple[int, float, np.ndarray]]:
     """Yield (frame_index, timestamp_seconds, frame_bgr) from a video."""
     video_path = str(video_path)
-    cap = cv2.VideoCapture(video_path)
+    cap = _open_capture(video_path)
     if not cap.isOpened():
         raise IOError(f"Cannot open video: {video_path}")
 
@@ -98,7 +138,7 @@ def read_video_frames(
 
 def read_single_frame(video_path: str | Path, frame_index: int) -> np.ndarray:
     """Read a specific frame from a video by index."""
-    cap = cv2.VideoCapture(str(video_path))
+    cap = _open_capture(str(video_path))
     if not cap.isOpened():
         raise IOError(f"Cannot open video: {video_path}")
 

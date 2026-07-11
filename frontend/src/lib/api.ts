@@ -56,6 +56,19 @@ function normalizeVideoFile(raw: any): VideoFile {
   };
 }
 
+/** Fallback class name from a COCO class id when the backend omits className. */
+function classNameFromId(classId: number): string {
+  switch (classId) {
+    case 0: return 'person';
+    case 1: return 'bicycle';
+    case 2: return 'car';
+    case 3: return 'motorcycle';
+    case 5: return 'bus';
+    case 7: return 'truck';
+    default: return 'object';
+  }
+}
+
 /** Map API confidence to 0-1 for UI (handles 0-100 percent from some sources). */
 function normalizeConfidence(raw: unknown): number {
   let c = Number(raw ?? 0);
@@ -78,14 +91,21 @@ function normalizeDetections(rawList: any[]): Detection[] {
 
     const confRaw = d.confidence ?? d.score ?? d.detectionConfidence;
 
+    const classId = Number(d.classId ?? d.class_id ?? -1);
+    const rawName = d.className ?? d.class_name;
+    const className =
+      rawName != null && String(rawName).trim()
+        ? String(rawName)
+        : classNameFromId(classId);
+
     return {
       id: String(d.id ?? `det-${idx}`),
       bbox: bboxObj,
       confidence: normalizeConfidence(confRaw),
-      classId: Number(d.classId ?? -1),
-      className: String(d.className ?? 'vehicle'),
+      classId,
+      className,
       frameId: Number(d.frameId ?? 0),
-      trackId: Number(d.trackId ?? d.track_id ?? -1),  
+      trackId: Number(d.trackId ?? d.track_id ?? -1),
       selected: Boolean(d.selected),
     };
   });
@@ -943,6 +963,8 @@ export async function runDatasetInput(payload: {
   cameras?: string[];
   /** Reuse an existing run so a single pipeline stage runs incrementally */
   runId?: string | null;
+  /** Dataset selector (cityflowv2/wildtrack) so detection uses the right classes. */
+  dataset?: string;
 }): Promise<ApiResponse<any>> {
   return fetchApi<ApiResponse<any>>('/datasets/run', {
     method: 'POST',

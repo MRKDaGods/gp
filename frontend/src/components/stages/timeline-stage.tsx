@@ -12,6 +12,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn, formatDuration, formatNetworkFailure, getCameraColor } from "@/lib/utils";
+import { domainFromDataset, domainNoun } from "@/lib/class-meta";
+import { useDatasetStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { DisclosurePanel, ErrorBanner, PlaybackControls, StageProgressCard, toStageStatus } from "@/components/pipeline";
 import { ExecutionTargetToggle } from "@/components/pipeline/run/ExecutionTargetToggle";
@@ -39,6 +41,9 @@ import {
 } from "@/lib/api";
 import type { TimelineTrack, TrajectorySegment } from "@/types";
 import { AlternativesSheet } from "./timeline/AlternativesSheet";
+// Noun for the tracked target ("vehicle"/"person"/"object" or their plurals), from the app dataset.
+const trackedNoun = (plural = false) =>
+  domainNoun(domainFromDataset(useDatasetStore.getState().selectedDataset), { plural });
 import { NLETimeline } from "./timeline/NLETimeline";
 import { TimelineAdvancedControls } from "./timeline/TimelineAdvancedControls";
 import { TimelineDebugPanel } from "./timeline/TimelineDebugPanel";
@@ -486,7 +491,7 @@ export function TimelineStage() {
       });
 
       // Determine dominant class from trajectory (backend may include class_name)
-      const className: string = trajectory.class_name ?? trajectory.className ?? "vehicle";
+      const className: string = trajectory.class_name ?? trajectory.className ?? "object";
       const confidence: number = selectedTrackKeys && selectedTrackKeys.size > 0
         ? scoreTrajectoryForQuery(trajectory, selectedTrackKeys)
         : (typeof trajectory.confidence === "number" ? trajectory.confidence : 1);
@@ -654,7 +659,7 @@ export function TimelineStage() {
               const shownCameras = new Set(rows.map((r) => r.cameraId)).size;
               const hidden = Math.max(0, q1Traj.length - maxMatched);
               const msg = hidden > 0
-                ? `Tracking your selected vehicle across ${shownCameras} camera${shownCameras === 1 ? "" : "s"}. ${hidden} other similar vehicle${hidden === 1 ? "" : "s"} available under Alternatives.`
+                ? `Tracking your selected ${trackedNoun()} across ${shownCameras} camera${shownCameras === 1 ? "" : "s"}. ${hidden} other similar ${hidden === 1 ? trackedNoun() : trackedNoun(true)} available under Alternatives.`
                 : String(q1Data.message ?? "Association loaded (query-matched)");
               updateStageProgress(4, { status: "completed", progress: 100, message: msg });
               console.info("decision", "matched trajectories rendered (capped)", { rows: rows.length, shownGlobals: maxMatched, hidden });
@@ -759,7 +764,7 @@ export function TimelineStage() {
             applyTracksReplaceKeepingMeta(trajectoryRows);
             const shown = Math.min(allTraj.length, NON_QUERY_MAX_TRAJECTORIES);
             const msg = allTraj.length > shown
-              ? `Showing ${shown} of ${allTraj.length} cross-camera trajectories. Pick a vehicle in the Selection stage to track just that one.`
+              ? `Showing ${shown} of ${allTraj.length} cross-camera trajectories. Pick a ${trackedNoun()} in the Selection stage to track just that one.`
               : `Showing ${allTraj.length} cross-camera trajector${allTraj.length === 1 ? "y" : "ies"}.`;
             updateStageProgress(4, { status: "completed", progress: 100, message: msg });
             console.info("decision", "non-query stage4 trajectories rendered (capped)", { rows: trajectoryRows.length, total: allTraj.length });
@@ -805,7 +810,7 @@ export function TimelineStage() {
               applyTracksReplaceKeepingMeta(rows2);
               const shown2 = Math.min(allTraj2.length, NON_QUERY_MAX_TRAJECTORIES);
               const msg2 = allTraj2.length > shown2
-                ? `Showing ${shown2} of ${allTraj2.length} cross-camera trajectories. Pick a vehicle in the Selection stage to track just that one.`
+                ? `Showing ${shown2} of ${allTraj2.length} cross-camera trajectories. Pick a ${trackedNoun()} in the Selection stage to track just that one.`
                 : `Showing ${allTraj2.length} cross-camera trajector${allTraj2.length === 1 ? "y" : "ies"}.`;
               updateStageProgress(4, { status: "completed", progress: 100, message: msg2 });
               console.info("decision", "non-query stage4 trajectories rendered after rerun (capped)", { rows: rows2.length, total: allTraj2.length });

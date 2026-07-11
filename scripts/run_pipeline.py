@@ -42,7 +42,17 @@ def main(config: str, dataset_config: str, stages: str, smoke_test: bool, dry_ru
             title="Device",
         ))
 
-    wildtrack_single_shot = _is_wildtrack_cfg(cfg) and bool(set(stage_nums) & {1, 2, 3, 4})
+    # WILDTRACK can run either through the precomputed MVDeTr single-shot detections
+    # OR the standard YOLO+tracker path (wildtrack.yaml configures detector.classes=[0]).
+    # Only take the MVDeTr shortcut when its precomputed detections file actually exists;
+    # otherwise fall through to the normal per-camera detection/tracking so the app's
+    # ingest -> detect flow works for people without an out-of-band export.
+    _wild_det_path = Path(str(cfg.get("stage_wildtrack_mvdetr", {}).get("detections_path", "")))
+    wildtrack_single_shot = (
+        _is_wildtrack_cfg(cfg)
+        and bool(set(stage_nums) & {1, 2, 3, 4})
+        and _wild_det_path.exists()
+    )
 
     if dry_run:
         console.print(Panel(

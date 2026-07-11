@@ -13,9 +13,6 @@ import {
 } from "react";
 import {
   Loader2,
-  Car,
-  Truck,
-  Bus,
   AlertCircle,
   Square,
   Clock,
@@ -27,6 +24,15 @@ import {
   Terminal,
 } from "lucide-react";
 import { cn, bboxToStyle } from "@/lib/utils";
+import {
+  classIconFor,
+  classLabelFor,
+  domainIcon,
+  domainNoun,
+  resolveDomain,
+  trackedTitle,
+} from "@/lib/class-meta";
+import { typicalFrameGap, valuesForFrame } from "@/lib/frame-lookup";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DisclosurePanel, ErrorBanner, PlaybackControls, toStageStatus } from "@/components/pipeline";
@@ -38,6 +44,7 @@ import {
   useSessionStore,
   useStageExecutionStore,
 } from "@/store";
+import { useDatasetStore } from "@/lib/store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
 import { MultiCameraView } from "@/components/stages/multi-camera-view";
@@ -158,14 +165,10 @@ function detectionCropThumbPropsEqual(
   );
 }
 
-/** Short display label for a COCO vehicle class id. */
-const CLASS_LABEL: Record<number, string> = { 2: "Car", 7: "Truck", 5: "Bus" };
-
-/** Small class glyph for captions/filters. */
+/** Small class glyph for captions/filters - person gets a pedestrian icon, not a car. */
 function ClassGlyph({ classId, className }: { classId: number; className?: string }) {
-  if (classId === 7) return <Truck className={className} />;
-  if (classId === 5) return <Bus className={className} />;
-  return <Car className={className} />;
+  const Icon = classIconFor(classId);
+  return <Icon className={className} />;
 }
 
 /** Pill toggle for the Tracked-Vehicles class filter. */
@@ -209,10 +212,8 @@ function ClassIconFallback({
   isSelected: boolean;
 }) {
   const cls = cn("h-6 w-6", isSelected ? "text-success" : "text-muted-foreground");
-  if (classId === 2) return <Car className={cls} />;
-  if (classId === 7) return <Truck className={cls} />;
-  if (classId === 5) return <Bus className={cls} />;
-  return <Car className={cls} />;
+  const Icon = classIconFor(classId);
+  return <Icon className={cls} />;
 }
 
 /** Sidebar crop thumbnails: stable crop URL per track + load only when in view. */
@@ -587,7 +588,8 @@ export function DetectionStage() {
     useVideoStore();
    const {detections,setDetections,selectedTrackIds,toggleTrackSelection,selectTrackIds,deselectAll,hoveredId,setHoveredId,}
     = useDetectionStore();
-  // Filter the tracked-vehicle list by class (All / Car / Truck / Bus).
+  const selectedDataset = useDatasetStore((s) => s.selectedDataset);
+  // Filter the tracked-object list by class (All / per detected class).
   const [classFilter, setClassFilter] = useState<number | "all">("all");
   const { runId, stages, updateStageProgress, setIsRunning } = usePipelineStore();
   const { currentStage, setCurrentStage } = useSessionStore();
@@ -620,6 +622,9 @@ export function DetectionStage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 450 });
   const detectionCacheRef = useRef<Map<number, typeof detections>>(new Map());
+  /** Sorted detection frame ids + typical spacing, for tolerant nearest-frame lookups. */
+  const sortedFrameKeysRef = useRef<number[]>([]);
+  const frameGapRef = useRef(1);
   /** Stable sidebar thumb source per track (first occurrence in cached frames). */
   const trackThumbByTrackRef = useRef<Map<number, { frameId: number; bbox: BoundingBox }>>(
     new Map()
@@ -710,6 +715,8 @@ export function DetectionStage() {
       if (!currentVideo) {
         trackThumbByTrackRef.current = new Map();
         detectionCacheRef.current = new Map();
+        sortedFrameKeysRef.current = [];
+        frameGapRef.current = 1;
         setTracks([]);
         setDetections([]);
         setIsLoading(false);
@@ -730,6 +737,8 @@ export function DetectionStage() {
       if (stage1Status !== "done") {
         detectionCacheRef.current = new Map();
         trackThumbByTrackRef.current = new Map();
+        sortedFrameKeysRef.current = [];
+        frameGapRef.current = 1;
         setDetectedMaxFrame(null);
         setTracks([]);
         setDetections([]);
@@ -745,13 +754,18 @@ export function DetectionStage() {
         trackThumbByTrackRef.current = buildTrackThumbnailSources(allDets);
         // Bound the scrubber to the frames detection actually produced.
         const frameKeys = [...allDets.keys()];
+        const sortedKeys = [...frameKeys].sort((a, b) => a - b);
+        sortedFrameKeysRef.current = sortedKeys;
+        frameGapRef.current = typicalFrameGap(sortedKeys);
         setDetectedMaxFrame(frameKeys.length ? Math.max(...frameKeys) : null);
         setTracks(summariseTracks(allDets));
-        setDetections(allDets.get(frameSyncRef.current) ?? []);
+        setDetections(valuesForFrame(allDets, sortedKeys, frameSyncRef.current, frameGapRef.current));
       } catch {
         if (cancelled) return;
         detectionCacheRef.current = new Map();
         trackThumbByTrackRef.current = new Map();
+        sortedFrameKeysRef.current = [];
+        frameGapRef.current = 1;
         setDetectedMaxFrame(null);
         setTracks([]);
         setDetections([]);
@@ -781,19 +795,22 @@ export function DetectionStage() {
     return () => ro.disconnect();
   }, []);
 
-  // Look up cached detections for the current frame - no API call.
+  // Look up cached detections for the current frame - no API call. Uses a tolerant
+  // nearest-frame match so boxes still render on scrub/playback positions that fall
+  // between the (possibly sparse) frames tracking produced, instead of flickering off.
   useEffect(() => {
     if (!currentVideo || isLoading) return;
-    const cached = detectionCacheRef.current.get(currentFrame);
-    if (cached) {
-      const prev = useDetectionStore.getState().detections;
-      if (prev === cached) return;
-      setDetections(cached);
-    } else if (detectionCacheRef.current.size > 0) {
-      const prev = useDetectionStore.getState().detections;
-      if (prev.length === 0) return;
-      setDetections([]);
-    }
+    if (detectionCacheRef.current.size === 0) return;
+    const next = valuesForFrame(
+      detectionCacheRef.current,
+      sortedFrameKeysRef.current,
+      currentFrame,
+      frameGapRef.current
+    );
+    const prev = useDetectionStore.getState().detections;
+    if (prev === next) return;
+    if (prev.length === 0 && next.length === 0) return;
+    setDetections(next);
   }, [currentVideo, currentFrame, isLoading, setDetections]);
 
   useEffect(() => {
@@ -979,7 +996,7 @@ export function DetectionStage() {
   const countByClassId = (classId: number) =>
     detections.filter((d) => d.classId === classId).length;
 
-  // Class breakdown + filtered list for the Tracked Vehicles panel.
+  // Class breakdown + filtered list for the Tracked panel.
   const classCounts = useMemo(() => {
     const counts: Record<number, number> = {};
     for (const t of tracks) counts[t.classId] = (counts[t.classId] ?? 0) + 1;
@@ -989,6 +1006,19 @@ export function DetectionStage() {
     () => Object.keys(classCounts).map(Number).sort((a, b) => a - b),
     [classCounts]
   );
+  // Whether this run tracks vehicles or people - prefer the real detected classes
+  // (robust for re-opened runs) and fall back to the selected dataset before any exist.
+  const domain = useMemo(
+    () => resolveDomain(selectedDataset, presentClasses),
+    [selectedDataset, presentClasses]
+  );
+  // Class ids visible in the CURRENT frame, for the on-video count strip.
+  const framePresentClasses = useMemo(() => {
+    const set = new Set<number>();
+    for (const d of detections) if (d.classId != null) set.add(d.classId);
+    return [...set].sort((a, b) => a - b);
+  }, [detections]);
+  const DomainIcon = domainIcon(domain);
   const filteredTracks = useMemo(
     () => (classFilter === "all" ? tracks : tracks.filter((t) => t.classId === classFilter)),
     [tracks, classFilter]
@@ -1159,18 +1189,16 @@ export function DetectionStage() {
                   <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
                     <div className="flex justify-between items-center text-white/80 text-xs font-mono">
                       <span className="flex items-center gap-3">
-                        <span className="flex items-center gap-1">
-                          <Car className="h-3.5 w-3.5" />
-                          {countByClassId(2)}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Truck className="h-3.5 w-3.5" />
-                          {countByClassId(7)}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Bus className="h-3.5 w-3.5" />
-                          {countByClassId(5)}
-                        </span>
+                        {framePresentClasses.length === 0 ? (
+                          <span className="opacity-70">{detections.length} in frame</span>
+                        ) : (
+                          framePresentClasses.map((cid) => (
+                            <span key={cid} className="flex items-center gap-1" title={classLabelFor(cid)}>
+                              <ClassGlyph classId={cid} className="h-3.5 w-3.5" />
+                              {countByClassId(cid)}
+                            </span>
+                          ))
+                        )}
                       </span>
                       <span className="text-success">
                         {selectedTrackIds.size} selected for tracking
@@ -1265,7 +1293,7 @@ export function DetectionStage() {
           <div className="shrink-0 border-b bg-muted/30 p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
-                <h3 className="font-semibold">Tracked Vehicles</h3>
+                <h3 className="font-semibold">{trackedTitle(domain)}</h3>
                 {currentVideo?.cameraId && (
                   <Badge variant="outline" className="shrink-0 gap-1 font-mono text-[10px]">
                     <Video className="h-3 w-3" />
@@ -1285,7 +1313,7 @@ export function DetectionStage() {
                     key={cid}
                     active={classFilter === cid}
                     onClick={() => setClassFilter(cid)}
-                    label={CLASS_LABEL[cid] ?? "Other"}
+                    label={classLabelFor(cid)}
                     count={classCounts[cid]}
                     icon={<ClassGlyph classId={cid} className="h-3 w-3" />}
                   />
@@ -1318,16 +1346,16 @@ export function DetectionStage() {
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
             {filteredTracks.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
-                <Car className="h-8 w-8 opacity-40" />
+                <DomainIcon className="h-8 w-8 opacity-40" />
                 {tracks.length === 0 ? (
                   <>
-                    <p className="text-sm font-medium">No tracked vehicles yet</p>
+                    <p className="text-sm font-medium">No tracked {domainNoun(domain, { plural: true })} yet</p>
                     <p className="text-xs">
-                      {stage1Status === "done" ? "Detection produced no vehicles for this camera." : "Run detection to populate this list."}
+                      {stage1Status === "done" ? `Detection produced no ${domainNoun(domain, { plural: true })} for this camera.` : "Run detection to populate this list."}
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm">No {(CLASS_LABEL[classFilter as number] ?? "matching").toLowerCase()} vehicles.</p>
+                  <p className="text-sm">No {classLabelFor(classFilter as number).toLowerCase()} tracks.</p>
                 )}
               </div>
             ) : (

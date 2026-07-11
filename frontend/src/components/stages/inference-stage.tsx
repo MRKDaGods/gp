@@ -70,8 +70,11 @@ const useInferenceRunStore = create<InferenceRunState>((set) => ({
   resetRunArtifacts: () => set({ activeStage: null, runModelMetadata: null, lastRunStageResponse: null, kagglePanelRunId: null }),
 }));
 
-function inferCameraId(video: { name: string; path: string } | null): string {
+function inferCameraId(video: { name: string; path: string; cameraId?: string | null } | null): string {
   if (!video) return "S02_c008";
+  // Prefer the real camera id from the dataset record (e.g. WILDTRACK "C1".."C7",
+  // which don't match the CityFlow S##_c### pattern). Fall back to the pattern, then default.
+  if (video.cameraId && video.cameraId.trim()) return video.cameraId.trim();
   const candidate = `${video.name} ${video.path}`;
   const match = candidate.match(/S\d{2}_c\d{3}/i);
   return (match?.[0] ?? "S02_c008").toUpperCase();

@@ -6,6 +6,7 @@ import { GripVertical, Loader2, Minus, Plus, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PlaybackControls } from "@/components/pipeline";
 import { cn, bboxToStyle } from "@/lib/utils";
+import { typicalFrameGap, valuesForFrame } from "@/lib/frame-lookup";
 import { getAllDetections, getVideoStreamUrl } from "@/lib/api";
 import type { BoundingBox, Detection, VideoFile } from "@/types";
 
@@ -30,6 +31,8 @@ interface VideoMeta {
 interface CameraDetections {
   byFrame: Map<number, Detection[]>;
   maxFrame: number;
+  sortedKeys: number[];
+  gap: number;
 }
 
 /** Map a local media time to the nearest extracted detection-frame index. */
@@ -344,10 +347,11 @@ export function MultiCameraView({
           try {
             const byFrame = await getAllDetections(v.id);
             const keys = [...byFrame.keys()];
+            const sortedKeys = [...keys].sort((a, b) => a - b);
             const maxFrame = keys.length ? Math.max(...keys) : 0;
-            return [v.id, { byFrame, maxFrame }] as const;
+            return [v.id, { byFrame, maxFrame, sortedKeys, gap: typicalFrameGap(sortedKeys) }] as const;
           } catch {
-            return [v.id, { byFrame: new Map<number, Detection[]>(), maxFrame: 0 }] as const;
+            return [v.id, { byFrame: new Map<number, Detection[]>(), maxFrame: 0, sortedKeys: [], gap: 1 }] as const;
           }
         })
       );
@@ -663,7 +667,7 @@ export function MultiCameraView({
       const oor = dur > 0 && (target < -0.05 || target > dur + 0.05);
       let dets: Detection[] = [];
       if (d && dur > 0 && !oor) {
-        dets = d.byFrame.get(timeToFrame(target, dur, d.maxFrame)) ?? [];
+        dets = valuesForFrame(d.byFrame, d.sortedKeys, timeToFrame(target, dur, d.maxFrame), d.gap);
       }
       out[v.id] = { dets, outOfRange: oor };
     }

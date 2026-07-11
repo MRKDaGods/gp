@@ -277,6 +277,12 @@ def _detect_camera_for_video(video_meta: Dict[str, Any], requested_camera_id: Op
     if requested_camera_id:
         return requested_camera_id.upper()
 
+    # Dataset videos carry their real camera id (e.g. WILDTRACK "C1"), which the
+    # CityFlow S##_c### regex below can't recover from the filename. Prefer it.
+    stored = video_meta.get("cameraId") or video_meta.get("_camera_id")
+    if stored and str(stored).strip():
+        return str(stored).strip()
+
     path_hint = str(video_meta.get("path", ""))
     name_hint = str(video_meta.get("name", ""))
 

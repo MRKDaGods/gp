@@ -125,7 +125,9 @@ export function getCameraColor(cameraId: string): string {
 // Class colors
 export const CLASS_COLORS: Record<number, string> = {
   0: '#3b82f6',  // person - blue
+  1: '#eab308',  // bicycle - yellow
   2: '#22c55e',  // car - green
+  3: '#ec4899',  // motorcycle - pink
   5: '#f97316',  // bus - orange
   7: '#8b5cf6',  // truck - purple
 };
@@ -137,7 +139,9 @@ export function getClassColor(classId: number): string {
 export function getClassName(classId: number): string {
   const names: Record<number, string> = {
     0: 'Person',
+    1: 'Bicycle',
     2: 'Car',
+    3: 'Motorcycle',
     5: 'Bus',
     7: 'Truck',
   };

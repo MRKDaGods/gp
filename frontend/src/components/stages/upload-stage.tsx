@@ -29,6 +29,9 @@ function inferAppDataset(name: string): AppDataset | null {
 }
 
 function inferCameraId(video: VideoFile): string {
+  // Prefer the real camera id (e.g. WILDTRACK "C1".."C7"); fall back to the
+  // CityFlow S##_c### pattern, then a default.
+  if (video.cameraId && video.cameraId.trim()) return video.cameraId.trim();
   const candidate = `${video.name} ${video.path}`;
   const match = candidate.match(/S\d{2}_c\d{3}/i);
   return (match?.[0] ?? "S02_c008").toUpperCase();

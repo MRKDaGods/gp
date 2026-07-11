@@ -44,41 +44,72 @@ class Detector:
             f"conf={confidence_threshold}, iou={iou_threshold}, agnostic_nms={agnostic_nms}"
         )
 
-    def detect(self, frame: np.ndarray) -> List[Detection]:
-        """Run detection on a single BGR frame."""
-        results = self.model.predict(
-            frame,
+    def _predict_kwargs(self) -> dict:
+        kwargs = dict(
             conf=self.confidence_threshold,
             iou=self.iou_threshold,
             classes=self.classes,
             device=self.device,
-            half=self.half,
             imgsz=self.img_size,
             agnostic_nms=self.agnostic_nms,
             verbose=False,
         )
+        # Only pass `half` when we actually want FP16. Passing it at all (even
+        # False) triggers ultralytics' noisy "'half' is deprecated" warning, and
+        # FP32 is the default - so omitting it keeps the log clean on the common path.
+        if self.half:
+            kwargs["half"] = True
+        return kwargs
 
-        detections = []
-        for result in results:
-            boxes = result.boxes
-            if boxes is None or len(boxes) == 0:
-                continue
-
-            for i in range(len(boxes)):
-                xyxy = boxes.xyxy[i].cpu().numpy()
-                conf = float(boxes.conf[i].cpu().numpy())
-                cls_id = int(boxes.cls[i].cpu().numpy())
-
-                detections.append(
-                    Detection(
-                        bbox=(float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])),
-                        confidence=conf,
-                        class_id=cls_id,
-                        class_name=CLASS_NAMES.get(cls_id, f"class_{cls_id}"),
-                    )
+    def _parse_result(self, result) -> List[Detection]:
+        boxes = result.boxes
+        if boxes is None or len(boxes) == 0:
+            return []
+        detections: List[Detection] = []
+        # Pull the whole batch off the GPU once, not per-box (far fewer syncs).
+        xyxy = boxes.xyxy.cpu().numpy()
+        confs = boxes.conf.cpu().numpy()
+        cls_ids = boxes.cls.cpu().numpy().astype(int)
+        for i in range(len(boxes)):
+            cls_id = int(cls_ids[i])
+            detections.append(
+                Detection(
+                    bbox=(float(xyxy[i][0]), float(xyxy[i][1]), float(xyxy[i][2]), float(xyxy[i][3])),
+                    confidence=float(confs[i]),
+                    class_id=cls_id,
+                    class_name=CLASS_NAMES.get(cls_id, f"class_{cls_id}"),
                 )
-
+            )
         return detections
+
+    def detect(self, frame: np.ndarray) -> List[Detection]:
+        """Run detection on a single BGR frame."""
+        results = self.model.predict(frame, **self._predict_kwargs())
+        detections: List[Detection] = []
+        for result in results:
+            detections.extend(self._parse_result(result))
+        return detections
+
+    def detect_batch(self, frames: List[np.ndarray]) -> List[List[Detection]]:
+        """Run detection on a batch of BGR frames in ONE GPU call (keeps the GPU
+        fed instead of idling between single-frame inferences). Returns one
+        detection list per input frame, in order. Falls back to per-frame on OOM."""
+        if not frames:
+            return []
+        try:
+            results = self.model.predict(frames, **self._predict_kwargs())
+            return [self._parse_result(r) for r in results]
+        except RuntimeError as exc:
+            if "out of memory" not in str(exc).lower():
+                raise
+            import torch
+
+            torch.cuda.empty_cache()
+            logger.warning(
+                f"Detection OOM at batch={len(frames)} - falling back to per-frame. "
+                "Lower stage1.detector.img_size or MTMC_DET_BATCH to avoid this."
+            )
+            return [self.detect(f) for f in frames]
 
     def detect_to_array(self, frame: np.ndarray) -> np.ndarray:
         """Run detection and return as numpy array for BoxMOT."""

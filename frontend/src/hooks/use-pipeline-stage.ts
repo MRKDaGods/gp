@@ -60,6 +60,9 @@ export function useRunPipelineStage() {
         const res = await runDatasetInput({
           inputDir: input.inputDir,
           name: input.name,
+          // Dataset selector so detection uses the right classes (vehicles vs people).
+          // The backend also infers this from the input path, but sending it is explicit.
+          dataset: input.name,
           cameras: input.cameras,
           // Coerce to a definite boolean so the backend never sees `undefined`
           // (which it would treat as "full video").

@@ -13,10 +13,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DisclosurePanel, ErrorBanner } from "@/components/pipeline";
 import { apiUrl, getTracklets } from "@/lib/api";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
-import { cn, getClassColor } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { classColorFor, classLabelFor } from "@/lib/class-meta";
 import { useDetectionStore, useManualStageStore, usePipelineStore, useSessionStore, useVideoStore } from "@/store";
-
-const CLASS_LABEL: Record<number, string> = { 2: "Car", 7: "Truck", 5: "Bus" };
 
 /** Pill toggle for the selection filters (camera / class). */
 function FilterPill({
@@ -196,7 +195,7 @@ export function SelectionStage() {
   );
 
   const groupedSelected = selectedTracklets.reduce((acc, tracklet) => {
-    const className = tracklet.className ?? "vehicle";
+    const className = classLabelFor(tracklet.classId, tracklet.className);
     acc[className] = [...(acc[className] ?? []), tracklet];
     return acc;
   }, {} as Record<string, TrackletSummary[]>);
@@ -256,7 +255,7 @@ export function SelectionStage() {
                 key={cid}
                 active={classFilter === cid}
                 onClick={() => setClassFilter(cid)}
-                label={CLASS_LABEL[cid] ?? "Other"}
+                label={classLabelFor(cid)}
                 count={classCounts[cid]}
               />
             ))}
@@ -316,7 +315,7 @@ export function SelectionStage() {
                 {Object.entries(groupedSelected).map(([className, items]) => (
                   <div key={className}>
                     <div className="mb-2 flex items-center gap-2">
-                      <div className="h-3 w-3 rounded-full" style={{ backgroundColor: getClassColor(items[0].classId ?? 2) }} />
+                      <div className="h-3 w-3 rounded-full" style={{ backgroundColor: classColorFor(items[0].classId) }} />
                       <span className="font-medium capitalize">{className}</span>
                       <Badge variant="secondary" className="ml-auto">{items.length}</Badge>
                     </div>
@@ -514,8 +513,8 @@ function TrackletCard({
             {isSelected ? <CheckCircle2 className="h-4 w-4 text-white" /> : <XCircle className="h-4 w-4 text-white" />}
           </div>
 
-          <Badge className="absolute bottom-2 left-2" style={{ backgroundColor: getClassColor(tracklet.classId ?? 2) }}>
-            {tracklet.className ?? "vehicle"}
+          <Badge className="absolute bottom-2 left-2" style={{ backgroundColor: classColorFor(tracklet.classId) }}>
+            {classLabelFor(tracklet.classId, tracklet.className)}
           </Badge>
 
           {tracklet.cameraId ? (

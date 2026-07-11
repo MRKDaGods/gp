@@ -4,6 +4,8 @@ import { useCallback } from "react";
 
 import { useToast } from "@/hooks/use-toast";
 import { getDatasetVideos, getRunDetail, type RunStageMap } from "@/lib/api";
+import { domainFromDataset } from "@/lib/class-meta";
+import { useDatasetStore } from "@/lib/store";
 import { useDetectionStore, useManualStageStore, usePipelineStore, useSessionStore, useTimelineStore, useVideoStore } from "@/store";
 import type { StageNumber, VideoFile } from "@/types";
 
@@ -50,6 +52,12 @@ export function useLoadRun() {
           smoke: Boolean(detail.smoke),
         });
       }
+
+      // Restore the vehicle/person model family so stage copy + model filtering match
+      // the re-opened run (the domain otherwise defaults to vehicles until detections load).
+      const domain = domainFromDataset(`${detail.name ?? ""} ${detail.inputDir ?? ""}`);
+      if (domain === "people") useDatasetStore.getState().setSelectedDataset("wildtrack");
+      else if (domain === "vehicles") useDatasetStore.getState().setSelectedDataset("cityflowv2");
 
       // Restore per-stage status from which stages produced output on disk.
       for (let i = 0; i <= 6; i += 1) {
