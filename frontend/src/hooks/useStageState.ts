@@ -24,19 +24,30 @@ const PREREQUISITE_OVERRIDE: Partial<Record<StageNumber, StageNumber>> = {
   6: 4,
 };
 
-/** The stage that must be done before `stage` can run (null for stage 0). */
-export function prerequisiteStage(stage: StageNumber): StageNumber | null {
+/**
+ * The stage that must be done before `stage` can run (null for stage 0).
+ *
+ * `datasetFlow` distinguishes the two run shapes: the dataset flow (reopening a
+ * run created against a dataset/ folder) runs ingestion as its own stage 0, so
+ * Detection (stage 1) genuinely needs it done first. The probe flow (upload one
+ * video) has no separate ingestion step - Detection ingests THIS video and
+ * detects/tracks it in one backend call (see execute_stage(), stages="0,1") -
+ * so stage 1 has no prerequisite there.
+ */
+export function prerequisiteStage(stage: StageNumber, datasetFlow: boolean = true): StageNumber | null {
   if (stage <= 0) return null;
+  if (stage === 1 && !datasetFlow) return null;
   return PREREQUISITE_OVERRIDE[stage] ?? ((stage - 1) as StageNumber);
 }
 
 export function deriveStageState(
   stage: StageNumber,
   stages: StageProgress[],
-  executionTarget: StageExecutionTarget
+  executionTarget: StageExecutionTarget,
+  datasetFlow: boolean = true
 ): StageStateSnapshot {
   const progress = stages.find((candidate) => candidate.stage === stage) ?? null;
-  const prereq = prerequisiteStage(stage);
+  const prereq = prerequisiteStage(stage, datasetFlow);
   const previousStage = prereq != null ? stages.find((candidate) => candidate.stage === prereq) ?? null : null;
   const blocked = prereq != null && !stageIsDone(previousStage);
   const isStale = progress !== null
@@ -59,6 +70,7 @@ export function deriveStageState(
 export function useStageState(stage: StageNumber): StageStateSnapshot {
   const stages = usePipelineStore((state) => state.stages);
   const executionTarget = useStageExecutionStore((state) => state.getStageExecutionTarget(stage));
+  const datasetFlow = usePipelineStore((state) => Boolean(state.runInput));
 
-  return deriveStageState(stage, stages, executionTarget);
+  return deriveStageState(stage, stages, executionTarget, datasetFlow);
 }

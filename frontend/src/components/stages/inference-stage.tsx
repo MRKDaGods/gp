@@ -11,27 +11,14 @@ import { InferenceSearchTargetCard } from "@/components/stages/inference/Inferen
 import { InferenceSourceCard, UPLOADED_DATASET, useEnsureGalleryReady, useInferenceDatasets, useInferenceSourceStore } from "@/components/stages/inference/InferenceSourceCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ApiError, cancelPipeline, getDatasets, getPipelineStatus, runStage, type DatasetFolder, type FusionConfigRequest } from "@/lib/api";
+import { ApiError, cancelPipeline, getDatasets, runStage, type DatasetFolder, type FusionConfigRequest } from "@/lib/api";
 import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
+import { getRunStageErrorMessage, inferCameraId, pollStageStatus } from "@/lib/pipeline-run";
 import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
 import type { ModelEntry } from "@/services/models";
 import { useDetectionStore, usePipelineStore, useSessionStore, useStageExecutionStore, useVideoStore } from "@/store";
 import type { RunModelMetadata, SingleStageRunStatus, StageNumber } from "@/types";
-
-function getRunStageErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status === 401) return "Kaggle credentials missing or invalid. Configure them in the sidebar settings.";
-    if (error.status === 429) return "Both Kaggle slots busy - try again later";
-    if (error.status === 400) {
-      const data = error.data as { detail?: unknown; message?: unknown } | undefined;
-      return String(data?.detail ?? data?.message ?? error.message);
-    }
-    if (error.status === 500) return "Kaggle dispatch failed. Falling back to local? Check backend logs.";
-  }
-
-  return error instanceof Error ? error.message : "Inference failed";
-}
 
 function extractRunModelMetadata(data: SingleStageRunStatus | null, selectedModel: ModelEntry | null): RunModelMetadata {
   return {
@@ -71,47 +58,6 @@ const useInferenceRunStore = create<InferenceRunState>((set) => ({
   resetRunArtifacts: () => set({ activeStage: null, runModelMetadata: null, lastRunStageResponse: null, kagglePanelRunId: null }),
 }));
 
-function inferCameraId(video: { name: string; path: string; cameraId?: string | null } | null): string {
-  if (!video) return "S02_c008";
-  // Prefer the real camera id from the dataset record (e.g. WILDTRACK "C1".."C7",
-  // which don't match the CityFlow S##_c### pattern). Fall back to the pattern, then default.
-  if (video.cameraId && video.cameraId.trim()) return video.cameraId.trim();
-  const candidate = `${video.name} ${video.path}`;
-  const match = candidate.match(/S\d{2}_c\d{3}/i);
-  return (match?.[0] ?? "S02_c008").toUpperCase();
-}
-
-async function pollStageStatus(
-  activeRunId: string,
-  stage: 2 | 3,
-  updateStageProgress: (stage: StageNumber, progress: any) => void
-) {
-  while (true) {
-    const statusResponse = await getPipelineStatus(activeRunId);
-    const statusData: any = statusResponse.data;
-    const status = String(statusData?.status ?? "running");
-    const progress = Number(statusData?.progress ?? 0);
-    const message = String(statusData?.message ?? `Stage ${stage} running...`);
-
-    updateStageProgress(stage, { status: "running", progress, message });
-
-    if (status === "completed") {
-      updateStageProgress(stage, { status: "completed", progress: 100, message: `Stage ${stage} complete` });
-      return;
-    }
-
-    if (status === "cancelled") {
-      updateStageProgress(stage, { status: "idle", progress: 0, message: `Stage ${stage} cancelled` });
-      return;
-    }
-
-    if (status === "error") {
-      throw new Error(String(statusData?.error ?? `Stage ${stage} failed`));
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-  }
-}
 
 function buildFusionPayload(fusion: ReturnType<typeof usePipelineStore.getState>["fusion"]): FusionConfigRequest | null {
   if (!fusion || fusion.models.length < 2) return null;
