@@ -122,9 +122,13 @@ export function UploadStage() {
 
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(event.target.files || []);
+      // Capture the input element before the await: the native event's
+      // currentTarget is cleared once the event finishes dispatching, so
+      // reading it after an `await` throws "Cannot set properties of null".
+      const input = event.currentTarget;
+      const files = Array.from(input.files || []);
       if (files.length > 0) await handleFiles(files);
-      event.currentTarget.value = "";
+      input.value = "";
     },
     [handleFiles]
   );
