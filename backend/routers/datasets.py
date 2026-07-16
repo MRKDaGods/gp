@@ -12,7 +12,10 @@ from backend.config import (
     DATASET_CONFIG_DIR,
     DATASET_DIR,
     OUTPUT_DIR,
+    PRECOMPUTED_DIR,
     VIDEO_EXTENSIONS,
+    precompute_run_id,
+    resolve_run_dir,
 )
 from backend.dependencies import get_app_state
 from backend.services.pipeline_service import (
@@ -376,6 +379,47 @@ async def run_dataset_input(
     return {"success": True, "data": state.active_runs[run_id]}
 
 
+def _find_precompute_run(dataset_folder: str) -> Tuple[Optional[str], Optional[Path]]:
+    """Locate the precompute run for a dataset folder across all output roots.
+
+    Prefers the stable id (dataset_precompute_<slug>, now living under
+    precomputed_datasets/); falls back to scanning every root for a run whose
+    run_context.json names this dataset (covers legacy / custom runs).
+    """
+    dataset_key = str(dataset_folder).lower()
+
+    # 1. Stable id - resolve_run_dir searches PRECOMPUTED_DIR, OUTPUT_DIR, data/outputs.
+    stable_id = precompute_run_id(dataset_folder)
+    stable_dir = resolve_run_dir(stable_id)
+    if stable_dir is not None:
+        return stable_id, stable_dir
+
+    # 2. Fallback: newest run in any root whose context names this dataset.
+    candidate_runs: List[tuple] = []
+    for root in (PRECOMPUTED_DIR, OUTPUT_DIR):
+        if not root.exists():
+            continue
+        for run_dir in root.iterdir():
+            if not run_dir.is_dir():
+                continue
+            ctx_path = run_dir / "run_context.json"
+            if not ctx_path.exists():
+                continue
+            try:
+                ctx = json.loads(ctx_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if str(ctx.get("source", "")).startswith("dataset") and str(
+                ctx.get("datasetFolder", "")
+            ).lower() == dataset_key:
+                candidate_runs.append((run_dir.stat().st_mtime, run_dir.name, run_dir))
+
+    candidate_runs.sort(key=lambda x: x[0], reverse=True)
+    if candidate_runs:
+        return candidate_runs[0][1], candidate_runs[0][2]
+    return None, None
+
+
 @router.get("/api/datasets")
 async def list_datasets(state: AppState = Depends(get_app_state)):
     """List available dataset folders under dataset/ with camera info."""
@@ -386,42 +430,16 @@ async def list_datasets(state: AppState = Depends(get_app_state)):
     for folder in sorted(DATASET_DIR.iterdir()):
         if not folder.is_dir():
             continue
-        cameras: List[Dict[str, Any]] = []
-        for cam_dir in sorted(folder.iterdir()):
-            if not cam_dir.is_dir():
-                continue
-            has_video = any((cam_dir / f"vdo{ext}").exists() for ext in VIDEO_EXTENSIONS)
-            cameras.append({"id": cam_dir.name, "hasVideo": has_video})
+        # Use the shared scanner so ANY video filename (cam1.mp4, vdo.avi, ...) and
+        # both layouts (per-camera subdirs and flat files) are detected - the old
+        # hardcoded `vdo.*` check missed datasets like `seif` (cam1.mp4).
+        layout, scanned = _scan_input_dir_cameras(folder)
+        cameras: List[Dict[str, Any]] = [
+            {"id": c["id"], "hasVideo": bool(c.get("hasVideo"))} for c in scanned
+        ]
         dataset_key = folder.name.lower()
-        candidate_runs: List[tuple] = []
-        if OUTPUT_DIR.exists():
-            for run_dir in OUTPUT_DIR.iterdir():
-                if not run_dir.is_dir():
-                    continue
-                run_id = run_dir.name
 
-                matched = False
-                if run_id == f"dataset_precompute_{dataset_key}":
-                    matched = True
-
-                if not matched:
-                    ctx_path = run_dir / "run_context.json"
-                    if ctx_path.exists():
-                        try:
-                            ctx = json.loads(ctx_path.read_text(encoding="utf-8"))
-                            if str(ctx.get("source", "")).startswith("dataset") and str(
-                                ctx.get("datasetFolder", "")
-                            ).lower() == dataset_key:
-                                matched = True
-                        except Exception:
-                            pass
-
-                if matched:
-                    candidate_runs.append((run_dir.stat().st_mtime, run_id, run_dir))
-
-        candidate_runs.sort(key=lambda x: x[0], reverse=True)
-        latest_run_id = candidate_runs[0][1] if candidate_runs else None
-        latest_run_dir = candidate_runs[0][2] if candidate_runs else None
+        latest_run_id, latest_run_dir = _find_precompute_run(folder.name)
 
         already_processed = False
         has_gallery = False
@@ -472,7 +490,10 @@ async def process_dataset(folder: str, background_tasks: BackgroundTasks, state:
     if not dataset_path.exists() or not dataset_path.is_dir():
         raise HTTPException(status_code=404, detail=f"Dataset folder '{folder}' not found")
 
-    run_id = _resolve_run_id(None)
+    # Stable, dataset-scoped id so a precompute always writes to the SAME dir
+    # (precomputed_datasets/dataset_precompute_<slug>) and the frontend can poll
+    # it without guessing. Reprocessing overwrites the same gallery in place.
+    run_id = precompute_run_id(folder)
 
     for run in state.active_runs.values():
         if run.get("status") == "running" and str(run.get("datasetFolder", "")).lower() == folder.lower():

@@ -151,9 +151,9 @@ class TrackerWrapper:
 
         raise ImportError(
             f"boxmot {getattr(boxmot, '__version__', '?')} does not expose a class for "
-            f"tracker '{algorithm}'. This project targets boxmot 10-12; a newer boxmot "
+            f"tracker '{algorithm}'. This project targets boxmot 11-12; a newer boxmot "
             "restructured its API. Reinstall a compatible version with:\n"
-            "    pip install \"boxmot>=10.0,<13\""
+            "    pip install \"boxmot>=11.0,<13\""
         )
 
     def update(

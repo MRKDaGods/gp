@@ -7,7 +7,8 @@ import { create } from "zustand";
 import { DisclosurePanel, ErrorBanner, ExecutionTargetToggle, RunStageWidget, toStageStatus } from "@/components/pipeline";
 import { InferenceDebugPanel } from "@/components/stages/inference/InferenceDebugPanel";
 import { InferenceModelCard } from "@/components/stages/inference/InferenceModelCard";
-import { InferenceSourceCard, useInferenceDatasets } from "@/components/stages/inference/InferenceSourceCard";
+import { InferenceSearchTargetCard } from "@/components/stages/inference/InferenceSearchTargetCard";
+import { InferenceSourceCard, UPLOADED_DATASET, useEnsureGalleryReady, useInferenceDatasets, useInferenceSourceStore } from "@/components/stages/inference/InferenceSourceCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, cancelPipeline, getDatasets, getPipelineStatus, runStage, type DatasetFolder, type FusionConfigRequest } from "@/lib/api";
@@ -156,6 +157,8 @@ export function InferenceStage() {
 
         <InferenceModelCard />
 
+        <InferenceSearchTargetCard />
+
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <RunStageWidget
             stage={2}
@@ -217,6 +220,7 @@ export function InferenceActions() {
   const runInput = usePipelineStore((state) => state.runInput);
   const runDatasetStage = useRunPipelineStage();
   const { datasets, selectedDataset } = useInferenceDatasets();
+  const ensureGalleryReady = useEnsureGalleryReady();
   const setActiveStage = useInferenceRunStore((state) => state.setActiveStage);
   const setRunModelMetadata = useInferenceRunStore((state) => state.setRunModelMetadata);
   const setLastRunStageResponse = useInferenceRunStore((state) => state.setLastRunStageResponse);
@@ -227,7 +231,10 @@ export function InferenceActions() {
   const stage2Status = toStageStatus(stage2Progress);
   const stage3Status = toStageStatus(stage3Progress);
   const fusionRunDisabled = modelMode === "fusion" && (!fusion || fusion.models.length < 2);
-  const isRunning = stage2Status === "running" || stage3Status === "running";
+  // A dataset auto-processing inline counts as "busy" too, so the run buttons
+  // can't be re-triggered mid-precompute.
+  const processingDataset = useInferenceSourceStore((state) => state.processingDataset);
+  const isRunning = stage2Status === "running" || stage3Status === "running" || Boolean(processingDataset);
 
   // Per-stage gating: in the dataset flow, features need detection (stage 1)
   // done and indexing needs features (stage 2) done - each runs only on demand.
@@ -316,14 +323,27 @@ export function InferenceActions() {
       return;
     }
 
-    if (request.useDataset && request.selectedDs?.cameraCoordinates && Object.keys(request.selectedDs.cameraCoordinates).length > 0) {
-      setMapCameraCoordinates(request.selectedDs.cameraCoordinates);
+    // Auto-process the "search within" dataset if it isn't precomputed yet, then
+    // search against its gallery. No-op for the uploaded-probe target. This is
+    // what lets the user pick a fresh dataset at Inference and have it processed
+    // inline before the search runs.
+    if (request.useDataset && selectedDataset !== UPLOADED_DATASET) {
+      try {
+        const gallery = await ensureGalleryReady(selectedDataset);
+        if (gallery.galleryRunId) setGalleryRunId(gallery.galleryRunId);
+        if (gallery.cameraCoordinates && Object.keys(gallery.cameraCoordinates).length > 0) {
+          setMapCameraCoordinates(gallery.cameraCoordinates);
+        } else {
+          setMapCameraCoordinates(null);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Dataset processing failed";
+        setError(message);
+        updateStageProgress(stage, { status: "error", progress: 100, message });
+        return;
+      }
     } else {
       setMapCameraCoordinates(null);
-    }
-
-    if (request.useDataset && request.selectedDs?.galleryRunId) {
-      setGalleryRunId(request.selectedDs.galleryRunId);
     }
 
     flushPipelineFromStage(4);
@@ -395,7 +415,7 @@ export function InferenceActions() {
       setIsRunning(false);
       setActiveStage(null);
     }
-  }, [buildStageRequest, currentVideo, dateTimeRange, locationFilter, modelMode, resetRunArtifacts, runId, runInput, runDatasetStage, selectedDataset, selectedModelMeta, setActiveStage, setCurrentVideo, setError, setGalleryRunId, setIsRunning, setKagglePanelRunId, setLastRunStageResponse, setMapCameraCoordinates, setRunId, setRunModelMetadata, storeGalleryRunId, updateStageProgress]);
+  }, [buildStageRequest, currentVideo, dateTimeRange, ensureGalleryReady, locationFilter, modelMode, resetRunArtifacts, runId, runInput, runDatasetStage, selectedDataset, selectedModelMeta, setActiveStage, setCurrentVideo, setError, setGalleryRunId, setIsRunning, setKagglePanelRunId, setLastRunStageResponse, setMapCameraCoordinates, setRunId, setRunModelMetadata, storeGalleryRunId, updateStageProgress]);
 
   // Cancel a specific stage's run. The run is incremental against one run_id, so
   // cancelling terminates the active subprocess; the poll loop then settles the

@@ -115,6 +115,12 @@ tmp_ablation/
 /dataset
 /uploads
 
+# Precomputed dataset galleries (multi-GB pipeline artifacts; regenerable via
+# Inference's auto-process or the Dataset tab's "Process Dataset", or copied in
+# manually - see precomputed_datasets/README.md)
+/precomputed_datasets/*
+!/precomputed_datasets/README.md
+
 # LaTeX build artifacts (generated; source is .tex/.bib)
 *.aux
 *.bbl

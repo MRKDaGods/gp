@@ -26,6 +26,7 @@ from backend.config import (
     VIDEO_EXTENSIONS,
     list_run_dirs,
     resolve_run_dir,
+    run_output_root,
 )
 from backend.models.requests import FusionConfig
 from backend.models.registry import CheckpointRef, ModelArchitecture, ModelEntry
@@ -626,7 +627,7 @@ def _resolve_run_id(requested_run_id: Optional[str]) -> str:
 def _write_run_context(run_id: str, payload: Dict[str, Any]) -> None:
     """Persist lightweight run metadata to help auditing and dataset discovery."""
     try:
-        run_dir = OUTPUT_DIR / run_id
+        run_dir = run_output_root(run_id) / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         ctx_path = run_dir / "run_context.json"
         existing: Dict[str, Any] = {}
@@ -889,8 +890,9 @@ def _prepare_input_for_run(run_id: str, source_video_path: Path, camera_id: str)
 
 
 def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path) -> Path:
-    """Copy dataset input videos into outputs/{run_id}/input/ for full run reproducibility."""
-    run_input_root = OUTPUT_DIR / run_id / "input"
+    """Copy dataset input videos into <run root>/{run_id}/input/ for full run reproducibility."""
+    run_root = run_output_root(run_id) / run_id
+    run_input_root = run_root / "input"
     run_input_root.mkdir(parents=True, exist_ok=True)
 
     copied: List[Dict[str, str]] = []
@@ -905,7 +907,7 @@ def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path) -> Path:
                 continue
             dst = camera_dir / src.name
             shutil.copy2(src, dst)
-            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(OUTPUT_DIR / run_id).as_posix())})
+            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(run_root).as_posix())})
 
     if not copied:
         misc_dir = run_input_root / "misc"
@@ -915,7 +917,7 @@ def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path) -> Path:
                 continue
             dst = misc_dir / src.name
             shutil.copy2(src, dst)
-            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(OUTPUT_DIR / run_id).as_posix())})
+            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(run_root).as_posix())})
 
     manifest = {
         "sourceDatasetPath": str(dataset_path),
@@ -965,7 +967,7 @@ def _build_pipeline_cmd(
         "--stages",
         stages,
         "--override",
-        f"project.output_dir={OUTPUT_DIR.as_posix()}",
+        f"project.output_dir={run_output_root(run_id).as_posix()}",
         "--override",
         f"project.run_name='{run_id}'",
         "--override",
@@ -1172,7 +1174,7 @@ async def _run_pipeline_streaming(
             _handle_line(payload)
 
     returncode = await future
-    run_dir = OUTPUT_DIR / run_id
+    run_dir = run_output_root(run_id) / run_id
 
     # A user cancel terminates the subprocess (non-zero return). Treat that as a
     # cancellation, not a pipeline error, so the UI can show a clean cancelled state.
@@ -1262,7 +1264,7 @@ async def _background_precompute_dataset() -> None:
     if not dataset_s01.exists():
         return
 
-    run_dir = OUTPUT_DIR / PRECOMPUTE_RUN_ID
+    run_dir = run_output_root(PRECOMPUTE_RUN_ID) / PRECOMPUTE_RUN_ID
     if any((run_dir / "stage1").glob("tracklets_*.json")):
         for vid_id, vid_meta in list(app_state.uploaded_videos.items()):
             cam_id = _extract_camera_id(str(vid_meta.get("path", "")))
@@ -1276,7 +1278,7 @@ async def _background_precompute_dataset() -> None:
             "scripts/run_pipeline.py",
             "--config", "configs/default.yaml",
             "--stages", "0,1,2,3,4",
-            "--override", f"project.output_dir={OUTPUT_DIR.as_posix()}",
+            "--override", f"project.output_dir={run_output_root(PRECOMPUTE_RUN_ID).as_posix()}",
             "--override", f"project.run_name={PRECOMPUTE_RUN_ID}",
             "--override", f"stage0.input_dir={dataset_s01.as_posix()}",
         ]

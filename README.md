@@ -9,7 +9,7 @@ WILDTRACK for people, and VeRi-776 for single-camera vehicle re-identification.
 
 The repository contains two things:
 
-1. An offline seven-stage tracking pipeline (`src/`), driven from the command
+1. An offline seven-staPge tracking pipeline (`src/`), driven from the command
    line.
 2. A live application stack: a FastAPI backend (`backend/`) and a Next.js
    dashboard called ATHAR (`frontend/`) for interactive re-identification,

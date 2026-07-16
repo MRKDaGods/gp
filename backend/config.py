@@ -26,10 +26,18 @@ _FFPROBE = _shutil.which("ffprobe")
 # -- Directory constants ----------------------------------------------------
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
+# Precomputed dataset galleries live in their OWN top-level folder, deliberately
+# OUTSIDE outputs/. A precompute run is a full stages 0-4 pass over a dataset/
+# folder; its artifacts are reused as the search "gallery" at inference time.
+# Keeping them separate from ad-hoc/probe runs makes them easy to back up, copy
+# between machines, and reason about. Precompute run dirs are named
+# `dataset_precompute_<slug>` (see PRECOMPUTE_PREFIX / precompute_run_id).
+PRECOMPUTED_DIR = Path("precomputed_datasets")
 # Runs are read from more than one root: app-created runs land in `outputs/`,
-# while Kaggle-imported / offline-pipeline runs land in `data/outputs/`. Reads
-# must look in both, otherwise completed runs become invisible to the UI.
-OUTPUT_DIRS = [OUTPUT_DIR, Path("data/outputs")]
+# precomputed dataset galleries in `precomputed_datasets/`, and Kaggle-imported /
+# offline-pipeline runs in `data/outputs/`. Reads must look in all of them,
+# otherwise completed runs become invisible to the UI.
+OUTPUT_DIRS = [OUTPUT_DIR, PRECOMPUTED_DIR, Path("data/outputs")]
 TIMELINE_DEBUG_LOG = OUTPUT_DIR / "timeline_query_debug.log"
 CITYFLOW_DIR = Path("data/raw/cityflowv2")
 DATASET_DIR = Path("dataset")
@@ -48,8 +56,37 @@ ENABLE_KAGGLE_IMPORT = (
     in {"1", "true", "yes", "on"}
 )
 
-# -- Precompute run id ------------------------------------------------------
+# -- Precompute run ids -----------------------------------------------------
+# Precompute run dirs are named `dataset_precompute_<slug>` where <slug> is the
+# lowercased dataset folder name. This prefix is the single source of truth for
+# routing a run's reads/writes to PRECOMPUTED_DIR instead of OUTPUT_DIR.
+PRECOMPUTE_PREFIX = "dataset_precompute_"
 PRECOMPUTE_RUN_ID = "dataset_precompute_s01"
+
+
+def precompute_slug(dataset_folder: str) -> str:
+    """Canonical slug for a dataset folder (lowercased, trimmed)."""
+    return str(dataset_folder).strip().lower()
+
+
+def precompute_run_id(dataset_folder: str) -> str:
+    """Stable precompute run id for a dataset folder, e.g. 'S01' -> 'dataset_precompute_s01'."""
+    return f"{PRECOMPUTE_PREFIX}{precompute_slug(dataset_folder)}"
+
+
+def is_precompute_run_id(run_id: str) -> bool:
+    """True when a run id refers to a precomputed dataset gallery."""
+    return bool(run_id) and str(run_id).startswith(PRECOMPUTE_PREFIX)
+
+
+def run_output_root(run_id: str) -> Path:
+    """Root directory a run's artifacts are written under.
+
+    Precompute runs live in PRECOMPUTED_DIR (a dedicated top-level folder);
+    everything else lands in OUTPUT_DIR. Both roots are covered by OUTPUT_DIRS
+    for reads, so this only matters for choosing WHERE to write.
+    """
+    return PRECOMPUTED_DIR if is_precompute_run_id(run_id) else OUTPUT_DIR
 
 # -- Pipeline stage labels --------------------------------------------------
 _STAGE_NAMES = {

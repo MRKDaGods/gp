@@ -1,46 +1,90 @@
-# Runtime requirements for local workflows and Kaggle notebooks.
-# Torch/Torchvision are installed separately in Kaggle notebooks so the GPU
-# build can be selected without being overwritten by pip -r.
-numpy>=1.24
-scipy>=1.10
-pandas>=2.0
-omegaconf>=2.3
-jsonschema>=4.0
-opencv-python-headless>=4.8
-Pillow>=10.0
-ultralytics>=8.1
+# Runtime requirements for local workflows, the FastAPI backend, and Kaggle
+# notebooks. Every version below is exact-pinned to the combination that was
+# verified to import and run cleanly together (Python 3.13.9, Windows,
+# CUDA 12.4 GPU). Do not loosen these back to ranges without re-verifying -
+# several of these packages (boxmot, opencv) have known cross-version
+# breakage described inline below.
+#
+# INSTALL (in this exact order):
+#   1) pip install -r requirements.txt
+#   2) (GPU only - optional) pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+#      Step 1 already installs a working CPU build of torch/torchvision
+#      (pulled in transitively by open-clip-torch/timm/torchreid). Step 2
+#      overwrites it with the CUDA 12.4 build if you have an NVIDIA GPU.
+#   3) pip install --no-deps boxmot==12.0.2
+#      MANDATORY, and MUST be its own --no-deps command. boxmot's own
+#      metadata hard-pins an old numpy/lapx/regex/torchvision (see note
+#      below), so installing it normally either fails outright (old numpy
+#      has no wheel for Python 3.13 and fails to build from source) or
+#      forces a ResolutionImpossible conflict against the versions pinned
+#      here. --no-deps skips boxmot's stale pins entirely; the versions
+#      already installed in step 1 are what boxmot actually runs against,
+#      and that combination is verified working (src/stage1_tracking/tracker.py).
+#   4) pip install --force-reinstall --no-deps opencv-python-headless==5.0.0.93
+#      MANDATORY, always run this last. ultralytics (step 1) declares a hard
+#      dependency on opencv-python (the GUI build), so step 1 silently pulls
+#      it in and it overwrites the headless build's files in the shared
+#      `cv2/` site-packages directory - `import cv2` keeps working but is now
+#      running the wrong (non-headless) variant. Step 4 forces headless back
+#      on top. Never run `pip uninstall opencv-python` by itself afterward:
+#      the two packages share files on disk, so uninstalling one deletes
+#      files the other needs and breaks `import cv2` entirely until you
+#      re-run step 4.
+#
+# `python start.py` only launches the already-installed backend + frontend;
+# it does not install dependencies. Run the 4 steps above first.
+
+numpy==2.3.5
+scipy==1.17.1
+pandas==2.3.3
+omegaconf==2.3.0
+jsonschema==4.26.0
+
+# opencv: ONLY opencv-python-headless may be installed. opencv-python (GUI
+# build) installs into the same `cv2/` site-packages directory and the two
+# silently corrupt each other (whichever installs last wins; uninstalling
+# either afterward deletes files the other still needs, breaking `import cv2`
+# completely). ultralytics/trackeval/boxmot declare opencv-python as a
+# transitive dependency - that's exactly why boxmot must be installed with
+# --no-deps (step 3) and why this line is pinned last-installed/authoritative.
+opencv-python-headless==5.0.0.93
+Pillow==12.0.0
+ultralytics==8.4.23
+
+# boxmot is intentionally NOT listed here - see the mandatory
+# `pip install --no-deps boxmot==12.0.2` step in the header above.
 # Cap below 13: boxmot 13+ restructured its package (boxmot.api / boxmot.detectors,
 # lazy imports) and renamed tracker classes, which breaks Stage 1 tracking.
-boxmot>=10.0,<13
-faiss-cpu>=1.7
-networkx>=3.1
-matplotlib>=3.7
-plotly>=5.15
-seaborn>=0.12
-streamlit>=1.28
-sentence-transformers>=2.2
-tqdm>=4.65
-loguru>=0.7
-click>=8.1
-rich>=13.0
-gdown>=4.7
-kaggle>=1.6
-timm>=0.9
-open-clip-torch>=2.26
-scikit-learn>=1.3
-motmetrics>=1.4
+
+faiss-cpu==1.13.2
+networkx==3.6.1
+matplotlib==3.10.8
+plotly==6.6.0
+seaborn==0.13.2
+streamlit==1.59.1
+sentence-transformers==5.3.0
+tqdm==4.67.3
+loguru==0.7.3
+click==8.3.1
+rich==15.0.0
+gdown==5.2.1
+kaggle==2.0.0
+timm==1.0.25
+open-clip-torch==3.3.0
+scikit-learn==1.8.0
+motmetrics==1.4.0
 
 # -- Backend web service (FastAPI app: `uvicorn backend_api:app`) --
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-python-multipart>=0.0.6
-pydantic>=2.0
+fastapi==0.135.1
+uvicorn[standard]==0.42.0
+python-multipart==0.0.22
+pydantic==2.12.5
 
 # -- Directly imported in backend/src, previously only pulled in transitively --
-PyYAML>=6.0
+PyYAML==6.0.3
 
 # -- Stage-5 evaluation + extra Re-ID backbones (lazy-imported by src/) --
-trackeval>=1.0           # HOTA / IDF1 / MOTA scorer (src/stage5_evaluation)
-torchreid>=0.2.5         # OSNet / ResNet-IBN reid backbones (src/stage2_features, src/training)
-tensorboard>=2.10        # required by torchreid's engine import
-pretrainedmodels>=0.7.4  # CLIP-SENet appearance branch (src/stage2_features)
+trackeval==1.3.0         # HOTA / IDF1 / MOTA scorer (src/stage5_evaluation)
+torchreid==0.2.5         # OSNet / ResNet-IBN reid backbones (src/stage2_features, src/training)
+tensorboard==2.21.0      # required by torchreid's engine import
+pretrainedmodels==0.7.4  # CLIP-SENet appearance branch (src/stage2_features)
