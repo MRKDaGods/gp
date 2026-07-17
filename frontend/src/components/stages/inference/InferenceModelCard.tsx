@@ -117,6 +117,8 @@ export function InferenceModelCard() {
             selectedId={selectedModelId}
             onSelect={handleSingleModelSelect}
             onModelChange={handleSingleModelChange}
+            defaultReadyOnly
+            autoSelectReady
           />
         ) : (
           <FusionModelPanel />

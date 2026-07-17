@@ -4,6 +4,8 @@ First-time setup after cloning the repo and configuring Kaggle credentials:
 
 ```bash
 pip install -r requirements.txt
+pip install --no-deps boxmot==12.0.2   # mandatory - see requirements.txt header
+pip install --force-reinstall --no-deps opencv-python-headless==5.0.0.93   # mandatory, run last - see requirements.txt header
 python scripts/download_weights.py          # pick a model set, or choose "all"
 python scripts/verify_assets.py
 ```

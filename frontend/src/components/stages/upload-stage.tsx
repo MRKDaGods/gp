@@ -1,32 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, ExternalLink, FileArchive, FileVideo, Folder, Loader2, Play, Upload } from "lucide-react";
+import { AlertCircle, CheckCircle2, ExternalLink, FileArchive, FileVideo, Folder, Loader2, Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DisclosurePanel, ErrorBanner, toStageStatus } from "@/components/pipeline";
-import { DatasetPicker } from "@/components/stages/dataset-picker";
-import { Lock, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
-import { getDatasetVideos, getFrameUrl, getVideos, importKaggleRunArtifacts, uploadVideo } from "@/lib/api";
+import { getFrameUrl, getVideos, importKaggleRunArtifacts, uploadVideo } from "@/lib/api";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
-import { type AppDataset, useDatasetStore } from "@/lib/store";
-import { useDetectionStore, usePipelineStore, useSessionStore, useTimelineStore, useVideoStore } from "@/store";
+import { usePipelineStore, useSessionStore, useVideoStore } from "@/store";
 import type { VideoFile } from "@/types";
-
-/** Map a loaded dataset/folder name to the vehicle/person model family so the */
-function inferAppDataset(name: string): AppDataset | null {
-  const n = name.toLowerCase();
-  if (/cityflow|aic|veri/.test(n)) return "cityflowv2";
-  if (/wildtrack|epfl|person/.test(n)) return "wildtrack";
-  return null;
-}
 
 function inferCameraId(video: VideoFile): string {
   // Prefer the real camera id (e.g. WILDTRACK "C1".."C7"); fall back to the
@@ -37,28 +24,17 @@ function inferCameraId(video: VideoFile): string {
   return (match?.[0] ?? "S02_c008").toUpperCase();
 }
 
+/**
+ * Upload = the PROBE step. You upload (or pick a previously uploaded) video that
+ * contains the subject you want to search for. Detection/Selection then run on
+ * THIS video only; the dataset you search *within* is chosen later at Inference.
+ */
 export function UploadStage() {
   const { videos, setVideos, addVideo, setCurrentVideo, currentVideo } = useVideoStore();
   const { setRunId, updateStageProgress } = usePipelineStore();
-  const runId = usePipelineStore((s) => s.runId);
-  const setRunInput = usePipelineStore((s) => s.setRunInput);
-  const pipelineStages = usePipelineStore((s) => s.stages);
-  const resetPipeline = usePipelineStore((s) => s.reset);
-  const setSelectedDataset = useDatasetStore((s) => s.setSelectedDataset);
-  const runPipelineStage = useRunPipelineStage();
   const { toast } = useToast();
 
-  // Once a run exists (ingestion has created it), lock the input so the user
-  // can't swap the dataset/cameras out from under the downstream per-stage runs.
-  const stage0Status = toStageStatus(pipelineStages.find((s) => s.stage === 0));
-  const inputLocked = Boolean(runId);
-
   const [isDragging, setIsDragging] = useState(false);
-  const [activeDataset, setActiveDataset] = useState<string | null>(null);
-  const [activeInputDir, setActiveInputDir] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [smokeRun, setSmokeRun] = useState(true);
-  const [isStartingMtmc, setIsStartingMtmc] = useState(false);
   const [isLoadingVideos, setIsLoadingVideos] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -76,20 +52,17 @@ export function UploadStage() {
       try {
         const response = await getVideos();
         if (response.success && response.data) {
-          // Show genuine user uploads on mount. Dataset footage is loaded on
-          // demand via the picker - BUT keep any persisted dataset cameras (from
-          const uploadsOnly = response.data.filter((v) =>
-            v.path.replace(/\\/g, "/").includes("/uploads/")
-          );
-          const persistedDatasetVideos = useVideoStore
-            .getState()
-            .videos.filter((v) => Boolean(v.cameraId));
-          const seen = new Set(persistedDatasetVideos.map((v) => v.id));
-          const merged = [...persistedDatasetVideos];
-          for (const u of uploadsOnly) {
-            if (!seen.has(u.id)) merged.push(u);
-          }
-          setVideos(merged);
+          // Probe flow shows genuine user uploads only. Dataset footage is never
+          // ingested here anymore - it's the search target, chosen at Inference.
+          // Backend paths are relative ("uploads/<file>", no leading slash), so
+          // match on a path SEGMENT rather than requiring a leading "/uploads/" -
+          // that stricter check never matched a real upload, silently emptying
+          // the gallery on every reload.
+          const uploadsOnly = response.data.filter((v) => {
+            const normalized = v.path.replace(/\\/g, "/");
+            return normalized === "uploads" || normalized.startsWith("uploads/") || normalized.includes("/uploads/");
+          });
+          setVideos(uploadsOnly);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -154,9 +127,13 @@ export function UploadStage() {
 
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(event.target.files || []);
+      // Capture the input element before the await: the native event's
+      // currentTarget is cleared once the event finishes dispatching, so
+      // reading it after an `await` throws "Cannot set properties of null".
+      const input = event.currentTarget;
+      const files = Array.from(input.files || []);
       if (files.length > 0) await handleFiles(files);
-      event.currentTarget.value = "";
+      input.value = "";
     },
     [handleFiles]
   );
@@ -205,148 +182,15 @@ export function UploadStage() {
     [currentVideo, setCurrentVideo, setRunId, toast, updateStageProgress, videos]
   );
 
-  const handleResetInput = useCallback(async () => {
-    const dir = activeInputDir;
-    resetPipeline();
-    // Clear the current video too: DetectionStage stays mounted and will
-    // auto-load on-disk artifacts (and re-mark stage 1 "done") for whatever
-    setCurrentVideo(null);
-    setSelectedIds(new Set());
-    // The run narrowed the gallery to its selected cameras; restore the dataset's
-    // FULL camera list so the user can pick a different subset without reloading.
-    if (dir) {
-      try {
-        const res = await getDatasetVideos(dir);
-        setVideos(res.data ?? []);
-      } catch {
-        /* keep whatever is in the store */
-      }
-    } else {
-      setActiveDataset(null);
-      setActiveInputDir(null);
-    }
-    toast({
-      title: "Input unlocked",
-      description: "Pipeline reset - you can choose a different dataset or cameras now.",
-    });
-  }, [activeInputDir, resetPipeline, setCurrentVideo, setVideos, toast]);
-
-  const datasetCameraVideos = videos.filter((v) => Boolean(v.cameraId));
-  const allSelected =
-    datasetCameraVideos.length > 0 && selectedIds.size === datasetCameraVideos.length;
-
-  const toggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const toggleSelectAll = useCallback(() => {
-    setSelectedIds((prev) =>
-      prev.size === datasetCameraVideos.length
-        ? new Set()
-        : new Set(datasetCameraVideos.map((v) => v.id))
-    );
-  }, [datasetCameraVideos]);
-
-  // Stage 0 only: ingest the selected cameras and CREATE the run. Detection,
-  // features, indexing, and association are NOT cascaded - each runs from its
-  const handleStartRun = useCallback(async () => {
-    if (!activeInputDir) return;
-    const chosen = datasetCameraVideos.filter((v) => selectedIds.has(v.id));
-    const cameras = chosen.map((v) => v.cameraId).filter(Boolean) as string[];
-    if (cameras.length < 1) return;
-
-    setIsStartingMtmc(true);
-    // Fresh run: clear any prior run state, then capture this run's input context
-    // so every downstream stage page can run incrementally against the same run.
-    resetPipeline();
-    // Also drop the previous run's tracking selection + timeline tracks (the selection
-    // now persists across reloads) so this fresh run doesn't inherit a stale pick.
-    useDetectionStore.getState().deselectAll();
-    useTimelineStore.getState().resetAfterUpstreamEdit();
-    setRunInput({
-      inputDir: activeInputDir,
-      cameras,
-      name: activeDataset ?? "dataset",
-      smoke: smokeRun,
-    });
-    // Restrict the workspace to ONLY the selected cameras so every downstream
-    // stage (detection viewer, camera switcher, etc.) shows/uses exactly what's
-    setVideos(chosen);
-    setCurrentVideo(chosen[0] ?? null);
-    try {
-      const result = await runPipelineStage({
-        pipelineStage: 0,
-        uiStage: 0,
-        // Surface the mode in the live progress message so it's unambiguous
-        // whether the quick test (first 10 frames) is actually in effect.
-        label: smokeRun ? "ingestion (quick test * first 10 frames/camera)" : "ingestion (full video)",
-      });
-      if (result === "completed") {
-        toast({
-          title: "Ingestion complete",
-          description: `${smokeRun ? "Quick test (10 frames/camera)" : "Full video"} ingested for ${cameras.length} ${cameras.length === 1 ? "camera" : "cameras"}. Open Detection to run tracking.`,
-          variant: "success",
-        });
-      }
-    } finally {
-      setIsStartingMtmc(false);
-    }
-  }, [
-    activeInputDir,
-    activeDataset,
-    datasetCameraVideos,
-    selectedIds,
-    smokeRun,
-    resetPipeline,
-    setRunInput,
-    setVideos,
-    setCurrentVideo,
-    runPipelineStage,
-  ]);
-
   return (
     <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
       <ErrorBanner title="Upload issue" message={loadError ?? uploadError} />
 
-      {inputLocked ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
-          <div className="flex items-center gap-2 text-sm">
-            <Lock className="h-4 w-4 shrink-0 text-warning" />
-            <span className="text-foreground">
-              Run active on {activeDataset ? <strong>{activeDataset}</strong> : "this input"} (run {runId}).
-              {" "}Reset the pipeline to choose a different dataset or cameras.
-            </span>
-          </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void handleResetInput()} className="gap-1.5">
-            <RotateCcw className="h-3.5 w-3.5" />
-            Reset &amp; change input
-          </Button>
-        </div>
-      ) : null}
-
-      <div className={cn(inputLocked && "pointer-events-none select-none opacity-60")}>
-      <div className="mt-4">
-        <DatasetPicker
-          onLoaded={(name, count, inputDir) => {
-            setActiveDataset(count > 0 ? name : null);
-            setActiveInputDir(count > 0 ? inputDir : null);
-            setSelectedIds(new Set());
-            // Keep the vehicle/person model family in sync with the loaded data.
-            const app = inferAppDataset(name);
-            if (count > 0 && app) setSelectedDataset(app);
-          }}
-        />
-      </div>
-
-      <div className="mt-4 flex items-center gap-3">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">or upload your own</span>
-        <div className="h-px flex-1 bg-border" />
+      <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">Step 1 - Upload your probe video.</span>{" "}
+        Upload the clip containing the subject (vehicle or person) you want to find.
+        Detection and Selection run on this video only. You&apos;ll choose the dataset
+        to search <em>within</em> later, at the Inference step.
       </div>
 
       <div className="mt-4 grid gap-6 lg:grid-cols-2">
@@ -377,7 +221,7 @@ export function UploadStage() {
                 <FileVideo className="h-8 w-8 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-lg font-medium">Drag and drop video files here</p>
+                <p className="text-lg font-medium">Drag and drop your probe video here</p>
                 <p className="text-sm text-muted-foreground">or browse from your computer</p>
               </div>
               <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} aria-label="Browse video files">
@@ -409,45 +253,15 @@ export function UploadStage() {
             <CardTitle className="flex items-center justify-between gap-3 text-base">
               <span className="flex items-center gap-2">
                 <FileVideo className="h-5 w-5" />
-                {activeDataset ? `Video Gallery - ${activeDataset}` : "Video Gallery"}
+                Your Uploaded Videos
               </span>
               <Badge variant="secondary">{videos.length} videos</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {datasetCameraVideos.length > 0 ? (
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/30 p-2">
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} />
-                  Select cameras ({selectedIds.size}/{datasetCameraVideos.length})
-                </label>
-                <div className="flex items-center gap-3">
-                  <label
-                    className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
-                    title="Process only the first 10 frames per camera - a fast sanity check that runs without a GPU."
-                  >
-                    <Checkbox checked={smokeRun} onCheckedChange={(v) => setSmokeRun(Boolean(v))} />
-                    Quick test (10 frames)
-                  </label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={selectedIds.size < 1 || isStartingMtmc || stage0Status === "running"}
-                    onClick={() => void handleStartRun()}
-                    aria-label={`Start run and ingest ${selectedIds.size} selected cameras`}
-                  >
-                    {isStartingMtmc || stage0Status === "running" ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Play className="mr-2 h-4 w-4" />
-                    )}
-                    {isStartingMtmc || stage0Status === "running"
-                      ? "Ingesting..."
-                      : `Start run * ingest ${selectedIds.size} ${selectedIds.size === 1 ? "camera" : "cameras"}`}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+            <p className="mb-3 text-xs text-muted-foreground">
+              Click a video to make it the active probe for Detection.
+            </p>
             <ScrollArea className="h-[400px]">
               {isLoadingVideos ? (
                 <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -457,8 +271,8 @@ export function UploadStage() {
               ) : videos.length === 0 ? (
                 <div className="flex h-[300px] flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
                   <AlertCircle className="h-8 w-8" />
-                  <p>No videos loaded</p>
-                  <p className="text-sm">Pick a dataset with &quot;Load videos&quot; above, or upload your own.</p>
+                  <p>No videos uploaded yet</p>
+                  <p className="text-sm">Drop or browse a probe video on the left to get started.</p>
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -468,9 +282,6 @@ export function UploadStage() {
                       video={video}
                       isSelected={currentVideo?.id === video.id}
                       onSelect={() => setCurrentVideo(video)}
-                      selectable={Boolean(video.cameraId)}
-                      checked={selectedIds.has(video.id)}
-                      onToggle={() => toggleSelect(video.id)}
                     />
                   ))}
                 </div>
@@ -478,7 +289,6 @@ export function UploadStage() {
             </ScrollArea>
           </CardContent>
         </Card>
-      </div>
       </div>
 
       <div className="mt-6 space-y-4">
@@ -535,17 +345,20 @@ export function UploadStage() {
 
 export function UploadStageActions() {
   const { setCurrentStage } = useSessionStore();
+  const currentVideo = useVideoStore((s) => s.currentVideo);
   const stages = usePipelineStore((s) => s.stages);
-  // Navigation only - Stage 1 detection is started from the Detection page's own
-  // Run button. Stays disabled until ingestion (stage 0) has actually finished,
-  const ingestDone = toStageStatus(stages.find((s) => s.stage === 0)) === "done";
+  // Probe flow: Detection runs on the selected video and creates the run itself.
+  // Enable navigation as soon as a probe video is chosen. If Stage 1 already ran,
+  // it stays enabled.
+  const stage1Done = toStageStatus(stages.find((s) => s.stage === 1)) === "done";
+  const canProceed = Boolean(currentVideo) || stage1Done;
 
   return (
     <Button
       type="button"
       onClick={() => setCurrentStage(1)}
-      disabled={!ingestDone}
-      title={!ingestDone ? "Waiting for ingestion to finish" : undefined}
+      disabled={!canProceed}
+      title={!canProceed ? "Upload or select a probe video first" : undefined}
       aria-label="Go to Detection stage"
     >
       Go to Detection
@@ -578,38 +391,23 @@ function VideoCard({
   video,
   isSelected,
   onSelect,
-  selectable = false,
-  checked = false,
-  onToggle,
 }: {
   video: VideoFile;
   isSelected: boolean;
   onSelect: () => void;
-  selectable?: boolean;
-  checked?: boolean;
-  onToggle?: () => void;
 }) {
   return (
     <div
       className={cn(
         "flex w-full items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent",
-        isSelected && "border-primary bg-primary/5",
-        checked && "border-primary/60 bg-primary/5"
+        isSelected && "border-primary bg-primary/5"
       )}
     >
-      {selectable ? (
-        <Checkbox
-          checked={checked}
-          onCheckedChange={() => onToggle?.()}
-          aria-label={`Select camera ${video.cameraId ?? video.name}`}
-          className="flex-shrink-0"
-        />
-      ) : null}
       <button
         type="button"
         className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none"
         onClick={onSelect}
-        aria-label={`Preview ${video.name}`}
+        aria-label={`Use ${video.name} as probe`}
         aria-pressed={isSelected}
       >
         <div className="relative h-16 w-24 flex-shrink-0 overflow-hidden rounded-md bg-muted">
@@ -619,9 +417,9 @@ function VideoCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="truncate font-medium">{video.name}</p>
-            {video.cameraId ? (
+            {isSelected ? (
               <Badge variant="secondary" className="flex-shrink-0 text-[10px]">
-                {video.cameraId}
+                probe
               </Badge>
             ) : null}
           </div>

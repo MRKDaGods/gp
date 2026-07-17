@@ -9,10 +9,10 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from backend.config import (
-    OUTPUT_DIR,
     PCA_MODEL_PATH,
     SIMILARITY_THRESHOLD_MEAN,
     SIMILARITY_THRESHOLD_P25,
+    run_path,
 )
 from backend.models.embedding import EmbeddingArtifact
 from backend.models.requests import TimelineQueryRequest
@@ -228,7 +228,7 @@ class TimelineService:
 
         Returns None if raw embeddings or PCA model don't exist.
         """
-        stage2_dir = OUTPUT_DIR / probe_run_id / "stage2"
+        stage2_dir = run_path(probe_run_id) / "stage2"
         raw_path = stage2_dir / "embeddings_raw.npy"
         idx_path = stage2_dir / "embedding_index.json"
         if not raw_path.exists() or not idx_path.exists():
@@ -486,6 +486,8 @@ class TimelineService:
         all_scored = extra.pop("all_scored_trajectories", [])
         diag.update(extra)
         diag["_ranked_candidates_for_export"] = all_scored
+        if all_scored:
+            diag["bestCandidateScore"] = round(float(all_scored[0][0]), 4)
         return [t for _, t in scored], diag
 
     def _exact_id_fallback(
@@ -574,4 +576,20 @@ class TimelineService:
                 "Selected tracklets were not found in probe embeddings "
                 "for this camera context."
             )
+        if mode == "embedding_dim_mismatch":
+            return diag.get(
+                "search_error", "Probe and gallery embeddings are incompatible."
+            )
+        if mode == "visual_reid_strict":
+            # Search ran fine; nothing cleared the similarity gate.
+            traj_n = diag.get("trajectoryCount", 0)
+            best = diag.get("bestCandidateScore")
+            if best is not None:
+                return (
+                    f"No cross-camera match: searched {traj_n} gallery "
+                    f"trajectories, best similarity {best:.0%} is below the "
+                    f"{SIMILARITY_THRESHOLD_MEAN:.0%} match threshold. The "
+                    "selected vehicle likely does not appear in this dataset."
+                )
+            return f"No cross-camera match found among {traj_n} gallery trajectories."
         return "Selected tracklets could not be resolved in current video/run context"

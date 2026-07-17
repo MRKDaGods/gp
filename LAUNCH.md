@@ -9,6 +9,17 @@ cd gp
 .\.venv\Scripts\activate          # or create: python -m venv .venv
 pip install -r requirements.txt
 
+# 1b. (GPU only) override the CPU torch build pulled in by step 1
+pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+
+# 1c. boxmot MUST be installed separately with --no-deps (see requirements.txt header)
+pip install --no-deps boxmot==12.0.2
+
+# 1d. always run last: ultralytics (step 1) silently pulls in the GUI
+# opencv-python build, which overwrites the headless build's files. Force
+# headless back on top.
+pip install --force-reinstall --no-deps opencv-python-headless==5.0.0.93
+
 # 2. Install Node deps for frontend
 cd frontend
 npm install

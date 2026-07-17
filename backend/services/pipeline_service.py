@@ -24,8 +24,10 @@ from backend.config import (
     OUTPUT_DIR,
     PRECOMPUTE_RUN_ID,
     VIDEO_EXTENSIONS,
+    is_precompute_run_id,
     list_run_dirs,
     resolve_run_dir,
+    run_output_root,
 )
 from backend.models.requests import FusionConfig
 from backend.models.registry import CheckpointRef, ModelArchitecture, ModelEntry
@@ -50,6 +52,12 @@ DATASET_TASK_BY_NAME = {
     "wildtrack": "mtmc_person",
     "veri776": "single_cam_reid",
 }
+
+# Config used for custom / unrecognized dataset folders. Traffic-style vehicle
+# footage is the common case, so default to the CityFlowV2 config (YOLO + BoT-SORT,
+# vehicle classes) instead of configs/default.yaml. Overridable via MTMC_DEFAULT_DATASET.
+_env_default_dataset = os.environ.get("MTMC_DEFAULT_DATASET", "cityflowv2").strip().lower()
+DEFAULT_DATASET_KEY = _env_default_dataset if _env_default_dataset in DATASET_CONFIG_BY_NAME else "cityflowv2"
 
 
 class RunCancelled(RuntimeError):
@@ -617,10 +625,43 @@ def _resolve_run_id(requested_run_id: Optional[str]) -> str:
     return _allocate_numeric_run_id()
 
 
+def _resolve_probe_run_id(requested_run_id: Optional[str], video_id: Optional[str]) -> str:
+    """Resolve a run id for a PROBE (uploaded-video) pipeline stage.
+
+    Probe stages must NEVER run under a precompute/gallery run id
+    (``dataset_precompute_*``): that would copy the probe's input and write its
+    stages into the dataset gallery namespace - e.g. the stray
+    ``outputs/dataset_precompute_seif/input/upload_*`` stub, and worse, probe
+    stages landing inside ``precomputed_datasets/``. The frontend shares one
+    pipeline-store ``runId`` across the probe and dataset-process flows, so a
+    stale gallery id can leak in here. When it does, recover the probe video's
+    own latest run (so Stage 2/3 still find its Stage-1 tracklets); failing that,
+    allocate a fresh numeric id. Probe artifacts thus always stay in ``outputs/``.
+    """
+    run_id = _resolve_run_id(requested_run_id)
+    if video_id and is_precompute_run_id(run_id):
+        recovered = app_state.video_to_latest_run.get(video_id)
+        if recovered and not is_precompute_run_id(recovered):
+            print(
+                f"[run-stage] Ignoring gallery runId {run_id!r} for probe video "
+                f"{video_id}; reusing probe run {recovered!r}",
+                flush=True,
+            )
+            return recovered
+        fresh = _allocate_numeric_run_id()
+        print(
+            f"[run-stage] Ignoring gallery runId {run_id!r} for probe video "
+            f"{video_id}; allocated fresh run {fresh!r}",
+            flush=True,
+        )
+        return fresh
+    return run_id
+
+
 def _write_run_context(run_id: str, payload: Dict[str, Any]) -> None:
     """Persist lightweight run metadata to help auditing and dataset discovery."""
     try:
-        run_dir = OUTPUT_DIR / run_id
+        run_dir = run_output_root(run_id) / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         ctx_path = run_dir / "run_context.json"
         existing: Dict[str, Any] = {}
@@ -874,6 +915,14 @@ def delete_run(run_id: str) -> bool:
 
 def _prepare_input_for_run(run_id: str, source_video_path: Path, camera_id: str) -> Path:
     run_input_dir = OUTPUT_DIR / run_id / "input" / camera_id
+    # Clear any video(s) already sitting here before copying this one in. Without
+    # this, reusing a run_id/camera_id for a DIFFERENT video (e.g. the frontend
+    # sending a stale runId after the user switched probe videos) leaves both
+    # files in the folder; stage 0 then treats them as one camera's footage and
+    # merges both videos' tracklets into a single output - visible as duplicate/
+    # overlapping detection boxes that don't match the video actually playing.
+    if run_input_dir.exists():
+        shutil.rmtree(run_input_dir)
     run_input_dir.mkdir(parents=True, exist_ok=True)
 
     target_video_path = run_input_dir / source_video_path.name
@@ -883,8 +932,9 @@ def _prepare_input_for_run(run_id: str, source_video_path: Path, camera_id: str)
 
 
 def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path) -> Path:
-    """Copy dataset input videos into outputs/{run_id}/input/ for full run reproducibility."""
-    run_input_root = OUTPUT_DIR / run_id / "input"
+    """Copy dataset input videos into <run root>/{run_id}/input/ for full run reproducibility."""
+    run_root = run_output_root(run_id) / run_id
+    run_input_root = run_root / "input"
     run_input_root.mkdir(parents=True, exist_ok=True)
 
     copied: List[Dict[str, str]] = []
@@ -899,7 +949,7 @@ def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path) -> Path:
                 continue
             dst = camera_dir / src.name
             shutil.copy2(src, dst)
-            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(OUTPUT_DIR / run_id).as_posix())})
+            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(run_root).as_posix())})
 
     if not copied:
         misc_dir = run_input_root / "misc"
@@ -909,7 +959,7 @@ def _prepare_dataset_input_for_run(run_id: str, dataset_path: Path) -> Path:
                 continue
             dst = misc_dir / src.name
             shutil.copy2(src, dst)
-            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(OUTPUT_DIR / run_id).as_posix())})
+            copied.append({"source": str(src), "copiedTo": str(dst.relative_to(run_root).as_posix())})
 
     manifest = {
         "sourceDatasetPath": str(dataset_path),
@@ -959,7 +1009,7 @@ def _build_pipeline_cmd(
         "--stages",
         stages,
         "--override",
-        f"project.output_dir={OUTPUT_DIR.as_posix()}",
+        f"project.output_dir={run_output_root(run_id).as_posix()}",
         "--override",
         f"project.run_name='{run_id}'",
         "--override",
@@ -1166,7 +1216,7 @@ async def _run_pipeline_streaming(
             _handle_line(payload)
 
     returncode = await future
-    run_dir = OUTPUT_DIR / run_id
+    run_dir = run_output_root(run_id) / run_id
 
     # A user cancel terminates the subprocess (non-zero return). Treat that as a
     # cancellation, not a pipeline error, so the UI can show a clean cancelled state.
@@ -1256,7 +1306,7 @@ async def _background_precompute_dataset() -> None:
     if not dataset_s01.exists():
         return
 
-    run_dir = OUTPUT_DIR / PRECOMPUTE_RUN_ID
+    run_dir = run_output_root(PRECOMPUTE_RUN_ID) / PRECOMPUTE_RUN_ID
     if any((run_dir / "stage1").glob("tracklets_*.json")):
         for vid_id, vid_meta in list(app_state.uploaded_videos.items()):
             cam_id = _extract_camera_id(str(vid_meta.get("path", "")))
@@ -1270,7 +1320,7 @@ async def _background_precompute_dataset() -> None:
             "scripts/run_pipeline.py",
             "--config", "configs/default.yaml",
             "--stages", "0,1,2,3,4",
-            "--override", f"project.output_dir={OUTPUT_DIR.as_posix()}",
+            "--override", f"project.output_dir={run_output_root(PRECOMPUTE_RUN_ID).as_posix()}",
             "--override", f"project.run_name={PRECOMPUTE_RUN_ID}",
             "--override", f"stage0.input_dir={dataset_s01.as_posix()}",
         ]
@@ -1363,7 +1413,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
             return
 
         if stage in (2, 3):
-            run_dir = OUTPUT_DIR / run_id
+            run_dir = run_output_root(run_id) / run_id
             stage2_done = (run_dir / "stage2" / "embeddings.npy").exists()
 
             if stage == 3 and stage2_done:
@@ -1507,7 +1557,8 @@ async def _execute_dataset_pipeline(run_id: str, dataset_path: Path, folder_name
         input_dir = _prepare_dataset_input_for_run(run_id, dataset_path)
 
         coords_file = dataset_path / "camera_coordinates.json"
-        dataset_key = resolve_dataset_key(folder_name, str(dataset_path))
+        # Custom/unrecognized folders fall back to the CityFlow config (not default.yaml).
+        dataset_key = resolve_dataset_key(folder_name, str(dataset_path)) or DEFAULT_DATASET_KEY
         if dataset_key:
             app_state.active_runs[run_id]["dataset"] = dataset_key
         cmd = _build_pipeline_cmd(
@@ -1610,8 +1661,9 @@ async def _execute_input_dir_pipeline(
     try:
         stage_nums = [int(s) for s in stages.split(",") if s.strip().isdigit()]
         # Resolve which dataset config drives detection classes (vehicles vs people).
-        # Prefer an explicit hint, else infer from the input path; None -> default.yaml.
-        dataset_key = resolve_dataset_key(dataset, input_dir)
+        # Prefer an explicit hint, else infer from the input path; custom/unknown
+        # folders fall back to the CityFlow config (YOLO + BoT-SORT), not default.yaml.
+        dataset_key = resolve_dataset_key(dataset, input_dir) or DEFAULT_DATASET_KEY
         app_state.active_runs[run_id]["message"] = f"Running ingestion on {label}..."
         app_state.active_runs[run_id]["progress"] = 2
         if dataset_key:

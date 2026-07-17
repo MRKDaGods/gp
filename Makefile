@@ -2,9 +2,13 @@
 
 install:
 	pip install -e .
+	pip install --no-deps boxmot==12.0.2
+	pip install --force-reinstall --no-deps opencv-python-headless==5.0.0.93
 
 install-dev:
 	pip install -e ".[dev]"
+	pip install --no-deps boxmot==12.0.2
+	pip install --force-reinstall --no-deps opencv-python-headless==5.0.0.93
 
 test:
 	pytest tests/ -v --tb=short

@@ -12,52 +12,64 @@ license = {text = "MIT"}
 
 dependencies = [
     # Core
-    "numpy>=1.24",
-    "scipy>=1.10",
-    "pandas>=2.0",
+    "numpy==2.3.5",
+    "scipy==1.17.1",
+    "pandas==2.3.3",
 
     # Configuration
-    "omegaconf>=2.3",
-    "jsonschema>=4.0",
+    "omegaconf==2.3.0",
+    "jsonschema==4.26.0",
 
-    # Computer Vision
-    "opencv-python-headless>=4.8",
-    "Pillow>=10.0",
+    # Computer Vision - opencv-python-headless ONLY. Do not add opencv-python
+    # (GUI build): both packages install into the same `cv2/` site-packages
+    # directory and corrupt each other. See requirements.txt for details.
+    "opencv-python-headless==5.0.0.93",
+    "Pillow==12.0.0",
 
     # Detection
-    "ultralytics>=8.1",
+    "ultralytics==8.4.23",
 
-    # Tracking
-    "boxmot>=10.0",
+    # boxmot is intentionally excluded from this list. It MUST be installed
+    # separately and with --no-deps:
+    #     pip install --no-deps boxmot==12.0.2
+    # boxmot's own metadata hard-pins an old numpy/lapx/regex/torchvision
+    # that conflicts with the versions pinned here (and has no Python 3.13
+    # wheel), so a normal resolved install fails. Cap below 13: boxmot 13+
+    # restructured its API and renamed tracker classes, which breaks Stage 1
+    # (src/stage1_tracking/tracker.py). See requirements.txt for the full
+    # install order.
 
-    # Deep Learning
-    "torch>=2.1",
-    "torchvision>=0.16",
-    "open-clip-torch>=2.26",
+    # Deep Learning - these are the PyPI CPU builds. For GPU, reinstall after
+    # with: pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124
+    # --index-url https://download.pytorch.org/whl/cu124  (verified working
+    # combination: CUDA 12.4, torch 2.6.0, torchvision 0.21.0).
+    "torch==2.6.0",
+    "torchvision==0.21.0",
+    "open-clip-torch==3.3.0",
 
     # Indexing
-    "faiss-cpu>=1.7",
+    "faiss-cpu==1.13.2",
 
     # Graphs
-    "networkx>=3.1",
+    "networkx==3.6.1",
 
     # Visualization
-    "matplotlib>=3.7",
-    "plotly>=5.15",
-    "seaborn>=0.12",
+    "matplotlib==3.10.8",
+    "plotly==6.6.0",
+    "seaborn==0.13.2",
 
     # Web Dashboard
-    "streamlit>=1.28",
+    "streamlit==1.59.1",
 
     # NL Query
-    "sentence-transformers>=2.2",
+    "sentence-transformers==5.3.0",
 
     # Utilities
-    "tqdm>=4.65",
-    "loguru>=0.7",
-    "click>=8.1",
-    "rich>=13.0",
-    "kaggle>=1.6",
+    "tqdm==4.67.3",
+    "loguru==0.7.3",
+    "click==8.3.1",
+    "rich==15.0.0",
+    "kaggle==2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -68,7 +80,7 @@ dev = [
     "ruff>=0.1",
 ]
 reid = [
-    "gdown>=4.7",
+    "gdown==5.2.1",
 ]
 lpr = [
     "paddleocr>=2.7",

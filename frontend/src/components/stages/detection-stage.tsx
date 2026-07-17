@@ -46,6 +46,7 @@ import {
 } from "@/store";
 import { useDatasetStore } from "@/lib/store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
+import { getRunStageErrorMessage, inferCameraId, pollStageStatus } from "@/lib/pipeline-run";
 import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
 import { MultiCameraView } from "@/components/stages/multi-camera-view";
 import {
@@ -53,6 +54,7 @@ import {
   getAllDetections,
   getFrameUrl,
   getVideoStreamUrl,
+  runStage,
   apiUrl,
 } from "@/lib/api";
 import type { BoundingBox, Detection, VideoFile } from "@/types";
@@ -701,7 +703,17 @@ export function DetectionStage() {
       // In a multi-camera dataset run every camera belongs to ONE run, so
       // switching the *viewed* camera is just a view change - it must not flush
       if (!usePipelineStore.getState().runInput) {
-        flushPipelineFromStage(id ? 2 : 1);
+        // Probe flow: each video gets its OWN run. Without clearing runId here,
+        // switching to a different probe video reuses the PREVIOUS video's runId
+        // on the next "Run detection" - the backend then copies this video into
+        // that old run's already-populated input/<camera>/ folder alongside the
+        // first one, and stage 0 merges both videos' tracklets into a single
+        // output (visible as duplicate/overlapping boxes that don't match what's
+        // playing). Dropping runId + stage 1 forces a fresh run per video.
+        usePipelineStore.setState({ runId: null });
+        flushPipelineFromStage(1);
+      } else {
+        flushPipelineFromStage(2);
       }
     }
   }, [currentVideo?.id]);
@@ -1493,20 +1505,50 @@ export function DetectionStage() {
 export function DetectionStageActions() {
   const { selectedTrackIds } = useDetectionStore();
   const { setCurrentStage } = useSessionStore();
-  const { runId, stages } = usePipelineStore();
+  const { runId, setRunId, stages, updateStageProgress, setError } = usePipelineStore();
   const runInput = usePipelineStore((s) => s.runInput);
+  const currentVideo = useVideoStore((s) => s.currentVideo);
   const runPipelineStage = useRunPipelineStage();
   const stageProgress = stages.find((stage) => stage.stage === 1);
   const status = toStageStatus(stageProgress);
-  // Detection runs pipeline stage 1 against the same run; gated on ingestion.
+  // Dataset flow: ingestion (stage 0) ran separately and must finish first.
+  // Probe flow: there's no separate ingestion step - stage 1 ingests THIS video
+  // and detects/tracks it in one backend call (execute_stage runs "0,1" together).
   const ingestDone = toStageStatus(stages.find((s) => s.stage === 0)) === "done";
+  const datasetFlow = Boolean(runInput);
 
   const running = status === "running";
   const done = status === "done";
-  const canRun = Boolean(runInput) && ingestDone && !running;
+  const canRun = datasetFlow ? ingestDone && !running : Boolean(currentVideo) && !running;
 
   const handleRun = async () => {
-    await runPipelineStage({ pipelineStage: 1, uiStage: 1, label: "detection" });
+    if (datasetFlow) {
+      await runPipelineStage({ pipelineStage: 1, uiStage: 1, label: "detection" });
+      return;
+    }
+
+    if (!currentVideo) {
+      updateStageProgress(1, { status: "error", progress: 100, message: "No probe video selected. Go back to Upload." });
+      return;
+    }
+
+    setError(null);
+    updateStageProgress(1, { status: "running", progress: 0, message: "Running ingestion + detection & tracking..." });
+
+    try {
+      const response = await runStage(1, {
+        runId: runId ?? undefined,
+        videoId: currentVideo.id,
+        cameraId: inferCameraId(currentVideo),
+      });
+      const nextRunId = response.data?.runId ?? runId;
+      if (nextRunId) setRunId(nextRunId);
+      if (nextRunId) await pollStageStatus(nextRunId, 1, updateStageProgress);
+    } catch (error) {
+      const message = getRunStageErrorMessage(error);
+      setError(message);
+      updateStageProgress(1, { status: "error", progress: 100, message });
+    }
   };
 
   const handleCancel = async () => {
@@ -1532,7 +1574,11 @@ export function DetectionStageActions() {
           type="button"
           onClick={() => void handleRun()}
           disabled={!canRun}
-          title={!runInput ? "Start a run from the Upload stage first" : !ingestDone ? "Waiting for ingestion to finish" : undefined}
+          title={
+            datasetFlow
+              ? (!ingestDone ? "Waiting for ingestion to finish" : undefined)
+              : (!currentVideo ? "Upload or select a probe video first" : undefined)
+          }
           aria-label="Run detection & tracking"
         >
           {done ? "Re-run detection" : "Run detection"}

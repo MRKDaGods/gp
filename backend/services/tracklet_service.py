@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from backend.config import OUTPUT_DIR
+from backend.config import OUTPUT_DIR, run_path
 from backend.services.logging_service import _timeline_debug
 from backend.services.video_service import (
     _detect_camera_for_video,
@@ -58,7 +58,8 @@ def _find_tracklet_in_run(
     preferred_camera_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Find a stage1 tracklet by id (and optionally camera) inside a run."""
-    run_dir = OUTPUT_DIR / run_id
+    # run_id may be a gallery (dataset_precompute_*) -> resolve via run_path.
+    run_dir = run_path(run_id)
     tracklets = _load_all_stage1_tracklets(run_dir)
     preferred_norm = _normalize_camera_id(preferred_camera_id) if preferred_camera_id else None
 
@@ -391,7 +392,7 @@ def _resolve_probe_run_id_for_video(
 def _build_tracklet_lookup(run_id: str) -> Dict[Tuple[str, int], Dict[str, Any]]:
     """Index all stage1 tracklets by (normalised_camera, track_id). First-seen wins."""
     lookup: Dict[Tuple[str, int], Dict[str, Any]] = {}
-    run_dir = OUTPUT_DIR / run_id
+    run_dir = run_path(run_id)
     for t in _load_all_stage1_tracklets(run_dir):
         cam = _normalize_camera_id(str(t.get("camera_id", "")))
         tid = int(t.get("track_id", -1))
@@ -403,7 +404,7 @@ def _build_tracklet_lookup(run_id: str) -> Dict[Tuple[str, int], Dict[str, Any]]
 def _build_tracklet_embedding_bank(run_id: str) -> Dict[Tuple[str, int], np.ndarray]:
     """Mean-pool stage2 embeddings per (camera, track_id) and L2-normalise."""
     bank: Dict[Tuple[str, int], np.ndarray] = {}
-    stage2_dir = OUTPUT_DIR / run_id / "stage2"
+    stage2_dir = run_path(run_id) / "stage2"
     emb_path = stage2_dir / "embeddings.npy"
     idx_path = stage2_dir / "embedding_index.json"
     if not emb_path.exists() or not idx_path.exists():
@@ -448,7 +449,7 @@ def _build_tracklet_global_map(
     key_to_gid: Dict[Tuple[str, int], Optional[int]] = {}
     gid_to_cam_count: Dict[int, int] = {}
     key_to_span: Dict[Tuple[str, int], Dict[str, float]] = {}
-    traj_path = OUTPUT_DIR / run_id / "stage4" / "global_trajectories.json"
+    traj_path = run_path(run_id) / "stage4" / "global_trajectories.json"
     if not traj_path.exists():
         return key_to_gid, gid_to_cam_count, key_to_span
 

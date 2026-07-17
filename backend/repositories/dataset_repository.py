@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
+from backend.config import run_path
 from backend.models.embedding import EmbeddingArtifact
 
 
@@ -58,11 +59,15 @@ class InMemoryDatasetRepository:
         return self._latest_runs.get(video_id)
 
     def list_trajectories(self, run_id: str) -> Optional[List[Dict[str, Any]]]:
-        traj_path = self._output_dir / run_id / "stage4" / "global_trajectories.json"
+        # run_path honors the precompute convention: gallery runs
+        # (dataset_precompute_*) resolve to precomputed_datasets/, not outputs/.
+        traj_path = run_path(run_id) / "stage4" / "global_trajectories.json"
         if not traj_path.exists():
             return None
         data = json.loads(traj_path.read_text(encoding="utf-8"))
         return data if isinstance(data, list) else []
 
     def load_embedding_artifact(self, run_id: str) -> Optional[EmbeddingArtifact]:
-        return EmbeddingArtifact.load_for_run(run_id, self._output_dir)
+        # Pass the resolved root (parent of the run dir) so gallery embeddings in
+        # precomputed_datasets/ load correctly, not just outputs/ probe runs.
+        return EmbeddingArtifact.load_for_run(run_id, run_path(run_id).parent)

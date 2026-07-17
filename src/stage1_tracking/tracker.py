@@ -121,26 +121,39 @@ class TrackerWrapper:
 
     @staticmethod
     def _get_tracker_class(algorithm: str):
-        """Dynamically import the tracker class from boxmot."""
+        """Dynamically import the tracker class from boxmot.
+
+        boxmot renames its tracker classes across versions (e.g. DeepOcSort vs
+        DeepOCSORT). Try the known casings for the requested tracker only, and
+        tolerate a getattr that raises: newer boxmot builds lazily import
+        submodules on attribute access, so we must NOT scan the whole namespace
+        (that triggers EVERY lazy import, including unrelated ones that may be
+        broken) and must catch import errors per-candidate rather than crash.
+        """
         import boxmot
 
         candidates = {
-            "botsort": ("BotSort", "BoTSORT", "BOTSORT"),
-            "deepocsort": ("DeepOcSort", "DeepOCSort", "DEEPOCSORT"),
-            "strongsort": ("StrongSort", "StrongSORT", "STRONGSORT"),
-            "bytetrack": ("ByteTrack", "BYTETrack", "BYTETRACK"),
-            "ocsort": ("OcSort", "OCSort", "OCSORT"),
-            "hybridsort": ("HybridSort", "HybridSORT", "HYBRIDSORT"),
+            "botsort": ("BotSort", "BoTSORT", "BOTSORT", "BotSORT", "Botsort"),
+            "deepocsort": ("DeepOcSort", "DeepOCSORT", "DeepOCSort", "DEEPOCSORT", "DeepOcSORT", "Deepocsort"),
+            "strongsort": ("StrongSort", "StrongSORT", "STRONGSORT", "Strongsort"),
+            "bytetrack": ("ByteTrack", "BYTETrack", "BYTETRACK", "Bytetrack"),
+            "ocsort": ("OcSort", "OCSort", "OCSORT", "Ocsort"),
+            "hybridsort": ("HybridSort", "HybridSORT", "HYBRIDSORT", "Hybridsort"),
         }
-
-        for class_name in candidates[algorithm]:
-            tracker_cls = getattr(boxmot, class_name, None)
-            if tracker_cls is not None:
+        for class_name in candidates.get(algorithm, ()):
+            try:
+                tracker_cls = getattr(boxmot, class_name)
+            except Exception:
+                # Lazy-import of this attribute failed in this boxmot build - skip it.
+                continue
+            if isinstance(tracker_cls, type):
                 return tracker_cls
 
         raise ImportError(
-            f"boxmot does not expose a supported class for '{algorithm}'. "
-            f"Tried: {candidates[algorithm]}"
+            f"boxmot {getattr(boxmot, '__version__', '?')} does not expose a class for "
+            f"tracker '{algorithm}'. This project targets boxmot 11-12; a newer boxmot "
+            "restructured its API. Reinstall a compatible version with:\n"
+            "    pip install \"boxmot>=11.0,<13\""
         )
 
     def update(
