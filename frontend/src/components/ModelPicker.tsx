@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -29,6 +29,13 @@ interface ModelPickerProps {
   allowUnavailableSelection?: boolean;
   compact?: boolean;
   respectDatasetFilter?: boolean;
+  /** Start filtered to models that are actually downloaded and runnable right
+   * now (no missing weights, runnable_locally, has a pipeline config). The
+   * user can still switch back to "All" - this only changes the default. */
+  defaultReadyOnly?: boolean;
+  /** When true (single-select only) and nothing is selected yet, auto-select
+   * the first ready model once the registry loads. */
+  autoSelectReady?: boolean;
 }
 
 const TASK_LABELS: Record<ModelTaskType, string> = {
@@ -97,13 +104,17 @@ export function ModelPicker({
   allowUnavailableSelection = false,
   compact = false,
   respectDatasetFilter,
+  defaultReadyOnly = false,
+  autoSelectReady = false,
 }: ModelPickerProps) {
   const selectedDataset = useDatasetStore((state) => state.selectedDataset);
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showDeadEnds, setShowDeadEnds] = useState(false);
+  const [readyOnly, setReadyOnly] = useState(defaultReadyOnly);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const didAutoSelect = useRef(false);
 
   const datasetFilter = respectDatasetFilter ?? taskType !== "single_cam_reid";
 
@@ -140,12 +151,29 @@ export function ModelPicker({
     onModelChange?.(selectedModel);
   }, [onModelChange, selectedModel]);
 
+  const visibleModels = useMemo(
+    () => (readyOnly ? models.filter((model) => !getDisabledReason(model, allowUnavailableSelection)) : models),
+    [models, readyOnly, allowUnavailableSelection]
+  );
+
   const grouped = useMemo(() => {
     return TASK_ORDER.map((taskType) => ({
       taskType,
-      models: models.filter((model) => model.task_type === taskType),
+      models: visibleModels.filter((model) => model.task_type === taskType),
     })).filter((group) => group.models.length > 0);
-  }, [models]);
+  }, [visibleModels]);
+
+  // Auto-select the first ready model once, on initial load, if nothing is
+  // picked yet. Only runs once per mount so it never fights a deliberate
+  // "Use legacy config" / deselect action later.
+  useEffect(() => {
+    if (!autoSelectReady || multiSelect || didAutoSelect.current || isLoading || selectedId) return;
+    const firstReady = visibleModels.find((model) => !getDisabledReason(model, allowUnavailableSelection));
+    if (firstReady) {
+      didAutoSelect.current = true;
+      onSelect(firstReady.id);
+    }
+  }, [autoSelectReady, multiSelect, isLoading, selectedId, visibleModels, allowUnavailableSelection, onSelect]);
 
   const toggleMulti = useCallback((modelId: string) => {
     if (!onMultiSelect) return;
@@ -160,6 +188,16 @@ export function ModelPicker({
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2.5">
+            <Button
+              type="button"
+              variant={readyOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => setReadyOnly((value) => !value)}
+              className="h-8 min-w-[64px] px-3"
+              title="Only show models that are downloaded and runnable right now"
+            >
+              Ready
+            </Button>
             {(["all", "production", "research"] as StatusFilter[]).map((status) => (
               <Button
                 key={status}
@@ -213,7 +251,17 @@ export function ModelPicker({
 
         {!isLoading && !error && grouped.length === 0 && (
           <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            No registry entries match the current filters.
+            {readyOnly && models.length > 0 ? (
+              <>
+                No downloaded models match the current filters.{" "}
+                <button type="button" className="font-medium text-primary underline underline-offset-2" onClick={() => setReadyOnly(false)}>
+                  Show all models
+                </button>{" "}
+                to see ones that need weights downloaded first.
+              </>
+            ) : (
+              "No registry entries match the current filters."
+            )}
           </div>
         )}
 

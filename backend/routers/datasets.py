@@ -12,10 +12,10 @@ from backend.config import (
     DATASET_CONFIG_DIR,
     DATASET_DIR,
     OUTPUT_DIR,
+    OUTPUT_DIRS,
     PRECOMPUTED_DIR,
     VIDEO_EXTENSIONS,
     precompute_run_id,
-    resolve_run_dir,
 )
 from backend.dependencies import get_app_state
 from backend.services.pipeline_service import (
@@ -379,20 +379,34 @@ async def run_dataset_input(
     return {"success": True, "data": state.active_runs[run_id]}
 
 
+def _has_gallery_content(run_dir: Path) -> bool:
+    """True when a run dir has actually produced tracklets, not just an empty stub."""
+    stage1 = run_dir / "stage1"
+    return stage1.exists() and any(stage1.glob("tracklets_*.json"))
+
+
 def _find_precompute_run(dataset_folder: str) -> Tuple[Optional[str], Optional[Path]]:
     """Locate the precompute run for a dataset folder across all output roots.
 
-    Prefers the stable id (dataset_precompute_<slug>, now living under
-    precomputed_datasets/); falls back to scanning every root for a run whose
-    run_context.json names this dataset (covers legacy / custom runs).
+    Prefers the stable id (dataset_precompute_<slug>); falls back to scanning
+    every root for a run whose run_context.json names this dataset (covers
+    legacy / custom runs).
     """
     dataset_key = str(dataset_folder).lower()
 
-    # 1. Stable id - resolve_run_dir searches PRECOMPUTED_DIR, OUTPUT_DIR, data/outputs.
+    # 1. Stable id. precomputed_datasets/ is the canonical home for these runs,
+    # so check it FIRST regardless of OUTPUT_DIRS' general read order (which
+    # puts outputs/ first for ad-hoc runs) - and prefer whichever candidate
+    # actually has tracklets over one that merely exists. Without this, a
+    # leftover empty outputs/dataset_precompute_<slug> stub (e.g. from an
+    # earlier cancelled/failed process attempt) would permanently shadow a
+    # complete gallery sitting in precomputed_datasets/.
     stable_id = precompute_run_id(dataset_folder)
-    stable_dir = resolve_run_dir(stable_id)
-    if stable_dir is not None:
-        return stable_id, stable_dir
+    ordered_roots = [PRECOMPUTED_DIR] + [r for r in OUTPUT_DIRS if r != PRECOMPUTED_DIR]
+    candidates = [root / stable_id for root in ordered_roots if (root / stable_id).exists()]
+    if candidates:
+        populated = next((c for c in candidates if _has_gallery_content(c)), None)
+        return stable_id, populated or candidates[0]
 
     # 2. Fallback: newest run in any root whose context names this dataset.
     candidate_runs: List[tuple] = []
