@@ -703,7 +703,17 @@ export function DetectionStage() {
       // In a multi-camera dataset run every camera belongs to ONE run, so
       // switching the *viewed* camera is just a view change - it must not flush
       if (!usePipelineStore.getState().runInput) {
-        flushPipelineFromStage(id ? 2 : 1);
+        // Probe flow: each video gets its OWN run. Without clearing runId here,
+        // switching to a different probe video reuses the PREVIOUS video's runId
+        // on the next "Run detection" - the backend then copies this video into
+        // that old run's already-populated input/<camera>/ folder alongside the
+        // first one, and stage 0 merges both videos' tracklets into a single
+        // output (visible as duplicate/overlapping boxes that don't match what's
+        // playing). Dropping runId + stage 1 forces a fresh run per video.
+        usePipelineStore.setState({ runId: null });
+        flushPipelineFromStage(1);
+      } else {
+        flushPipelineFromStage(2);
       }
     }
   }, [currentVideo?.id]);

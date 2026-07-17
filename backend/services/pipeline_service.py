@@ -881,6 +881,14 @@ def delete_run(run_id: str) -> bool:
 
 def _prepare_input_for_run(run_id: str, source_video_path: Path, camera_id: str) -> Path:
     run_input_dir = OUTPUT_DIR / run_id / "input" / camera_id
+    # Clear any video(s) already sitting here before copying this one in. Without
+    # this, reusing a run_id/camera_id for a DIFFERENT video (e.g. the frontend
+    # sending a stale runId after the user switched probe videos) leaves both
+    # files in the folder; stage 0 then treats them as one camera's footage and
+    # merges both videos' tracklets into a single output - visible as duplicate/
+    # overlapping detection boxes that don't match the video actually playing.
+    if run_input_dir.exists():
+        shutil.rmtree(run_input_dir)
     run_input_dir.mkdir(parents=True, exist_ok=True)
 
     target_video_path = run_input_dir / source_video_path.name
