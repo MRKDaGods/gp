@@ -17,10 +17,11 @@ import { ApiError, cancelPipeline, getDatasets, runStage, type DatasetFolder, ty
 import { useKaggleCredentialsStore } from "@/lib/kaggle-credentials-store";
 import { flushPipelineFromStage } from "@/lib/pipeline-flush";
 import { getRunStageErrorMessage, inferCameraId, pollStageStatus } from "@/lib/pipeline-run";
+import { useDatasetStore } from "@/lib/store";
 import { useRunPipelineStage } from "@/hooks/use-pipeline-stage";
 import type { ModelEntry } from "@/services/models";
 import { useDetectionStore, usePipelineStore, useSessionStore, useStageExecutionStore, useVideoStore } from "@/store";
-import type { RunModelMetadata, SingleStageRunStatus, StageNumber } from "@/types";
+import type { RunModelMetadata, SingleStageRunStatus } from "@/types";
 
 function extractRunModelMetadata(data: SingleStageRunStatus | null, selectedModel: ModelEntry | null): RunModelMetadata {
   return {
@@ -76,35 +77,34 @@ function buildFusionPayload(fusion: ReturnType<typeof usePipelineStore.getState>
 /** Compact progress for the probe's feature-extraction / indexing steps. Only
  * shows while running or once complete - the dataset precompute has its own
  * progress inside the "Search within" card. Replaces the two large per-stage
- * widgets so the page shows one clear status line instead of raw pipeline stages. */
+ * widgets so the page shows one clear status line instead of raw pipeline stages.
+ *
+ * Both pipeline stages Inference runs (2=features, 3=indexing) report into the
+ * SAME store slot (stage 3, "Inference"'s UI slot) rather than stages[2]/[3]
+ * directly - stages[2] is Selection's UI slot (a manual stage with its own,
+ * separate completion tracking) and writing pipeline-stage-2 progress there
+ * corrupted Selection's sidebar/error state with Inference's own errors. */
 function InferenceProgressStrip() {
   const stages = usePipelineStore((state) => state.stages);
-  const stage2 = stages.find((s) => s.stage === 2);
-  const stage3 = stages.find((s) => s.stage === 3);
-  const stage2Status = toStageStatus(stage2);
-  const stage3Status = toStageStatus(stage3);
+  const progress = stages.find((s) => s.stage === 3);
+  const status = toStageStatus(progress);
 
-  const active =
-    stage3Status === "running" ? { label: "Building search index", progress: stage3?.progress ?? 0 }
-    : stage2Status === "running" ? { label: "Extracting features from your selection", progress: stage2?.progress ?? 0 }
-    : null;
-
-  if (active) {
+  if (status === "running") {
     return (
       <div className="space-y-1 rounded-md border border-primary/30 bg-primary/5 p-3">
         <div className="flex items-center justify-between text-sm">
           <span className="flex items-center gap-2 text-foreground">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            {active.label}...
+            {progress?.message ?? "Running..."}
           </span>
-          <span className="font-mono text-xs">{Math.round(active.progress)}%</span>
+          <span className="font-mono text-xs">{Math.round(progress?.progress ?? 0)}%</span>
         </div>
-        <Progress value={active.progress} className="h-2" />
+        <Progress value={progress?.progress ?? 0} className="h-2" />
       </div>
     );
   }
 
-  if (stage3Status === "done") {
+  if (status === "done") {
     return (
       <div className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">
         Search index ready - continue to the Timeline to see matches.
@@ -120,13 +120,9 @@ export function InferenceStage() {
   const stages = usePipelineStore((state) => state.stages);
   const error = usePipelineStore((state) => state.error);
   const runModelMetadata = useInferenceRunStore((state) => state.runModelMetadata);
-  const stage2Progress = stages.find((stage) => stage.stage === 2);
-  const stage3Progress = stages.find((stage) => stage.stage === 3);
-  const stage2Status = toStageStatus(stage2Progress);
-  const stage3Status = toStageStatus(stage3Progress);
-  const errorMessage = error
-    ?? (stage2Status === "error" ? stage2Progress?.message : null)
-    ?? (stage3Status === "error" ? stage3Progress?.message : null);
+  const inferenceProgress = stages.find((stage) => stage.stage === 3);
+  const inferenceStatus = toStageStatus(inferenceProgress);
+  const errorMessage = error ?? (inferenceStatus === "error" ? inferenceProgress?.message : null);
 
   return (
     <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
@@ -190,21 +186,26 @@ export function InferenceActions() {
   const runDatasetStage = useRunPipelineStage();
   const { datasets, selectedDataset } = useInferenceDatasets();
   const ensureGalleryReady = useEnsureGalleryReady();
+  // The probe's own detection-class family (cityflowv2/wildtrack), set at
+  // Upload/Detection time - independent of which dataset folder is chosen to
+  // search within below.
+  const probeAppDataset = useDatasetStore((state) => state.selectedDataset);
   const setActiveStage = useInferenceRunStore((state) => state.setActiveStage);
   const setRunModelMetadata = useInferenceRunStore((state) => state.setRunModelMetadata);
   const setLastRunStageResponse = useInferenceRunStore((state) => state.setLastRunStageResponse);
   const setKagglePanelRunId = useInferenceRunStore((state) => state.setKagglePanelRunId);
   const resetRunArtifacts = useInferenceRunStore((state) => state.resetRunArtifacts);
   const [showComputeDialog, setShowComputeDialog] = useState(false);
-  const stage2Progress = stages.find((stage) => stage.stage === 2);
-  const stage3Progress = stages.find((stage) => stage.stage === 3);
-  const stage2Status = toStageStatus(stage2Progress);
-  const stage3Status = toStageStatus(stage3Progress);
+  // Both pipeline stages Inference drives (2=features, 3=indexing) report into
+  // stages[3] (Inference's own UI slot) - see InferenceProgressStrip for why
+  // stages[2] (Selection's slot) must never be used here.
+  const inferenceProgress = stages.find((stage) => stage.stage === 3);
+  const inferenceStatus = toStageStatus(inferenceProgress);
   const fusionRunDisabled = modelMode === "fusion" && (!fusion || fusion.models.length < 2);
   // A dataset auto-processing inline counts as "busy" too, so the run buttons
   // can't be re-triggered mid-precompute.
   const processingDataset = useInferenceSourceStore((state) => state.processingDataset);
-  const isRunning = stage2Status === "running" || stage3Status === "running" || Boolean(processingDataset);
+  const isRunning = inferenceStatus === "running" || Boolean(processingDataset);
 
   // What must be true before the single "Continue" action can run the pipeline.
   // Dataset flow (reopened run): detection (stage 1) must be done. Probe flow:
@@ -213,12 +214,18 @@ export function InferenceActions() {
   const detectionDone = toStageStatus(stages.find((s) => s.stage === 1)) === "done";
   const preconditionsUnmet = fusionRunDisabled || (datasetFlow ? !detectionDone : selectedTrackIds.size === 0);
   // Index already built -> "Continue" just navigates; otherwise it runs the pipeline.
-  const inferenceDone = stage3Status === "done" || (stage3Progress?.progress ?? 0) >= 100;
+  const inferenceDone = inferenceStatus === "done" || (inferenceProgress?.progress ?? 0) >= 100;
 
   const buildStageRequest = useCallback((stage: 2 | 3) => {
     const useDataset = !selectedModelMeta && selectedDataset && selectedDataset !== "__uploaded__";
     const selectedDs = useDataset ? datasets.find((dataset) => dataset.name === selectedDataset) : null;
-    const effectiveDataset = selectedModelMeta?.dataset ?? (useDataset ? selectedDataset : undefined);
+    // `dataset` (sent to runStage below) selects the PIPELINE CONFIG / detection
+    // classes - it must be a known family key (cityflowv2/wildtrack), never the
+    // "search within" dataset FOLDER name (e.g. "seif"), which the backend's
+    // strict config resolver rejects with a 400. The probe's own family is
+    // always correct here; the chosen folder is carried separately below as
+    // datasetName, purely for gallery/display purposes.
+    const effectiveDataset = selectedModelMeta?.dataset ?? probeAppDataset;
     const fusionPayload = modelMode === "fusion" ? buildFusionPayload(fusion) : null;
     const executionTarget = getStageExecutionTarget(stage);
     const credentials = useKaggleCredentialsStore.getState().credentials;
@@ -234,7 +241,7 @@ export function InferenceActions() {
         ? { kaggle: { target: "kaggle" as const, username: credentials?.username, key: credentials?.key } }
         : {},
     };
-  }, [datasets, fusion, getStageExecutionTarget, modelMode, selectedDataset, selectedModelId, selectedModelMeta]);
+  }, [datasets, fusion, getStageExecutionTarget, modelMode, probeAppDataset, selectedDataset, selectedModelId, selectedModelMeta]);
 
   // Run one backend stage (2=features, 3=index). Returns "completed" when it
   // finished locally, "queued" when dispatched to Kaggle (async - don't chain),
@@ -248,7 +255,9 @@ export function InferenceActions() {
       flushPipelineFromStage(4);
       const result = await runDatasetStage({
         pipelineStage: stage,
-        uiStage: stage as StageNumber,
+        // Both pipeline stages run from the Inference page, so both must report
+        // into UI stage 3 (Inference) - stage 2 is Selection's UI slot.
+        uiStage: 3,
         label: stage === 2 ? "feature extraction" : "indexing",
       });
       if (result === "completed" && stage === 3) {
@@ -279,17 +288,17 @@ export function InferenceActions() {
     if (modelMode === "fusion" && !request.fusionPayload) {
       const message = "Pick at least 2 models for fusion mode";
       setError(message);
-      updateStageProgress(stage, { status: "error", progress: 100, message });
+      updateStageProgress(3, { status: "error", progress: 100, message });
       return "error";
     }
 
     if (!probeVideo) {
-      updateStageProgress(stage, { status: "error", progress: 100, message: "No probe video selected. Go back to Upload." });
+      updateStageProgress(3, { status: "error", progress: 100, message: "No probe video selected. Go back to Upload." });
       return "error";
     }
 
     if (!probeRunId) {
-      updateStageProgress(stage, { status: "error", progress: 100, message: "Run Stage 1 (Detection & Tracking) on your uploaded video first." });
+      updateStageProgress(3, { status: "error", progress: 100, message: "Run Stage 1 (Detection & Tracking) on your uploaded video first." });
       return "error";
     }
 
@@ -309,7 +318,7 @@ export function InferenceActions() {
       } catch (err) {
         const message = err instanceof Error ? err.message : "Dataset processing failed";
         setError(message);
-        updateStageProgress(stage, { status: "error", progress: 100, message });
+        updateStageProgress(3, { status: "error", progress: 100, message });
         return "error";
       }
     } else {
@@ -318,7 +327,7 @@ export function InferenceActions() {
 
     flushPipelineFromStage(4);
     setIsRunning(true);
-    updateStageProgress(stage, {
+    updateStageProgress(3, {
       status: "running",
       progress: 0,
       message: stage === 2 ? "Extracting feature vectors from selected tracklets..." : "Building FAISS search index...",
@@ -348,7 +357,7 @@ export function InferenceActions() {
 
       if (nextRunId && responseData?.execution_target === "kaggle") {
         setKagglePanelRunId(nextRunId);
-        updateStageProgress(stage, {
+        updateStageProgress(3, {
           status: "running",
           progress: 0,
           message: stage === 2 ? "Kaggle kernel queued for feature extraction" : "Kaggle kernel queued for indexing",
@@ -356,7 +365,7 @@ export function InferenceActions() {
         return "queued";
       }
 
-      if (nextRunId) await pollStageStatus(nextRunId, stage, updateStageProgress);
+      if (nextRunId) await pollStageStatus(nextRunId, 3, updateStageProgress);
       setCurrentVideo(probeVideo);
 
       if (stage === 3 && !storeGalleryRunId && !(request.useDataset && request.selectedDs?.galleryRunId)) {
@@ -381,7 +390,7 @@ export function InferenceActions() {
       }
       const message = getRunStageErrorMessage(error);
       setError(message);
-      updateStageProgress(stage, { status: "error", progress: 100, message });
+      updateStageProgress(3, { status: "error", progress: 100, message });
       return "error";
     } finally {
       setIsRunning(false);
@@ -404,12 +413,11 @@ export function InferenceActions() {
   // then settles the UI state.
   const handleCancel = async () => {
     if (!runId) return;
-    const stage = stage3Status === "running" ? 3 : 2;
     try {
       await cancelPipeline(runId);
     } finally {
       setIsRunning(false);
-      updateStageProgress(stage, { status: "idle", progress: 0, message: `Stage ${stage} cancelled` });
+      updateStageProgress(3, { status: "idle", progress: 0, message: "Cancelled" });
       setActiveStage(null);
     }
   };
