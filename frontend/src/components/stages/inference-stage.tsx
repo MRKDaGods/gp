@@ -217,14 +217,18 @@ export function InferenceActions() {
   const inferenceDone = inferenceStatus === "done" || (inferenceProgress?.progress ?? 0) >= 100;
 
   const buildStageRequest = useCallback((stage: 2 | 3) => {
-    const useDataset = !selectedModelMeta && selectedDataset && selectedDataset !== "__uploaded__";
+    // Model and gallery are independent: a selected model only sets the ReID
+    // recipe/config below - it must NOT disable the "search within" folder. So
+    // useDataset is driven purely by the chosen folder, whether or not a model
+    // is selected. (A handful of models are tested across many datasets.)
+    const useDataset = Boolean(selectedDataset) && selectedDataset !== "__uploaded__";
     const selectedDs = useDataset ? datasets.find((dataset) => dataset.name === selectedDataset) : null;
     // `dataset` (sent to runStage below) selects the PIPELINE CONFIG / detection
     // classes - it must be a known family key (cityflowv2/wildtrack), never the
     // "search within" dataset FOLDER name (e.g. "seif"), which the backend's
-    // strict config resolver rejects with a 400. The probe's own family is
-    // always correct here; the chosen folder is carried separately below as
-    // datasetName, purely for gallery/display purposes.
+    // strict config resolver rejects with a 400. The model's family (or the
+    // probe's own) is always correct here; the chosen folder is carried
+    // separately below as datasetName, purely for gallery/display purposes.
     const effectiveDataset = selectedModelMeta?.dataset ?? probeAppDataset;
     const fusionPayload = modelMode === "fusion" ? buildFusionPayload(fusion) : null;
     const executionTarget = getStageExecutionTarget(stage);
@@ -423,7 +427,8 @@ export function InferenceActions() {
   };
 
   // Does the chosen "search within" dataset still need to be precomputed?
-  const selectedDs = !selectedModelMeta && selectedDataset !== UPLOADED_DATASET
+  // Independent of model selection (model = recipe, folder = gallery).
+  const selectedDs = selectedDataset !== UPLOADED_DATASET
     ? datasets.find((d) => d.name === selectedDataset)
     : undefined;
   const datasetNeedsCompute = Boolean(selectedDs && !selectedDs.hasGallery);
