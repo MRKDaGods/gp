@@ -54,9 +54,14 @@ export function UploadStage() {
         if (response.success && response.data) {
           // Probe flow shows genuine user uploads only. Dataset footage is never
           // ingested here anymore - it's the search target, chosen at Inference.
-          const uploadsOnly = response.data.filter((v) =>
-            v.path.replace(/\\/g, "/").includes("/uploads/")
-          );
+          // Backend paths are relative ("uploads/<file>", no leading slash), so
+          // match on a path SEGMENT rather than requiring a leading "/uploads/" -
+          // that stricter check never matched a real upload, silently emptying
+          // the gallery on every reload.
+          const uploadsOnly = response.data.filter((v) => {
+            const normalized = v.path.replace(/\\/g, "/");
+            return normalized === "uploads" || normalized.startsWith("uploads/") || normalized.includes("/uploads/");
+          });
           setVideos(uploadsOnly);
         }
       } catch (err) {
