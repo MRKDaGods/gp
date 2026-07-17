@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from backend.config import _HAS_CV2, OUTPUT_DIR
+from backend.config import _HAS_CV2, PRECOMPUTED_DIR, run_path
 from backend.services.tracklet_service import (
     _load_all_stage1_tracklets,
     _normalize_camera_id,
@@ -86,8 +86,8 @@ def _transcode_to_mp4(src: Path, dst: Path) -> bool:
 def _stage0_frame_path(run_id: str, camera_id: str, frame_id: int) -> Optional[Path]:
     """Resolve a frame image path from stage0 artifacts for run/camera/frame."""
     candidates = [
-        OUTPUT_DIR / run_id / "stage0" / camera_id,
-        OUTPUT_DIR / "dataset_precompute_s01" / "stage0" / camera_id,
+        run_path(run_id) / "stage0" / camera_id,
+        run_path("dataset_precompute_s01") / "stage0" / camera_id,
     ]
     for run_stage0 in candidates:
         jpg = run_stage0 / f"frame_{frame_id:06d}.jpg"
@@ -105,10 +105,10 @@ def _resolve_stage0_camera_dir(run_id: str, camera_id: str) -> Optional[Path]:
     cam = _normalize_camera_id(raw)
     names = [n for n in (raw, cam) if n]
 
-    roots = [OUTPUT_DIR / run_id / "stage0"]
-    if OUTPUT_DIR.exists():
-        roots.extend(p / "stage0" for p in sorted(OUTPUT_DIR.glob("dataset_precompute_s*"), reverse=True))
-    roots.append(OUTPUT_DIR / "dataset_precompute_s01" / "stage0")
+    roots = [run_path(run_id) / "stage0"]
+    if PRECOMPUTED_DIR.exists():
+        roots.extend(p / "stage0" for p in sorted(PRECOMPUTED_DIR.glob("dataset_precompute_s*"), reverse=True))
+    roots.append(run_path("dataset_precompute_s01") / "stage0")
 
     for root in roots:
         for name in names:
@@ -275,7 +275,7 @@ def _generate_annotated_summary_video(
         return None
     import cv2 as _cv2
 
-    run_dir = OUTPUT_DIR / run_id
+    run_dir = run_path(run_id)
     summary_path = run_dir / "matched" / "summary.json"
     if not summary_path.exists():
         return None
@@ -482,7 +482,7 @@ def _find_tracklet_for_clip(
     """Locate the stage1 tracklet for a matched clip across probe and dataset runs."""
     cam = _normalize_camera_id(camera_id)
     for rid in (probe_run_id, dataset_run_id):
-        stage1_dir = OUTPUT_DIR / rid / "stage1"
+        stage1_dir = run_path(rid) / "stage1"
         if not stage1_dir.exists():
             continue
         for p in sorted(stage1_dir.glob("tracklets_*.json")):
@@ -495,7 +495,7 @@ def _find_tracklet_for_clip(
                         return t
             except Exception:
                 continue
-    all_tracklets = _load_all_stage1_tracklets(OUTPUT_DIR / dataset_run_id)
+    all_tracklets = _load_all_stage1_tracklets(run_path(dataset_run_id))
     for t in all_tracklets:
         if int(t.get("track_id", -1)) == track_id and _normalize_camera_id(str(t.get("camera_id", ""))) == cam:
             return t
@@ -504,7 +504,7 @@ def _find_tracklet_for_clip(
 
 def _export_selected_clips(run_id: str, selected_ids: set) -> None:
     """Export a cropped mp4 clip for each user-selected tracklet."""
-    run_dir = OUTPUT_DIR / run_id
+    run_dir = run_path(run_id)
     if not (run_dir / "stage1").exists():
         return
 
@@ -543,11 +543,11 @@ def _export_matched_clips(
 
     from datetime import datetime
 
-    out_dir = OUTPUT_DIR / probe_run_id / "matched"
+    out_dir = run_path(probe_run_id) / "matched"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     dataset_name: str = gallery_run_id
-    gallery_ctx_path = OUTPUT_DIR / gallery_run_id / "run_context.json"
+    gallery_ctx_path = run_path(gallery_run_id) / "run_context.json"
     if gallery_ctx_path.exists():
         try:
             ctx = json.loads(gallery_ctx_path.read_text(encoding="utf-8"))
@@ -557,14 +557,14 @@ def _export_matched_clips(
     if dataset_name == gallery_run_id:
         try:
             import re as _re
-            cfg_text = (OUTPUT_DIR / gallery_run_id / "config.yaml").read_text(encoding="utf-8")
+            cfg_text = (run_path(gallery_run_id) / "config.yaml").read_text(encoding="utf-8")
             m = _re.search(r"run_name\s*:\s*(\S+)", cfg_text)
             if m:
                 dataset_name = m.group(1)
         except Exception:
             pass
 
-    gallery_run_dir = OUTPUT_DIR / gallery_run_id
+    gallery_run_dir = run_path(gallery_run_id)
     gallery_tracklets: Dict[tuple, Dict[str, Any]] = {}
     for t in _load_all_stage1_tracklets(gallery_run_dir):
         cam = _normalize_camera_id(str(t.get("camera_id", "")))

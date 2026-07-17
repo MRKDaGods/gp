@@ -88,6 +88,27 @@ def run_output_root(run_id: str) -> Path:
     """
     return PRECOMPUTED_DIR if is_precompute_run_id(run_id) else OUTPUT_DIR
 
+
+def run_path(run_id: str) -> Path:
+    """Resolve ``<root>/<run_id>`` for reads, honoring the precompute convention.
+
+    Precompute galleries (``dataset_precompute_*``) live under PRECOMPUTED_DIR, so
+    this checks :func:`run_output_root` first. That deliberately ignores an empty
+    ``outputs/<run_id>`` stub that Stage-4 association can leave behind and which
+    would otherwise shadow the real gallery in ``precomputed_datasets/``. Falls
+    back to a scan across OUTPUT_DIRS for legacy layouts, and finally to the
+    conventional root even if it does not yet exist (so writers still work).
+    """
+    preferred = run_output_root(run_id) / run_id
+    if preferred.exists():
+        return preferred
+    if _is_safe_run_id(run_id):
+        for root in OUTPUT_DIRS:
+            candidate = root / run_id
+            if candidate.exists():
+                return candidate
+    return preferred
+
 # -- Pipeline stage labels --------------------------------------------------
 _STAGE_NAMES = {
     0: "Ingestion & Pre-Processing",
