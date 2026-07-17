@@ -21,7 +21,7 @@ from backend.services.kaggle_service import (
 from backend.services import kaggle_service
 from backend.services.pipeline_service import (
     PipelineModelValidationError,
-    _resolve_run_id,
+    _resolve_probe_run_id,
     _write_run_context,
     execute_full_pipeline,
     execute_stage,
@@ -77,10 +77,17 @@ async def run_stage(
         print(f"\n[UI Request] Run Stage {stage} Payload: {request_dump}")
         payload = request or PipelineRunRequest()
         requested_run_id = payload.runId or (payload.config or {}).get("runId")
-        run_id = _resolve_run_id(str(requested_run_id) if requested_run_id is not None else None)
 
         config = payload.config or {}
         video_id = payload.videoId or config.get("videoId")
+        # Probe stages must never inherit a gallery (dataset_precompute_*) run id -
+        # that leaks probe artifacts into the dataset namespace. Guard recovers the
+        # probe's own run or allocates a fresh numeric id. Keeps outputs/ clean of
+        # precompute dirs regardless of a stale shared runId from the frontend.
+        run_id = _resolve_probe_run_id(
+            str(requested_run_id) if requested_run_id is not None else None,
+            video_id,
+        )
         camera_id = payload.cameraId or config.get("cameraId")
         smoke_test = bool(payload.smokeTest or config.get("smokeTest", False))
         use_cpu = bool(payload.useCpu or config.get("useCpu", False))
@@ -235,8 +242,9 @@ async def run_full_pipeline(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    run_id = _resolve_run_id(payload.runId or config.get("runId"))
     video_id = payload.videoId or config.get("videoId")
+    # Same guard as run-stage: a full probe run must not adopt a gallery run id.
+    run_id = _resolve_probe_run_id(payload.runId or config.get("runId"), video_id)
     camera_id = payload.cameraId or config.get("cameraId")
     smoke_test = bool(payload.smokeTest or config.get("smokeTest", False))
     use_cpu = bool(payload.useCpu or config.get("useCpu", False))

@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend.config import OUTPUT_DIR
+from backend.config import run_path
 from backend.dependencies import get_app_state
 from backend.models.requests import SearchRequest
 from backend.services.video_service import _normalize_camera_id
@@ -31,7 +31,7 @@ async def search_by_tracklet(request: SearchRequest, state: AppState = Depends(g
             detail="Probe video has not been processed yet (run Stage 1 first).",
         )
 
-    probe_stage2_dir = OUTPUT_DIR / probe_run_id / "stage2"
+    probe_stage2_dir = run_path(probe_run_id) / "stage2"
     probe_emb_path = probe_stage2_dir / "embeddings.npy"
     probe_idx_path = probe_stage2_dir / "embedding_index.json"
 
@@ -48,10 +48,12 @@ async def search_by_tracklet(request: SearchRequest, state: AppState = Depends(g
             detail="No galleryRunId provided. Select a preprocessed dataset first.",
         )
 
-    gallery_stage2_dir = OUTPUT_DIR / gallery_run_id / "stage2"
+    # Gallery may be a precompute dataset in precomputed_datasets/ - resolve via
+    # run_path so search reads the real gallery, not a missing outputs/ path.
+    gallery_stage2_dir = run_path(gallery_run_id) / "stage2"
     gallery_emb_path = gallery_stage2_dir / "embeddings.npy"
     gallery_idx_path = gallery_stage2_dir / "embedding_index.json"
-    traj_path = OUTPUT_DIR / gallery_run_id / "stage4" / "global_trajectories.json"
+    traj_path = run_path(gallery_run_id) / "stage4" / "global_trajectories.json"
 
     if not gallery_emb_path.exists() or not gallery_idx_path.exists():
         raise HTTPException(

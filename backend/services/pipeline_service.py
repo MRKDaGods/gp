@@ -24,6 +24,7 @@ from backend.config import (
     OUTPUT_DIR,
     PRECOMPUTE_RUN_ID,
     VIDEO_EXTENSIONS,
+    is_precompute_run_id,
     list_run_dirs,
     resolve_run_dir,
     run_output_root,
@@ -622,6 +623,39 @@ def _resolve_run_id(requested_run_id: Optional[str]) -> str:
         if txt:
             return txt
     return _allocate_numeric_run_id()
+
+
+def _resolve_probe_run_id(requested_run_id: Optional[str], video_id: Optional[str]) -> str:
+    """Resolve a run id for a PROBE (uploaded-video) pipeline stage.
+
+    Probe stages must NEVER run under a precompute/gallery run id
+    (``dataset_precompute_*``): that would copy the probe's input and write its
+    stages into the dataset gallery namespace - e.g. the stray
+    ``outputs/dataset_precompute_seif/input/upload_*`` stub, and worse, probe
+    stages landing inside ``precomputed_datasets/``. The frontend shares one
+    pipeline-store ``runId`` across the probe and dataset-process flows, so a
+    stale gallery id can leak in here. When it does, recover the probe video's
+    own latest run (so Stage 2/3 still find its Stage-1 tracklets); failing that,
+    allocate a fresh numeric id. Probe artifacts thus always stay in ``outputs/``.
+    """
+    run_id = _resolve_run_id(requested_run_id)
+    if video_id and is_precompute_run_id(run_id):
+        recovered = app_state.video_to_latest_run.get(video_id)
+        if recovered and not is_precompute_run_id(recovered):
+            print(
+                f"[run-stage] Ignoring gallery runId {run_id!r} for probe video "
+                f"{video_id}; reusing probe run {recovered!r}",
+                flush=True,
+            )
+            return recovered
+        fresh = _allocate_numeric_run_id()
+        print(
+            f"[run-stage] Ignoring gallery runId {run_id!r} for probe video "
+            f"{video_id}; allocated fresh run {fresh!r}",
+            flush=True,
+        )
+        return fresh
+    return run_id
 
 
 def _write_run_context(run_id: str, payload: Dict[str, Any]) -> None:
@@ -1379,7 +1413,7 @@ async def execute_stage(run_id: str, stage: int, config: Dict[str, Any]):
             return
 
         if stage in (2, 3):
-            run_dir = OUTPUT_DIR / run_id
+            run_dir = run_output_root(run_id) / run_id
             stage2_done = (run_dir / "stage2" / "embeddings.npy").exists()
 
             if stage == 3 and stage2_done:
