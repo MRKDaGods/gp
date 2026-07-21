@@ -92,7 +92,10 @@ smart cities, streets).
 - [ ] Port remaining stage2 kernels: CLIP-SENet (fix HF-hub-first load order — air-gap bug found during smoke), DINOv2, HSV extractor, PCA whitener (pickled PCA = checkpoint)
 - [ ] Port stage3: FAISS index + tracklet catalog (SQLite)
 - [x] Port stage4 kernels **verbatim** (9 of 11): `similarity`, `reranking`, `query_expansion`, `graph_solver`, `camera_bias`, `fic`, `geospatial`, `spatial_temporal`, `zone_scoring` → `athar/components/associators/` + `hsv_extractor`/`pca_whitening` → embedders + `athar/core/constants.py`; 6 v1 test modules carried (101 tests green). Sole change everywhere: loguru → stdlib logging (verified no loguru-only APIs, all f-strings)
-- [ ] Port `aflink` + `occlusion` + `global_trajectories` (coupled to v1 Tracklet/GlobalTrajectory models — lands with the association orchestrator) + `test_multi_query` (needs stage3)
+- [x] Port `aflink` + `occlusion` + `global_trajectories` + v1 `data_models`/`video_utils` (athar/core), `faiss_index`/`metadata_store` (athar/components/indexing), `format_converter`/`metrics`/`ground_plane_eval`/`evaluate_reid` (athar/evaluation), `clip_senet_model`/`reid_model`/`robust_pool`/`crop_extractor` (embedders), `training/model.py` (IBN archs) — 64 more v1 tests carried
+- [x] Port VeRi eval trio (`scripts/eval/eval_{09v_transreid,clip_senet,14t_fusion}_veri776.py`) + `athar/serving/reid_loaders.py` byte-faithful (loader↔script cycle kept intact for parity; clean inversion = Phase 4 serving refactor) + `test_14t_fusion_math`
+- [x] **Gate P1 test written**: `tests/parity/test_veri_fusion.py` runs the PORTED evaluator end-to-end (`ATHAR_RUN_PARITY=1 pytest -m parity`), asserts mAP 93.32 ± 0.2pt
+- [ ] `test_multi_query` (needs stage2/stage3 pipeline glue)
 - [ ] New DAG runner with resume (stage- and chunk-level checkpointing)
 - [ ] Port stage5: TrackEval integration + format converter
 - [ ] **GATE P1: VeRi-776 fusion mAP = 93.3 ± 0.2** (pytest `-m parity`)
