@@ -113,11 +113,10 @@ smart cities, streets).
 - [x] DAG runner with two-level resume (`athar/pipeline/runner.py`): frozen-config guard, `is_complete` stage skip, atomic per-stage chunk checkpoints, CancellationToken, per-run `events.jsonl` + pluggable sinks, failures recorded on the manifest. 11 tests
 - [ ] Port stage5: TrackEval integration + format converter
 - [x] **GATE P1: VeRi-776 fusion mAP = 93.3 ± 0.2 — PASSED 2026-07-21** (ported tree, `ATHAR_RUN_PARITY=1 pytest -m parity`, 45:48)
-- [ ] **GATE P2: CityFlowV2 MTMC IDF1 = 0.779 ± 0.002** — infrastructure READY, blocked on Kaggle access:
-  - [x] Harness: `tests/parity/test_cityflow_association.py` — runs v1 stages 3-5 locally on CPU (no GPU rule violation) against goldens, pinned to commit `24e85f31` (the SHA the public `14v-verify-b1-from-yaml` kernel drift-gated at 0.77936/154 on Kaggle); auto-creates worktree `../gp-v1-b1`
-  - [x] Golden-packaging kernel: `scripts/kaggle/p2_cityflow_goldens/` (CPU kernel, adapted from 14v; drift-gates then tarballs stage1 tracklets + stage2 TTA features + trajectories + eval report + sha256 provenance)
-  - [x] Fetch script: `scripts/kaggle/fetch_p2_goldens.py` (downloads + sha256-verifies into `data/goldens/`)
-  - [ ] **BLOCKED (user)**: goldens live in PRIVATE kernel outputs under the `yahiaakhalafallah` account (`14c-tta-stage2`, `mtmc-10a-stages-0-2`); local token is `mrkdagods`. Any one of: (a) drop yahia's kaggle.json in `~/.kaggle/`, (b) make those two kernels public, (c) push+run `scripts/kaggle/p2_cityflow_goldens/` from that account. Then: fetch → `ATHAR_RUN_PARITY=1 pytest -m parity tests/parity/test_cityflow_association.py`
+- [x] **GATE P2: CityFlowV2 MTMC IDF1 = 0.779 ± 0.002 — PASSED 2026-07-21** (EXACT: mtmc_idf1 0.77936, id_switches 154 — matches the Kaggle 14v drift gate bit-for-bit; local CPU stages 3-5 in 33.7s). Baseline frozen: `tests/parity/baselines/cityflow_b1_local_20260721.json` (incl. golden sha256s + provenance)
+  - [x] Harness: `tests/parity/test_cityflow_association.py` — v1 stages 3-5 on CPU against goldens, pinned to commit `24e85f31` (worktree `../gp-v1-b1`, auto-created; KEEP)
+  - [x] Goldens: fetched from `yahiaakhalafallah/14c-tta-stage2` kernel output → `data/goldens/cityflow_b1_goldens/` (stage1 tracklets ×6 cams + TTA stage2 features). Kaggle auth for teammate accounts: `KAGGLE_API_TOKEN=$(cat ~/.kaggle/<name>_access_token)` — env vars KAGGLE_USERNAME/KEY and KAGGLE_CONFIG_DIR are IGNORED by CLI 2.0.1
+  - [x] Golden-packaging kernel (`scripts/kaggle/p2_cityflow_goldens/`) + fetch script kept for regeneration
 - [ ] IR/grayscale segment detection + dynamic stream reweighting (D15)
 
 ### Phase 3 — Multi-class & profiles
@@ -165,7 +164,7 @@ smart cities, streets).
 | Gate | Benchmark | Metric | Target | Status |
 |------|-----------|--------|--------|--------|
 | P1 | VeRi-776 two-stream fusion | mAP | 93.3 ± 0.2 | ✅ **PASSED 2026-07-21** — ported v2 tree, full run (45:48, GTX 1050 Ti); v1-env baseline 93.268 same day |
-| P2 | CityFlowV2 MTMC | IDF1 | 0.779 ± 0.002 | ⏸ harness+kernel+fetch READY; blocked on Kaggle access to yahia's private kernel outputs (see Phase 2) |
+| P2 | CityFlowV2 MTMC | IDF1 | 0.779 ± 0.002 | ✅ **PASSED 2026-07-21** — EXACT 0.77936 / id_sw 154 (local CPU stages 3-5, 33.7s; matches Kaggle 14v gate) |
 | P3 | WILDTRACK (MVDeTr) | IDF1 / MODA | 0.946 / 0.903 | ☐ not run |
 | P4 | Generic person tracking | IDF1 | establish baseline | ☐ no number exists |
 | P5 | ATHAR-Bench v0 (Shorouk) | IDF1 + retrieval | establish baseline | ☐ needs annotation |
@@ -179,8 +178,8 @@ smart cities, streets).
 
 ## 6. Open items needing user input
 
-- [ ] **Gate P2 Kaggle access** (one-minute fix, unblocks the parity gate): the goldens are in private kernel outputs under `yahiaakhalafallah` (`14c-tta-stage2`, `mtmc-10a-stages-0-2`); local token is `mrkdagods`. Either drop yahia's `kaggle.json` into `~/.kaggle/`, make those two kernels public, or run `scripts/kaggle/p2_cityflow_goldens/` from that account — then `python scripts/kaggle/fetch_p2_goldens.py` + `ATHAR_RUN_PARITY=1 pytest -m parity tests/parity/test_cityflow_association.py`
-- [ ] Remote branch pruning approval (`origin/backedn`, stale feature/fix/verify branches) — NOTE: `verify/14v-kaggle-b1` must be KEPT (Gate P2 kernel clones it)
+- [x] ~~Gate P2 Kaggle access~~ — RESOLVED 2026-07-21: all four account tokens live in `~/.kaggle/` (`<name>_access_token` files); use `KAGGLE_API_TOKEN=$(cat ...)` to switch identity (CLI 2.0.1 ignores KAGGLE_USERNAME/KEY and KAGGLE_CONFIG_DIR)
+- [ ] Remote branch pruning approval (`origin/backedn`, stale feature/fix/verify branches) — NOTE: `verify/14v-kaggle-b1` must be KEPT (Gate P2 pins commit `24e85f31` from it)
 - [ ] Shorouk annotation plan (who labels, which tool — CVAT?)
 - [ ] Night/IR + mall footage acquisition
 - [ ] Deployment hardware target (server spec, GPU) — sizes DeviceManager & installer

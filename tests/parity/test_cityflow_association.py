@@ -88,12 +88,18 @@ def test_cityflow_b1_association_reproduces_idf1(tmp_path):
     shutil.copytree(GOLDENS / "stage1", run_dir / "stage1")
     shutil.copytree(GOLDENS / "stage2", run_dir / "stage2")
 
+    tertiary = run_dir / "stage2" / "embeddings_tertiary.npy"
     cmd = [
         str(V1_PYTHON),
         str(B1_WORKTREE / "scripts" / "run_pipeline.py"),
         "--config", str(B1_WORKTREE / "configs" / "datasets" / "cityflowv2.yaml"),
         "--stages", "3,4,5",
         "--override", f"project.run_name={run_name}",
+        # the baked config points tertiary at data/outputs/run_latest/…; we
+        # don't create that symlink (Windows privileges) — pass the SAME file
+        # by absolute path instead. Not a recipe change.
+        "--override",
+        f"stage4.association.tertiary_embeddings.path={tertiary.as_posix()}",
     ]
     env = {**os.environ, "PYTHONPATH": str(B1_WORKTREE)}
     result = subprocess.run(

@@ -1,0 +1,42 @@
+{
+  "gate": "P2",
+  "date": "2026-07-21",
+  "result": "PASSED",
+  "baseline_model_id": "vehicle_mtmc_14e_b1",
+  "metrics": {
+    "mtmc_idf1": 0.7793596227569698,
+    "idf1": 0.7946139234279311,
+    "id_switches": 154,
+    "mota": 0.675783388418806,
+    "mtmc_id_switches": 198
+  },
+  "targets": {
+    "mtmc_idf1": 0.77936,
+    "id_switches": 154
+  },
+  "environment": {
+    "runner": "local CPU (stages 3-5; 33.7s)",
+    "v1_commit": "24e85f31e6663e3f4b4d6649f2b34c9ce2145f0e",
+    "v1_branch": "verify/14v-kaggle-b1 (B1 recipe baked in configs/datasets/cityflowv2.yaml)",
+    "worktree": "../gp-v1-b1",
+    "python_env": ".venv (py3.13.2, v1 stack)",
+    "reference": "public kernel yahiaakhalafallah/14v-verify-b1-from-yaml drift-gated the same recipe at 0.77936/154 on Kaggle, 2026-05-15"
+  },
+  "goldens": {
+    "source": "kernel output yahiaakhalafallah/14c-tta-stage2 (checkpoint.tar.gz, run_14c_tta_v1_20260507_151647; stage1 tracklets + TTA stage2 features)",
+    "local_path": "data/goldens/cityflow_b1_goldens",
+    "file_sha256": {
+      "stage1/tracklets_S01_c001.json": "221edc143a0a329344e6f4e4e1f369c0226b77f3b4156e7257f81786c2a304dc",
+      "stage1/tracklets_S01_c002.json": "1c54dc02dfd39b9a726e4bd90b0adadc1a8c201f37eeeb5a5be64ef80583cf10",
+      "stage1/tracklets_S01_c003.json": "2d3d0b98b55c0841c7cd7f31d1395d71ed84823f62417e0cf5c3b470e4afacf4",
+      "stage1/tracklets_S02_c006.json": "23f6b6692ab9b500c332442e4ee57b61de89114a40472de06d5b5ab4b18cda06",
+      "stage1/tracklets_S02_c007.json": "4f6b856d27698aa672858051160e8f9810ff98e403f3422245dd9db4dfbc6bdf",
+      "stage1/tracklets_S02_c008.json": "fb03b3816e10790eb5ef5125999f68e62b9f0b7d34c9e4d65f0f0bc94c3e4229",
+      "stage2/embedding_index.json": "c7f0be5cd8d9d8f65089c2c937989ef5328a9d573709505d937047c925e02819",
+      "stage2/embeddings.npy": "2f3a863c8ade025b3a37a4513a2b55aa38557ebfd407d651fb224ab0ecdbdb5c",
+      "stage2/embeddings_tertiary.npy": "c6eb3dfb6956c2da03236839d59dcf721889b2b7ddf8bdd350cec17519036018",
+      "stage2/hsv_features.npy": "5531cd3e1eadc4d8418b409d121a4bf2a4bb595ccdb60a13e8644557079ad0aa"
+    }
+  },
+  "notes": "tertiary path passed by absolute --override (same file the baked run_latest symlink pointed to); all other stage-4 values from the baked branch config, zero recipe overrides."
+}
