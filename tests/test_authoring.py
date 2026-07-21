@@ -89,5 +89,9 @@ class TestCli:
         assert "error:" in capsys.readouterr().err
 
     def test_unimplemented_commands_point_to_roadmap(self, capsys):
-        assert cli_main(["run"]) == 3
+        assert cli_main(["models"]) == 3
         assert "ROADMAP" in capsys.readouterr().err
+
+    def test_run_requires_videos(self, capsys):
+        assert cli_main(["run"]) == 2
+        assert "--video" in capsys.readouterr().err
