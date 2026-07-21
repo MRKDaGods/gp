@@ -91,7 +91,8 @@ smart cities, streets).
 - [ ] Port detector wrapper (YOLO) + tracker (BoxMOT) + TrackletBuilder behind protocols
 - [ ] Port remaining stage2 kernels: CLIP-SENet (fix HF-hub-first load order — air-gap bug found during smoke), DINOv2, HSV extractor, PCA whitener (pickled PCA = checkpoint)
 - [ ] Port stage3: FAISS index + tracklet catalog (SQLite)
-- [ ] Port stage4 kernels **verbatim**: `similarity`, `reranking`, `query_expansion`, `graph_solver`, helpers (`camera_bias`, `aflink`, `fic`, `geospatial`, `spatial_temporal`, `zone_scoring`, `occlusion`) — carry ALL of v1 `tests/test_stage4/`
+- [x] Port stage4 kernels **verbatim** (9 of 11): `similarity`, `reranking`, `query_expansion`, `graph_solver`, `camera_bias`, `fic`, `geospatial`, `spatial_temporal`, `zone_scoring` → `athar/components/associators/` + `hsv_extractor`/`pca_whitening` → embedders + `athar/core/constants.py`; 6 v1 test modules carried (101 tests green). Sole change everywhere: loguru → stdlib logging (verified no loguru-only APIs, all f-strings)
+- [ ] Port `aflink` + `occlusion` + `global_trajectories` (coupled to v1 Tracklet/GlobalTrajectory models — lands with the association orchestrator) + `test_multi_query` (needs stage3)
 - [ ] New DAG runner with resume (stage- and chunk-level checkpointing)
 - [ ] Port stage5: TrackEval integration + format converter
 - [ ] **GATE P1: VeRi-776 fusion mAP = 93.3 ± 0.2** (pytest `-m parity`)
