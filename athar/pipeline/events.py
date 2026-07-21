@@ -47,6 +47,13 @@ class StageCompleted(_Event):
     stage: str
 
 
+class StageSkipped(_Event):
+    """Stage found already complete on resume; its artifacts validated."""
+
+    event: Literal["stage_skipped"] = "stage_skipped"
+    stage: str
+
+
 class RunCompleted(_Event):
     event: Literal["run_completed"] = "run_completed"
 
@@ -58,8 +65,22 @@ class RunFailed(_Event):
     traceback: Optional[str] = None
 
 
+class RunCancelled(_Event):
+    event: Literal["run_cancelled"] = "run_cancelled"
+    stage: Optional[str] = None
+
+
 PipelineEvent = Annotated[
-    Union[StageStarted, StageProgress, ArtifactWritten, StageCompleted, RunCompleted, RunFailed],
+    Union[
+        StageStarted,
+        StageProgress,
+        ArtifactWritten,
+        StageCompleted,
+        StageSkipped,
+        RunCompleted,
+        RunFailed,
+        RunCancelled,
+    ],
     Field(discriminator="event"),
 ]
 
