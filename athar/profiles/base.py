@@ -41,6 +41,10 @@ class RunProfile(BaseModel):
     """Complete component binding for a run."""
 
     name: str
+    frame_source: ComponentSpec = Field(
+        default_factory=lambda: ComponentSpec(name="video"),
+        description="Decoder slot; default = best available video decoder",
+    )
     detector: ComponentSpec
     multi_view: bool = Field(
         default=False, description="True when detector slot is a MultiViewDetector"
