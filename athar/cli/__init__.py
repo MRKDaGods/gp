@@ -1,0 +1,1 @@
+"""`athar` command-line interface."""

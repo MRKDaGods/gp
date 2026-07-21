@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "athar"
+version = "2.0.0a0"
+description = "ATHAR — multi-camera forensic tracking platform for people and vehicles"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.7",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+athar = "athar.cli.main:main"
+
+[tool.setuptools.packages.find]
+include = ["athar*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "parity: end-to-end benchmark parity gates (slow, needs checkpoints + datasets)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

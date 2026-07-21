@@ -1,0 +1,55 @@
+# ── Python ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ── Node / frontend ─────────────────────────────────────
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+
+# ── Data, models, runs — never in git ───────────────────
+/data/
+/dataset/
+/models/
+/outputs/
+/uploads/
+/runs/
+/precomputed_datasets/
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# ── Legacy v1 leftovers (kept on disk, not part of v2) ──
+/_legacy_archive/
+/frontend/
+/memories/
+*.zip
+*.xlsx
+*.log
+tmp_*
+
+# ── Tooling / IDE / agents ──────────────────────────────
+.vscode/
+.idea/
+.streamlit/
+.claude/
+.agents/
+skills-lock.json
+
+# ── OS ──────────────────────────────────────────────────
+Thumbs.db
+.DS_Store
