@@ -60,12 +60,28 @@ def plan_indices(
     start: int = 0,
     stop: Optional[int] = None,
     step: int = 1,
-) -> Optional[range]:
+    indices: Optional[Sequence[int]] = None,
+) -> Optional[Sequence[int]]:
     """The original-index sampling plan shared by all sources.
 
-    Returns None when frame_count is unknown (purely sequential sources
-    then iterate until EOF applying the same start/stop/step filter).
+    Either a ``start/stop/step`` range or an explicit ``indices`` list
+    (sorted, deduplicated — e.g. the union of a camera's crop-candidate
+    frames). Returns None when frame_count is unknown (purely sequential
+    sources then iterate until EOF applying the same filter).
     """
+    if indices is not None:
+        if start != 0 or stop is not None or step != 1:
+            raise FrameSourceError("indices is exclusive with start/stop/step")
+        plan = sorted(set(int(i) for i in indices))
+        if not plan:
+            raise FrameSourceError("empty explicit indices plan")
+        if plan[0] < 0:
+            raise FrameSourceError(f"negative frame index: {plan[0]}")
+        if frame_count is not None and plan[-1] >= frame_count:
+            raise FrameSourceError(
+                f"frame index {plan[-1]} >= frame count {frame_count}"
+            )
+        return plan
     if start < 0 or step < 1:
         raise FrameSourceError(f"invalid sampling: start={start} step={step}")
     if stop is not None and stop < start:

@@ -8,7 +8,7 @@ lossless path for pipeline tests.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Sequence
 
 import numpy as np
 
@@ -30,6 +30,7 @@ class ImageDirFrameSource:
         start: int = 0,
         stop: Optional[int] = None,
         step: int = 1,
+        indices: Optional[Sequence[int]] = None,
         fps: Optional[float] = None,
     ) -> None:
         path = Path(path)
@@ -44,7 +45,7 @@ class ImageDirFrameSource:
         if not self._files:
             raise FrameSourceError(f"no image files in {path}")
         self.frame_count = len(self._files)
-        plan = plan_indices(self.frame_count, start, stop, step)
+        plan = plan_indices(self.frame_count, start, stop, step, indices)
         assert plan is not None
         self._plan = plan
 

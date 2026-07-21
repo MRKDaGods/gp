@@ -23,7 +23,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Sequence
 
 import numpy as np
 
@@ -90,6 +90,7 @@ class TorchcodecFrameSource:
         start: int = 0,
         stop: Optional[int] = None,
         step: int = 1,
+        indices: Optional[Sequence[int]] = None,
         device: str = "cpu",
     ) -> None:
         _ensure_ffmpeg_dlls()
@@ -106,7 +107,7 @@ class TorchcodecFrameSource:
         meta = self._decoder.metadata
         self.nominal_fps: Optional[float] = meta.average_fps
         self.frame_count: int = len(self._decoder)
-        plan = plan_indices(self.frame_count, start, stop, step)
+        plan = plan_indices(self.frame_count, start, stop, step, indices)
         assert plan is not None  # frame_count is always known here
         self._plan = plan
 
@@ -132,6 +133,7 @@ class PyAVFrameSource:
         start: int = 0,
         stop: Optional[int] = None,
         step: int = 1,
+        indices: Optional[Sequence[int]] = None,
     ) -> None:
         import av  # noqa: PLC0415 — optional dep
 
@@ -145,9 +147,15 @@ class PyAVFrameSource:
             self.nominal_fps = float(stream.average_rate) if stream.average_rate else None
             self.frame_count: Optional[int] = stream.frames or None
         self._start, self._stop, self._step = start, stop, step
-        plan_indices(self.frame_count, start, stop, step)  # validate early
+        plan = plan_indices(self.frame_count, start, stop, step, indices)
+        self._indices = set(plan) if indices is not None else None
+        if indices is not None:
+            assert plan is not None
+            self._stop = plan[-1] + 1  # sequential early-exit past the last wanted frame
 
     def _wanted(self, idx: int) -> bool:
+        if self._indices is not None:
+            return idx in self._indices
         if idx < self._start or (self._stop is not None and idx >= self._stop):
             return False
         return (idx - self._start) % self._step == 0
@@ -198,6 +206,7 @@ class OpenCVFrameSource:
         start: int = 0,
         stop: Optional[int] = None,
         step: int = 1,
+        indices: Optional[Sequence[int]] = None,
     ) -> None:
         import cv2  # noqa: PLC0415
 
@@ -213,7 +222,11 @@ class OpenCVFrameSource:
         finally:
             cap.release()
         self._start, self._stop, self._step = start, stop, step
-        plan_indices(self.frame_count, start, stop, step)  # validate early
+        plan = plan_indices(self.frame_count, start, stop, step, indices)
+        self._indices = set(plan) if indices is not None else None
+        if indices is not None:
+            assert plan is not None
+            self._stop = plan[-1] + 1
 
     def batches(self, batch_size: int) -> Iterator[DecodedFrameBatch]:
         if batch_size < 1:
@@ -228,7 +241,10 @@ class OpenCVFrameSource:
             while cap.grab():  # sequential — never CAP_PROP_POS_FRAMES
                 if self._stop is not None and idx >= self._stop:
                     break
-                wanted = idx >= self._start and (idx - self._start) % self._step == 0
+                if self._indices is not None:
+                    wanted = idx in self._indices
+                else:
+                    wanted = idx >= self._start and (idx - self._start) % self._step == 0
                 if wanted:
                     ok, img = cap.retrieve()
                     if not ok:

@@ -149,6 +149,24 @@ class TestVideoSources:
         with pytest.raises(FrameSourceError, match="invalid sampling"):
             video_source_cls("cam01", coded_video, start=10, stop=5)
 
+    def test_explicit_indices_plan(self, video_source_cls, coded_video):
+        wanted = [3, 7, 7, 19, 30]  # dupes collapse, order normalizes
+        source = video_source_cls("cam01", coded_video, indices=wanted)
+        seen = []
+        for batch in source.batches(batch_size=2):
+            for n, idx in enumerate(batch.frame_indices):
+                assert _index_from(batch.images(), n) == idx
+            seen.extend(batch.frame_indices)
+        assert seen == [3, 7, 19, 30]
+
+    def test_indices_exclusive_with_range(self, video_source_cls, coded_video):
+        with pytest.raises(FrameSourceError, match="exclusive"):
+            video_source_cls("cam01", coded_video, start=1, indices=[2, 3])
+
+    def test_out_of_range_index_rejected(self, video_source_cls, coded_video):
+        with pytest.raises(FrameSourceError, match="frame count"):
+            video_source_cls("cam01", coded_video, indices=[FRAMES + 5])
+
     def test_nominal_fps_probed(self, video_source_cls, coded_video):
         source = video_source_cls("cam01", coded_video)
         assert source.nominal_fps == pytest.approx(FPS, abs=0.5)
