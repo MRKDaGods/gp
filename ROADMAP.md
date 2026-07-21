@@ -82,16 +82,20 @@ smart cities, streets).
 - [x] Dependency/stack research (live-verified) → [docs/STACK.md](docs/STACK.md) + pinned pyproject groups (D17–D19)
 - [x] Config authoring loader (YAML → validated layers → ResolvedConfig); `athar config resolve` shows per-key provenance
 - [x] `athar` CLI: subcommand scaffold (`config resolve` live; `run`/`models`/`migrate` stubs point at their phases)
-- [x] uv lockfile: 151 packages resolved clean (uv 0.8.2 — upgrade blocked by a locked uvx.exe; re-lock after upgrade). `uv sync --extra ml --extra backend` still pending for the new runtime venv
+- [x] uv lockfile: 151 packages resolved clean (uv 0.8.2 — upgrade blocked by a locked uvx.exe; re-lock after upgrade)
+- [x] **`.venv-v2` runtime env live** (2026-07-21): `UV_PROJECT_ENVIRONMENT=.venv-v2 uv sync` with ml/backend/eval/dev extras; old `.venv` untouched (v1 parity env). CPU torch by design (driver 572.47 < cu130's ≥580; local = smoke only). Full suite: **261 passed** under .venv-v2, 251 under v1 env. torchcodec works on Windows via PyAV-bundled FFmpeg DLLs (STACK.md conflict #7); boxmot 22 quirks documented (conflict #8)
 - **RULE (2026-07-21, permanent)**: no co-author trailers on commits (history rewritten); GPU-intensive jobs run on **Kaggle, never locally** → Gate P2 CityFlow golden run must be a Kaggle kernel
 
 ### Phase 2 — Pipeline port (parity-gated)
 - [x] Port `configs/model_registry.yaml` + `weights_manifest.yaml` + schema (verbatim) and `scripts/download_weights.py`
 - [x] Port TransReID model **verbatim** (`athar/components/embedders/transreid_model.py`; sole change: loguru → stdlib logging) + checkpoint-contract tests (both frozen checkpoints load; only cls_head/jpm_cls drops; unit-norm 768-d output)
 - [x] Ingest boundary v1: SHA-256 evidence hashing, PyAV/cv2 probe, TimeBase declaration, manifest population (`athar/pipeline/ingest.py`, 7 tests). Transcode-to-canonical + fisheye dewarp remain pluggable TODOs; FrameSource decode (torchcodec) next
-- [ ] FrameSource implementations: torchcodec on-demand decode (primary), VFR handling, batch-to-tensor (D11)
-- [x] Port stage1 kernels verbatim: `detector`, `tracker`, `tracklet_builder`, `bidirectional`, `bidirectional_merge`, `ssa` → `athar/components/tracking/` + 3 v1 test modules (12 tests). Note: written against ultralytics 8.4.23 / boxmot 12 APIs — re-validate wrappers against boxmot 22 at uv-lock time
-- [ ] Wrap stage1/stage2 kernels behind the v2 component protocols (Detector/Tracker/Embedder adapters)
+- [x] FrameSource implementations (D11): torchcodec frame-exact random access (primary) + PyAV sequential + OpenCV sequential-only (seeking retired) + image-dir; original frame indices preserved through sampling; pts carried on batches (`pts_deviation_s` flags VFR); registry-wired (`video` auto-best). 23 tests across the full decoder matrix
+- [x] Port stage1 kernels verbatim: `detector`, `tracker`, `tracklet_builder`, `bidirectional`, `bidirectional_merge`, `ssa` → `athar/components/tracking/` + 3 v1 test modules (12 tests)
+- [x] **boxmot 22 revalidation** (2026-07-21): `TrackerWrapper` speaks both generations — `TRACKER_DEFINITIONS` class paths (≥20) + casing fallback (11-12); reid via `boxmot.reid.core.reid.ReID` from LOCAL weights only (public `ReIDModel` chain is broken upstream); `boosttrack` added; smoke-validated bytetrack/botsort(+osnet reid)/boosttrack. omegaconf fully decoupled from the ported tree
+- [x] Detector/Tracker adapters (`athar/components/adapters/`): `yolo_v1` (one all-classes pass, COCO→EntityClass, scene-time Detections), `boxmot_v1` (stateful per camera, drain() → v2 Tracklets + observations)
+- [x] **detect_track stage** (`athar/pipeline/stages/detect_track.py`): FrameSource → detector → per-branch trackers → `tracklets.<cam>` artifact per camera; branch id namespacing; camera-level checkpoint resume; 5 tests + **end-to-end smoke on real Shorouk CCTV green** (torchcodec + YOLO26m + botsort/osnet on boxmot 22 — first full v2 ingest→detect_track run)
+- [ ] Embedder adapters + embed stage (crops → TransReID/CLIP-SENet/HSV streams as EmbeddingStreamRefs)
 - [ ] Port remaining stage2 kernels: CLIP-SENet (fix HF-hub-first load order — air-gap bug found during smoke), DINOv2, HSV extractor, PCA whitener (pickled PCA = checkpoint)
 - [ ] Port stage3: FAISS index + tracklet catalog (SQLite)
 - [x] Port stage4 kernels **verbatim** (9 of 11): `similarity`, `reranking`, `query_expansion`, `graph_solver`, `camera_bias`, `fic`, `geospatial`, `spatial_temporal`, `zone_scoring` → `athar/components/associators/` + `hsv_extractor`/`pca_whitening` → embedders + `athar/core/constants.py`; 6 v1 test modules carried (101 tests green). Sole change everywhere: loguru → stdlib logging (verified no loguru-only APIs, all f-strings)
@@ -99,10 +103,14 @@ smart cities, streets).
 - [x] Port VeRi eval trio (`scripts/eval/eval_{09v_transreid,clip_senet,14t_fusion}_veri776.py`) + `athar/serving/reid_loaders.py` byte-faithful (loader↔script cycle kept intact for parity; clean inversion = Phase 4 serving refactor) + `test_14t_fusion_math`
 - [x] **Gate P1 test written**: `tests/parity/test_veri_fusion.py` runs the PORTED evaluator end-to-end (`ATHAR_RUN_PARITY=1 pytest -m parity`), asserts mAP 93.32 ± 0.2pt
 - [ ] `test_multi_query` (needs stage2/stage3 pipeline glue)
-- [ ] New DAG runner with resume (stage- and chunk-level checkpointing)
+- [x] DAG runner with two-level resume (`athar/pipeline/runner.py`): frozen-config guard, `is_complete` stage skip, atomic per-stage chunk checkpoints, CancellationToken, per-run `events.jsonl` + pluggable sinks, failures recorded on the manifest. 11 tests
 - [ ] Port stage5: TrackEval integration + format converter
 - [x] **GATE P1: VeRi-776 fusion mAP = 93.3 ± 0.2 — PASSED 2026-07-21** (ported tree, `ATHAR_RUN_PARITY=1 pytest -m parity`, 45:48)
-- [ ] **GATE P2: CityFlowV2 MTMC IDF1 = 0.779 ± 0.002**
+- [ ] **GATE P2: CityFlowV2 MTMC IDF1 = 0.779 ± 0.002** — infrastructure READY, blocked on Kaggle access:
+  - [x] Harness: `tests/parity/test_cityflow_association.py` — runs v1 stages 3-5 locally on CPU (no GPU rule violation) against goldens, pinned to commit `24e85f31` (the SHA the public `14v-verify-b1-from-yaml` kernel drift-gated at 0.77936/154 on Kaggle); auto-creates worktree `../gp-v1-b1`
+  - [x] Golden-packaging kernel: `scripts/kaggle/p2_cityflow_goldens/` (CPU kernel, adapted from 14v; drift-gates then tarballs stage1 tracklets + stage2 TTA features + trajectories + eval report + sha256 provenance)
+  - [x] Fetch script: `scripts/kaggle/fetch_p2_goldens.py` (downloads + sha256-verifies into `data/goldens/`)
+  - [ ] **BLOCKED (user)**: goldens live in PRIVATE kernel outputs under the `yahiaakhalafallah` account (`14c-tta-stage2`, `mtmc-10a-stages-0-2`); local token is `mrkdagods`. Any one of: (a) drop yahia's kaggle.json in `~/.kaggle/`, (b) make those two kernels public, (c) push+run `scripts/kaggle/p2_cityflow_goldens/` from that account. Then: fetch → `ATHAR_RUN_PARITY=1 pytest -m parity tests/parity/test_cityflow_association.py`
 - [ ] IR/grayscale segment detection + dynamic stream reweighting (D15)
 
 ### Phase 3 — Multi-class & profiles
@@ -150,7 +158,7 @@ smart cities, streets).
 | Gate | Benchmark | Metric | Target | Status |
 |------|-----------|--------|--------|--------|
 | P1 | VeRi-776 two-stream fusion | mAP | 93.3 ± 0.2 | ✅ **PASSED 2026-07-21** — ported v2 tree, full run (45:48, GTX 1050 Ti); v1-env baseline 93.268 same day |
-| P2 | CityFlowV2 MTMC | IDF1 | 0.779 ± 0.002 | ☐ not run |
+| P2 | CityFlowV2 MTMC | IDF1 | 0.779 ± 0.002 | ⏸ harness+kernel+fetch READY; blocked on Kaggle access to yahia's private kernel outputs (see Phase 2) |
 | P3 | WILDTRACK (MVDeTr) | IDF1 / MODA | 0.946 / 0.903 | ☐ not run |
 | P4 | Generic person tracking | IDF1 | establish baseline | ☐ no number exists |
 | P5 | ATHAR-Bench v0 (Shorouk) | IDF1 + retrieval | establish baseline | ☐ needs annotation |
@@ -164,7 +172,8 @@ smart cities, streets).
 
 ## 6. Open items needing user input
 
-- [ ] Remote branch pruning approval (`origin/backedn`, stale feature/fix/verify branches)
+- [ ] **Gate P2 Kaggle access** (one-minute fix, unblocks the parity gate): the goldens are in private kernel outputs under `yahiaakhalafallah` (`14c-tta-stage2`, `mtmc-10a-stages-0-2`); local token is `mrkdagods`. Either drop yahia's `kaggle.json` into `~/.kaggle/`, make those two kernels public, or run `scripts/kaggle/p2_cityflow_goldens/` from that account — then `python scripts/kaggle/fetch_p2_goldens.py` + `ATHAR_RUN_PARITY=1 pytest -m parity tests/parity/test_cityflow_association.py`
+- [ ] Remote branch pruning approval (`origin/backedn`, stale feature/fix/verify branches) — NOTE: `verify/14v-kaggle-b1` must be KEPT (Gate P2 kernel clones it)
 - [ ] Shorouk annotation plan (who labels, which tool — CVAT?)
 - [ ] Night/IR + mall footage acquisition
 - [ ] Deployment hardware target (server spec, GPU) — sizes DeviceManager & installer

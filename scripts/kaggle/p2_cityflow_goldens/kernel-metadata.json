@@ -1,0 +1,20 @@
+{
+  "id": "yahiaakhalafallah/athar-p2-cityflow-goldens",
+  "title": "ATHAR P2 CityFlow Goldens",
+  "code_file": "athar_p2_cityflow_goldens.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "yahiaakhalafallah/mtmc-weights",
+    "thanhnguyenle/data-aicity-2023-track-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yahiaakhalafallah/14c-tta-stage2",
+    "yahiaakhalafallah/mtmc-10a-stages-0-2"
+  ]
+}
