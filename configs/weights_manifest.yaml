@@ -1,0 +1,102 @@
+# -----------------------------------------------------------------------------
+# Pipeline weight manifest - single source of truth for downloadable checkpoints.
+#
+# All required weights are consolidated into ONE public Kaggle dataset so that a
+# fresh clone can fetch everything needed to run the pipeline and reproduce the
+# VeRi-776 results. Download with:
+#
+#     python scripts/download_weights.py            # interactive set picker
+#     python scripts/download_weights.py --set all  # everything
+#     python scripts/download_weights.py --set veri  # just the VeRi-776 paper streams
+#
+# Each file is SHA-256 pinned; the downloader verifies integrity after fetch.
+# `name` is the (flat) filename inside the Kaggle dataset; `local_path` is where
+# the file is placed in the repo (matches configs/model_registry.yaml).
+# -----------------------------------------------------------------------------
+version: 1
+kaggle_dataset: mrkdagods/mtmc-veri776-pipeline-weights
+license: CC-BY-4.0
+
+sets:
+  vehicle-mtmc-14e:
+    description: >-
+      Vehicle MTMC 14e B1 production (CityFlowV2): YOLO26m detector, OSNet tracker
+      ReID, TransReID ViT-B/16 CLIP primary, and DINOv2-Large tertiary streams.
+    registry_models: [vehicle_mtmc_14e_b1, cityflow_transreid]
+  vehicle-mtmc-14k:
+    description: >-
+      Vehicle MTMC 14k v1 K7 R50-IBN research stack: everything in vehicle-mtmc-14e
+      plus the FastReID ResNet50-IBN quaternary stream.
+    registry_models: [vehicle_mtmc_14k_v1_k7]
+  person-mtmc:
+    description: >-
+      Person MTMC 12b production (WILDTRACK): MVDeTr multiview ground-plane detector.
+    registry_models: [person_mtmc_12b, person_detector_12a_mvdetr]
+  veri:
+    description: >-
+      VeRi-776 paper two-stream fusion (93.32% mAP / 98.45% Rank-1): TransReID
+      ViT-B/16 CLIP (Stream 1) and CLIP-SENet v6 (Stream 2).
+    registry_models: [veri776_14t_fusion, veri776_09v_v17_transreid, veri776_clipsenet_v6]
+
+files:
+  - name: yolo26m.pt
+    local_path: models/detection/yolo26m.pt
+    sha256: 401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7
+    size_bytes: 44255705
+    sets: [vehicle-mtmc-14e, vehicle-mtmc-14k]
+    note: YOLO26m vehicle detector (Stage 1).
+
+  - name: osnet_x0_25_msmt17.pt
+    local_path: models/tracker/osnet_x0_25_msmt17.pt
+    sha256: 6f57607fed9f502b9efed546108132ee715df5a5b6e6932c6269bacb47f59f99
+    size_bytes: 3057863
+    sets: [vehicle-mtmc-14e, vehicle-mtmc-14k]
+    note: BoxMOT OSNet tracker ReID weights (Stage 1 tracking).
+
+  - name: transreid_cityflowv2_best.pth
+    local_path: models/reid/transreid_cityflowv2_best.pth
+    sha256: 3d477e2530dd53f9e303cdef9ab78609d7d5c5a500258c2478e7b50eee44378f
+    size_bytes: 346518635
+    sets: [vehicle-mtmc-14e, vehicle-mtmc-14k]
+    note: TransReID ViT-B/16 CLIP primary ReID (CityFlowV2, 256px).
+
+  - name: vehicle_transreid_dinov2_large_cityflowv2_final.pth
+    local_path: models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth
+    sha256: 579643e0bd474f71e1955939305311d271f9ac18e5cdf61afe944dfbeabd348d
+    size_bytes: 1217428513
+    sets: [vehicle-mtmc-14e, vehicle-mtmc-14k]
+    note: DINOv2 ViT-L/14 tertiary ReID stream (CityFlowV2 score fusion).
+
+  - name: fastreid_r50_ibn_cityflowv2_final.pth
+    local_path: models/reid/fastreid_r50_ibn_cityflowv2_final.pth
+    sha256: c2d50ab895dd374e29c5de9811794cf588428c9bf85278de253f168bab410e88
+    size_bytes: 99857872
+    sets: [vehicle-mtmc-14k]
+    note: FastReID ResNet50-IBN quaternary ReID stream (14k K7 research only).
+
+  - name: MultiviewDetector.pth
+    local_path: models/person_detection/MultiviewDetector.pth
+    sha256: ca6fcf69cfbbcb5b8d2d0528bc5de58ba6564cf5d8ffb4ab15733bbabde06a53
+    size_bytes: 49745811
+    sets: [person-mtmc]
+    note: MVDeTr ResNet18 multiview ground-plane detector (WILDTRACK).
+
+  - name: vehicle_transreid_vit_base_veri776.pth
+    local_path: models/reid/vehicle_transreid_vit_base_veri776.pth
+    sha256: 8d32334a41933cbf0514fbc72e462124f8785a8057d02b475aca8abf65dbe5e9
+    size_bytes: 346889637
+    sets: [veri]
+    note: >-
+      VeRi-776 paper Stream 1 (TransReID ViT-B/16 CLIP). Reproduces the paper's
+      89.97% standalone mAP and the 93.32% fusion headline (tab:repro hash).
+
+  - name: clipsenet_v6_veri776.pth
+    local_path: models/reid/clipsenet_v6_veri776_best.pth
+    sha256: d24bd3cd42cc4e90c7da71e4b955d7b7e3274614e53fc686153b02c116d20a1c
+    size_bytes: 370932705
+    sets: [veri]
+    note: >-
+      VeRi-776 paper Stream 2 (CLIP-SENet v6 inference extract). This is the exact
+      hash-pinned checkpoint that produced 91.44% standalone / 93.32% fusion mAP
+      (paper tab:repro). Placed at clipsenet_v6_veri776_best.pth, the path the
+      pipeline loader expects (the loader is content-based and accepts the extract).

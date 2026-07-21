@@ -61,9 +61,11 @@ smart cities, streets).
 - [x] Fresh orphan branch `athar-v2`
 - [x] Junk purge (caches/logs/tmp deleted; zips + untracked sweep scripts + kaggle notebooks preserved in `_legacy_archive/`)
 - [x] Fresh `.gitignore`, `README.md`, this roadmap
-- [ ] Golden artifacts frozen from `seif_final` (stage2 embeddings + stage4 output for CityFlowV2 S02; WILDTRACK equivalents) → `data/golden/`
-- [ ] Verify checkpoints load + VeRi 93.3 reproduces on current env (BEFORE building on top) — port `_legacy_archive/scripts/_local_fusion_verify.py` as the seed
-- [ ] Prune stale local branches (keep `seif_final`, `paper-working`, `master`, `paper-tests`; verify `fix/people-support-and-gpu` merged first) — **needs user OK for remote deletions**
+- [ ] Golden artifacts: CityFlow stage2/stage4 goldens do NOT exist locally (v1 generated them on Kaggle) — freeze VeRi feature dumps from the parity run instead; CityFlow goldens come from the first local v1 pipeline run (long GPU job, schedule deliberately)
+- [x] Checkpoints verified: all 8 manifest SHA-256s match on disk; both TransReID checkpoints load through the PORTED module with the exact v1 key contract (tests/test_checkpoint_contract.py)
+- [ ] VeRi 93.3 reproduction: full eval RUNNING in background (v1 worktree `../gp-v1`, GTX 1050 Ti, smoke passed) → becomes Gate P1 baseline
+- [x] Local branch pruning: deleted 7 safe branches (merged and/or identical to origin). KEPT pending user decision: `feature/people-tracking` + `master-legacy` (local differs from origin — possible unpushed work), `repro/osnet-secondary` (exists nowhere else). Remote pruning still needs user OK.
+- [x] v1 reference worktree at `../gp-v1` (seif_final checkout) for running legacy code + verbatim ports
 
 ### Phase 1 — Skeleton & core contracts  ← CURRENT
 - [x] `athar/` package layout + `pyproject.toml`
@@ -83,9 +85,11 @@ smart cities, streets).
 - [ ] uv lockfile (`uv lock`) with cu130/cpu torch indexes — first real install (upgrade local uv 0.8.2 → current first; do at Phase 2 start)
 
 ### Phase 2 — Pipeline port (parity-gated)
+- [x] Port `configs/model_registry.yaml` + `weights_manifest.yaml` + schema (verbatim) and `scripts/download_weights.py`
+- [x] Port TransReID model **verbatim** (`athar/components/embedders/transreid_model.py`; sole change: loguru → stdlib logging) + checkpoint-contract tests (both frozen checkpoints load; only cls_head/jpm_cls drops; unit-norm 768-d output)
 - [ ] Ingest: normalize-on-ingest (hash, transcode, VFR handling), on-demand frame decode (D11)
 - [ ] Port detector wrapper (YOLO) + tracker (BoxMOT) + TrackletBuilder behind protocols
-- [ ] Port stage2 kernels: TransReID model/loader (**verbatim** — checkpoint key-remap contract), CLIP-SENet, DINOv2, HSV extractor, PCA whitener (pickled PCA = checkpoint)
+- [ ] Port remaining stage2 kernels: CLIP-SENet (fix HF-hub-first load order — air-gap bug found during smoke), DINOv2, HSV extractor, PCA whitener (pickled PCA = checkpoint)
 - [ ] Port stage3: FAISS index + tracklet catalog (SQLite)
 - [ ] Port stage4 kernels **verbatim**: `similarity`, `reranking`, `query_expansion`, `graph_solver`, helpers (`camera_bias`, `aflink`, `fic`, `geospatial`, `spatial_temporal`, `zone_scoring`, `occlusion`) — carry ALL of v1 `tests/test_stage4/`
 - [ ] New DAG runner with resume (stage- and chunk-level checkpointing)
