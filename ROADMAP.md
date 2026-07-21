@@ -82,12 +82,14 @@ smart cities, streets).
 - [x] Dependency/stack research (live-verified) → [docs/STACK.md](docs/STACK.md) + pinned pyproject groups (D17–D19)
 - [x] Config authoring loader (YAML → validated layers → ResolvedConfig); `athar config resolve` shows per-key provenance
 - [x] `athar` CLI: subcommand scaffold (`config resolve` live; `run`/`models`/`migrate` stubs point at their phases)
-- [ ] uv lockfile (`uv lock`) with cu130/cpu torch indexes — first real install (upgrade local uv 0.8.2 → current first; do at Phase 2 start)
+- [x] uv lockfile: 151 packages resolved clean (uv 0.8.2 — upgrade blocked by a locked uvx.exe; re-lock after upgrade). `uv sync --extra ml --extra backend` still pending for the new runtime venv
+- **RULE (2026-07-21, permanent)**: no co-author trailers on commits (history rewritten); GPU-intensive jobs run on **Kaggle, never locally** → Gate P2 CityFlow golden run must be a Kaggle kernel
 
 ### Phase 2 — Pipeline port (parity-gated)
 - [x] Port `configs/model_registry.yaml` + `weights_manifest.yaml` + schema (verbatim) and `scripts/download_weights.py`
 - [x] Port TransReID model **verbatim** (`athar/components/embedders/transreid_model.py`; sole change: loguru → stdlib logging) + checkpoint-contract tests (both frozen checkpoints load; only cls_head/jpm_cls drops; unit-norm 768-d output)
-- [ ] Ingest: normalize-on-ingest (hash, transcode, VFR handling), on-demand frame decode (D11)
+- [x] Ingest boundary v1: SHA-256 evidence hashing, PyAV/cv2 probe, TimeBase declaration, manifest population (`athar/pipeline/ingest.py`, 7 tests). Transcode-to-canonical + fisheye dewarp remain pluggable TODOs; FrameSource decode (torchcodec) next
+- [ ] FrameSource implementations: torchcodec on-demand decode (primary), VFR handling, batch-to-tensor (D11)
 - [x] Port stage1 kernels verbatim: `detector`, `tracker`, `tracklet_builder`, `bidirectional`, `bidirectional_merge`, `ssa` → `athar/components/tracking/` + 3 v1 test modules (12 tests). Note: written against ultralytics 8.4.23 / boxmot 12 APIs — re-validate wrappers against boxmot 22 at uv-lock time
 - [ ] Wrap stage1/stage2 kernels behind the v2 component protocols (Detector/Tracker/Embedder adapters)
 - [ ] Port remaining stage2 kernels: CLIP-SENet (fix HF-hub-first load order — air-gap bug found during smoke), DINOv2, HSV extractor, PCA whitener (pickled PCA = checkpoint)
