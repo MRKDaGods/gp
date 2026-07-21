@@ -1,0 +1,33 @@
+{
+  "gate": "P4",
+  "date": "2026-07-21",
+  "result": "BASELINE ESTABLISHED",
+  "metrics": {
+    "sct_idf1": 0.3242937077760191,
+    "sct_mota": -0.3081183841195478,
+    "sct_id_switches": 2551,
+    "mtmc_idf1": 0.19177140342674845,
+    "mtmc_mota": -0.11738753856980466,
+    "mtmc_id_switches": 3201,
+    "num_pred_rows": 35776,
+    "per_camera_idf1": {
+      "C1": 0.3017, "C2": 0.3514, "C3": 0.3145, "C4": 0.2344,
+      "C5": 0.3566, "C6": 0.2911, "C7": 0.4204
+    }
+  },
+  "protocol": {
+    "benchmark": "WILDTRACK-as-plain-video (7 Image_subsets cameras as image_dir evidence @ declared 2 fps)",
+    "gt": "v1-recipe image-plane MOT GT (prepare_dataset.py: 1-based sequential frames over sorted annotation JSONs, global personIDs, 25%-visibility clip)",
+    "eval": "scripts/eval/eval_p4_wildtrack_person.py — evaluate_mot (SCT, IoU 0.5) + evaluate_mtmc (associate global ids)",
+    "alignment_check": "frame-shift probe on C1: shift 0 beats +/-1 (MOTA 0.144 vs 0.037 / -0.013) — pred/GT frame alignment verified correct"
+  },
+  "environment": {
+    "runner": "Kaggle GPU kernel mrkdagods/athar-p4-wildtrack-person-baseline v3, NvidiaTeslaT4",
+    "v2_commit": "44a27b673e7fb63277068d4db8d8525604b41a9a (athar-p4-bundle src snapshot)",
+    "run_id": "run-20260721-182657-cd5c76",
+    "config_hash": "eba147858b857f1b21d6c1f758eb68d3c8dbaa746c7ee28a570b2dd15cb196c7",
+    "profile": "scripts/kaggle/p4_wildtrack_person/profile_p4_wildtrack_person.yaml (YOLO26m@1280 conf 0.55, botsort+osnet, Market1501 TransReID person stream + HSV)",
+    "artifacts": "data/goldens/wildtrack_p4_run/ (gitignored; re-fetch via scripts/kaggle/fetch_p4_results.py)"
+  },
+  "notes": "First number for the generic (monocular, non-multiview) person path — nothing to be at parity WITH; this is the improvement target. The 3-5x gap to the P3 multiview chain (ground-plane IDF1 0.9456 on the same footage) is the design justification for MVDeTr as a MultiViewDetector component (D9/Phase 3). Known levers not yet applied: v1 stage0 CLAHE preprocessing; tracker operating point for 2 fps annotated rate (or track at the native 60 fps video rate and evaluate on annotated frames); association params were first-shot multiclass adaptations; Market1501 checkpoint has a domain gap to outdoor WILDTRACK (CC-ReID / DINOv2 streams pending). WILDTRACK monocular MOT has no published reference protocol - dense crowd at 2 fps is adversarial for IoU-motion trackers, reflected in the negative MOTAs (FP/FN-heavy) and high fragmentation."
+}

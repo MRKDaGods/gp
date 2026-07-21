@@ -126,7 +126,7 @@ smart cities, streets).
   - [x] Harness: `tests/parity/test_wildtrack_ground_plane.py` — v1 wildtrack single-shot route (cached 12a MVDeTr test.txt -> ground-plane Kalman -> ground-plane eval) pinned to commit `8c181472` (worktree `../gp-v1-wt`, auto-created; KEEP — seif_final later slimmed stage5, so the pin matters)
   - [x] Goldens: test.txt fetched from `yahiaakhalafallah/12a-resume-emit-wildtrack-test-txt` kernel output -> `data/goldens/wildtrack_b1_goldens/` (fetch script `scripts/kaggle/fetch_p3_goldens.py` verifies pinned sha256s)
   - Reference: kernel `gumfreddy/14w-verify-wildtrack-b1` validated the same recipe at the same SHA (drift -0.0014/+0.0004 vs 0.947/0.903 targets, match=true); MVDeTr detector parity itself was gated upstream by kernel 14z
-- [ ] **GATE P4 (new): generic person tracking benchmark** (MOT17-style or WILDTRACK-as-plain-video) — no number exists today; establish baseline
+- [x] **GATE P4 (new): generic person tracking baseline — ESTABLISHED 2026-07-21** (WILDTRACK-as-plain-video, Kaggle T4 kernel, v2 DAG end-to-end incl. image-dir ingest + person stream): SCT IDF1 0.324 / MTMC IDF1 0.192 vs the v1-recipe image-plane GT (frame alignment verified by shift probe). Baseline + protocol + improvement levers frozen: `tests/parity/baselines/wildtrack_person_p4_20260721.json`. The 3-5x gap to the P3 multiview chain (0.9456 on the same footage) is the quantified case for MVDeTr as a MultiViewDetector component. Levers: CLAHE plugin, tracker tuned for 2 fps (or track at native 60 fps), association tuning, CC-ReID/DINOv2 streams
 - [ ] Spatial-model plugins: GPS (port `geospatial.py`), learned transition-time topology; floor-plan graph interface
 
 ### Phase 4 — Serving, jobs, API
@@ -170,7 +170,7 @@ smart cities, streets).
 | P1 | VeRi-776 two-stream fusion | mAP | 93.3 ± 0.2 | ✅ **PASSED 2026-07-21** — ported v2 tree, full run (45:48, GTX 1050 Ti); v1-env baseline 93.268 same day |
 | P2 | CityFlowV2 MTMC | IDF1 | 0.779 ± 0.002 | ✅ **PASSED 2026-07-21** — EXACT 0.77936 / id_sw 154 (local CPU stages 3-5, 33.7s; matches Kaggle 14v gate) |
 | P3 | WILDTRACK (MVDeTr) | IDF1 / MODA | 0.946 / 0.903 | ✅ **PASSED 2026-07-21** — EXACT 0.94561 / 0.90336, IDSW 5 (local CPU ~12s; bit-for-bit vs Kaggle 14w) |
-| P4 | Generic person tracking | IDF1 | establish baseline | ☐ no number exists |
+| P4 | Generic person tracking | IDF1 | establish baseline | ✅ **BASELINE 2026-07-21** — SCT 0.324 / MTMC 0.192 (WILDTRACK-as-plain-video, Kaggle T4; improvement target, see baseline JSON) |
 | P5 | ATHAR-Bench v0 (Shorouk) | IDF1 + retrieval | establish baseline | ☐ needs annotation |
 
 ## 5. Port map (from council salvage audit)
