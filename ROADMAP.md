@@ -88,7 +88,8 @@ smart cities, streets).
 - [x] Port `configs/model_registry.yaml` + `weights_manifest.yaml` + schema (verbatim) and `scripts/download_weights.py`
 - [x] Port TransReID model **verbatim** (`athar/components/embedders/transreid_model.py`; sole change: loguru → stdlib logging) + checkpoint-contract tests (both frozen checkpoints load; only cls_head/jpm_cls drops; unit-norm 768-d output)
 - [ ] Ingest: normalize-on-ingest (hash, transcode, VFR handling), on-demand frame decode (D11)
-- [ ] Port detector wrapper (YOLO) + tracker (BoxMOT) + TrackletBuilder behind protocols
+- [x] Port stage1 kernels verbatim: `detector`, `tracker`, `tracklet_builder`, `bidirectional`, `bidirectional_merge`, `ssa` → `athar/components/tracking/` + 3 v1 test modules (12 tests). Note: written against ultralytics 8.4.23 / boxmot 12 APIs — re-validate wrappers against boxmot 22 at uv-lock time
+- [ ] Wrap stage1/stage2 kernels behind the v2 component protocols (Detector/Tracker/Embedder adapters)
 - [ ] Port remaining stage2 kernels: CLIP-SENet (fix HF-hub-first load order — air-gap bug found during smoke), DINOv2, HSV extractor, PCA whitener (pickled PCA = checkpoint)
 - [ ] Port stage3: FAISS index + tracklet catalog (SQLite)
 - [x] Port stage4 kernels **verbatim** (9 of 11): `similarity`, `reranking`, `query_expansion`, `graph_solver`, `camera_bias`, `fic`, `geospatial`, `spatial_temporal`, `zone_scoring` → `athar/components/associators/` + `hsv_extractor`/`pca_whitening` → embedders + `athar/core/constants.py`; 6 v1 test modules carried (101 tests green). Sole change everywhere: loguru → stdlib logging (verified no loguru-only APIs, all f-strings)
