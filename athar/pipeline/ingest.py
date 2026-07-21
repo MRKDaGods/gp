@@ -54,6 +54,50 @@ def hash_file(path: Path | str, chunk_bytes: int = 1 << 20) -> str:
     return digest.hexdigest()
 
 
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
+
+
+def list_image_files(path: Path | str) -> list[Path]:
+    """The frame files of an image-directory evidence source, in name order
+    (the same order ImageDirFrameSource decodes them)."""
+    root = Path(path)
+    files = sorted(p for p in root.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
+    if not files:
+        raise IngestError(f"no image files in directory: {root}")
+    return files
+
+
+def hash_image_dir(path: Path | str) -> str:
+    """Manifest hash of an image-sequence directory: SHA-256 over
+    (filename, content-sha256) rows in name order. Renaming, reordering,
+    adding, removing, or editing any frame changes the hash."""
+    digest = hashlib.sha256()
+    for f in list_image_files(path):
+        digest.update(f.name.encode("utf-8"))
+        digest.update(bytes.fromhex(hash_file(f)))
+    return digest.hexdigest()
+
+
+def probe_image_dir(path: Path | str) -> VideoProbe:
+    """Geometry from the first frame; an image sequence has no intrinsic
+    fps, so the caller must declare a TimeBase."""
+    import cv2  # noqa: PLC0415 — decode dependency
+
+    files = list_image_files(path)
+    first = cv2.imread(str(files[0]))
+    if first is None:
+        raise IngestError(f"cannot read first image: {files[0]}")
+    height, width = first.shape[:2]
+    return VideoProbe(
+        duration_s=None,
+        fps=None,
+        width=width,
+        height=height,
+        frame_count=len(files),
+        codec="image_dir",
+    )
+
+
 def probe_video(path: Path | str) -> VideoProbe:
     """Probe container metadata; PyAV preferred, OpenCV fallback.
 
@@ -126,8 +170,12 @@ def ingest_video(
     if any(v.camera_id == camera_id for v in manifest.inputs):
         raise IngestError(f"camera {camera_id!r} already ingested on run {manifest.run_id}")
 
-    sha256 = hash_file(path)
-    probe = probe_video(path)
+    if path.is_dir():
+        sha256 = hash_image_dir(path)
+        probe = probe_image_dir(path)
+    else:
+        sha256 = hash_file(path)
+        probe = probe_video(path)
 
     if timebase is None:
         if probe.fps is None:
@@ -143,12 +191,17 @@ def ingest_video(
             f"timebase camera_id {timebase.camera_id!r} != ingested camera {camera_id!r}"
         )
 
+    fps = probe.fps if probe.fps is not None else timebase.fps
+    duration_s = probe.duration_s
+    if duration_s is None and probe.frame_count and fps:
+        duration_s = probe.frame_count / fps
+
     video = VideoInput(
         camera_id=camera_id,
         original_path=str(path),
         sha256=sha256,
-        duration_s=probe.duration_s,
-        fps=probe.fps,
+        duration_s=duration_s,
+        fps=fps,
         width=probe.width,
         height=probe.height,
     )

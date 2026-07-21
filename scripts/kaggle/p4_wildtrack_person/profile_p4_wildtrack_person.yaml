@@ -1,0 +1,68 @@
+# Gate P4 — WILDTRACK-as-plain-video person baseline profile.
+#
+# Cameras are WILDTRACK Image_subsets image directories (400 annotated
+# frames @ 2 fps, declared via `athar run --fps 2`). Detector/tracker
+# operating points follow v1 configs/datasets/wildtrack.yaml stage1
+# (YOLO @ 1280, conf 0.55, botsort + osnet appearance); the person
+# appearance stream is the Market1501 TransReID checkpoint through the
+# same adapter the multiclass profile uses.
+profile:
+  name: p4_wildtrack_person
+  frame_source:
+    name: image_dir
+  detector:
+    name: yolo_v1
+    config:
+      model_path: models/detection/yolo26m.pt
+      img_size: 1280
+      confidence_threshold: 0.55
+      iou_threshold: 0.50
+  branches:
+    - entity_classes: [person]
+      tracker:
+        name: boxmot_v1
+        config:
+          algorithm: botsort
+          reid_weights: models/tracker/osnet_x0_25_msmt17.pt
+          min_observations: 5
+          tracker_config:
+            track_buffer: 120
+            track_high_thresh: 0.25
+            track_low_thresh: 0.10
+            new_track_thresh: 0.25
+            match_thresh: 0.60
+            appearance_thresh: 0.25
+      embedders:
+        - name: transreid_v1
+          config:
+            weights_path: models/reid/person_transreid_vit_base_market1501.pth
+            stream_name: transreid_person
+            input_size: [256, 128]
+            num_cameras: 6
+            vit_model: vit_base_patch16_224
+            clip_normalization: false
+        - name: hsv_v1
+      score_terms:
+        - name: appearance
+      solver:
+        name: graph_cc
+defaults:
+  detect_track:
+    batch_size: 8
+    device: "cuda:0"
+  embed:
+    samples_per_tracklet: 16
+    tracklet_chunk: 8
+    min_area: 400
+    device: "cuda:0"
+  associate:
+    top_k: 80
+    mutual_top_k: 8
+    similarity_threshold: 0.55
+    min_time_gap: 0.0
+    max_time_gap: 15.0
+    weights:
+      person:
+        appearance: 0.65
+        hsv: 0.10
+        spatiotemporal: 0.25

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from athar import __version__
 
@@ -88,8 +89,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
             if not sep or not cam or not path:
                 print(f"error: --video expects CAM=PATH, got {spec!r}", file=sys.stderr)
                 return 2
+            timebase = None
+            if Path(path).is_dir() and args.fps:
+                from athar.core.timebase import CameraTimeBase, TimeBaseSource
+
+                timebase = CameraTimeBase(
+                    camera_id=cam, fps=args.fps, source=TimeBaseSource.MANUAL
+                )
             try:
-                video = ingest_video(manifest, cam, path)
+                video = ingest_video(manifest, cam, path, timebase=timebase)
             except IngestError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 2
@@ -193,7 +201,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--profile", default="multiclass",
                      help="builtin profile name or profile YAML path")
     run.add_argument("--video", action="append", metavar="CAM=PATH",
-                     help="evidence video for one camera (repeatable)")
+                     help="evidence video (or image-sequence directory) for one "
+                          "camera (repeatable)")
+    run.add_argument("--fps", type=float, default=None,
+                     help="declared fps for image-directory cameras (they have "
+                          "no intrinsic rate; recorded as a MANUAL TimeBase)")
     run.add_argument("--role", default="gallery",
                      choices=["gallery", "probe", "benchmark", "adaptation"])
     run.add_argument("--runs-root", default="data/runs", help="run store root")

@@ -11,6 +11,7 @@ from athar.contracts.manifest import RunManifest, RunRole
 from athar.core.ids import new_run_id
 from athar.core.timebase import CameraTimeBase, TimeBaseSource
 from athar.pipeline.ingest import (
+    hash_image_dir,
     IngestError,
     hash_file,
     ingest_video,
@@ -95,3 +96,51 @@ class TestIngest:
         tb = CameraTimeBase(camera_id="other", fps=FPS)
         with pytest.raises(IngestError, match="!= ingested camera"):
             ingest_video(manifest, "cam01", tiny_video, timebase=tb)
+
+
+@pytest.fixture()
+def tiny_image_dir(tmp_path):
+    root = tmp_path / "cam_frames"
+    root.mkdir()
+    rng = np.random.default_rng(11)
+    for i in range(6):
+        img = rng.integers(0, 255, (SIZE[1], SIZE[0], 3), dtype=np.uint8)
+        cv2.imwrite(str(root / f"{i * 5:08d}.png"), img)
+    (root / "notes.txt").write_text("ignored non-image file")
+    return root
+
+
+class TestImageDirIngest:
+    def test_requires_declared_timebase(self, tiny_image_dir):
+        with pytest.raises(IngestError, match="TimeBase"):
+            ingest_video(_manifest(), "cam01", tiny_image_dir)
+
+    def test_ingests_with_manual_fps(self, tiny_image_dir):
+        manifest = _manifest()
+        tb = CameraTimeBase(camera_id="cam01", fps=2.0, source=TimeBaseSource.MANUAL)
+        video = ingest_video(manifest, "cam01", tiny_image_dir, timebase=tb)
+        assert video.fps == 2.0
+        assert video.duration_s == pytest.approx(6 / 2.0)
+        assert video.width == SIZE[0] and video.height == SIZE[1]
+        assert manifest.timebase.require("cam01").source is TimeBaseSource.MANUAL
+
+    def test_hash_covers_names_and_content(self, tiny_image_dir):
+        base = hash_image_dir(tiny_image_dir)
+        assert base == hash_image_dir(tiny_image_dir)  # deterministic
+
+        renamed = tiny_image_dir / "00000005.png"
+        moved = tiny_image_dir / "99999999.png"
+        renamed.rename(moved)
+        assert hash_image_dir(tiny_image_dir) != base
+        moved.rename(renamed)
+        assert hash_image_dir(tiny_image_dir) == base
+
+        payload = renamed.read_bytes()
+        renamed.write_bytes(payload[:-1] + bytes([payload[-1] ^ 1]))
+        assert hash_image_dir(tiny_image_dir) != base
+
+    def test_empty_dir_rejected(self, tmp_path):
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        with pytest.raises(IngestError, match="no image files"):
+            ingest_video(_manifest(), "cam01", empty)
