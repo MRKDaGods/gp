@@ -78,9 +78,9 @@ smart cities, streets).
 - [x] Model lifecycle registry types (D5)
 - [x] Contract unit tests green
 - [x] Dependency/stack research (live-verified) → [docs/STACK.md](docs/STACK.md) + pinned pyproject groups (D17–D19)
-- [ ] Config authoring loader (YAML → validated layers → ResolvedConfig)
-- [ ] `athar` CLI: `run`, `models`, `migrate` stubs wired
-- [ ] uv lockfile (`uv lock`) with cu130/cpu torch indexes — first real install
+- [x] Config authoring loader (YAML → validated layers → ResolvedConfig); `athar config resolve` shows per-key provenance
+- [x] `athar` CLI: subcommand scaffold (`config resolve` live; `run`/`models`/`migrate` stubs point at their phases)
+- [ ] uv lockfile (`uv lock`) with cu130/cpu torch indexes — first real install (upgrade local uv 0.8.2 → current first; do at Phase 2 start)
 
 ### Phase 2 — Pipeline port (parity-gated)
 - [ ] Ingest: normalize-on-ingest (hash, transcode, VFR handling), on-demand frame decode (D11)
