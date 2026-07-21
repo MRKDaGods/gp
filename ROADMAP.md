@@ -99,7 +99,7 @@ smart cities, streets).
 - [ ] `test_multi_query` (needs stage2/stage3 pipeline glue)
 - [ ] New DAG runner with resume (stage- and chunk-level checkpointing)
 - [ ] Port stage5: TrackEval integration + format converter
-- [ ] **GATE P1: VeRi-776 fusion mAP = 93.3 ± 0.2** (pytest `-m parity`)
+- [x] **GATE P1: VeRi-776 fusion mAP = 93.3 ± 0.2 — PASSED 2026-07-21** (ported tree, `ATHAR_RUN_PARITY=1 pytest -m parity`, 45:48)
 - [ ] **GATE P2: CityFlowV2 MTMC IDF1 = 0.779 ± 0.002**
 - [ ] IR/grayscale segment detection + dynamic stream reweighting (D15)
 
@@ -147,7 +147,7 @@ smart cities, streets).
 
 | Gate | Benchmark | Metric | Target | Status |
 |------|-----------|--------|--------|--------|
-| P1 | VeRi-776 two-stream fusion | mAP | 93.3 ± 0.2 | ◐ v1-env baseline 93.268 ✓ (2026-07-21); ported-tree gate run in progress |
+| P1 | VeRi-776 two-stream fusion | mAP | 93.3 ± 0.2 | ✅ **PASSED 2026-07-21** — ported v2 tree, full run (45:48, GTX 1050 Ti); v1-env baseline 93.268 same day |
 | P2 | CityFlowV2 MTMC | IDF1 | 0.779 ± 0.002 | ☐ not run |
 | P3 | WILDTRACK (MVDeTr) | IDF1 / MODA | 0.946 / 0.903 | ☐ not run |
 | P4 | Generic person tracking | IDF1 | establish baseline | ☐ no number exists |
