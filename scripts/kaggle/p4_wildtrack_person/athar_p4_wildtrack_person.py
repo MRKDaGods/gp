@@ -27,9 +27,11 @@ from pathlib import Path
 
 INPUT = Path("/kaggle/input")
 WORK = Path("/kaggle/working")
-PROJECT = WORK / "athar-v2"
-RUNS_ROOT = WORK / "runs"
-OUT_DIR = WORK / "p4_out"
+# /kaggle/working IS the kernel output — keep the source copy and the bulky
+# run store OUT of it (/tmp) so the persisted output is just the results.
+PROJECT = Path("/tmp/athar-v2")
+RUNS_ROOT = Path("/tmp/runs")
+OUT_DIR = Path("/tmp/p4_out")
 
 
 def run(cmd, cwd=None, env=None):
@@ -59,6 +61,16 @@ def main() -> None:
     # No pip install of athar itself: the package pins Python 3.13 and Kaggle
     # ships 3.12 — PYTHONPATH is all the runtime actually needs.
     env = {**os.environ, "PYTHONPATH": str(PROJECT)}
+
+    # Fail in seconds, not after 7 minutes of evidence hashing, if the
+    # assigned GPU arch is unsupported by the image torch (P100/sm_60 died
+    # with "no kernel image" — push with --accelerator NvidiaTeslaT4).
+    import torch
+
+    print("torch", torch.__version__, "cuda", torch.version.cuda,
+          "device", torch.cuda.get_device_name(0))
+    assert float((torch.ones(8, device="cuda") * 2).sum().item()) == 16.0
+    print("CUDA sanity op OK")
 
     # ---- models into the tree ----------------------------------------
     (PROJECT / "models" / "detection").mkdir(parents=True, exist_ok=True)
