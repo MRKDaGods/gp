@@ -29,7 +29,7 @@ import numpy as np
 from athar.components.adapters.detection import COCO_TO_ENTITY
 from athar.contracts.manifest import ArtifactRecord
 from athar.core.ids import TrackKey
-from athar.core.types import EntityClass, Trajectory
+from athar.core.types import Trajectory
 
 if TYPE_CHECKING:
     from athar.pipeline.runner import StageContext
