@@ -63,7 +63,7 @@ smart cities, streets).
 - [x] Fresh `.gitignore`, `README.md`, this roadmap
 - [ ] Golden artifacts: CityFlow stage2/stage4 goldens do NOT exist locally (v1 generated them on Kaggle) — freeze VeRi feature dumps from the parity run instead; CityFlow goldens come from the first local v1 pipeline run (long GPU job, schedule deliberately)
 - [x] Checkpoints verified: all 8 manifest SHA-256s match on disk; both TransReID checkpoints load through the PORTED module with the exact v1 key contract (tests/test_checkpoint_contract.py)
-- [ ] VeRi 93.3 reproduction: full eval RUNNING in background (v1 worktree `../gp-v1`, GTX 1050 Ti, smoke passed) → becomes Gate P1 baseline
+- [x] **VeRi 93.3 REPRODUCED on current env** (v1 worktree, GTX 1050 Ti, 41.6 min): fused mAP **93.268** / R1 98.451 (@ w_clipsenet=0.7; Kaggle reference at same w: 93.214; manifest headline 93.32 @ best-w). Drift parents match: TransReID solo 90.014 (registry 89.97), CLIP-SENet solo 91.362. Baseline frozen: `tests/parity/baselines/veri776_fusion_v1env_20260721.json`
 - [x] Local branch pruning: deleted 7 safe branches (merged and/or identical to origin). KEPT pending user decision: `feature/people-tracking` + `master-legacy` (local differs from origin — possible unpushed work), `repro/osnet-secondary` (exists nowhere else). Remote pruning still needs user OK.
 - [x] v1 reference worktree at `../gp-v1` (seif_final checkout) for running legacy code + verbatim ports
 
@@ -147,7 +147,7 @@ smart cities, streets).
 
 | Gate | Benchmark | Metric | Target | Status |
 |------|-----------|--------|--------|--------|
-| P1 | VeRi-776 two-stream fusion | mAP | 93.3 ± 0.2 | ☐ not run |
+| P1 | VeRi-776 two-stream fusion | mAP | 93.3 ± 0.2 | ◐ v1-env baseline 93.268 ✓ (2026-07-21); ported-tree gate run in progress |
 | P2 | CityFlowV2 MTMC | IDF1 | 0.779 ± 0.002 | ☐ not run |
 | P3 | WILDTRACK (MVDeTr) | IDF1 / MODA | 0.946 / 0.903 | ☐ not run |
 | P4 | Generic person tracking | IDF1 | establish baseline | ☐ no number exists |

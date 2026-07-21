@@ -1,0 +1,74 @@
+{
+  "experiment": "14t_fusion_verify",
+  "wall_time_sec": 2497.463615179062,
+  "params": {
+    "w_clipsenet": 0.7,
+    "w_transreid": 0.30000000000000004,
+    "transreid_stream": "global",
+    "aqe_k": 3,
+    "rerank": {
+      "k1": 80,
+      "k2": 15,
+      "lambda_value": 0.2
+    },
+    "smoke": false,
+    "max_queries": null,
+    "max_gallery": null,
+    "query_count": 1678,
+    "gallery_count": 11579,
+    "not_for_accuracy_reporting": false
+  },
+  "score_fusion": {
+    "cosine": {
+      "mAP": 0.8672448701648027,
+      "R1": 0.9797377586364746,
+      "R5": 0.9916567206382751,
+      "R10": 0.9952324032783508
+    },
+    "cosine_aqe": {
+      "mAP": 0.8829447645764996,
+      "R1": 0.9809296727180481,
+      "R5": 0.9910607933998108,
+      "R10": 0.9946364760398865
+    },
+    "rerank_aqe": {
+      "mAP": 0.9326849418445357,
+      "R1": 0.9845053553581238,
+      "R5": 0.9874851107597351,
+      "R10": 0.9898688793182373
+    },
+    "best": {
+      "mAP": 0.9326849418445357,
+      "R1": 0.9845053553581238,
+      "R5": 0.9874851107597351,
+      "R10": 0.9898688793182373,
+      "w_clipsenet": 0.7,
+      "w_transreid": 0.30000000000000004
+    },
+    "all_rows": []
+  },
+  "drift_parents": {
+    "transreid_09v_concat_patch_aqe3_rerank": {
+      "mAP": 0.9001428780609638,
+      "R1": 0.9779499173164368,
+      "R5": 0.9851012825965881,
+      "R10": 0.9880810379981995
+    },
+    "clipsenet_v6_aqe10_rerank_k1_50_k2_10_lambda_0_1": {
+      "mAP": 0.9136177827086461,
+      "R1": 0.9696066975593567,
+      "R5": 0.9785459041595459,
+      "R10": 0.9827175140380859
+    }
+  },
+  "checkpoints": {
+    "transreid": {
+      "path": "E:\\dev\\src\\gp\\models\\reid\\vehicle_transreid_vit_base_veri776.pth",
+      "sha256": "8d32334a41933cbf0514fbc72e462124f8785a8057d02b475aca8abf65dbe5e9"
+    },
+    "clipsenet": {
+      "path": "E:\\dev\\src\\gp\\models\\reid\\clipsenet_v6_veri776_best.pth",
+      "sha256": "d24bd3cd42cc4e90c7da71e4b955d7b7e3274614e53fc686153b02c116d20a1c"
+    }
+  }
+}
