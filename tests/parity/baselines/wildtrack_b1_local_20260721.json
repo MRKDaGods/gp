@@ -1,0 +1,37 @@
+{
+  "gate": "P3",
+  "date": "2026-07-21",
+  "result": "PASSED",
+  "metrics": {
+    "ground_plane_idf1": 0.9456066945606695,
+    "ground_plane_moda": 0.9033613445378151,
+    "precision": 0.9479166666666666,
+    "recall": 0.9558823529411765,
+    "modp_cm": 10.025366715656421,
+    "false_positives": 50,
+    "misses": 42,
+    "id_switches_logged": 5
+  },
+  "targets": {
+    "ground_plane_idf1": 0.9456066945606695,
+    "ground_plane_moda": 0.9033613445378151,
+    "tolerance": 0.002
+  },
+  "environment": {
+    "runner": "local CPU (wildtrack single-shot route + stage5; ~1 min)",
+    "v1_commit": "8c181472c892fa53ca7d3e7121a41abf03b26f79",
+    "v1_ref": "master merge commit #36 (docs/record-14z-v7-moda); ancestor of seif_final but seif_final later slimmed stage5 — pin the SHA",
+    "worktree": "../gp-v1-wt",
+    "python_env": ".venv (py3.13.2, v1 stack)",
+    "reference": "kernel gumfreddy/14w-verify-wildtrack-b1 validated the same recipe at this SHA: idf1 0.9456066945606695 / moda 0.9033613445378151 (drift vs 0.947/0.903 targets: -0.0014/+0.0004, match=true). Local run reproduces those floats bit-for-bit."
+  },
+  "goldens": {
+    "source": "kernel output yahiaakhalafallah/12a-resume-emit-wildtrack-test-txt (regenerated 12a MVDeTr detector output for the WILDTRACK test split, frames 360-399)",
+    "local_path": "data/goldens/wildtrack_b1_goldens",
+    "file_sha256": {
+      "test.txt": "da47ba2cc29be21a405fd6d7bb06de5351ad61327029a6db77d44b2d9beffbe4",
+      "wildtrack_gt.txt": "982be8b937f1d4681563b940676b612d43003ad5615ae530d0d395a4ffdc9cc6"
+    }
+  },
+  "notes": "The wildtrack config routes stages 1-4 into the MVDeTr single-shot chain (cached test.txt -> ground-plane Kalman tracker -> projected tracklets); stage5 ground_plane_eval scores IDF1/MODA against annotations_positions on the published protocol (conf 0.25, match 50cm, NMS 50cm). The image-plane per-camera/MTMC numbers also present in evaluation_report.json are a secondary diagnostic, not gated. This gate protects the ports of: ground-plane Kalman tracker, wildtrack calibration/projection, ground-plane eval. MVDeTr detector parity itself was covered upstream by kernel 14z (v7 MODA record)."
+}

@@ -4,7 +4,7 @@
 > checklist, parity gates, and open items. Update it in every working session —
 > mark items done, add discoveries, never delete decision history.
 >
-> Last updated: **2026-07-21** · Current phase: **Phase 1 — Skeleton & contracts**
+> Last updated: **2026-07-21** · Current phase: **Phase 3 — Multi-class & profiles** (Phase 2 port essentially complete; gates P1–P3 passed)
 
 ---
 
@@ -122,7 +122,10 @@ smart cities, streets).
 ### Phase 3 — Multi-class & profiles
 - [ ] `vehicle+person` joint profile: one detection pass (COCO 0,2,5,7), per-class branches
 - [ ] MVDeTr as MultiViewDetector component; `person_multiview` profile
-- [ ] **GATE P3: WILDTRACK IDF1 0.946 / MODA 0.903**
+- [x] **GATE P3: WILDTRACK ground-plane IDF1 0.946 / MODA 0.903 — PASSED 2026-07-21** (EXACT bit-for-bit vs the Kaggle 14w verify reference: idf1 0.9456066945606695 / moda 0.9033613445378151 / IDSW 5; local CPU ~12s). Baseline frozen: `tests/parity/baselines/wildtrack_b1_local_20260721.json`
+  - [x] Harness: `tests/parity/test_wildtrack_ground_plane.py` — v1 wildtrack single-shot route (cached 12a MVDeTr test.txt -> ground-plane Kalman -> ground-plane eval) pinned to commit `8c181472` (worktree `../gp-v1-wt`, auto-created; KEEP — seif_final later slimmed stage5, so the pin matters)
+  - [x] Goldens: test.txt fetched from `yahiaakhalafallah/12a-resume-emit-wildtrack-test-txt` kernel output -> `data/goldens/wildtrack_b1_goldens/` (fetch script `scripts/kaggle/fetch_p3_goldens.py` verifies pinned sha256s)
+  - Reference: kernel `gumfreddy/14w-verify-wildtrack-b1` validated the same recipe at the same SHA (drift -0.0014/+0.0004 vs 0.947/0.903 targets, match=true); MVDeTr detector parity itself was gated upstream by kernel 14z
 - [ ] **GATE P4 (new): generic person tracking benchmark** (MOT17-style or WILDTRACK-as-plain-video) — no number exists today; establish baseline
 - [ ] Spatial-model plugins: GPS (port `geospatial.py`), learned transition-time topology; floor-plan graph interface
 
@@ -165,7 +168,7 @@ smart cities, streets).
 |------|-----------|--------|--------|--------|
 | P1 | VeRi-776 two-stream fusion | mAP | 93.3 ± 0.2 | ✅ **PASSED 2026-07-21** — ported v2 tree, full run (45:48, GTX 1050 Ti); v1-env baseline 93.268 same day |
 | P2 | CityFlowV2 MTMC | IDF1 | 0.779 ± 0.002 | ✅ **PASSED 2026-07-21** — EXACT 0.77936 / id_sw 154 (local CPU stages 3-5, 33.7s; matches Kaggle 14v gate) |
-| P3 | WILDTRACK (MVDeTr) | IDF1 / MODA | 0.946 / 0.903 | ☐ not run |
+| P3 | WILDTRACK (MVDeTr) | IDF1 / MODA | 0.946 / 0.903 | ✅ **PASSED 2026-07-21** — EXACT 0.94561 / 0.90336, IDSW 5 (local CPU ~12s; bit-for-bit vs Kaggle 14w) |
 | P4 | Generic person tracking | IDF1 | establish baseline | ☐ no number exists |
 | P5 | ATHAR-Bench v0 (Shorouk) | IDF1 + retrieval | establish baseline | ☐ needs annotation |
 
