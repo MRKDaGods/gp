@@ -50,6 +50,9 @@ smart cities, streets).
 | D14 | 07-21 | Shorouk dataset (14 synced 1080p cams, ~21.5 min, GPS coords) = **ATHAR-Bench v0** eval seed (annotate in-house), NOT training data. |
 | D15 | 07-21 | Night/IR: per-segment IR detection + dynamic stream reweighting (HSV weight → 0 on IR). IR footage required in bench before night claims. |
 | D16 | 07-21 | Branch layout: `athar-v2` = orphan rebuild branch; v1 stays on `seif_final`; legacy access via `git restore --source=seif_final`. |
+| D17 | 07-21 | **Stack researched & pinned** (live-verified 2026-07-21; full rationale in [docs/STACK.md](docs/STACK.md)): Python 3.13 + uv; torch 2.13 cu130; ultralytics 8.4 / **YOLO26**; boxmot 22 / **BoostTrack**; torchcodec (frame-exact decode — cv2 seeking retired); faiss-cpu exact IP; opencv headless 4.13 (5.x blocked by boxmot); insightface 1.0 buffalo_l; OpenGait; CION ReIDZoo as person-ReID retrain base. Dropped as dead: decord, py-motmetrics, upstream TrackEval (sn-trackeval fork for parity), torchreid, passlib. |
+| D18 | 07-21 | **Parity profile ≠ production profile.** Parity gates P1–P3 pin v1 components (YOLO26m, v1 tracker+config, TrackEval-compatible metrics). Upgrades (YOLO26x @1280, BoostTrack, optional RF-DETR-XL second pass) live in production profiles and are benchmarked against the parity baseline — never silently swapped. |
+| D19 | 07-21 | App stack: FastAPI 0.139 + uvicorn; SQLAlchemy 2 on SQLite WAL; jobs = own SQLite file + `UPDATE…RETURNING` claims in separate worker processes; **server-side sessions** + pwdlib argon2 + dependency-based RBAC (fastapi-users/passlib dead); SSE for progress; structlog + hash-chained audit; **Playwright PDF** (WeasyPrint Arabic-broken). Frontend: Next.js 16 + React 19, Tailwind 4 (logical props → RTL), **shadcn/ui on Base UI**, next-intl, TanStack Table v8, **MapLibre + PMTiles** (air-gapped maps), Recharts+ECharts, Konva video overlays + custom canvas timeline, hey-api client, Node 24 + pnpm, TS 5.9 pinned. |
 
 ## 3. Phase checklist
 
@@ -74,8 +77,10 @@ smart cities, streets).
 - [x] Case/Gallery/Probe/Target + HypothesisEdge models (D7)
 - [x] Model lifecycle registry types (D5)
 - [x] Contract unit tests green
+- [x] Dependency/stack research (live-verified) → [docs/STACK.md](docs/STACK.md) + pinned pyproject groups (D17–D19)
 - [ ] Config authoring loader (YAML → validated layers → ResolvedConfig)
 - [ ] `athar` CLI: `run`, `models`, `migrate` stubs wired
+- [ ] uv lockfile (`uv lock`) with cu130/cpu torch indexes — first real install
 
 ### Phase 2 — Pipeline port (parity-gated)
 - [ ] Ingest: normalize-on-ingest (hash, transcode, VFR handling), on-demand frame decode (D11)

@@ -7,13 +7,46 @@ name = "athar"
 version = "2.0.0a0"
 description = "ATHAR — multi-camera forensic tracking platform for people and vehicles"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13,<3.14"
+# Version window is exactly 3.12-3.13 (numpy 2.5 floor, boxmot 22 ceiling); see docs/STACK.md.
 dependencies = [
-    "pydantic>=2.7",
-    "numpy>=1.26",
+    "pydantic>=2.13",
+    "numpy==2.5.1",
 ]
 
 [project.optional-dependencies]
+# Researched + pinned 2026-07-21 — full rationale in docs/STACK.md.
+# Resolve with uv (torch cu130/cpu via [tool.uv] indexes) when Phase 2 begins.
+ml = [
+    "torch==2.13.0",
+    "torchvision",                       # paired release resolved at lock time
+    "torchcodec==0.15.0",
+    "av==18.0.0",
+    "opencv-python-headless==4.13.0.92", # NOT 5.x (boxmot cap); never .90 (FIPS crash)
+    "ultralytics==8.4.103",              # YOLO26 generation
+    "boxmot==22.0.0",
+    "faiss-cpu==1.14.3",
+    "timm==1.0.28",
+    "open-clip-torch==3.3.0",
+    "insightface==1.0.1",
+    "onnxruntime==1.27.0",               # CPU-only by design (docs/STACK.md conflict #2)
+]
+backend = [
+    "fastapi[standard]>=0.139",
+    "uvicorn[standard]>=0.51",
+    "pydantic-settings>=2",
+    "sqlalchemy>=2.0.51",
+    "aiosqlite",
+    "alembic",
+    "pwdlib[argon2]",
+    "sse-starlette",
+    "python-multipart",
+    "structlog",
+    "playwright",                        # PDF reports; vendor Chromium for air-gap
+]
+eval = [
+    "sn-trackeval",                      # maintained TrackEval fork — parity gates only
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
@@ -21,6 +54,10 @@ dev = [
 
 [project.scripts]
 athar = "athar.cli.main:main"
+
+[tool.uv]
+# boxmot names non-headless opencv-python; we standardize on headless (docs/STACK.md #1).
+override-dependencies = ["opencv-python-headless==4.13.0.92"]
 
 [tool.setuptools.packages.find]
 include = ["athar*"]
@@ -34,4 +71,4 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py313"
