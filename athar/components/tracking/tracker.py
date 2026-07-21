@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
-from typing import Optional
+from typing import Mapping, Optional
 
 import numpy as np
 import logging
 
 logger = logging.getLogger(__name__)
-from omegaconf import DictConfig
 
 from athar.core.data_models import Detection
 
@@ -62,6 +61,7 @@ class TrackerWrapper:
 
     SUPPORTED_ALGORITHMS = {
         "botsort", "deepocsort", "strongsort", "bytetrack", "ocsort", "hybridsort",
+        "boosttrack",  # boxmot >= 20 only (D18 production-profile candidate)
     }
 
     def __init__(
@@ -70,7 +70,7 @@ class TrackerWrapper:
         reid_weights: Optional[str] = None,
         device: str = "cuda:0",
         half: bool = True,
-        tracker_config: Optional[DictConfig] = None,
+        tracker_config: Optional[Mapping] = None,
     ):
         if algorithm not in self.SUPPORTED_ALGORITHMS:
             raise ValueError(
@@ -107,6 +107,32 @@ class TrackerWrapper:
 
         sig = inspect.signature(tracker_cls.__init__)
         valid_params = set(sig.parameters.keys()) - {"self"}
+
+        # boxmot >= 20 trackers take a pre-built reid backend (`reid_model`)
+        # instead of reid_weights/device/half. Build it ONLY from local
+        # weights — never let boxmot fall back to downloading (air-gap).
+        if "reid_model" in valid_params and "reid_weights" not in valid_params:
+            reid_path = Path(_reid)
+            if reid_path.is_file():
+                try:
+                    from boxmot.reid.core.reid import ReID
+
+                    kwargs["reid_model"] = ReID(reid_path, device=device, half=half).model
+                except Exception as exc:  # noqa: BLE001 - degrade, don't die
+                    logger.warning(
+                        "could not build boxmot ReID backend from %s (%s); "
+                        "tracking without appearance features", reid_path, exc,
+                    )
+                    if "with_reid" in valid_params:
+                        kwargs["with_reid"] = False
+            else:
+                logger.warning(
+                    "reid weights not found at %s; tracking without appearance features",
+                    reid_path,
+                )
+                if "with_reid" in valid_params:
+                    kwargs["with_reid"] = False
+
         accepts_var_kwargs = any(
             param.kind == inspect.Parameter.VAR_KEYWORD
             for param in sig.parameters.values()
@@ -125,14 +151,29 @@ class TrackerWrapper:
     def _get_tracker_class(algorithm: str):
         """Dynamically import the tracker class from boxmot.
 
-        boxmot renames its tracker classes across versions (e.g. DeepOcSort vs
-        DeepOCSORT). Try the known casings for the requested tracker only, and
-        tolerate a getattr that raises: newer boxmot builds lazily import
-        submodules on attribute access, so we must NOT scan the whole namespace
-        (that triggers EVERY lazy import, including unrelated ones that may be
-        broken) and must catch import errors per-candidate rather than crash.
+        boxmot >= 20 ships an authoritative registry
+        (boxmot.trackers.registry.TRACKER_DEFINITIONS) mapping algorithm name
+        to class path — use it when present (validated against boxmot 22).
+        Older boxmot (11-12, the v1 parity env) exposes top-level classes with
+        unstable casing; fall back to trying known casings per algorithm, and
+        tolerate a getattr that raises: those builds lazily import submodules
+        on attribute access, so we must NOT scan the whole namespace (that
+        triggers EVERY lazy import, including unrelated broken ones) and must
+        catch import errors per-candidate rather than crash.
         """
+        import importlib
+
         import boxmot
+
+        try:
+            from boxmot.trackers.registry import TRACKER_DEFINITIONS
+        except ImportError:
+            pass
+        else:
+            definition = TRACKER_DEFINITIONS.get(algorithm)
+            if definition is not None:
+                module_name, class_name = definition.class_path.rsplit(".", 1)
+                return getattr(importlib.import_module(module_name), class_name)
 
         candidates = {
             "botsort": ("BotSort", "BoTSORT", "BOTSORT", "BotSORT", "Botsort"),
@@ -153,9 +194,8 @@ class TrackerWrapper:
 
         raise ImportError(
             f"boxmot {getattr(boxmot, '__version__', '?')} does not expose a class for "
-            f"tracker '{algorithm}'. This project targets boxmot 11-12; a newer boxmot "
-            "restructured its API. Reinstall a compatible version with:\n"
-            "    pip install \"boxmot>=11.0,<13\""
+            f"tracker '{algorithm}'. Validated generations: boxmot 11-12 (top-level "
+            "classes, v1 parity env) and boxmot >= 20 (trackers.registry, v2 env)."
         )
 
     def update(

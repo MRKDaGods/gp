@@ -85,6 +85,18 @@ def coded_image_dir(tmp_path_factory):
 
 
 def _available(module: str) -> bool:
+    if module == "torchcodec":
+        # find_spec is not enough: torchcodec imports but fails at DLL load
+        # when FFmpeg libs are absent — probe the real decoder import.
+        try:
+            from athar.components.framesources.video import _ensure_ffmpeg_dlls
+
+            _ensure_ffmpeg_dlls()
+            from torchcodec.decoders import VideoDecoder  # noqa: F401
+
+            return True
+        except Exception:
+            return False
     return importlib.util.find_spec(module) is not None
 
 

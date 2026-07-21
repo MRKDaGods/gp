@@ -202,7 +202,7 @@ class ResNet101IBNBranch(nn.Module):
             )
         except Exception as exc:  # noqa: BLE001 - keep fallback chain moving
             logger.warning(
-                "Appearance branch loader 'torch.hub' failed for '{}': {}",
+                "Appearance branch loader 'torch.hub' failed for '%s': %s",
                 self._IBN_MODEL,
                 exc,
             )

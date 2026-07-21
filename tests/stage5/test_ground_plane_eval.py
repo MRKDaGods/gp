@@ -1,6 +1,7 @@
 import json
 
 import numpy as np
+import pytest
 
 from athar.evaluation.ground_plane_eval import evaluate_ground_plane, load_gt_ground_positions
 
@@ -53,6 +54,10 @@ def test_load_gt_ground_positions_filters_to_camera_visibility(tmp_path) -> None
 
 
 def test_ground_plane_moda_excludes_id_switches() -> None:
+    # evaluate_ground_plane still runs on motmetrics (v1 kernel); the v2 env
+    # dropped motmetrics (dead upstream) — rebuild on sn-trackeval is a
+    # Phase 5 evaluation item. Runs in the v1 env, skips in .venv-v2.
+    pytest.importorskip("motmetrics")
     gt = {frame_id: [(1, float(frame_id), 0.0)] for frame_id in range(6)}
     pred = {frame_id: [(frame_id + 10, float(frame_id), 0.0)] for frame_id in range(6)}
 

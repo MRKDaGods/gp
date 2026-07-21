@@ -68,6 +68,9 @@
 4. **torchvision pairing** — let uv resolve the torch-2.13 partner at lock time.
 5. **Parity vs production profiles** — parity gates (P1–P3) MUST pin v1 components (YOLO26m, v1 tracker+config, TrackEval-compatible metrics via sn-trackeval). Upgrades (YOLO26x, BoostTrack, RF-DETR) live only in production profiles and get benchmarked against the parity baseline — never silently swapped.
 6. **Air-gap install bundle must vendor**: Playwright Chromium, `.pmtiles` + glyphs/sprites, fonts, all wheels (devpi/verdaccio mirrors for in-gap rebuilds).
+7. **torchcodec on Windows needs FFmpeg DLLs** — solved WITHOUT a system FFmpeg: PyAV 18 wheels bundle FFmpeg 8 (avcodec-62 …) hash-mangled by delvewheel; `athar.components.framesources.video._ensure_ffmpeg_dlls()` copies them to canonical names inside `av.libs` and registers the directory on first use. The PyAV wheel is therefore the vendored FFmpeg carrier (air-gap friendly). Verified 2026-07-21: torchcodec 0.15 frame-exact decode green on Windows.
+8. **boxmot 22.0.0 wheel quirks** (verified 2026-07-21): (a) upstream ships a stale `__version__ = "19.0.0"` string — trust `boxmot-22.0.0.dist-info`, not `boxmot.__version__`; (b) the public `boxmot.ReIDModel` / `boxmot.api.runtime` import chain is BROKEN (imports missing `boxmot.data` module) — use `boxmot.reid.core.reid.ReID` directly; (c) tracker classes are NOT top-level exports anymore — resolve via `boxmot.trackers.registry.TRACKER_DEFINITIONS` class paths; (d) reid-trackers take a pre-built `reid_model=ReID(weights).model` instead of `reid_weights/device/half`. `TrackerWrapper` handles both generations; smoke-validated bytetrack/botsort(+osnet reid)/boosttrack on 22.0.0.
+9. **Local .venv-v2 is CPU-torch by design** — NVIDIA driver 572.47 < 580 required by cu130, and local runs are smoke-only per the Kaggle GPU rule anyway. The old `.venv` (torch 2.12 cu126) remains for local GPU smoke + v1 parity runs.
 
 ## Dropped from v1 (dead/superseded)
 

@@ -15,7 +15,7 @@ import torch
 import torch.nn.functional as F
 import torchvision.transforms as T
 import torchvision.transforms.functional as TF
-from omegaconf import OmegaConf
+import yaml
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
@@ -89,8 +89,10 @@ def _l2_normalize(features: np.ndarray, eps: float = 1e-12) -> np.ndarray:
 
 
 def _load_registry_models() -> list[dict[str, Any]]:
-    loaded = OmegaConf.load(REGISTRY_PATH)
-    data = OmegaConf.to_container(loaded, resolve=True)
+    # v1 used OmegaConf.load + to_container(resolve=True); the registry YAML
+    # contains no interpolations, so plain safe_load is byte-equivalent.
+    with open(REGISTRY_PATH, encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
     if not isinstance(data, dict):
         raise ValueError(f"Registry must be a mapping: {REGISTRY_PATH}")
     models = data.get("models", [])

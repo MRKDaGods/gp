@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import Any, Iterable, List, Optional
 
 import cv2
 import numpy as np
 import logging
 
 logger = logging.getLogger(__name__)
-from omegaconf import DictConfig
 
 from athar.core.data_models import FrameInfo, Tracklet
 from athar.components.tracking.detector import Detector
@@ -23,7 +22,7 @@ BWD_ID_OFFSET = 1_000_000
 def run_backward_pass(
     cam_frames: Iterable[FrameInfo],
     detector: Detector,
-    stage_cfg: DictConfig,
+    stage_cfg: Any,  # attribute-style config (OmegaConf-shaped); omegaconf not required
     camera_id: str,
     *,
     min_tracklet_length: int,

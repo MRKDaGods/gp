@@ -18,6 +18,10 @@ Three decoders, one contract (see base.py):
 from __future__ import annotations
 
 import logging
+import os
+import re
+import shutil
+import sys
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -40,6 +44,42 @@ def _require_file(path: Path | str) -> Path:
     return path
 
 
+_ffmpeg_dlls_done = False
+
+
+def _ensure_ffmpeg_dlls() -> None:
+    """Windows: make torchcodec loadable with no system FFmpeg install.
+
+    torchcodec links plain FFmpeg DLL names (avcodec-62.dll, …); PyAV wheels
+    bundle exactly those libraries but hash-mangled by delvewheel
+    (avcodec-62-<hash>.dll). Copy them to their canonical names once and
+    register the directory — the PyAV wheel becomes the vendored FFmpeg
+    carrier (air-gap friendly: no separate FFmpeg download). No-op off
+    Windows, without PyAV, or when the copies already exist; fails soft on
+    read-only installs (torchcodec then falls back to PyAV/OpenCV sources).
+    """
+    global _ffmpeg_dlls_done
+    if _ffmpeg_dlls_done or sys.platform != "win32":
+        return
+    _ffmpeg_dlls_done = True
+    try:
+        import av  # noqa: PLC0415
+    except ImportError:
+        return
+    libs = Path(av.__file__).resolve().parent.parent / "av.libs"
+    if not libs.is_dir():
+        return
+    try:
+        for mangled in libs.glob("*.dll"):
+            m = re.match(r"^((?:av[a-z]+|sw[a-z]+)-\d+)-[0-9a-f]{32}\.dll$", mangled.name)
+            if m and not (libs / f"{m.group(1)}.dll").exists():
+                shutil.copy2(mangled, libs / f"{m.group(1)}.dll")
+        os.add_dll_directory(str(libs))
+        logger.debug("registered FFmpeg DLL directory for torchcodec: %s", libs)
+    except OSError as exc:  # pragma: no cover — read-only site-packages
+        logger.warning("could not stage FFmpeg DLLs for torchcodec: %s", exc)
+
+
 class TorchcodecFrameSource:
     """Random-access, frame-exact decode via torchcodec (RGB → BGR copy)."""
 
@@ -52,6 +92,7 @@ class TorchcodecFrameSource:
         step: int = 1,
         device: str = "cpu",
     ) -> None:
+        _ensure_ffmpeg_dlls()
         from torchcodec.decoders import VideoDecoder  # noqa: PLC0415 — optional dep
 
         self.camera_id = camera_id
@@ -224,10 +265,14 @@ def create_video_source(camera_id: str, path: Path | str, **kwargs: object):
     """Best-available video source: torchcodec → PyAV → OpenCV."""
     global _selected
     if _selected is None:
+        _ensure_ffmpeg_dlls()
         for module_name, cls in _PREFERENCE:
             try:
-                __import__(module_name)
-            except ImportError:
+                if module_name == "torchcodec":
+                    from torchcodec.decoders import VideoDecoder  # noqa: F401, PLC0415
+                else:
+                    __import__(module_name)
+            except (ImportError, OSError):
                 continue
             _selected = cls
             logger.info("video FrameSource decoder: %s", cls.__name__)
