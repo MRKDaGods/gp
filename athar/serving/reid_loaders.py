@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import re
 import time
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -36,11 +34,6 @@ CONCAT_PATCH_GEM_P = 3.0
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 CLIPSENET_IMG_SIZE = (320, 320)
-
-_DEVICE = "cpu"
-_PIN_MEMORY = False
-_NUM_WORKERS = 0
-
 
 @dataclass(frozen=True)
 class LoadedReIDModel:
@@ -74,12 +67,14 @@ def _normalise_device(device: str) -> str:
     return "cpu"
 
 
-def _set_runtime(device: str) -> str:
-    global _DEVICE, _PIN_MEMORY, _NUM_WORKERS
-    _DEVICE = _normalise_device(device)
-    _PIN_MEMORY = _DEVICE.startswith("cuda")
-    _NUM_WORKERS = 2 if _PIN_MEMORY else 0
-    return _DEVICE
+def _loader_params(device: str) -> tuple[str, bool, int]:
+    """(device, pin_memory, num_workers) — computed per call, never stored.
+
+    v1 kept these in module globals mutated by _set_runtime(); concurrent
+    callers on different devices contaminated each other."""
+    actual = _normalise_device(device)
+    pin_memory = actual.startswith("cuda")
+    return actual, pin_memory, (2 if pin_memory else 0)
 
 
 def _l2_normalize(features: np.ndarray, eps: float = 1e-12) -> np.ndarray:
@@ -173,7 +168,7 @@ def _load_transreid(
     num_cameras: int,
     img_size: tuple[int, int],
 ) -> torch.nn.Module:
-    actual_device = _set_runtime(device)
+    actual_device = _normalise_device(device)
     model = build_transreid(
         num_classes=1,
         num_cameras=num_cameras,
@@ -243,6 +238,7 @@ def _extract_transreid_from_path_loader(
     dataloader: DataLoader,
     *,
     concat_patch: bool,
+    device: str,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     model.eval()
     model._concat_patch = bool(concat_patch)
@@ -252,10 +248,10 @@ def _extract_transreid_from_path_loader(
     all_camids: list[np.ndarray] = []
     try:
         for paths, pids, camids in dataloader:
-            cam_tensor = camids.to(_DEVICE, non_blocking=True).long()
+            cam_tensor = camids.to(device, non_blocking=True).long()
             per_view_features = []
             for view_batch in _transreid_view_batches_from_paths(list(paths)):
-                view_batch = view_batch.to(_DEVICE, non_blocking=True)
+                view_batch = view_batch.to(device, non_blocking=True)
                 features = model(view_batch, cam_ids=cam_tensor)
                 if isinstance(features, (tuple, list)):
                     features = features[-1]
@@ -281,20 +277,21 @@ def extract_09v_features_with_metadata(
     *,
     stream: Literal["global", "concat_patch_flip"],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
-    _set_runtime(device)
+    actual_device, pin_memory, num_workers = _loader_params(device)
     if stream not in {"global", "concat_patch_flip"}:
         raise ValueError(f"Unknown TransReID stream: {stream}")
     loader = DataLoader(
         PathDataset(items),
         batch_size=batch_size,
         shuffle=False,
-        num_workers=_NUM_WORKERS,
-        pin_memory=_PIN_MEMORY,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
     )
     features, pids, camids = _extract_transreid_from_path_loader(
         model,
         loader,
         concat_patch=(stream == "concat_patch_flip"),
+        device=actual_device,
     )
     return _l2_normalize(features), pids, camids, [str(item["path"]) for item in items]
 
@@ -324,16 +321,16 @@ def extract_transreid_09v_images(
     device: str,
     batch_size: int = 32,
 ) -> np.ndarray:
-    _set_runtime(device)
+    actual_device = _normalise_device(device)
     model.eval()
     img_size = getattr(model, "_serving_img_size", TRANSREID_IMG_SIZE)
     batches: list[np.ndarray] = []
     for start in range(0, len(images), batch_size):
         chunk = images[start:start + batch_size]
-        cam_tensor = torch.zeros(len(chunk), dtype=torch.long, device=_DEVICE)
+        cam_tensor = torch.zeros(len(chunk), dtype=torch.long, device=actual_device)
         per_view_features = []
         for view_batch in _transreid_view_batches_from_images(chunk, img_size=img_size):
-            view_batch = view_batch.to(_DEVICE, non_blocking=True)
+            view_batch = view_batch.to(actual_device, non_blocking=True)
             features = model(view_batch, cam_ids=cam_tensor)
             if isinstance(features, (tuple, list)):
                 features = features[-1]
@@ -344,7 +341,7 @@ def extract_transreid_09v_images(
 
 
 def build_clipsenet_model(checkpoint: Path, device: str) -> torch.nn.Module:
-    from scripts.eval.eval_clip_senet_veri776 import build_clip_senet, load_checkpoint
+    from athar.components.embedders.clip_senet_v6 import build_clip_senet, load_checkpoint
 
     actual_device = _normalise_device(device)
     checkpoint_path = checkpoint.expanduser().resolve()
@@ -418,7 +415,7 @@ def extract_clipsenet_features(
     batch_size: int,
     device: str,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
-    from scripts.eval.eval_clip_senet_veri776 import build_loader
+    from athar.components.embedders.clip_senet_v6 import build_loader
 
     actual_device = _normalise_device(device)
     loader = build_loader(items, img_size, batch_size)
@@ -449,33 +446,27 @@ def _feature_dim_for_loader(loader: str) -> int:
     return 2048 if loader == "clipsenet_v6" else 768
 
 
-def _cache_size() -> int:
-    raw = os.getenv("REID_MODEL_CACHE_SIZE", "2")
-    try:
-        return max(1, int(raw))
-    except ValueError:
-        return 2
+# Serving loader dispatch: model_id -> (builder, loader tag). Extend here,
+# never with another if/elif chain.
+LOADER_BUILDERS: dict[str, tuple[Any, str]] = {
+    "veri776_09v_v17_transreid": (build_09v_model, "transreid_09v"),
+    "cityflow_transreid": (build_cityflow_transreid_model, "transreid_cityflow"),
+    "veri776_clipsenet_v6": (build_clipsenet_model, "clipsenet_v6"),
+}
 
 
-@lru_cache(maxsize=2)
-def _load_reid_model_cached(model_id: str, device: str) -> LoadedReIDModel:
+def _build_loaded_model(model_id: str, device: str) -> LoadedReIDModel:
     entry = _registry_entry(model_id)
     if entry.get("task_type") != "single_cam_reid":
         raise ValueError(f"Model {model_id} is not a single_cam_reid model")
     if entry.get("status") == "dead_end":
         raise ValueError(f"Model {model_id} is marked dead_end")
     checkpoint = _primary_checkpoint(entry)
-    if model_id == "veri776_09v_v17_transreid":
-        model = build_09v_model(checkpoint, device)
-        loader = "transreid_09v"
-    elif model_id == "cityflow_transreid":
-        model = build_cityflow_transreid_model(checkpoint, device)
-        loader = "transreid_cityflow"
-    elif model_id == "veri776_clipsenet_v6":
-        model = build_clipsenet_model(checkpoint, device)
-        loader = "clipsenet_v6"
-    else:
-        raise ValueError(f"No Phase 2a serving loader is registered for {model_id}")
+    try:
+        builder, loader = LOADER_BUILDERS[model_id]
+    except KeyError:
+        raise ValueError(f"No serving loader is registered for {model_id}") from None
+    model = builder(checkpoint, device)
     return LoadedReIDModel(
         model_id=model_id,
         model=model,
@@ -488,17 +479,18 @@ def _load_reid_model_cached(model_id: str, device: str) -> LoadedReIDModel:
 
 
 def load_reid_model(model_id: str, device: str) -> LoadedReIDModel:
-    if _cache_size() != 2:
-        # functools.lru_cache maxsize is fixed at decoration time; keeping this
-        # branch makes the env var explicit while preserving the requested max-2 default.
-        pass
-    return _load_reid_model_cached(model_id, _normalise_device(device))
+    """Backward-compatible entry point: delegates to the default ReIDRuntime
+    (configurable LRU, REID_MODEL_CACHE_SIZE honored — unlike the old fixed
+    ``lru_cache(maxsize=2)``)."""
+    from athar.serving.runtime import default_runtime
+
+    return default_runtime().load(model_id, device)
 
 
 def clear_reid_model_cache() -> None:
-    _load_reid_model_cached.cache_clear()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    from athar.serving.runtime import default_runtime
+
+    default_runtime().clear()
 
 
 def extract_features(

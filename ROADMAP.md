@@ -131,6 +131,7 @@ smart cities, streets).
 
 ### Phase 4 — Serving, jobs, API
 - [ ] Unified model loader + refcounted LRU cache with VRAM budget + DeviceManager
+  - [x] **2026-07-21 first slice**: loader<->script cycle inverted — CLIP-SENet arch moved verbatim to `athar/components/embedders/clip_senet_v6.py` (the copy that made 91.36/93.3; eval script re-imports, serving no longer imports scripts). `reid_loaders` module globals killed (per-call `_loader_params`); fixed `lru_cache(2)` replaced by `athar/serving/runtime.py` ReIDRuntime (configurable LRU honoring REID_MODEL_CACHE_SIZE, thread-safe, build-outside-lock, stats; old API delegates). Refcount + VRAM budget + DeviceManager still open; `clip_senet_model.py` (HF-hub-first air-gap bug) still to retire with the stage2 glue port
 - [ ] Model lifecycle registry impl (SQLite) + promote/rollback + eval-gate enforcement
 - [ ] JobService: SQLite queue, worker subprocess, typed event pipe, cancel/resume, executor-agnostic (local | kaggle) (D13)
 - [ ] FastAPI app: thin routers → services → RunRepository; OpenAPI → generated TS client
