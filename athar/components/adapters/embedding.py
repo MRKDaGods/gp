@@ -30,6 +30,8 @@ class TransReidEmbedderAdapter:
         stream_name: str = "transreid_primary",
         input_size: Sequence[int] = (224, 224),  # (H, W) — VeRi recipe
         num_cameras: int = 20,
+        vit_model: str = "vit_base_patch16_clip_224.openai",
+        clip_normalization: Optional[bool] = None,
         device: str = "cpu",
         half: bool = False,
         flip_augment: bool = True,
@@ -52,6 +54,8 @@ class TransReidEmbedderAdapter:
             half=half,
             flip_augment=flip_augment,
             num_cameras=num_cameras,
+            vit_model=vit_model,
+            clip_normalization=clip_normalization,
         )
 
     def embed(self, crops: np.ndarray) -> np.ndarray:

@@ -122,33 +122,41 @@ class AssociateStage:
                 )
             )
 
-        # ---- candidates: FAISS top-k on the primary stream ---------------
+        # ---- candidates: FAISS top-k per appearance stream ----------------
+        # Each branch's appearance stream only indexes that branch's rows, so
+        # sweeping every non-hsv stream gives every branch its own candidate
+        # pool; with a single stream this is bit-identical to the v1 flow.
         summary = json.loads(ctx.artifact_path("embed.summary").read_text(encoding="utf-8"))
-        primary = config.get("associate.primary_stream") or next(
-            (s for s in summary["streams"] if s != "hsv"), None
-        )
-        if primary is None:
+        configured = config.get("associate.primary_stream")
+        streams = [configured] if configured else [
+            s for s in summary["streams"] if s != "hsv"
+        ]
+        streams = [s for s in streams if f"index.{s}" in ctx.manifest.artifacts]
+        if not streams:
             raise ValueError("associate: no appearance stream to associate on")
-        index = faiss.read_index(str(ctx.artifact_path(f"index.{primary}")))
-        row_map: list[int] = json.loads(
-            ctx.artifact_path(f"index.{primary}.rows").read_text(encoding="utf-8")
-        )
-        vectors = index.reconstruct_n(0, index.ntotal)
-        scores, positions = index.search(vectors, min(top_k + 1, index.ntotal))
 
         candidates: dict[tuple[int, int], float] = {}
-        for qpos in range(index.ntotal):
-            i = row_map[qpos]
-            for score, rpos in zip(scores[qpos], positions[qpos]):
-                if rpos < 0 or rpos == qpos:
-                    continue
-                j = row_map[int(rpos)]
-                if camera_ids[i] == camera_ids[j]:
-                    continue  # cross-camera only
-                if branch_of[i] is None or branch_of[i] != branch_of[j]:
-                    continue
-                pair = (min(i, j), max(i, j))
-                candidates[pair] = max(candidates.get(pair, -1.0), float(score))
+        for stream in streams:
+            index = faiss.read_index(str(ctx.artifact_path(f"index.{stream}")))
+            if index.ntotal == 0:
+                continue
+            row_map: list[int] = json.loads(
+                ctx.artifact_path(f"index.{stream}.rows").read_text(encoding="utf-8")
+            )
+            vectors = index.reconstruct_n(0, index.ntotal)
+            scores, positions = index.search(vectors, min(top_k + 1, index.ntotal))
+            for qpos in range(index.ntotal):
+                i = row_map[qpos]
+                for score, rpos in zip(scores[qpos], positions[qpos]):
+                    if rpos < 0 or rpos == qpos:
+                        continue
+                    j = row_map[int(rpos)]
+                    if camera_ids[i] == camera_ids[j]:
+                        continue  # cross-camera only
+                    if branch_of[i] is None or branch_of[i] != branch_of[j]:
+                        continue
+                    pair = (min(i, j), max(i, j))
+                    candidates[pair] = max(candidates.get(pair, -1.0), float(score))
 
         filtered = mutual_nearest_neighbor_filter(
             [(i, j, s) for (i, j), s in candidates.items()],
@@ -246,7 +254,8 @@ class AssociateStage:
 
         payload = {
             "schema_version": ASSOCIATE_SCHEMA_VERSION,
-            "primary_stream": primary,
+            "primary_stream": "+".join(streams),
+            "streams": streams,
             "num_tracklets": n,
             "num_identities": len(trajectories),
             "trajectories": [t.model_dump(mode="json") for t in trajectories],
@@ -258,7 +267,7 @@ class AssociateStage:
                 name="associate.trajectories",
                 relpath=relpath,
                 schema_version=ASSOCIATE_SCHEMA_VERSION,
-                producer=f"associate/{primary}",
+                producer=f"associate/{'+'.join(streams)}",
                 row_count=len(trajectories),
             )
         )

@@ -1,8 +1,8 @@
 """Built-in run profiles + profile loading.
 
 ``multiclass`` is the default operational profile: one YOLO26 pass over
-COCO person+vehicle classes, per-class branches (person: HSV stream until
-the person-ReID stream lands; vehicles: TransReID VeRi checkpoint + HSV).
+COCO person+vehicle classes, per-class branches (person: TransReID
+Market1501 checkpoint + HSV; vehicles: TransReID VeRi checkpoint + HSV).
 Custom profiles load from YAML files with the same RunProfile schema.
 
 Each builtin ships its PROFILE_DEFAULT config layer — the bottom layer of
@@ -32,7 +32,21 @@ def multiclass_profile() -> RunProfile:
             ClassBranch(
                 entity_classes=[EntityClass.PERSON],
                 tracker=ComponentSpec(name="boxmot_v1", config={"algorithm": "botsort"}),
-                embedders=[ComponentSpec(name="hsv_v1")],
+                embedders=[
+                    ComponentSpec(
+                        name="transreid_v1",
+                        config={
+                            # v1 wildtrack.yaml stage2.reid.person recipe
+                            "weights_path": "models/reid/person_transreid_vit_base_market1501.pth",
+                            "stream_name": "transreid_person",
+                            "input_size": [256, 128],  # list, not tuple — YAML-stable
+                            "num_cameras": 6,
+                            "vit_model": "vit_base_patch16_224",
+                            "clip_normalization": False,
+                        },
+                    ),
+                    ComponentSpec(name="hsv_v1"),
+                ],
                 score_terms=[ComponentSpec(name="appearance")],
                 solver=ComponentSpec(name="graph_cc"),
             ),

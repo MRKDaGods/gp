@@ -14,6 +14,7 @@ porting is trusted — see ROADMAP Phase 0/2.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -26,20 +27,35 @@ from athar.components.embedders.transreid_model import build_transreid  # noqa: 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VERI_CKPT = REPO_ROOT / "models" / "reid" / "vehicle_transreid_vit_base_veri776.pth"
 CITYFLOW_CKPT = REPO_ROOT / "models" / "reid" / "transreid_cityflowv2_best.pth"
+PERSON_CKPT = REPO_ROOT / "models" / "reid" / "person_transreid_vit_base_market1501.pth"
 
 # Exact v1 build recipes:
 #  - VeRi:     scripts/eval/eval_09v_transreid_veri776.py (IMG_SIZE, SIE_NUM_CAMERAS)
 #  - CityFlow: configs/default.yaml stage2.reid.vehicle (input_size, num_cameras)
+#  - Person:   configs/datasets/wildtrack.yaml stage2.reid.person (Market1501:
+#              6 cams, 256x128, plain ImageNet ViT — not the CLIP variant)
 RECIPES = {
     "veri776": dict(
         checkpoint=VERI_CKPT,
         num_cameras=20,
         img_size=(224, 224),
+        vit_model="vit_base_patch16_clip_224.openai",
     ),
     "cityflowv2": dict(
         checkpoint=CITYFLOW_CKPT,
         num_cameras=59,
         img_size=(256, 256),
+        vit_model="vit_base_patch16_clip_224.openai",
+    ),
+    "market1501_person": dict(
+        checkpoint=PERSON_CKPT,
+        num_cameras=6,
+        img_size=(256, 128),
+        vit_model="vit_base_patch16_224",
+        # This checkpoint was trained without the JPM head; bn_jpm.* stay
+        # default-initialized, exactly as v1 loaded it. Harmless: the JPM
+        # branch only runs under self.training.
+        tolerated_missing=("bn_jpm.",),
     ),
 }
 
@@ -50,7 +66,7 @@ def _build(recipe: dict, caplog):
             num_classes=1,
             num_cameras=recipe["num_cameras"],
             embed_dim=768,
-            vit_model="vit_base_patch16_clip_224.openai",
+            vit_model=recipe["vit_model"],
             pretrained=False,
             weights_path=str(recipe["checkpoint"]),
             img_size=recipe["img_size"],
@@ -67,7 +83,15 @@ def test_checkpoint_loads_with_v1_key_contract(name, caplog):
     model = _build(recipe, caplog)
 
     text = caplog.text
-    assert "critical missing keys" not in text, f"key contract broken:\n{text}"
+    tolerated = recipe.get("tolerated_missing", ())
+    for line in text.splitlines():
+        if "critical missing keys" not in line:
+            continue
+        missing = re.findall(r"'([^']+)'", line)
+        unexpected = [
+            k for k in missing if not any(k.startswith(t) for t in tolerated)
+        ]
+        assert not unexpected, f"key contract broken: {unexpected}\n{text}"
     assert "Loaded TransReID weights" in text
     # The ONLY tolerated drops are the training-time classifier heads.
     dropped = [line for line in text.splitlines() if "Dropping key" in line]
