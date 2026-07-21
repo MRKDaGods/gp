@@ -8,7 +8,7 @@ scripts/eval/eval_p4_wildtrack_person.py.
 
 Inputs (kernel dataset_sources):
 - aryashah2k/large-scale-multicamera-detection-dataset  (WILDTRACK frames)
-- mrkdagods/athar-p4-bundle   (src.tar.gz + yolo26m + osnet + GT + profile)
+- mrkdagods/athar-p4-bundle   (src/ tree + yolo26m + osnet + GT + profile)
 - gumfreddy/mtmc-weights      (person_transreid_vit_base_market1501.pth)
 
 Outputs: p4_metrics.json + p4_run_artifacts.tar.gz (tracklets/trajectories
@@ -18,6 +18,7 @@ for local baseline freezing).
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -43,13 +44,11 @@ def find_dir(marker: str) -> Path:
 
 
 def main() -> None:
-    bundle = find_dir("src.tar.gz")
+    bundle = find_dir("profile_p4_wildtrack_person.yaml")
     print("bundle:", bundle)
 
     if not PROJECT.exists():
-        PROJECT.mkdir(parents=True)
-        with tarfile.open(bundle / "src.tar.gz", "r:gz") as tar:
-            tar.extractall(PROJECT)
+        shutil.copytree(bundle / "src", PROJECT)
     print("src head:", (PROJECT / "GIT_SHA.txt").read_text().strip()
           if (PROJECT / "GIT_SHA.txt").exists() else "(no sha file)")
 
@@ -57,7 +56,9 @@ def main() -> None:
          "faiss-cpu", "motmetrics", "lapx", "pydantic>=2", "pyyaml", "timm", "filterpy"])
     run([sys.executable, "-m", "pip", "install", "-q", "--no-deps",
          "ultralytics", "boxmot==22.0.0"])
-    run([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", str(PROJECT)])
+    # No pip install of athar itself: the package pins Python 3.13 and Kaggle
+    # ships 3.12 — PYTHONPATH is all the runtime actually needs.
+    env = {**os.environ, "PYTHONPATH": str(PROJECT)}
 
     # ---- models into the tree ----------------------------------------
     (PROJECT / "models" / "detection").mkdir(parents=True, exist_ok=True)
@@ -89,7 +90,7 @@ def main() -> None:
            "--runs-root", str(RUNS_ROOT)]
     for cam in cams:
         cmd += ["--video", f"{cam}={image_subsets / cam}"]
-    run(cmd, cwd=PROJECT)
+    run(cmd, cwd=PROJECT, env=env)
 
     run_dir = next(p for p in sorted(RUNS_ROOT.iterdir()) if (p / "manifest.json").exists())
     manifest = json.loads((run_dir / "manifest.json").read_text())
@@ -99,7 +100,7 @@ def main() -> None:
     # ---- eval ---------------------------------------------------------
     run([sys.executable, str(PROJECT / "scripts" / "eval" / "eval_p4_wildtrack_person.py"),
          "--run-dir", str(run_dir), "--gt-dir", str(bundle / "gt"),
-         "--out-dir", str(OUT_DIR)], cwd=PROJECT)
+         "--out-dir", str(OUT_DIR)], cwd=PROJECT, env=env)
 
     metrics = json.loads((OUT_DIR / "p4_metrics.json").read_text())
     print(json.dumps(metrics, indent=2))

@@ -49,6 +49,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from athar.pipeline.stages.detect_track import DetectTrackStage
     from athar.pipeline.stages.embed import EmbedStage
     from athar.pipeline.stages.index import IndexStage
+    from athar.pipeline.stages.package import PackageStage
     from athar.profiles.builtin import ProfileError, load_profile
 
     try:
@@ -114,7 +115,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     "stage_skipped": " already complete"}[kind]
             print(f"\n{event.stage}{tail}", end="", file=sys.stderr)
 
-    stages = [DetectTrackStage(), EmbedStage(), IndexStage(), AssociateStage()]
+    stages = [DetectTrackStage(), EmbedStage(), IndexStage(), AssociateStage(),
+              PackageStage()]
     runner = PipelineRunner(store, stages, extra_sinks=[console_sink])
     print(f"run {manifest.run_id} [{manifest.role.value}] profile={profile.name} "
           f"config={manifest.config.config_hash[:12]}")

@@ -1,10 +1,12 @@
 """Assemble + upload the athar-p4-bundle Kaggle dataset (private, mrkdagods).
 
 Contents:
-- src.tar.gz  — `git archive` of the CURRENT athar-v2 HEAD (code only, no
-  data/models/venvs; GIT_SHA.txt inside records provenance)
+- src/  — `git archive` of the CURRENT athar-v2 HEAD, extracted (a plain
+  tree: Kaggle auto-decompresses dataset archives, so shipping the tree
+  directly is the only deterministic layout). src/GIT_SHA.txt records
+  provenance.
 - models/yolo26m.pt, models/osnet_x0_25_msmt17.pt
-- gt/C1..C7.txt (+ roi_polygons.json) — v1-recipe WILDTRACK MOT ground truth
+- gt/C1..C7.txt — v1-recipe WILDTRACK MOT ground truth
 - profile_p4_wildtrack_person.yaml
 
 Usage:
@@ -45,16 +47,12 @@ def main() -> int:
     head = run(["git", "-C", PROJECT_ROOT, "rev-parse", "HEAD"]).strip()
     archive = staging / "src.tar"
     run(["git", "-C", PROJECT_ROOT, "archive", "-o", archive, "HEAD"])
-    with tarfile.open(archive, "a") as tar:
-        sha_file = staging / "GIT_SHA.txt"
-        sha_file.write_text(head + "\n", encoding="utf-8")
-        tar.add(sha_file, arcname="GIT_SHA.txt")
-    import gzip
-
-    with open(archive, "rb") as raw, gzip.open(staging / "src.tar.gz", "wb") as gz:
-        shutil.copyfileobj(raw, gz)
+    src_dir = staging / "src"
+    src_dir.mkdir()
+    with tarfile.open(archive) as tar:
+        tar.extractall(src_dir)
     archive.unlink()
-    (staging / "GIT_SHA.txt").unlink()
+    (src_dir / "GIT_SHA.txt").write_text(head + "\n", encoding="utf-8")
 
     (staging / "models").mkdir()
     shutil.copy2(PROJECT_ROOT / "models" / "detection" / "yolo26m.pt",
