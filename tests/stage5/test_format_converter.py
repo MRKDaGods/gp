@@ -1,0 +1,235 @@
+"""Tests for stage 5 format converter - frame numbering and format correctness."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+
+from athar.core.data_models import GlobalTrajectory, Tracklet, TrackletFrame
+
+
+def _make_trajectory(
+    global_id: int = 1,
+    camera_id: str = "S01_c001",
+    track_id: int = 10,
+    frames: list | None = None,
+) -> GlobalTrajectory:
+    """Create a simple trajectory for testing."""
+    if frames is None:
+        frames = [
+            TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 150, 250), confidence=0.9),
+            TrackletFrame(frame_id=10, timestamp=1.0, bbox=(110, 210, 160, 260), confidence=0.85),
+        ]
+    tracklet = Tracklet(
+        track_id=track_id,
+        camera_id=camera_id,
+        class_id=2,
+        class_name="car",
+        frames=frames,
+    )
+    return GlobalTrajectory(global_id=global_id, tracklets=[tracklet])
+
+
+class TestMOTFrameNumbering:
+    """Verify MOT submission uses 1-based frame numbering."""
+
+    def test_mot_submission_1based_frames(self, tmp_path: Path):
+        from athar.evaluation.format_converter import trajectories_to_mot_submission
+
+        traj = _make_trajectory(
+            global_id=5,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(10, 20, 50, 60), confidence=0.9),
+                TrackletFrame(frame_id=99, timestamp=9.9, bbox=(15, 25, 55, 65), confidence=0.8),
+            ],
+        )
+        trajectories_to_mot_submission([traj], tmp_path)
+
+        output_file = tmp_path / "S01_c001.txt"
+        assert output_file.exists()
+
+        lines = output_file.read_text().strip().split("\n")
+        assert len(lines) == 2
+
+        # First line: frame_id=0 in internal repr -> 1 in MOT output
+        parts0 = lines[0].split(",")
+        assert int(parts0[0]) == 1, f"Expected 1-based frame 1, got {parts0[0]}"
+
+        # Second line: frame_id=99 -> 100 in MOT output
+        parts1 = lines[1].split(",")
+        assert int(parts1[0]) == 100, f"Expected 1-based frame 100, got {parts1[0]}"
+
+
+class TestCrossIDNMS:
+    """Verify cross-ID NMS removes overlapping predictions from different trajectories."""
+
+    def test_nms_removes_duplicate_boxes(self, tmp_path: Path):
+        """Two trajectories with nearly-identical boxes on same frame -> NMS keeps one."""
+        from athar.evaluation.format_converter import trajectories_to_mot_submission
+
+        # bbox format: (x1, y1, x2, y2) - xyxy
+        # Trajectory A: global_id=1, frames 0-2
+        traj_a = _make_trajectory(
+            global_id=1,
+            camera_id="S01_c001",
+            track_id=10,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 150, 260), confidence=0.9),
+                TrackletFrame(frame_id=1, timestamp=0.1, bbox=(102, 202, 152, 262), confidence=0.88),
+                TrackletFrame(frame_id=2, timestamp=0.2, bbox=(104, 204, 154, 264), confidence=0.85),
+            ],
+        )
+        # Trajectory B: global_id=2, frames 1-2 at nearly identical positions (same vehicle fragment)
+        traj_b = _make_trajectory(
+            global_id=2,
+            camera_id="S01_c001",
+            track_id=20,
+            frames=[
+                TrackletFrame(frame_id=1, timestamp=0.1, bbox=(103, 203, 153, 263), confidence=0.80),
+                TrackletFrame(frame_id=2, timestamp=0.2, bbox=(105, 205, 155, 265), confidence=0.78),
+            ],
+        )
+        trajectories_to_mot_submission([traj_a, traj_b], tmp_path)
+
+        output_file = tmp_path / "S01_c001.txt"
+        lines = output_file.read_text().strip().split("\n")
+
+        # Without NMS: 5 lines (3 from traj_a + 2 from traj_b)
+        # With NMS: 3 lines (traj_b's frames 1&2 are suppressed by traj_a's higher conf)
+        assert len(lines) == 3, f"Expected 3 lines after NMS, got {len(lines)}"
+
+        # All kept predictions should be from traj_a (global_id=1)
+        for line in lines:
+            parts = line.split(",")
+            assert int(parts[1]) == 1, f"Expected global_id 1, got {parts[1]}"
+
+    def test_nms_keeps_non_overlapping_boxes(self, tmp_path: Path):
+        """Two trajectories with non-overlapping boxes on same frame -> both kept."""
+        from athar.evaluation.format_converter import trajectories_to_mot_submission
+
+        # Far apart: no IoU
+        traj_a = _make_trajectory(
+            global_id=1,
+            camera_id="S01_c001",
+            track_id=10,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 150, 260), confidence=0.9),
+            ],
+        )
+        traj_b = _make_trajectory(
+            global_id=2,
+            camera_id="S01_c001",
+            track_id=20,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(500, 600, 550, 660), confidence=0.85),
+            ],
+        )
+        trajectories_to_mot_submission([traj_a, traj_b], tmp_path)
+
+        output_file = tmp_path / "S01_c001.txt"
+        lines = output_file.read_text().strip().split("\n")
+        assert len(lines) == 2, f"Expected 2 lines (both kept), got {len(lines)}"
+
+
+class TestMinSubmissionConfidence:
+    """Verify min_submission_confidence drops weak detections."""
+
+    def test_drops_low_confidence(self, tmp_path: Path):
+        from athar.evaluation.format_converter import trajectories_to_mot_submission
+
+        traj = _make_trajectory(
+            global_id=1,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 150, 260), confidence=0.9),
+                TrackletFrame(frame_id=1, timestamp=0.1, bbox=(102, 202, 152, 262), confidence=0.10),
+                TrackletFrame(frame_id=2, timestamp=0.2, bbox=(104, 204, 154, 264), confidence=0.05),
+            ],
+        )
+        trajectories_to_mot_submission([traj], tmp_path, min_submission_confidence=0.15)
+
+        output_file = tmp_path / "S01_c001.txt"
+        lines = output_file.read_text().strip().split("\n")
+        assert len(lines) == 1, f"Expected 1 line (only conf=0.9 kept), got {len(lines)}"
+
+    def test_zero_threshold_keeps_all(self, tmp_path: Path):
+        from athar.evaluation.format_converter import trajectories_to_mot_submission
+
+        traj = _make_trajectory(
+            global_id=1,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 150, 260), confidence=0.9),
+                TrackletFrame(frame_id=1, timestamp=0.1, bbox=(102, 202, 152, 262), confidence=0.05),
+            ],
+        )
+        trajectories_to_mot_submission([traj], tmp_path, min_submission_confidence=0.0)
+
+        output_file = tmp_path / "S01_c001.txt"
+        lines = output_file.read_text().strip().split("\n")
+        assert len(lines) == 2
+
+
+class TestConfigurableNMSThreshold:
+    """Verify cross_id_nms_iou parameter controls NMS aggressiveness."""
+
+    def test_lower_threshold_removes_more(self, tmp_path: Path):
+        """At IoU=0.3, moderately overlapping boxes get suppressed."""
+        from athar.evaluation.format_converter import trajectories_to_mot_submission
+
+        # Two boxes with ~40% IoU - suppressed at 0.3 but not at 0.5
+        traj_a = _make_trajectory(
+            global_id=1,
+            camera_id="S01_c001",
+            track_id=10,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(100, 200, 200, 300), confidence=0.9),
+            ],
+        )
+        traj_b = _make_trajectory(
+            global_id=2,
+            camera_id="S01_c001",
+            track_id=20,
+            frames=[
+                TrackletFrame(frame_id=0, timestamp=0.0, bbox=(150, 250, 250, 350), confidence=0.7),
+            ],
+        )
+        # At default IoU=0.5 - both kept (IoU~0.25 < 0.5)
+        trajectories_to_mot_submission([traj_a, traj_b], tmp_path, cross_id_nms_iou=0.5)
+        lines_05 = (tmp_path / "S01_c001.txt").read_text().strip().split("\n")
+
+        # At IoU=0.2 - traj_b suppressed
+        import shutil
+        shutil.rmtree(tmp_path)
+        tmp_path.mkdir()
+        trajectories_to_mot_submission([traj_a, traj_b], tmp_path, cross_id_nms_iou=0.2)
+        lines_02 = (tmp_path / "S01_c001.txt").read_text().strip().split("\n")
+
+        assert len(lines_05) >= len(lines_02)
+
+
+class TestAICSubmissionFormat:
+    """Verify AIC submission uses correct column order and 1-based frames."""
+
+    def test_aic_column_order(self, tmp_path: Path):
+        from athar.evaluation.format_converter import trajectories_to_aic_submission
+
+        traj = _make_trajectory(
+            global_id=42,
+            camera_id="S01_c001",
+            frames=[
+                TrackletFrame(frame_id=54, timestamp=5.4, bbox=(100, 200, 150, 250), confidence=0.9),
+            ],
+        )
+        output_file = tmp_path / "submission.txt"
+        trajectories_to_aic_submission([traj], output_file)
+
+        lines = output_file.read_text().strip().split("\n")
+        assert len(lines) == 1
+
+        parts = lines[0].split()
+        # AIC format: camera_id obj_id frame_id x y w h -1 -1
+        assert parts[0] == "S01_c001", f"Col 0 (camera_id): {parts[0]}"
+        assert int(parts[1]) == 42, f"Col 1 (obj_id): {parts[1]}"
+        assert int(parts[2]) == 55, f"Col 2 (frame_id, 1-based): {parts[2]}"
+        assert len(parts) == 9, f"Expected 9 columns, got {len(parts)}"
+        assert parts[7] == "-1", f"Col 7 (sentinel): {parts[7]}"
+        assert parts[8] == "-1", f"Col 8 (sentinel): {parts[8]}"

@@ -1,0 +1,333 @@
+"""Convert between tracking output formats."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
+
+from athar.core.data_models import GlobalTrajectory
+
+
+def _load_wildtrack_roi(
+    annotations_dir: str | Path,
+    margin_cm: float = 100.0,
+) -> Optional[Tuple[float, float, float, float]]:
+    """Compute ground-plane bounding box from WILDTRACK GT annotations.
+
+    Returns (xmin, ymin, xmax, ymax) in cm, expanded by *margin_cm*.
+    """
+    import json
+    import glob
+
+    annotations_dir = Path(annotations_dir)
+    if not annotations_dir.exists():
+        return None
+
+    GRID_W = 480
+    GP_XMIN, GP_YMIN = -300.0, -900.0
+    CELL_SIZE = 2.5
+
+    xs, ys = [], []
+    for jf in sorted(glob.glob(str(annotations_dir / "*.json")))[:10]:  # sample 10 frames
+        with open(jf) as f:
+            for entry in json.load(f):
+                pid = int(entry["positionID"])
+                row, col = divmod(pid, GRID_W)
+                gx = GP_XMIN + col * CELL_SIZE
+                gy = GP_YMIN + row * CELL_SIZE
+                xs.append(gx)
+                ys.append(gy)
+
+    if not xs:
+        return None
+
+    return (
+        min(xs) - margin_cm,
+        min(ys) - margin_cm,
+        max(xs) + margin_cm,
+        max(ys) + margin_cm,
+    )
+
+
+def _foot_to_ground(
+    px: float, py: float,
+    K: np.ndarray, R: np.ndarray, t: np.ndarray,
+) -> Tuple[float, float]:
+    """Back-project a pixel foot point (px, py) onto the Z=0 ground plane.
+
+    Returns ground-plane (x, y) in cm.
+    """
+    K_inv = np.linalg.inv(K)
+    ray = K_inv @ np.array([px, py, 1.0])
+    # Camera centre in world coords
+    C = -R.T @ t
+    d = R.T @ ray
+    # Intersect with Z=0: C[2] + s * d[2] = 0
+    if abs(d[2]) < 1e-9:
+        return float("nan"), float("nan")
+    s = -C[2] / d[2]
+    pt = C + s * d
+    return float(pt[0]), float(pt[1])
+
+
+def trajectories_to_mot_submission(
+    trajectories: List[GlobalTrajectory],
+    output_dir: str | Path,
+    roi_config: Optional[Dict] = None,
+    min_submission_confidence: float = 0.0,
+    cross_id_nms_iou: float = 0.5,
+    max_detections_per_frame: int = 0,
+) -> None:
+    """Convert global trajectories to MOTChallenge submission format.
+
+    Creates one text file per camera with lines:
+        frame_id, global_id, x, y, w, h, confidence, class, visibility
+
+    Args:
+        trajectories: Global trajectories from Stage 4.
+        output_dir: Output directory for MOT-format files.
+        roi_config: Optional dict with keys:
+            - annotations_dir: path to WILDTRACK annotations_positions
+            - calibrations_dir: path to WILDTRACK calibrations
+            - margin_cm: ground-plane ROI margin (default 100)
+        min_submission_confidence: Drop detections below this confidence.
+            Targets weak detections at temporal track edges (approaching/leaving).
+        cross_id_nms_iou: IoU threshold for cross-ID NMS suppression.
+        max_detections_per_frame: Keep only top-K highest-confidence predictions
+            per frame (0 = disabled).  Reduces FP from over-detection.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # -- Optional ground-plane ROI filter (WILDTRACK) ------------------
+    roi_bbox = None
+    cam_calibs = None
+    if roi_config:
+        ann_dir = roi_config.get("annotations_dir")
+        cal_dir = roi_config.get("calibrations_dir")
+        margin = float(roi_config.get("margin_cm", 100.0))
+        if ann_dir:
+            roi_bbox = _load_wildtrack_roi(ann_dir, margin)
+        if cal_dir and roi_bbox is not None:
+            from athar.evaluation.ground_plane_eval import _load_calibration
+            cam_calibs = _load_calibration(Path(cal_dir))
+            logger.info(
+                f"ROI filter active: bbox=({roi_bbox[0]:.0f},{roi_bbox[1]:.0f})-"
+                f"({roi_bbox[2]:.0f},{roi_bbox[3]:.0f}) cm, "
+                f"calibrations for {len(cam_calibs)} cameras"
+            )
+
+    # Group all detections by camera
+    camera_rows = {}
+    filtered_count = 0
+    nan_count = 0
+    invalid_bbox_count = 0
+    total_count = 0
+
+    for traj in trajectories:
+        for tracklet in traj.tracklets:
+            cam_id = tracklet.camera_id
+            if cam_id not in camera_rows:
+                camera_rows[cam_id] = []
+
+            for frame in tracklet.frames:
+                x1, y1, x2, y2 = frame.bbox
+                w = x2 - x1
+                h = y2 - y1
+                total_count += 1
+
+                # Skip interpolated detections (confidence=0) and weak detections
+                if frame.confidence <= min_submission_confidence:
+                    continue
+
+                # Skip invalid bounding boxes (negative width/height)
+                if w <= 0 or h <= 0:
+                    invalid_bbox_count += 1
+                    continue
+
+                # ROI filter: check if foot point projects inside GP ROI
+                if roi_bbox is not None and cam_calibs is not None and cam_id in cam_calibs:
+                    foot_x = (x1 + x2) / 2.0
+                    foot_y = y2  # bottom centre = foot
+                    calib = cam_calibs[cam_id]
+                    gx, gy = _foot_to_ground(
+                        foot_x, foot_y,
+                        calib["K"], calib["R"], calib["tvec"],
+                    )
+                    if np.isnan(gx) or np.isnan(gy):
+                        nan_count += 1
+                        filtered_count += 1
+                        continue
+                    if (
+                        gx < roi_bbox[0] or gx > roi_bbox[2]
+                        or gy < roi_bbox[1] or gy > roi_bbox[3]
+                    ):
+                        filtered_count += 1
+                        continue
+
+                row = (
+                    frame.frame_id + 1,  # MOT format: 1-based frame numbering
+                    traj.global_id,
+                    x1, y1, w, h,
+                    frame.confidence,
+                    tracklet.class_id,
+                    1.0,  # visibility
+                )
+                camera_rows[cam_id].append(row)
+
+    if filtered_count > 0:
+        logger.info(
+            f"ROI filter removed {filtered_count}/{total_count} detections "
+            f"({filtered_count / total_count * 100:.1f}%)"
+            + (f", {nan_count} NaN projections" if nan_count else "")
+        )
+    if invalid_bbox_count > 0:
+        logger.warning(
+            f"Skipped {invalid_bbox_count} detections with invalid bounding boxes (w<=0 or h<=0)"
+        )
+
+    # Write per-camera files
+    for cam_id, rows in camera_rows.items():
+        rows.sort(key=lambda r: (r[0], r[1]))
+        # Deduplicate same (frame, global_id) entries - keep highest confidence.
+        # These can arise when the graph solver incorrectly merges two same-camera
+        # tracklets that share overlapping frames.
+        seen: dict = {}
+        dedup_rows = []
+        dup_count = 0
+        for row in rows:
+            key = (row[0], row[1])  # (frame_id, global_id)
+            if key in seen:
+                dup_count += 1
+                if row[6] > seen[key][6]:  # replace if higher confidence
+                    seen[key] = row
+            else:
+                seen[key] = row
+                dedup_rows.append(row)
+        if dup_count > 0:
+            # Rebuild dedup list preserving insertion order
+            dedup_rows = [seen[k] for k in dict.fromkeys((r[0], r[1]) for r in rows)]
+            logger.warning(f"{cam_id}: removed {dup_count} duplicate (frame,id) rows")
+
+        # Top-K detections per frame: cut the lowest-confidence predictions
+        if max_detections_per_frame > 0:
+            topk_removed = 0
+            frame_groups_topk: dict = {}
+            for row in dedup_rows:
+                frame_groups_topk.setdefault(row[0], []).append(row)
+            topk_rows = []
+            for fid in sorted(frame_groups_topk):
+                frows = frame_groups_topk[fid]
+                if len(frows) <= max_detections_per_frame:
+                    topk_rows.extend(frows)
+                else:
+                    frows.sort(key=lambda r: -r[6])  # highest confidence first
+                    topk_rows.extend(frows[:max_detections_per_frame])
+                    topk_removed += len(frows) - max_detections_per_frame
+            if topk_removed > 0:
+                logger.info(f"{cam_id}: top-K filter removed {topk_removed} low-conf detections (K={max_detections_per_frame})")
+            dedup_rows = topk_rows
+
+        # Cross-ID NMS: remove overlapping predictions from different global IDs
+        # on the same frame.  This catches same-vehicle fragments assigned to
+        # different trajectories, which produce FP for every overlapping frame.
+        nms_removed = 0
+        frame_groups: dict = {}
+        for row in dedup_rows:
+            frame_groups.setdefault(row[0], []).append(row)
+        nms_rows = []
+        for fid in sorted(frame_groups):
+            frows = frame_groups[fid]
+            if len(frows) <= 1:
+                nms_rows.extend(frows)
+                continue
+            # Sort by confidence descending (keep high-conf first)
+            frows.sort(key=lambda r: -r[6])
+            keep = []
+            for row in frows:
+                # row format: (frame_id, global_id, x, y, w, h, conf, class, vis)
+                rx, ry, rw, rh = row[2], row[3], row[4], row[5]
+                suppressed = False
+                for kept in keep:
+                    kx, ky, kw, kh = kept[2], kept[3], kept[4], kept[5]
+                    # Compute IoU (xywh format)
+                    x1 = max(rx, kx)
+                    y1 = max(ry, ky)
+                    x2 = min(rx + rw, kx + kw)
+                    y2 = min(ry + rh, ky + kh)
+                    inter = max(0, x2 - x1) * max(0, y2 - y1)
+                    area_r = rw * rh
+                    area_k = kw * kh
+                    union = area_r + area_k - inter
+                    iou = inter / union if union > 0 else 0
+                    if iou > cross_id_nms_iou:
+                        suppressed = True
+                        break
+                if not suppressed:
+                    keep.append(row)
+                else:
+                    nms_removed += 1
+            nms_rows.extend(keep)
+        if nms_removed > 0:
+            logger.info(f"{cam_id}: cross-ID NMS removed {nms_removed} overlapping predictions")
+        dedup_rows = sorted(nms_rows, key=lambda r: (r[0], r[1]))
+
+        file_path = output_dir / f"{cam_id}.txt"
+        with open(file_path, "w") as f:
+            for row in dedup_rows:
+                f.write(",".join(str(v) for v in row) + "\n")
+
+    logger.info(
+        f"MOT submission written: {len(camera_rows)} cameras, "
+        f"{sum(len(r) for r in camera_rows.values())} detection rows"
+    )
+
+    # -- Per-camera diagnostic summary ----------------------------------------
+    # Helps diagnose FP ratio issues and detect cameras with anomalous counts.
+    global_ids_per_cam = {}
+    for cam_id, rows in sorted(camera_rows.items()):
+        unique_ids = set(r[1] for r in rows)
+        global_ids_per_cam[cam_id] = unique_ids
+        logger.info(
+            f"  {cam_id}: {len(rows):>6d} rows, "
+            f"{len(unique_ids):>3d} trajectory IDs"
+        )
+
+
+def trajectories_to_aic_submission(
+    trajectories: List[GlobalTrajectory],
+    output_path: str | Path,
+) -> None:
+    """Convert global trajectories to AI City Challenge submission format.
+
+    AIC format: camera_id obj_id frame_id x y w h -1 -1
+
+    Args:
+        trajectories: Global trajectories.
+        output_path: Output text file path.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    rows = []
+    for traj in trajectories:
+        for tracklet in traj.tracklets:
+            for frame in tracklet.frames:
+                x1, y1, x2, y2 = frame.bbox
+                w = x2 - x1
+                h = y2 - y1
+                if w <= 0 or h <= 0:
+                    continue
+                rows.append(
+                    f"{tracklet.camera_id} {traj.global_id} {frame.frame_id + 1} "
+                    f"{x1:.1f} {y1:.1f} {w:.1f} {h:.1f} -1 -1"
+                )
+
+    rows.sort()
+    output_path.write_text("\n".join(rows) + "\n")
+    logger.info(f"AIC submission written: {len(rows)} rows to {output_path}")
