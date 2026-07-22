@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 
 from athar import __version__
 
@@ -35,74 +34,57 @@ def _cmd_config_resolve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_video_specs(specs: list[str] | None) -> dict[str, str]:
+    """CAM=PATH pairs -> dict; raises ValueError on malformed specs."""
+    videos: dict[str, str] = {}
+    for spec in specs or []:
+        cam, sep, path = spec.partition("=")
+        if not sep or not cam or not path:
+            raise ValueError(f"--video expects CAM=PATH, got {spec!r}")
+        videos[cam] = path
+    return videos
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
-    import athar.components.adapters  # noqa: F401 — registers detector/tracker/embedders
-    import athar.components.framesources  # noqa: F401 — registers frame sources
-    from athar.contracts.authoring import parse_dotted_overrides
-    from athar.contracts.config import ConfigLayer, ResolvedConfig
-    from athar.contracts.manifest import RunManifest, RunRole
-    from athar.contracts.store import FilesystemRunStore
-    from athar.core.ids import new_run_id
-    from athar.pipeline.ingest import IngestError, ingest_video
+    from athar.contracts.authoring import ConfigAuthoringError
+    from athar.contracts.store import FilesystemRunStore, RunNotFound
+    from athar.pipeline.ingest import IngestError
     from athar.pipeline.runner import PipelineRunner
-    from athar.pipeline.stages.associate import AssociateStage
-    from athar.pipeline.stages.detect_track import DetectTrackStage
-    from athar.pipeline.stages.embed import EmbedStage
-    from athar.pipeline.stages.index import IndexStage
-    from athar.pipeline.stages.package import PackageStage
-    from athar.profiles.builtin import ProfileError, load_profile
-
-    try:
-        profile, defaults = load_profile(args.profile)
-    except ProfileError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-
-    layers = [(ConfigLayer.PROFILE_DEFAULT, defaults)]
-    if args.set:
-        layers.append((ConfigLayer.RUN_OVERRIDE, parse_dotted_overrides(args.set)))
-    config = ResolvedConfig.resolve(layers)
+    from athar.pipeline.setup import (
+        RunSetupError,
+        create_run,
+        default_stages,
+        resume_run,
+    )
+    from athar.profiles.builtin import ProfileError
 
     store = FilesystemRunStore(args.runs_root)
-    if args.resume:
-        try:
-            manifest = store.load(args.resume)
-        except KeyError:
-            print(f"error: run {args.resume!r} not found in {args.runs_root}", file=sys.stderr)
-            return 2
-        if manifest.profile_name != profile.name:
-            print(
-                f"error: run {manifest.run_id} was created with profile "
-                f"{manifest.profile_name!r}, not {profile.name!r}",
-                file=sys.stderr,
-            )
-            return 2
-    else:
-        if not args.video:
-            print("error: at least one --video CAM=PATH is required", file=sys.stderr)
-            return 2
-        manifest = RunManifest(
-            run_id=new_run_id(), role=RunRole(args.role), profile_name=profile.name
-        )
-        manifest.config = config
-        for spec in args.video:
-            cam, sep, path = spec.partition("=")
-            if not sep or not cam or not path:
-                print(f"error: --video expects CAM=PATH, got {spec!r}", file=sys.stderr)
-                return 2
-            timebase = None
-            if Path(path).is_dir() and args.fps:
-                from athar.core.timebase import CameraTimeBase, TimeBaseSource
-
-                timebase = CameraTimeBase(
-                    camera_id=cam, fps=args.fps, source=TimeBaseSource.MANUAL
-                )
+    try:
+        if args.resume:
             try:
-                video = ingest_video(manifest, cam, path, timebase=timebase)
-            except IngestError as exc:
-                print(f"error: {exc}", file=sys.stderr)
+                manifest, profile = resume_run(store, args.resume, args.profile)
+            except RunNotFound:
+                print(f"error: run {args.resume!r} not found in {args.runs_root}",
+                      file=sys.stderr)
                 return 2
-            print(f"ingested {cam}: sha256={video.sha256[:12]}... fps={video.fps}")
+        else:
+            if not args.video:
+                print("error: at least one --video CAM=PATH is required", file=sys.stderr)
+                return 2
+            manifest, profile = create_run(
+                profile_name=args.profile,
+                videos=_parse_video_specs(args.video),
+                role=args.role,
+                fps=args.fps,
+                overrides=args.set,
+                on_ingest=lambda cam, video: print(
+                    f"ingested {cam}: sha256={video.sha256[:12]}... fps={video.fps}"
+                ),
+            )
+    except (ProfileError, IngestError, RunSetupError, ConfigAuthoringError,
+            ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     def console_sink(event) -> None:
         kind = getattr(event, "event", "")
@@ -115,9 +97,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     "stage_skipped": " already complete"}[kind]
             print(f"\n{event.stage}{tail}", end="", file=sys.stderr)
 
-    stages = [DetectTrackStage(), EmbedStage(), IndexStage(), AssociateStage(),
-              PackageStage()]
-    runner = PipelineRunner(store, stages, extra_sinks=[console_sink])
+    runner = PipelineRunner(store, default_stages(), extra_sinks=[console_sink])
     print(f"run {manifest.run_id} [{manifest.role.value}] profile={profile.name} "
           f"config={manifest.config.config_hash[:12]}")
     try:
@@ -239,6 +219,77 @@ def _cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_worker(args: argparse.Namespace) -> int:
+    import logging
+
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    from athar.jobs.worker import run_worker
+
+    return run_worker(
+        args.queue, once=args.once, poll_s=args.poll, worker_id=args.worker_id
+    )
+
+
+def _cmd_jobs(args: argparse.Namespace) -> int:
+    from athar.jobs.queue import JobExecutor, JobNotFound, JobQueue, JobStatus
+    from athar.jobs.service import JobService
+
+    try:
+        if args.subcommand == "submit":
+            try:
+                videos = _parse_video_specs(args.video)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            service = JobService(args.queue, args.runs_root, spawn_worker=False)
+            try:
+                job = service.submit_run(
+                    videos=videos,
+                    profile=args.profile,
+                    role=args.role,
+                    fps=args.fps,
+                    overrides=args.set,
+                    resume_run_id=args.resume,
+                    executor=JobExecutor(args.executor),
+                    priority=args.priority,
+                )
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            finally:
+                service.queue.close()
+            print(job.job_id)
+            print("start a worker with: athar worker --queue " + args.queue,
+                  file=sys.stderr)
+            return 0
+
+        queue = JobQueue(args.queue)
+        try:
+            if args.subcommand == "list":
+                status = JobStatus(args.status) if args.status else None
+                jobs = queue.list(status=status)
+                if not jobs:
+                    print("no jobs")
+                for job in jobs:
+                    run = f" run={job.run_id}" if job.run_id else ""
+                    err = f" error={job.error}" if job.error else ""
+                    print(f"{job.job_id}  {job.kind:<14} {job.status.value:<10} "
+                          f"[{job.executor.value}]{run}{err}")
+            elif args.subcommand == "show":
+                print(queue.get(args.job_id).model_dump_json(indent=2))
+            elif args.subcommand == "cancel":
+                status = queue.request_cancel(args.job_id)
+                print(f"{args.job_id}: {status.value}")
+        finally:
+            queue.close()
+    except (JobNotFound, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def _not_implemented(what: str, phase: str):
     def handler(_args: argparse.Namespace) -> int:
         print(f"`athar {what}` arrives in {phase} — see ROADMAP.md", file=sys.stderr)
@@ -291,6 +342,40 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--min-score", type=float, default=0.0)
     search.add_argument("--runs-root", default="data/runs")
     search.set_defaults(handler=_cmd_search)
+    worker = sub.add_parser("worker", help="run a job-queue worker process")
+    worker.add_argument("--queue", default="data/jobs/jobs.db", help="job queue SQLite path")
+    worker.add_argument("--once", action="store_true",
+                        help="process at most one job, then exit")
+    worker.add_argument("--poll", type=float, default=1.0,
+                        help="idle poll interval in seconds")
+    worker.add_argument("--worker-id", default=None)
+    worker.set_defaults(handler=_cmd_worker)
+
+    jobs = sub.add_parser("jobs", help="submit and inspect queued jobs")
+    jobs_sub = jobs.add_subparsers(dest="subcommand", required=True)
+    j_submit = jobs_sub.add_parser("submit", help="queue a pipeline run")
+    j_submit.add_argument("--queue", default="data/jobs/jobs.db")
+    j_submit.add_argument("--runs-root", default="data/runs")
+    j_submit.add_argument("--profile", default="multiclass")
+    j_submit.add_argument("--video", action="append", metavar="CAM=PATH")
+    j_submit.add_argument("--role", default="gallery",
+                          choices=["gallery", "probe", "benchmark", "adaptation"])
+    j_submit.add_argument("--fps", type=float, default=None)
+    j_submit.add_argument("--set", action="append", metavar="KEY.PATH=VALUE")
+    j_submit.add_argument("--resume", metavar="RUN_ID", default=None)
+    j_submit.add_argument("--executor", default="local", choices=["local", "kaggle"])
+    j_submit.add_argument("--priority", type=int, default=0)
+    j_submit.set_defaults(handler=_cmd_jobs)
+    for name, help_text in [("list", "list jobs"), ("show", "dump one job"),
+                            ("cancel", "request cancellation")]:
+        p = jobs_sub.add_parser(name, help=help_text)
+        p.add_argument("--queue", default="data/jobs/jobs.db")
+        if name == "list":
+            p.add_argument("--status", default=None)
+        else:
+            p.add_argument("job_id")
+        p.set_defaults(handler=_cmd_jobs)
+
     models = sub.add_parser("models", help="model lifecycle registry (D5)")
     models_sub = models.add_subparsers(dest="subcommand", required=True)
 
