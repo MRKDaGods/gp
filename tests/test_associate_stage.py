@@ -210,6 +210,103 @@ class TestAssociate:
         with pytest.raises(NotImplementedError, match="windowed association"):
             _run(store, manifest)
 
+    def test_weighted_stream_fusion(self, store):
+        """Two appearance streams that disagree: default max-merges, weighted
+        fusion averages (renormalized), zero weight drops a stream."""
+
+        def build(config):
+            manifest = RunManifest(
+                run_id=new_run_id(), role=RunRole.GALLERY, profile_name="assoc-test"
+            )
+            manifest.config = config
+            run_dir = store.run_dir(manifest.run_id)
+            (run_dir / "tracklets").mkdir(parents=True, exist_ok=True)
+            (run_dir / "embeddings").mkdir(parents=True, exist_ok=True)
+            base = np.zeros(DIM, dtype=np.float32)
+            base[0] = 1.0
+            ortho = np.zeros(DIM, dtype=np.float32)
+            ortho[1] = 1.0
+            # appearance agrees (cos ~1); clipsenet disagrees (cos 0)
+            spec = {
+                "cam01": {"appearance": base, "clipsenet": base},
+                "cam02": {"appearance": base, "clipsenet": ortho},
+            }
+            streams = {
+                name: {"dim": DIM, "artifacts": []}
+                for name in ("appearance", "clipsenet", "hsv")
+            }
+            for cam, vecs in spec.items():
+                manifest.inputs.append(VideoInput(
+                    camera_id=cam, original_path=f"unused/{cam}", sha256="0" * 64
+                ))
+                payload = {
+                    "schema_version": 1, "camera_id": cam, "observations": {},
+                    "tracklets": [{
+                        "key": {"run_id": manifest.run_id, "camera_id": cam,
+                                "track_id": 1},
+                        "entity_class": "car",
+                        "start_ts_scene_s": 0.0 if cam == "cam01" else 20.0,
+                        "end_ts_scene_s": 5.0 if cam == "cam01" else 25.0,
+                        "observation_count": 10, "mean_confidence": 0.9,
+                    }],
+                }
+                (run_dir / "tracklets" / f"{cam}.json").write_text(
+                    json.dumps(payload), "utf-8"
+                )
+                manifest.register_artifact(ArtifactRecord(
+                    name=f"tracklets.{cam}", relpath=f"tracklets/{cam}.json",
+                    schema_version=1, producer="test", row_count=1,
+                ))
+                all_vecs = dict(vecs, hsv=np.full(4, 0.5, dtype=np.float32))
+                for stream, vec in all_vecs.items():
+                    np.savez(
+                        run_dir / "embeddings" / f"{cam}.{stream}.npz",
+                        embeddings=vec[None, :],
+                        track_ids=np.asarray([1], dtype=np.int64),
+                    )
+                    name = f"embeddings.{cam}.{stream}"
+                    manifest.register_artifact(ArtifactRecord(
+                        name=name, relpath=f"embeddings/{cam}.{stream}.npz",
+                        schema_version=1, producer="test", row_count=1,
+                    ))
+                    streams[stream]["artifacts"].append(name)
+            (run_dir / "embed_summary.json").write_text(
+                json.dumps({"schema_version": 1, "streams": streams}), "utf-8"
+            )
+            manifest.register_artifact(ArtifactRecord(
+                name="embed.summary", relpath="embed_summary.json",
+                schema_version=1, producer="test", row_count=2,
+            ))
+            return manifest
+
+        def appearance_evidence(config) -> float:
+            result = _run(store, build(config))
+            assert result.status == RunStatus.COMPLETED
+            payload = json.loads(
+                store.artifact_path(result, "associate.trajectories").read_text("utf-8")
+            )
+            merged = [t for t in payload["trajectories"] if len(t["members"]) == 2]
+            assert merged, "the pair should merge in every variant"
+            return merged[0]["evidence"]["appearance"]
+
+        # default: max over streams -> the agreeing stream wins
+        assert appearance_evidence(_config()) > 0.95
+        # equal weights: (1*1 + 1*0) / 2
+        even = appearance_evidence(_config(
+            stream_weights={"appearance": 1.0, "clipsenet": 1.0}
+        ))
+        assert abs(even - 0.5) < 0.05
+        # 14t-style downweighted secondary: (1*1 + 0.7*0) / 1.7
+        weighted = appearance_evidence(_config(
+            stream_weights={"appearance": 1.0, "clipsenet": 0.7}
+        ))
+        assert abs(weighted - 1.0 / 1.7) < 0.05
+        # zero weight removes the stream from the mean entirely
+        solo = appearance_evidence(_config(
+            stream_weights={"appearance": 1.0, "clipsenet": 0.0}
+        ))
+        assert solo > 0.95
+
     def test_config_subtree_rebuilds_nested(self):
         cfg = _config()
         weights = config_subtree(cfg, "associate.weights")

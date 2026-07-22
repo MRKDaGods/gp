@@ -135,7 +135,13 @@ class AssociateStage:
         if not streams:
             raise ValueError("associate: no appearance stream to associate on")
 
+        # Optional weighted fusion across appearance streams (v1 14t/14e
+        # recipe: sim = sum(w_s * cos_s) / sum(w_s) over streams that carry
+        # BOTH tracklets). Unset -> the original max-merge, bit-identical.
+        stream_weights = config_subtree(config, "associate.stream_weights") or None
+
         candidates: dict[tuple[int, int], float] = {}
+        per_stream: dict[str, tuple[np.ndarray, dict[int, int]]] = {}
         for stream in streams:
             index = faiss.read_index(str(ctx.artifact_path(f"index.{stream}")))
             if index.ntotal == 0:
@@ -144,6 +150,10 @@ class AssociateStage:
                 ctx.artifact_path(f"index.{stream}.rows").read_text(encoding="utf-8")
             )
             vectors = index.reconstruct_n(0, index.ntotal)
+            if stream_weights is not None:
+                per_stream[stream] = (
+                    vectors, {row: pos for pos, row in enumerate(row_map)}
+                )
             scores, positions = index.search(vectors, min(top_k + 1, index.ntotal))
             for qpos in range(index.ntotal):
                 i = row_map[qpos]
@@ -157,6 +167,27 @@ class AssociateStage:
                         continue
                     pair = (min(i, j), max(i, j))
                     candidates[pair] = max(candidates.get(pair, -1.0), float(score))
+
+        if stream_weights is not None and candidates:
+            # Rescore the candidate union: weighted mean of per-stream cosines
+            # (index vectors are L2-normed -> dot == cosine), renormalized
+            # over the streams that actually carry both rows so a tracklet
+            # missing from one stream is never silently penalized.
+            for pair in list(candidates):
+                i, j = pair
+                numerator = 0.0
+                denominator = 0.0
+                for stream, (vectors, pos_of) in per_stream.items():
+                    if i not in pos_of or j not in pos_of:
+                        continue
+                    weight = float(stream_weights.get(stream, 1.0))
+                    if weight <= 0.0:
+                        continue
+                    similarity = float(vectors[pos_of[i]] @ vectors[pos_of[j]])
+                    numerator += weight * similarity
+                    denominator += weight
+                if denominator > 0.0:
+                    candidates[pair] = numerator / denominator
 
         filtered = mutual_nearest_neighbor_filter(
             [(i, j, s) for (i, j), s in candidates.items()],

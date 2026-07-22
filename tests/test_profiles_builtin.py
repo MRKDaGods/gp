@@ -23,6 +23,33 @@ class TestBuiltin:
             assert profile.branches and isinstance(defaults, dict)
 
 
+class TestProduction:
+    def test_adds_clipsenet_to_vehicle_branch_only(self):
+        profile, defaults = load_profile("production")
+        assert profile.name == "production"
+        vehicle = next(
+            b for b in profile.branches if EntityClass.CAR in b.entity_classes
+        )
+        person = next(
+            b for b in profile.branches if EntityClass.PERSON in b.entity_classes
+        )
+        assert [e.name for e in vehicle.embedders] == [
+            "transreid_v1", "clipsenet_v1", "hsv_v1",
+        ]
+        assert "clipsenet_v1" not in [e.name for e in person.embedders]
+        # 14t recipe reference weighting, renormalized fusion in associate
+        assert defaults["associate"]["stream_weights"] == {
+            "transreid_primary": 1.0, "clipsenet": 0.7,
+        }
+
+    def test_parity_profile_untouched(self):
+        # D18: production upgrades must never leak into the parity profile
+        profile, defaults = load_profile("multiclass")
+        for branch in profile.branches:
+            assert "clipsenet_v1" not in [e.name for e in branch.embedders]
+        assert "stream_weights" not in defaults["associate"]
+
+
 class TestYamlProfiles:
     def test_yaml_roundtrip(self, tmp_path):
         profile, defaults = load_profile("multiclass")
