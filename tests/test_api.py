@@ -33,7 +33,9 @@ from athar.serving.registry import (  # noqa: E402
 
 from test_search_engine import _unit, _write_run  # noqa: E402
 
-PASSWORDS = {"admin": "pw-admin", "inv": "pw-inv", "view": "pw-view"}
+PASSWORDS = {
+    "admin": "pw-admin", "inv": "pw-inv", "inv2": "pw-inv2", "view": "pw-view",
+}
 
 
 @pytest.fixture()
@@ -55,6 +57,7 @@ def client(settings):
     with services.session_factory() as db:
         create_user(db, "admin", PASSWORDS["admin"], Role.ADMIN)
         create_user(db, "inv", PASSWORDS["inv"], Role.INVESTIGATOR)
+        create_user(db, "inv2", PASSWORDS["inv2"], Role.INVESTIGATOR)
         create_user(db, "view", PASSWORDS["view"], Role.VIEWER)
         db.commit()
     with TestClient(app) as test_client:
@@ -324,6 +327,156 @@ class TestSearch:
             json={"gallery_run_id": gallery.run_id, "probe_run_id": probe.run_id},
         )
         assert response.status_code == 403
+
+
+class TestCases:
+    def _create(self, client, title="Mall incident 14"):
+        response = client.post("/cases", json={"title": title})
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    def test_ownership_scoping(self, client):
+        login(client, "inv")
+        case = self._create(client)
+        assert case["owner"] == "inv"
+
+        # another investigator: invisible in list, 404 (not 403) by id
+        login(client, "inv2")
+        assert client.get("/cases").json() == []
+        assert client.get(f"/cases/{case['case_id']}").status_code == 404
+        denied = client.patch(
+            f"/cases/{case['case_id']}", json={"status": "closed"}
+        )
+        assert denied.status_code == 404  # existence is not confirmed
+
+        # admin sees and can touch everything
+        login(client, "admin")
+        assert [c["case_id"] for c in client.get("/cases").json()] == [case["case_id"]]
+        assert client.get(f"/cases/{case['case_id']}").status_code == 200
+
+        # viewers cannot create cases at all
+        login(client, "view")
+        assert client.post("/cases", json={"title": "x"}).status_code == 403
+        assert client.get("/cases").json() == []
+
+    def test_workspace_flow_confirm(self, client, gallery, probe):
+        login(client, "inv")
+        case = self._create(client)
+        case_id = case["case_id"]
+
+        # attach both evidence runs; role is copied from the manifest
+        attached = client.post(
+            f"/cases/{case_id}/runs", json={"run_id": gallery.run_id}
+        )
+        assert attached.status_code == 201
+        client.post(f"/cases/{case_id}/runs", json={"run_id": probe.run_id})
+        detail = client.get(f"/cases/{case_id}").json()
+        assert {r["run_id"]: r["role"] for r in detail["runs"]} == {
+            gallery.run_id: "gallery", probe.run_id: "probe",
+        }
+
+        # target + hypothesis from a search-hit-shaped payload
+        target = client.post(
+            f"/cases/{case_id}/targets", json={"label": "Suspect A"}
+        ).json()
+        hyp = client.post(
+            f"/cases/{case_id}/targets/{target['target_id']}/hypotheses",
+            json={"run_id": gallery.run_id, "camera_id": "g1", "track_id": 1,
+                  "raw_score": 0.97, "stream": "appearance"},
+        )
+        assert hyp.status_code == 201
+        hyp_id = hyp.json()["hypothesis_id"]
+        assert hyp.json()["status"] == "proposed"
+        assert hyp.json()["probability"] is None  # uncalibrated: no invented numbers
+
+        # confirm: attributed decision, member appears
+        decided = client.post(
+            f"/cases/{case_id}/targets/{target['target_id']}/hypotheses/{hyp_id}/decide",
+            json={"status": "confirmed"},
+        ).json()
+        assert decided["status"] == "confirmed"
+        assert decided["decided_by"] == "inv"
+        assert decided["decided_at"] is not None
+        detail = client.get(f"/cases/{case_id}").json()
+        assert detail["targets"][0]["members"] == [
+            {"run_id": gallery.run_id, "camera_id": "g1", "track_id": 1}
+        ]
+
+        # a decision is final — no re-deciding
+        again = client.post(
+            f"/cases/{case_id}/targets/{target['target_id']}/hypotheses/{hyp_id}/decide",
+            json={"status": "rejected"},
+        )
+        assert again.status_code == 409
+
+        # the whole trail is in the audit chain
+        login(client, "admin")
+        actions = [r["action"] for r in client.get("/audit").json()]
+        for expected in ("case_created", "case_run_attached", "target_created",
+                         "hypothesis_proposed", "hypothesis_decided"):
+            assert expected in actions, expected
+        assert client.get("/audit/verify").json()["intact"] is True
+
+    def test_reject_adds_no_member(self, client, gallery):
+        login(client, "inv")
+        case_id = self._create(client)["case_id"]
+        client.post(f"/cases/{case_id}/runs", json={"run_id": gallery.run_id})
+        target = client.post(
+            f"/cases/{case_id}/targets", json={"label": "Suspect B"}
+        ).json()
+        hyp = client.post(
+            f"/cases/{case_id}/targets/{target['target_id']}/hypotheses",
+            json={"run_id": gallery.run_id, "camera_id": "g2", "track_id": 1,
+                  "raw_score": 0.4},
+        ).json()
+        client.post(
+            f"/cases/{case_id}/targets/{target['target_id']}/hypotheses"
+            f"/{hyp['hypothesis_id']}/decide",
+            json={"status": "rejected"},
+        )
+        detail = client.get(f"/cases/{case_id}").json()
+        assert detail["targets"][0]["members"] == []
+        assert detail["targets"][0]["hypotheses"][0]["status"] == "rejected"
+
+    def test_evidence_guards(self, client, gallery, probe):
+        login(client, "inv")
+        case_id = self._create(client)["case_id"]
+
+        # unknown run 404; duplicate attach 409
+        ghost = client.post(f"/cases/{case_id}/runs", json={"run_id": "run-ghost"})
+        assert ghost.status_code == 404
+        client.post(f"/cases/{case_id}/runs", json={"run_id": gallery.run_id})
+        dup = client.post(f"/cases/{case_id}/runs", json={"run_id": gallery.run_id})
+        assert dup.status_code == 409
+
+        # hypotheses may only cite runs attached to the case
+        target = client.post(
+            f"/cases/{case_id}/targets", json={"label": "T"}
+        ).json()
+        unattached = client.post(
+            f"/cases/{case_id}/targets/{target['target_id']}/hypotheses",
+            json={"run_id": probe.run_id, "camera_id": "p1", "track_id": 5,
+                  "raw_score": 0.9},
+        )
+        assert unattached.status_code == 409
+        assert "attach" in unattached.json()["detail"]
+
+        # detach works and is idempotent-guarded
+        gone = client.delete(f"/cases/{case_id}/runs/{gallery.run_id}")
+        assert gone.status_code == 204
+        assert client.get(f"/cases/{case_id}").json()["runs"] == []
+        missing = client.delete(f"/cases/{case_id}/runs/{gallery.run_id}")
+        assert missing.status_code == 404
+
+    def test_update_and_close(self, client):
+        login(client, "inv")
+        case_id = self._create(client)["case_id"]
+        updated = client.patch(
+            f"/cases/{case_id}", json={"title": "Renamed", "status": "closed"}
+        ).json()
+        assert (updated["title"], updated["status"]) == ("Renamed", "closed")
+        summary = client.get("/cases").json()[0]
+        assert summary["status"] == "closed"
 
 
 class TestAudit:

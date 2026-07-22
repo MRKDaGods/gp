@@ -76,13 +76,14 @@ def create_app(settings: Optional[ApiSettings] = None) -> FastAPI:
             allow_headers=["*"],
         )
 
-    from athar.api.routers import auditlog, auth, jobs, models, runs, search
+    from athar.api.routers import auditlog, auth, cases, jobs, models, runs, search
 
     app.include_router(auth.router)
     app.include_router(runs.router)
     app.include_router(jobs.router)
     app.include_router(models.router)
     app.include_router(search.router)
+    app.include_router(cases.router)
     app.include_router(auditlog.router)
 
     @app.get("/health", tags=["meta"])

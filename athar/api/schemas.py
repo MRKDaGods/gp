@@ -96,6 +96,103 @@ class SearchResponse(BaseModel):
     hits: list[SearchHitOut]
 
 
+class CaseCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=256)
+
+
+class CaseUpdateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    status: Optional[Literal["open", "closed"]] = None
+
+
+class CaseSummary(BaseModel):
+    case_id: str
+    title: str
+    status: str
+    owner: str
+    num_runs: int
+    num_targets: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CaseRunOut(BaseModel):
+    run_id: str
+    role: str
+    attached_by: str
+    attached_at: datetime
+
+
+class AttachRunRequest(BaseModel):
+    run_id: str
+
+
+class TargetCreateRequest(BaseModel):
+    label: str = Field(min_length=1, max_length=256)
+
+
+class TrackRefOut(BaseModel):
+    run_id: str
+    camera_id: str
+    track_id: int
+
+
+class HypothesisCreateRequest(BaseModel):
+    kind: Literal[
+        "appearance", "face", "gait", "boarding", "alighting", "manual"
+    ] = "appearance"
+    run_id: str
+    camera_id: str
+    track_id: int
+    raw_score: float = 1.0
+    probability: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Calibrated P(same identity) as returned by /search; "
+        "null when the stream was uncalibrated",
+    )
+    stream: Optional[str] = None
+
+
+class HypothesisOut(BaseModel):
+    hypothesis_id: int
+    kind: str
+    run_id: str
+    camera_id: str
+    track_id: int
+    raw_score: float
+    probability: Optional[float]
+    stream: Optional[str]
+    status: str
+    proposed_by: str
+    created_at: datetime
+    decided_by: Optional[str]
+    decided_at: Optional[datetime]
+
+
+class DecideRequest(BaseModel):
+    status: Literal["confirmed", "rejected"]
+
+
+class TargetOut(BaseModel):
+    target_id: str
+    label: str
+    created_by: str
+    created_at: datetime
+    members: list[TrackRefOut]
+    hypotheses: list[HypothesisOut]
+
+
+class CaseDetail(BaseModel):
+    case_id: str
+    title: str
+    status: str
+    owner: str
+    created_at: datetime
+    updated_at: datetime
+    runs: list[CaseRunOut]
+    targets: list[TargetOut]
+
+
 class AuditRecordOut(BaseModel):
     seq: int
     ts: str
