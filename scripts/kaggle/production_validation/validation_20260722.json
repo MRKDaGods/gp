@@ -1,0 +1,30 @@
+{
+  "git_sha": "9280a099fda2c06663ae3920464056a6bc989f4c",
+  "config_hash": "d39193234da9a8eecb2e19e4c13ebe0d1d4f51a0b0fa5741f70b0ec59fc49ad7",
+  "run_id": "run-20260722-144640-8df968",
+  "cameras": [
+    "c006",
+    "c007"
+  ],
+  "streams": [
+    "clipsenet",
+    "dinov2",
+    "hsv",
+    "transreid_person",
+    "transreid_primary"
+  ],
+  "num_identities": 9,
+  "num_cross_camera": 1,
+  "cross_camera_evidence": [
+    {
+      "global_id": 0,
+      "entity_class": "car",
+      "confidence": 0.6396180566287197,
+      "evidence": {
+        "appearance": 0.4769532765930677,
+        "hsv": 0.8130296050626609,
+        "spatiotemporal": 0.9145030838504064
+      }
+    }
+  ]
+}
