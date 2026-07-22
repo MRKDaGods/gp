@@ -79,17 +79,24 @@ def fetch_cityflow_cams() -> list[tuple[str, Path]]:
         staging = Path("/tmp/_aic22_staging")
         staging.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(str(archive)) as zf:
-            # only the validation scene's members — no need for all 20GB on disk
-            members = [m for m in zf.namelist() if "/validation/" in m]
+            # only the validation scene's members — no need for all 20GB on
+            # disk (names may or may not carry a top-level archive prefix)
+            members = [m for m in zf.namelist()
+                       if m.startswith("validation/") or "/validation/" in m]
             zf.extractall(str(staging), members=members or None)
         archive.unlink()
         root = staging
 
-    # group vdo.avi by scene dir; first scene with >= 2 cams wins
+    # group vdo.avi by scene dir; prefer the validation split, then the
+    # first scene with >= 2 cams
     by_scene: dict[Path, list[Path]] = {}
     for vdo in sorted(root.rglob("vdo.avi")):
         by_scene.setdefault(vdo.parent.parent, []).append(vdo)
-    for scene, videos in sorted(by_scene.items()):
+    ordered = sorted(
+        by_scene.items(),
+        key=lambda item: (0 if "validation" in str(item[0]) else 1, str(item[0])),
+    )
+    for scene, videos in ordered:
         if len(videos) >= 2:
             picked = videos[:2]
             print(f"scene {scene.name}: using " +
@@ -156,8 +163,10 @@ def main() -> None:
     cmd = [sys.executable, "-m", "athar.cli.main", "run",
            "--profile", "production", "--role", "gallery",
            "--runs-root", str(RUNS_ROOT),
-           "--set", "detect_track.device=cuda",
-           "--set", "embed.device=cuda"]
+           # cuda:0, not bare "cuda": ultralytics select_device writes the
+           # string into CUDA_VISIBLE_DEVICES and "cuda" masks every GPU
+           "--set", "detect_track.device=cuda:0",
+           "--set", "embed.device=cuda:0"]
     for cam_name, video in cams:
         cmd += ["--video", f"{cam_name}={video}"]
     run(cmd, cwd=PROJECT, env=env)
