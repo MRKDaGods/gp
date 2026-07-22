@@ -1,3 +1,6 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -13,15 +16,17 @@ const STATUS_CLASSES: Record<string, string> = {
   cancelled: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   failed: "bg-destructive/10 text-destructive dark:bg-destructive/20",
   rejected: "bg-destructive/10 text-destructive dark:bg-destructive/20",
+  closed: "bg-muted text-muted-foreground",
 };
 
 export function StatusBadge({ status }: Readonly<{ status: string }>) {
+  const t = useTranslations("statuses");
   return (
     <Badge
       variant="secondary"
       className={cn("capitalize", STATUS_CLASSES[status])}
     >
-      {status}
+      {status in STATUS_CLASSES ? t(status) : status}
     </Badge>
   );
 }
