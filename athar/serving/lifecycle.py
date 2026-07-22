@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -44,15 +45,17 @@ class ModelLifecycleDB:
     def __init__(self, db_path: Path | str = DEFAULT_DB) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.db_path))
+        # served from FastAPI's threadpool -> cross-thread use behind _lock
+        self.conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        self._lock = threading.RLock()
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA busy_timeout=5000")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self._create_tables()
 
     def _create_tables(self) -> None:
-        with self.conn:
+        with self._lock, self.conn:
             self.conn.execute(
                 """CREATE TABLE IF NOT EXISTS models (
                     model_id TEXT PRIMARY KEY,
@@ -124,12 +127,13 @@ class ModelLifecycleDB:
         )
 
     def add(self, entry: ModelEntry, actor: str = "") -> None:
-        existing = self.conn.execute(
-            "SELECT 1 FROM models WHERE model_id = ?", (entry.model_id,)
-        ).fetchone()
+        with self._lock:
+            existing = self.conn.execute(
+                "SELECT 1 FROM models WHERE model_id = ?", (entry.model_id,)
+            ).fetchone()
         if existing:
             raise LifecycleError(f"model {entry.model_id!r} already registered")
-        with self.conn:
+        with self._lock, self.conn:
             self._write_entry(entry)
             self._event(
                 entry.model_id, "register", to_stage=entry.stage.value, actor=actor
@@ -137,9 +141,10 @@ class ModelLifecycleDB:
 
     # -- read path -------------------------------------------------------------
     def get(self, model_id: str) -> ModelEntry:
-        row = self.conn.execute(
-            "SELECT entry_json FROM models WHERE model_id = ?", (model_id,)
-        ).fetchone()
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT entry_json FROM models WHERE model_id = ?", (model_id,)
+            ).fetchone()
         if row is None:
             raise ModelNotFound(model_id)
         return ModelEntry.model_validate_json(row["entry_json"])
@@ -160,10 +165,9 @@ class ModelLifecycleDB:
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
         query += " ORDER BY model_id"
-        return [
-            ModelEntry.model_validate_json(r["entry_json"])
-            for r in self.conn.execute(query, params)
-        ]
+        with self._lock:
+            rows = self.conn.execute(query, params).fetchall()
+        return [ModelEntry.model_validate_json(r["entry_json"]) for r in rows]
 
     def production(self, task: ModelTask) -> Optional[ModelEntry]:
         entries = self.list(task=task, stage=ModelStage.PRODUCTION)
@@ -181,7 +185,9 @@ class ModelLifecycleDB:
             query += " WHERE model_id = ?"
             params = (model_id,)
         query += " ORDER BY seq"
-        return [dict(r) for r in self.conn.execute(query, params)]
+        with self._lock:
+            rows = self.conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
 
     # -- lifecycle transitions ---------------------------------------------------
     def promote(
@@ -203,7 +209,7 @@ class ModelLifecycleDB:
             if current is not None and current.model_id != model_id:
                 superseded = current
         entry.promote(to, eval_report)  # raises on illegal/ungated transitions
-        with self.conn:
+        with self._lock, self.conn:
             if superseded is not None:
                 superseded.stage = ModelStage.VALIDATED
                 self._write_entry(superseded)
@@ -227,7 +233,7 @@ class ModelLifecycleDB:
         entry = self.get(model_id)
         from_stage = entry.stage
         entry.promote(ModelStage.RETIRED)
-        with self.conn:
+        with self._lock, self.conn:
             self._write_entry(entry)
             self._event(
                 model_id, "retire",
@@ -243,8 +249,9 @@ class ModelLifecycleDB:
         current = self.production(task)
         if current is None:
             raise LifecycleError(f"no production model for {task.value} to roll back")
-        promote_event = self.conn.execute(
-            """SELECT * FROM lifecycle_events
+        with self._lock:
+            promote_event = self.conn.execute(
+                """SELECT * FROM lifecycle_events
                WHERE model_id = ? AND action = 'promote' AND to_stage = 'production'
                ORDER BY seq DESC LIMIT 1""",
             (current.model_id,),
@@ -254,7 +261,7 @@ class ModelLifecycleDB:
             candidate = self.get(promote_event["superseded_model"])
             if candidate.stage is ModelStage.VALIDATED:
                 restored = candidate
-        with self.conn:
+        with self._lock, self.conn:
             current.stage = ModelStage.VALIDATED
             self._write_entry(current)
             if restored is not None:

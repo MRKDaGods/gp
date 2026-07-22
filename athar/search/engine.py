@@ -34,6 +34,13 @@ class SearchError(RuntimeError):
     pass
 
 
+class IncompatibleStreams(SearchError):
+    """The probe/gallery PAIR cannot be scored together (missing stream on
+    the probe, dim mismatch, projection-lineage mismatch). The API maps
+    this to HTTP 409 — an explicit conflict, never a silent fallback (the
+    v1 global-PCA bug class)."""
+
+
 @dataclass(frozen=True)
 class SearchHit:
     probe_key: TrackKey
@@ -216,17 +223,20 @@ class GallerySearcher:
             probe_store.artifact_path(probe, "embed.summary").read_text(encoding="utf-8")
         )
         if stream not in probe_summary["streams"]:
-            raise SearchError(f"probe {probe.run_id} has no stream {stream!r}")
+            raise IncompatibleStreams(
+                f"probe {probe.run_id} has no stream {stream!r} — it was "
+                f"processed with a different profile than the gallery"
+            )
         g_dim = gallery_streams[stream]["dim"]
         p_dim = probe_summary["streams"][stream]["dim"]
         if g_dim != p_dim:
-            raise SearchError(
+            raise IncompatibleStreams(
                 f"stream {stream!r} dim mismatch: gallery {g_dim} vs probe {p_dim}"
             )
         g_proj = gallery_streams[stream].get("projection_fitted_on")
         p_proj = probe_summary["streams"][stream].get("projection_fitted_on")
         if g_proj != p_proj:
-            raise SearchError(
+            raise IncompatibleStreams(
                 f"stream {stream!r} projection lineage mismatch: gallery "
                 f"{g_proj!r} vs probe {p_proj!r} — refusing cross-lineage scoring"
             )

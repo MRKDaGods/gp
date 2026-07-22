@@ -290,6 +290,52 @@ def _cmd_jobs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_users(args: argparse.Namespace) -> int:
+    from sqlalchemy import select
+
+    from athar.api import audit
+    from athar.api.db import Role, UserRow, make_engine, make_session_factory
+    from athar.api.security import AuthError, create_user
+
+    engine = make_engine(args.app_db)
+    factory = make_session_factory(engine)
+    try:
+        with factory() as db:
+            if args.subcommand == "add":
+                try:
+                    user = create_user(
+                        db, args.username, args.password, Role(args.role)
+                    )
+                except AuthError as exc:
+                    print(f"error: {exc}", file=sys.stderr)
+                    return 2
+                audit.append(db, "cli", "user_created",
+                             username=user.username, role=user.role)
+                db.commit()
+                print(f"created {user.username} [{user.role}]")
+            elif args.subcommand == "list":
+                users = db.scalars(select(UserRow).order_by(UserRow.username)).all()
+                if not users:
+                    print("no users (create one with: athar users add ...)")
+                for user in users:
+                    flag = " (disabled)" if user.disabled else ""
+                    print(f"{user.username:<24} {user.role}{flag}")
+    finally:
+        engine.dispose()
+    return 0
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from athar.api.app import create_app
+    from athar.api.settings import ApiSettings
+
+    app = create_app(ApiSettings())  # paths/flags come from ATHAR_* env vars
+    uvicorn.run(app, host=args.host, port=args.port)
+    return 0
+
+
 def _not_implemented(what: str, phase: str):
     def handler(_args: argparse.Namespace) -> int:
         print(f"`athar {what}` arrives in {phase} — see ROADMAP.md", file=sys.stderr)
@@ -342,6 +388,24 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--min-score", type=float, default=0.0)
     search.add_argument("--runs-root", default="data/runs")
     search.set_defaults(handler=_cmd_search)
+    users = sub.add_parser("users", help="manage API users (local operator only)")
+    users_sub = users.add_subparsers(dest="subcommand", required=True)
+    u_add = users_sub.add_parser("add", help="create a user")
+    u_add.add_argument("username")
+    u_add.add_argument("--password", required=True)
+    u_add.add_argument("--role", default="viewer",
+                       choices=["viewer", "investigator", "admin"])
+    u_add.add_argument("--app-db", default="data/app/app.db")
+    u_add.set_defaults(handler=_cmd_users)
+    u_list = users_sub.add_parser("list", help="list users")
+    u_list.add_argument("--app-db", default="data/app/app.db")
+    u_list.set_defaults(handler=_cmd_users)
+
+    serve = sub.add_parser("serve", help="run the API server (settings via ATHAR_* env)")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.set_defaults(handler=_cmd_serve)
+
     worker = sub.add_parser("worker", help="run a job-queue worker process")
     worker.add_argument("--queue", default="data/jobs/jobs.db", help="job queue SQLite path")
     worker.add_argument("--once", action="store_true",
