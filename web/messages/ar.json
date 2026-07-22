@@ -24,7 +24,32 @@
     "status": "الحالة",
     "profile": "الملف",
     "artifacts": "المخرجات",
-    "created": "الإنشاء"
+    "created": "الإنشاء",
+    "monitor": "مراقبة",
+    "live": "مباشر",
+    "connecting": "جارٍ الاتصال",
+    "stream_ended": "انتهى البث",
+    "stream_error": "لا توجد أحداث متاحة",
+    "overview": "نظرة عامة",
+    "config": "الإعدادات",
+    "provenance": "طبقة المصدر",
+    "key": "المفتاح",
+    "value": "القيمة",
+    "config_hash": "بصمة الإعدادات",
+    "no_config": "لا توجد إعدادات مجمدة",
+    "inputs": "مدخلات الأدلة",
+    "camera": "الكاميرا",
+    "sha256": "البصمة",
+    "duration": "المدة (ث)",
+    "fps": "الإطارات/ث",
+    "artifacts_title": "المخرجات",
+    "producer": "المنتِج",
+    "rows": "الصفوف",
+    "download": "تنزيل",
+    "events": "الأحداث",
+    "no_events": "لا توجد أحداث بعد",
+    "error_label": "الخطأ",
+    "not_found": "المعالجة غير موجودة"
   },
   "jobs": {
     "title": "المهام",
@@ -33,7 +58,9 @@
     "kind": "النوع",
     "status": "الحالة",
     "executor": "المنفذ",
-    "cancel": "إلغاء"
+    "cancel": "إلغاء",
+    "monitor": "مراقبة",
+    "hide": "إخفاء"
   },
   "theme": {
     "toggle": "تبديل المظهر"

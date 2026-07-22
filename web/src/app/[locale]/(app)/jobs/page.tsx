@@ -1,7 +1,9 @@
 "use client";
 
+import { Fragment } from "react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { EventStream } from "@/components/event-stream";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,13 +20,14 @@ import {
   listJobsJobsGet,
   type Job,
 } from "@/lib/api";
-import "@/lib/client";
+import { API_URL } from "@/lib/client";
 
 const ACTIVE = new Set(["queued", "claimed", "running"]);
 
 export default function JobsPage() {
   const t = useTranslations("jobs");
   const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [monitoring, setMonitoring] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     listJobsJobsGet().then(({ data }) => setJobs(data ?? []));
@@ -63,27 +66,53 @@ export default function JobsPage() {
             </TableHeader>
             <TableBody>
               {jobs.map((job) => (
-                <TableRow key={job.job_id}>
-                  <TableCell className="font-mono text-xs">
-                    {job.job_id}
-                  </TableCell>
-                  <TableCell>{job.kind}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={job.status ?? "queued"} />
-                  </TableCell>
-                  <TableCell>{job.executor}</TableCell>
-                  <TableCell>
-                    {ACTIVE.has(job.status ?? "") && (
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        onClick={() => cancel(job.job_id!)}
-                      >
-                        {t("cancel")}
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
+                <Fragment key={job.job_id}>
+                  <TableRow>
+                    <TableCell className="font-mono text-xs">
+                      {job.job_id}
+                    </TableCell>
+                    <TableCell>{job.kind}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={job.status ?? "queued"} />
+                    </TableCell>
+                    <TableCell>{job.executor}</TableCell>
+                    <TableCell className="space-x-2">
+                      {job.run_id && (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() =>
+                            setMonitoring((current) =>
+                              current === job.job_id ? null : job.job_id!,
+                            )
+                          }
+                        >
+                          {monitoring === job.job_id
+                            ? t("hide")
+                            : t("monitor")}
+                        </Button>
+                      )}
+                      {ACTIVE.has(job.status ?? "") && (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => cancel(job.job_id!)}
+                        >
+                          {t("cancel")}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                  {monitoring === job.job_id && (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <EventStream
+                          url={`${API_URL}/jobs/${job.job_id}/events/stream`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
               ))}
             </TableBody>
           </Table>

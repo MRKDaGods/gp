@@ -24,7 +24,32 @@
     "status": "Status",
     "profile": "Profile",
     "artifacts": "Artifacts",
-    "created": "Created"
+    "created": "Created",
+    "monitor": "Monitor",
+    "live": "Live",
+    "connecting": "Connecting",
+    "stream_ended": "Stream ended",
+    "stream_error": "No events available",
+    "overview": "Overview",
+    "config": "Configuration",
+    "provenance": "Source layer",
+    "key": "Key",
+    "value": "Value",
+    "config_hash": "Config hash",
+    "no_config": "No frozen configuration",
+    "inputs": "Evidence inputs",
+    "camera": "Camera",
+    "sha256": "SHA-256",
+    "duration": "Duration (s)",
+    "fps": "FPS",
+    "artifacts_title": "Artifacts",
+    "producer": "Producer",
+    "rows": "Rows",
+    "download": "Download",
+    "events": "Events",
+    "no_events": "No events yet",
+    "error_label": "Error",
+    "not_found": "Run not found"
   },
   "jobs": {
     "title": "Jobs",
@@ -33,7 +58,9 @@
     "kind": "Kind",
     "status": "Status",
     "executor": "Executor",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "monitor": "Monitor",
+    "hide": "Hide"
   },
   "theme": {
     "toggle": "Toggle theme"
