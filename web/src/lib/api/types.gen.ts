@@ -1275,6 +1275,74 @@ export type GetReportRunsRunIdReportGetResponses = {
 
 export type GetReportRunsRunIdReportGetResponse = GetReportRunsRunIdReportGetResponses[keyof GetReportRunsRunIdReportGetResponses];
 
+export type ExportReportHtmlRunsRunIdReportHtmlGetData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: {
+        /**
+         * Locale
+         */
+        locale?: string;
+    };
+    url: '/runs/{run_id}/report.html';
+};
+
+export type ExportReportHtmlRunsRunIdReportHtmlGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportReportHtmlRunsRunIdReportHtmlGetError = ExportReportHtmlRunsRunIdReportHtmlGetErrors[keyof ExportReportHtmlRunsRunIdReportHtmlGetErrors];
+
+export type ExportReportHtmlRunsRunIdReportHtmlGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: string;
+};
+
+export type ExportReportHtmlRunsRunIdReportHtmlGetResponse = ExportReportHtmlRunsRunIdReportHtmlGetResponses[keyof ExportReportHtmlRunsRunIdReportHtmlGetResponses];
+
+export type ExportReportPdfRunsRunIdReportPdfGetData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: {
+        /**
+         * Locale
+         */
+        locale?: string;
+    };
+    url: '/runs/{run_id}/report.pdf';
+};
+
+export type ExportReportPdfRunsRunIdReportPdfGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportReportPdfRunsRunIdReportPdfGetError = ExportReportPdfRunsRunIdReportPdfGetErrors[keyof ExportReportPdfRunsRunIdReportPdfGetErrors];
+
+export type ExportReportPdfRunsRunIdReportPdfGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type DownloadArtifactRunsRunIdArtifactsNameGetData = {
     body?: never;
     path: {

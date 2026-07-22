@@ -49,7 +49,8 @@
     "events": "Events",
     "no_events": "No events yet",
     "error_label": "Error",
-    "not_found": "Run not found"
+    "not_found": "Run not found",
+    "report_pdf": "PDF report"
   },
   "jobs": {
     "title": "Jobs",

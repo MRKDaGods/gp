@@ -153,6 +153,59 @@ def _cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_report(args: argparse.Namespace) -> int:
+    import json
+    from pathlib import Path
+
+    from athar.contracts.store import FilesystemRunStore, RunNotFound
+    from athar.reporting import (
+        ReportError,
+        html_to_pdf,
+        load_weight_shas,
+        models_from_config,
+        render_report_html,
+    )
+
+    store = FilesystemRunStore(args.runs_root)
+    try:
+        manifest = store.load(args.run_id)
+    except RunNotFound as exc:
+        print(f"error: run not found: {exc}", file=sys.stderr)
+        return 2
+    if "package.report" not in manifest.artifacts:
+        print(
+            "error: run has no package.report artifact (package stage not run)",
+            file=sys.stderr,
+        )
+        return 2
+    report = json.loads(
+        store.artifact_path(manifest, "package.report").read_text("utf-8")
+    )
+    weight_shas = load_weight_shas(Path(args.weights_manifest))
+    models = (
+        models_from_config(manifest.config.values, weight_shas)
+        if manifest.config
+        else []
+    )
+    html = render_report_html(
+        report, models=models, run_dir=store.run_dir(args.run_id),
+        locale=args.locale,
+    )
+    out = Path(args.output) if args.output else Path(
+        f"athar-report-{args.run_id}.{'html' if args.html else 'pdf'}"
+    )
+    if args.html:
+        out.write_text(html, encoding="utf-8")
+    else:
+        try:
+            out.write_bytes(html_to_pdf(html))
+        except ReportError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    print(f"wrote {out}")
+    return 0
+
+
 def _cmd_models(args: argparse.Namespace) -> int:
     from athar.serving.lifecycle import (
         LifecycleError,
@@ -388,6 +441,20 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--min-score", type=float, default=0.0)
     search.add_argument("--runs-root", default="data/runs")
     search.set_defaults(handler=_cmd_search)
+
+    report = sub.add_parser(
+        "report", help="export a run's chain-of-custody report (PDF/HTML)"
+    )
+    report.add_argument("run_id", metavar="RUN_ID")
+    report.add_argument("-o", "--output", help="output path (default: cwd)")
+    report.add_argument("--locale", choices=("ar", "en"), default="ar")
+    report.add_argument("--html", action="store_true",
+                        help="write HTML instead of printing to PDF")
+    report.add_argument("--runs-root", default="data/runs")
+    report.add_argument("--weights-manifest",
+                        default="configs/weights_manifest.yaml")
+    report.set_defaults(handler=_cmd_report)
+
     users = sub.add_parser("users", help="manage API users (local operator only)")
     users_sub = users.add_subparsers(dest="subcommand", required=True)
     u_add = users_sub.add_parser("add", help="create a user")

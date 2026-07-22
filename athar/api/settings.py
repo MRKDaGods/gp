@@ -19,6 +19,7 @@ class ApiSettings(BaseSettings):
     registry_db: Path = Path("data/registry/models.db")
     app_db: Path = Path("data/app/app.db")
     calibration_path: Path | None = None  # StreamCalibrations JSON (optional)
+    weights_manifest: Path = Path("configs/weights_manifest.yaml")
 
     session_ttl_hours: float = 12.0
     cookie_name: str = "athar_session"

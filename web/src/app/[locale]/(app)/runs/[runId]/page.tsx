@@ -76,6 +76,14 @@ export default function RunDetailPage() {
           {run.profile_name} ·{" "}
           {run.created_at ? new Date(run.created_at).toLocaleString(locale) : ""}
         </span>
+        {"package.report" in (run.artifacts ?? {}) && (
+          <a
+            className="rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+            href={`${API_URL}/runs/${run.run_id}/report.pdf?locale=${locale}`}
+          >
+            {t("report_pdf")}
+          </a>
+        )}
       </div>
 
       {run.error && (

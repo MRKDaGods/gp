@@ -49,7 +49,8 @@
     "events": "الأحداث",
     "no_events": "لا توجد أحداث بعد",
     "error_label": "الخطأ",
-    "not_found": "المعالجة غير موجودة"
+    "not_found": "المعالجة غير موجودة",
+    "report_pdf": "تقرير PDF"
   },
   "jobs": {
     "title": "المهام",

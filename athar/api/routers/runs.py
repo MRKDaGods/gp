@@ -6,16 +6,24 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.sse import EventSourceResponse
 
-from athar.api.deps import RequireViewer, ServicesDep
+from athar.api import audit
+from athar.api.deps import CurrentUser, DbDep, RequireViewer, ServicesDep
 from athar.api.schemas import RunSummary
 from athar.api.sse import tail_events
 from athar.contracts.manifest import RunManifest, RunRole
 from athar.contracts.store import RunNotFound
 from athar.pipeline.runner import EVENTS_FILENAME
+from athar.reporting import (
+    ReportError,
+    html_to_pdf,
+    load_weight_shas,
+    models_from_config,
+    render_report_html,
+)
 
 router = APIRouter(prefix="/runs", tags=["runs"], dependencies=[RequireViewer])
 
@@ -79,6 +87,67 @@ def get_report(services: ServicesDep, run_id: str) -> dict:
         )
     return json.loads(
         services.store.artifact_path(manifest, "package.report").read_text("utf-8")
+    )
+
+
+def _report_html(services: ServicesDep, run_id: str, locale: str) -> str:
+    manifest = _load(services, run_id)
+    if "package.report" not in manifest.artifacts:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"run {run_id!r} has no package.report artifact (package stage not run)",
+        )
+    report = json.loads(
+        services.store.artifact_path(manifest, "package.report").read_text("utf-8")
+    )
+    weight_shas = load_weight_shas(services.settings.weights_manifest)
+    models = (
+        models_from_config(manifest.config.values, weight_shas)
+        if manifest.config
+        else []
+    )
+    return render_report_html(
+        report,
+        models=models,
+        run_dir=services.store.run_dir(run_id),
+        locale=locale if locale in ("ar", "en") else "ar",
+    )
+
+
+@router.get("/{run_id}/report.html", response_class=HTMLResponse)
+def export_report_html(
+    services: ServicesDep, run_id: str, db: DbDep, user: CurrentUser,
+    locale: str = "ar",
+) -> HTMLResponse:
+    """Chromium-free preview of the exact document the PDF prints."""
+    html = _report_html(services, run_id, locale)
+    audit.append(
+        db, user.username, "report_exported",
+        run_id=run_id, locale=locale, fmt="html",
+    )
+    return HTMLResponse(html)
+
+
+@router.get("/{run_id}/report.pdf")
+def export_report_pdf(
+    services: ServicesDep, run_id: str, db: DbDep, user: CurrentUser,
+    locale: str = "ar",
+) -> Response:
+    html = _report_html(services, run_id, locale)
+    try:
+        pdf = html_to_pdf(html)
+    except ReportError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from None
+    audit.append(
+        db, user.username, "report_exported",
+        run_id=run_id, locale=locale, fmt="pdf",
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="athar-report-{run_id}.pdf"'
+        },
     )
 
 

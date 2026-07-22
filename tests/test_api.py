@@ -184,9 +184,56 @@ class TestRuns:
 
     def test_report_404_without_package_stage(self, client, gallery):
         login(client, "view")
-        response = client.get(f"/runs/{gallery.run_id}/report")
-        assert response.status_code == 404
-        assert "package" in response.json()["detail"]
+        for path in ("report", "report.html", "report.pdf"):
+            response = client.get(f"/runs/{gallery.run_id}/{path}")
+            assert response.status_code == 404
+            assert "package" in response.json()["detail"]
+
+    def _write_package_report(self, settings, store, gallery):
+        from athar.contracts.manifest import ArtifactRecord
+
+        report = {
+            "schema_version": 1,
+            "run": {"run_id": gallery.run_id, "role": "gallery",
+                    "profile": "p", "config_hash": "ch" * 32,
+                    "created_at": "2026-07-22"},
+            "evidence": [{"camera_id": "g1", "original_path": "e.mp4",
+                          "sha256": "ev" * 32, "duration_s": 1, "fps": 25}],
+            "identities": [],
+        }
+        path = settings.runs_root / gallery.run_id / "report_inputs.json"
+        path.write_text(json.dumps(report), encoding="utf-8")
+        manifest = store.load(gallery.run_id)
+        manifest.register_artifact(ArtifactRecord(
+            name="package.report", relpath="report_inputs.json",
+            schema_version=1, producer="package",
+        ))
+        store.save(manifest)
+
+    def test_report_html_export(self, client, settings, store, gallery):
+        self._write_package_report(settings, store, gallery)
+        login(client, "view")
+        response = client.get(f"/runs/{gallery.run_id}/report.html?locale=en")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        assert "ev" * 32 in response.text  # video sha in the custody chain
+        assert 'dir="ltr"' in response.text
+
+    def test_report_pdf_export(self, client, settings, store, gallery, monkeypatch):
+        self._write_package_report(settings, store, gallery)
+        import athar.api.routers.runs as runs_router
+
+        monkeypatch.setattr(
+            runs_router, "html_to_pdf", lambda html: b"%PDF-1.4 fake"
+        )
+        login(client, "inv")
+        response = client.get(f"/runs/{gallery.run_id}/report.pdf")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert response.content.startswith(b"%PDF")
+        login(client, "admin")
+        actions = [r["action"] for r in client.get("/audit").json()]
+        assert "report_exported" in actions
 
 
 class TestJobs:
