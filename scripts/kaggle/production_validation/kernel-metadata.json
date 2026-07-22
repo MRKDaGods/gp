@@ -1,0 +1,19 @@
+{
+  "id": "mrkdagods/athar-production-profile-validation",
+  "title": "ATHAR production profile validation",
+  "code_file": "athar_production_validation.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "mrkdagods/athar-p4-bundle",
+    "mrkdagods/mtmc-veri776-pipeline-weights",
+    "gumfreddy/mtmc-weights"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
