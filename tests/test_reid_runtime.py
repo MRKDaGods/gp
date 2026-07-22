@@ -1,4 +1,5 @@
-"""ReIDRuntime tests: LRU semantics, env sizing, thread safety.
+"""ReIDRuntime tests: LRU semantics, env sizing, thread safety, leases,
+and VRAM-budget enforcement.
 
 Uses an injected fake builder — no torch models are loaded. The runtime's
 only torch touchpoint (_release_cuda) is exercised through clear().
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from athar.serving.devices import DeviceBudgetError, DeviceManager
 from athar.serving.runtime import ReIDRuntime, _env_max_models
 
 
@@ -98,3 +100,115 @@ class TestThreads:
         survivors = {id(r) for r in results}
         assert len(survivors) == 1
         assert len(rt.stats()["loaded"]) == 1
+
+    def test_concurrent_same_key_builds_once(self, builds):
+        """Waiters block on the first builder instead of deserializing the
+        same checkpoint N times."""
+        rt = ReIDRuntime(max_models=2, builder=builds)
+        barrier = threading.Barrier(8)
+
+        def worker():
+            barrier.wait()
+            rt.load("a", "cpu")
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert builds.calls == [("a", "cpu")]
+
+    def test_failed_build_unwinds_cleanly(self, builds):
+        attempts = []
+
+        def flaky(model_id, device):
+            attempts.append(model_id)
+            if len(attempts) == 1:
+                raise RuntimeError("checkpoint corrupt")
+            return FakeLoaded(model_id=model_id, device=device)
+
+        rt = ReIDRuntime(max_models=2, builder=flaky)
+        with pytest.raises(RuntimeError, match="checkpoint corrupt"):
+            rt.load("a", "cpu")
+        # failure fully unwound: next call retries and succeeds
+        assert rt.load("a", "cpu").model_id == "a"
+        assert rt.devices.reserved("cpu") == 0  # failed reservation released
+
+
+class TestLeases:
+    def test_lease_pins_against_lru_eviction(self, builds):
+        rt = ReIDRuntime(max_models=2, builder=builds)
+        with rt.acquire("a", "cpu"):
+            rt.load("b", "cpu")
+            rt.load("c", "cpu")  # would evict "a" (LRU-oldest) without the lease
+            loaded = {e["model_id"] for e in rt.stats()["loaded"]}
+            assert "a" in loaded
+        # after release, the next insert can evict it again
+        rt.load("d", "cpu")
+        loaded = {e["model_id"] for e in rt.stats()["loaded"]}
+        assert "a" not in loaded
+        assert len(loaded) == 2
+
+    def test_release_is_idempotent(self, builds):
+        rt = ReIDRuntime(max_models=2, builder=builds)
+        lease = rt.acquire("a", "cpu")
+        lease.release()
+        lease.release()
+        assert rt.stats()["loaded"][0]["refcount"] == 0
+
+    def test_nested_leases_refcount(self, builds):
+        rt = ReIDRuntime(max_models=2, builder=builds)
+        l1 = rt.acquire("a", "cpu")
+        l2 = rt.acquire("a", "cpu")
+        assert rt.stats()["loaded"][0]["refcount"] == 2
+        l1.release()
+        assert rt.stats()["loaded"][0]["refcount"] == 1
+        l2.release()
+        assert rt.stats()["loaded"][0]["refcount"] == 0
+
+    def test_clear_keeps_leased_models(self, builds):
+        rt = ReIDRuntime(max_models=2, builder=builds)
+        lease = rt.acquire("a", "cpu")
+        rt.load("b", "cpu")
+        rt.clear()
+        loaded = {e["model_id"] for e in rt.stats()["loaded"]}
+        assert loaded == {"a"}
+        lease.release()
+        rt.clear()
+        assert rt.stats()["loaded"] == []
+
+
+class TestBudget:
+    @staticmethod
+    def _runtime(builds, budget: int, size: int, max_models: int = 4) -> ReIDRuntime:
+        return ReIDRuntime(
+            max_models=max_models,
+            builder=builds,
+            devices=DeviceManager(budgets={"cpu": budget}),
+            size_estimator=lambda model_id: size,
+        )
+
+    def test_budget_evicts_unleased_to_fit(self, builds):
+        rt = self._runtime(builds, budget=100, size=60)
+        rt.load("a", "cpu")
+        rt.load("b", "cpu")  # 120 > 100: evicts "a"
+        loaded = {e["model_id"] for e in rt.stats()["loaded"]}
+        assert loaded == {"b"}
+        assert rt.devices.reserved("cpu") == 60
+
+    def test_budget_refuses_when_everything_leased(self, builds):
+        rt = self._runtime(builds, budget=100, size=60)
+        with rt.acquire("a", "cpu"):
+            with pytest.raises(DeviceBudgetError, match="leased"):
+                rt.acquire("b", "cpu")
+        # lease released: now it fits by evicting "a"
+        assert rt.load("b", "cpu").model_id == "b"
+
+    def test_eviction_releases_reservation(self, builds):
+        rt = self._runtime(builds, budget=200, size=60)
+        rt.load("a", "cpu")
+        rt.load("b", "cpu")
+        rt.load("c", "cpu")  # 3 x 60 = 180 <= 200: all resident
+        assert rt.devices.reserved("cpu") == 180
+        rt.clear()
+        assert rt.devices.reserved("cpu") == 0
