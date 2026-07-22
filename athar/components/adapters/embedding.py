@@ -72,6 +72,99 @@ class TransReidEmbedderAdapter:
         )
 
 
+class ClipSenetEmbedderAdapter:
+    """CLIP-SENet v6 appearance stream (the 91.36/93.3 VeRi arch).
+
+    Constructed OFFLINE by design (air-gap): vendored IBN-a appearance
+    backbone + timm TinyCLIP semantic branch, both ``pretrained=False``,
+    then a strict checkpoint load. Bitwise equivalence of this construction
+    vs the original pretrained-download path is established by
+    ``scripts/eval/check_clipsenet_offline_build.py`` (state dicts
+    identical; forward drift ~6e-8 from kernel-order differences).
+
+    Tracklet pooling mirrors the v1 TransReID semantics exactly:
+    ``softmax(quality * temperature)`` weights over per-crop L2-normed
+    features, weighted sum, no final re-norm.
+    """
+
+    def __init__(
+        self,
+        weights_path: str,
+        stream_name: str = "clipsenet",
+        device: str = "cpu",
+        batch_size: int = 16,
+        quality_temperature: float = 3.0,
+        image_size: Optional[Sequence[int]] = None,  # default: canonical (320, 320)
+    ) -> None:
+        from pathlib import Path
+
+        from athar.components.embedders.clip_senet_v6 import (
+            IMAGE_SIZE,
+            build_clip_senet,
+            build_transform,
+            load_checkpoint,
+        )
+
+        state_dict, _kind, num_classes = load_checkpoint(
+            Path(weights_path), map_location="cpu"
+        )
+        model = build_clip_senet(
+            num_classes=num_classes,
+            appearance_pretrained=False,
+            semantic_pretrained=False,
+        )
+        missing, unexpected = model.load_state_dict(state_dict, strict=False)
+        if missing or unexpected:
+            raise RuntimeError(
+                "CLIP-SENet checkpoint load was not strict: "
+                f"missing={missing[:5]}, unexpected={unexpected[:5]}"
+            )
+        self._device = device
+        self._model = model.to(device).eval()
+        self._transform = build_transform(
+            tuple(image_size) if image_size else IMAGE_SIZE
+        )
+        self.stream_name = stream_name
+        self.dim = 2048
+        self.model_id: Optional[str] = None
+        self._batch_size = batch_size
+        self._quality_temperature = quality_temperature
+
+    def _embed_bgr(self, crops: "list[np.ndarray]") -> np.ndarray:
+        import torch
+        import torch.nn.functional as F
+        from PIL import Image
+
+        features: list[np.ndarray] = []
+        with torch.inference_mode():
+            for start in range(0, len(crops), self._batch_size):
+                chunk = crops[start:start + self._batch_size]
+                batch = torch.stack(
+                    [self._transform(Image.fromarray(c[:, :, ::-1])) for c in chunk]
+                ).to(self._device)
+                out = self._model(batch)
+                if isinstance(out, (tuple, list)):
+                    out = out[-1]
+                features.append(
+                    F.normalize(out.float(), p=2, dim=1).cpu().numpy()
+                )
+        return np.concatenate(features, axis=0).astype(np.float32)
+
+    def embed(self, crops: np.ndarray) -> np.ndarray:
+        return self._embed_bgr([crops[i] for i in range(crops.shape[0])])
+
+    def embed_tracklet(
+        self, scored_crops: "list[QualityScoredCrop]", cam_index: Optional[int] = None
+    ) -> Optional[np.ndarray]:
+        if not scored_crops:
+            return None
+        features = self._embed_bgr([c.image for c in scored_crops])
+        qualities = np.asarray([c.quality for c in scored_crops], dtype=np.float32)
+        weights = np.exp(qualities * self._quality_temperature)
+        weights = weights / weights.sum()
+        return (features * weights[:, np.newaxis]).sum(axis=0)
+
+
 class HsvEmbedderAdapter:
     """Striped HSV color histogram stream (pure numpy/cv2 — always available).
 

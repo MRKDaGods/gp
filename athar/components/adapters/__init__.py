@@ -11,13 +11,18 @@ Registered names:
     ``boxmot_v1``        ported BoxMOT wrapper (stateful, per camera)
 - embedder /
     ``transreid_v1``     ported TransReID ReIDModel (flip TTA + quality pooling)
+    ``clipsenet_v1``     CLIP-SENet v6 (offline construction + strict ckpt load)
     ``hsv_v1``           striped HSV histograms (pure numpy/cv2)
 """
 
 from __future__ import annotations
 
 from athar.components.adapters.detection import YoloDetectorAdapter
-from athar.components.adapters.embedding import HsvEmbedderAdapter, TransReidEmbedderAdapter
+from athar.components.adapters.embedding import (
+    ClipSenetEmbedderAdapter,
+    HsvEmbedderAdapter,
+    TransReidEmbedderAdapter,
+)
 from athar.components.adapters.tracking import BoxmotTrackerAdapter
 from athar.components.protocols import ComponentKindName
 from athar.components.registry import registry
@@ -25,11 +30,13 @@ from athar.components.registry import registry
 registry.register(ComponentKindName.DETECTOR, "yolo_v1")(YoloDetectorAdapter)
 registry.register(ComponentKindName.TRACKER, "boxmot_v1")(BoxmotTrackerAdapter)
 registry.register(ComponentKindName.EMBEDDER, "transreid_v1")(TransReidEmbedderAdapter)
+registry.register(ComponentKindName.EMBEDDER, "clipsenet_v1")(ClipSenetEmbedderAdapter)
 registry.register(ComponentKindName.EMBEDDER, "hsv_v1")(HsvEmbedderAdapter)
 
 __all__ = [
     "YoloDetectorAdapter",
     "BoxmotTrackerAdapter",
     "TransReidEmbedderAdapter",
+    "ClipSenetEmbedderAdapter",
     "HsvEmbedderAdapter",
 ]

@@ -177,6 +177,7 @@ class ResNet101IBNBranch(nn.Module):
         for loader in (
             self._load_pretrainedmodels_ibn,
             self._load_torch_hub_ibn,
+            self._load_vendored_ibn,
             self._load_timm_ibn,
             self._load_timm_plain,
         ):
@@ -249,7 +250,7 @@ class ResNet101IBNBranch(nn.Module):
                 )
         except Exception as exc:  # noqa: BLE001 - keep fallback chain moving
             logger.warning(
-                "Appearance branch loader 'torch.hub' failed for '{}': {}",
+                "Appearance branch loader 'torch.hub' failed for '%s': %s",
                 self._IBN_MODEL,
                 exc,
             )
@@ -260,6 +261,35 @@ class ResNet101IBNBranch(nn.Module):
         backbone = _ResNetFeatureWrapper(raw_model)
         return backbone, LoadedBackboneInfo(
             family="torch.hub",
+            model_name=self._IBN_MODEL,
+            pretrained_tag="official_pretrained" if pretrained else "random_init",
+        )
+
+    def _load_vendored_ibn(
+        self, pretrained: bool
+    ) -> tuple[nn.Module, LoadedBackboneInfo] | None:
+        """Air-gap loader (added 2026-07-22, Phase 4): the same IBN-a
+        structure built from the vendored v1 training arch — no hub CODE
+        fetch, so construction works offline with ``pretrained=False``
+        (weights come from the serving checkpoint anyway). Deliberately
+        placed AFTER torch.hub so online provider selection — the path
+        that produced 91.36/93.3 — is unchanged. Equivalence vs the
+        torch.hub build is checked bitwise by
+        scripts/eval/check_clipsenet_offline_build.py."""
+        try:
+            from athar.training.model import _build_resnet101_ibn_a
+
+            with _cpu_safe_hub_deserialization():
+                # last_stride=2 keeps torchvision's default layer4 stride,
+                # matching the official IBN-Net model the wrapper expects.
+                raw_model = _build_resnet101_ibn_a(last_stride=2, pretrained=pretrained)
+        except Exception as exc:  # noqa: BLE001 - keep fallback chain moving
+            logger.warning("Appearance branch loader 'vendored-ibn' failed: %s", exc)
+            return None
+
+        backbone = _ResNetFeatureWrapper(raw_model)
+        return backbone, LoadedBackboneInfo(
+            family="vendored",
             model_name=self._IBN_MODEL,
             pretrained_tag="official_pretrained" if pretrained else "random_init",
         )
