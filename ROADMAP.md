@@ -4,7 +4,7 @@
 > checklist, parity gates, and open items. Update it in every working session —
 > mark items done, add discoveries, never delete decision history.
 >
-> Last updated: **2026-07-21** · Current phase: **Phase 3 — Multi-class & profiles** (Phase 2 port essentially complete; gates P1–P3 passed)
+> Last updated: **2026-07-22** · Current phase: **Phase 4 — Serving, jobs, API (core COMPLETE)** → Phase 5 frontend next (gates P1–P4 settled)
 
 ---
 
@@ -130,13 +130,13 @@ smart cities, streets).
 - [ ] Spatial-model plugins: GPS (port `geospatial.py`), learned transition-time topology; floor-plan graph interface
 
 ### Phase 4 — Serving, jobs, API
-- [ ] Unified model loader + refcounted LRU cache with VRAM budget + DeviceManager
-  - [x] **2026-07-21 first slice**: loader<->script cycle inverted — CLIP-SENet arch moved verbatim to `athar/components/embedders/clip_senet_v6.py` (the copy that made 91.36/93.3; eval script re-imports, serving no longer imports scripts). `reid_loaders` module globals killed (per-call `_loader_params`); fixed `lru_cache(2)` replaced by `athar/serving/runtime.py` ReIDRuntime (configurable LRU honoring REID_MODEL_CACHE_SIZE, thread-safe, build-outside-lock, stats; old API delegates). Refcount + VRAM budget + DeviceManager still open; `clip_senet_model.py` (HF-hub-first air-gap bug) still to retire with the stage2 glue port
-- [ ] Model lifecycle registry impl (SQLite) + promote/rollback + eval-gate enforcement
-- [ ] JobService: SQLite queue, worker subprocess, typed event pipe, cancel/resume, executor-agnostic (local | kaggle) (D13)
-- [ ] FastAPI app: thin routers → services → RunRepository; OpenAPI → generated TS client
-- [ ] AuthN/AuthZ (users, roles, case ownership) + tamper-evident append-only audit log
-- [ ] Search engine: probe-vs-gallery with embedding-provenance compatibility checks (explicit 409, no silent PCA fallback); calibrated score→probability
+- [x] Unified model loader + refcounted LRU cache with VRAM budget + DeviceManager — **DONE 2026-07-22**: `athar/serving/devices.py` DeviceManager (per-device byte budgets: CUDA total×0.9 headroom or `ATHAR_VRAM_BUDGET_MB`; explicit `DeviceBudgetError` instead of CUDA OOM) + ReIDRuntime leases (`acquire()` → ModelLease context manager; leased models never evicted; single build per (model,device) — waiters block instead of re-deserializing; failed builds unwind reservations)
+  - [x] **2026-07-21 first slice**: loader<->script cycle inverted — CLIP-SENet arch moved verbatim to `athar/components/embedders/clip_senet_v6.py` (the copy that made 91.36/93.3; eval script re-imports, serving no longer imports scripts). `reid_loaders` module globals killed (per-call `_loader_params`); fixed `lru_cache(2)` replaced by `athar/serving/runtime.py` ReIDRuntime (configurable LRU honoring REID_MODEL_CACHE_SIZE, thread-safe, build-outside-lock, stats; old API delegates). `clip_senet_model.py` (HF-hub-first air-gap bug) still to retire with the stage2 glue port
+- [x] Model lifecycle registry impl (SQLite) + promote/rollback + eval-gate enforcement — **DONE 2026-07-22**: `athar/serving/lifecycle.py` ModelLifecycleDB (WAL; append-only `lifecycle_events` trail; promote-to-production demotes+records the superseded model, rollback restores it; YAML authoring imports CANDIDATES only). CLI `athar models list/show/import/promote/retire/rollback/events`
+- [x] JobService: SQLite queue, worker subprocess, typed event pipe, cancel/resume, executor-agnostic (local | kaggle) (D13) — **DONE 2026-07-22**: `athar/jobs/` queue (own DB, WAL, atomic `UPDATE...RETURNING` claims, priority+FIFO, per-executor routing; stale-heartbeat requeue keeps `run_id` so the next worker RESUMES) + worker loop (LocalRunExecutor over shared `athar/pipeline/setup.py`; event-sink cancel bridge to CancellationToken; KaggleExecutor = Phase 6 seam) + JobService facade. CLI `athar worker`, `athar jobs submit/list/show/cancel`. Event pipe = the run's `events.jsonl` (no second store)
+- [x] FastAPI app: thin routers → services → RunRepository — **DONE 2026-07-22**: `athar/api/` factory + ApiSettings (`ATHAR_*` env), routers /auth /runs /jobs /models /search /audit /health, SSE tails of run events (validate-then-stream), artifact downloads w/ escape guard, `athar serve`; live HTTP smoke green. OpenAPI served at /openapi.json; **generated TS client lands with the Phase 5 frontend (hey-api)**
+- [x] AuthN/AuthZ + tamper-evident append-only audit log — **DONE 2026-07-22**: server-side sessions (raw token only in the httponly cookie, sha256 in DB) + pwdlib argon2id + ordered dependency-RBAC (viewer<investigator<admin) on SQLAlchemy 2/SQLite WAL; hash-chained audit log + `/audit/verify` (finds first broken record; tamper test proves it). Case-ownership scoping arrives with the Case API (Phase 5 backend companion)
+- [x] Search engine: explicit 409 + calibrated score→probability — **DONE 2026-07-22**: `IncompatibleStreams` (probe missing stream / dim / projection lineage) → HTTP 409, unknown run → 404, other refusals → 400 — never a silent fallback. `athar/search/calibration.py`: per-stream logistic (Platt) fit w/ provenance + StreamCalibrations artifact; /search returns `probability=null` for uncalibrated streams (no invented confidence). **Fitting real calibrations on a labeled benchmark = Phase 6 task**
 
 ### Phase 5 — Frontend (enterprise-grade)
 - [ ] Next.js App Router scaffold, design system (shadcn/ui + Tailwind), dark/light, **Arabic/RTL i18n scaffolding from day 1**
