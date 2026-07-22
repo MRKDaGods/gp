@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CancelJobJobsJobIdCancelPostData, CancelJobJobsJobIdCancelPostErrors, CancelJobJobsJobIdCancelPostResponses, DownloadArtifactRunsRunIdArtifactsNameGetData, DownloadArtifactRunsRunIdArtifactsNameGetErrors, DownloadArtifactRunsRunIdArtifactsNameGetResponses, GetJobJobsJobIdGetData, GetJobJobsJobIdGetErrors, GetJobJobsJobIdGetResponses, GetModelModelsModelIdGetData, GetModelModelsModelIdGetErrors, GetModelModelsModelIdGetResponses, GetReportRunsRunIdReportGetData, GetReportRunsRunIdReportGetErrors, GetReportRunsRunIdReportGetResponses, GetRunRunsRunIdGetData, GetRunRunsRunIdGetErrors, GetRunRunsRunIdGetResponses, HealthHealthGetData, HealthHealthGetResponses, ListAuditAuditGetData, ListAuditAuditGetErrors, ListAuditAuditGetResponses, ListEventsRunsRunIdEventsGetData, ListEventsRunsRunIdEventsGetErrors, ListEventsRunsRunIdEventsGetResponses, ListJobsJobsGetData, ListJobsJobsGetErrors, ListJobsJobsGetResponses, ListModelsModelsGetData, ListModelsModelsGetErrors, ListModelsModelsGetResponses, ListRunsRunsGetData, ListRunsRunsGetErrors, ListRunsRunsGetResponses, LoginAuthLoginPostData, LoginAuthLoginPostErrors, LoginAuthLoginPostResponses, LogoutAuthLogoutPostData, LogoutAuthLogoutPostResponses, MeAuthMeGetData, MeAuthMeGetResponses, ModelHistoryModelsModelIdHistoryGetData, ModelHistoryModelsModelIdHistoryGetErrors, ModelHistoryModelsModelIdHistoryGetResponses, PromoteModelModelsModelIdPromotePostData, PromoteModelModelsModelIdPromotePostErrors, PromoteModelModelsModelIdPromotePostResponses, RetireModelModelsModelIdRetirePostData, RetireModelModelsModelIdRetirePostErrors, RetireModelModelsModelIdRetirePostResponses, RollbackProductionModelsRollbackPostData, RollbackProductionModelsRollbackPostErrors, RollbackProductionModelsRollbackPostResponses, SearchSearchPostData, SearchSearchPostErrors, SearchSearchPostResponses, StreamEventsRunsRunIdEventsStreamGetData, StreamEventsRunsRunIdEventsStreamGetErrors, StreamEventsRunsRunIdEventsStreamGetResponses, StreamJobEventsJobsJobIdEventsStreamGetData, StreamJobEventsJobsJobIdEventsStreamGetErrors, StreamJobEventsJobsJobIdEventsStreamGetResponses, SubmitJobJobsPostData, SubmitJobJobsPostErrors, SubmitJobJobsPostResponses, VerifyAuditVerifyGetData, VerifyAuditVerifyGetResponses } from './types.gen';
+import type { AttachRunCasesCaseIdRunsPostData, AttachRunCasesCaseIdRunsPostErrors, AttachRunCasesCaseIdRunsPostResponses, CancelJobJobsJobIdCancelPostData, CancelJobJobsJobIdCancelPostErrors, CancelJobJobsJobIdCancelPostResponses, CreateCaseCasesPostData, CreateCaseCasesPostErrors, CreateCaseCasesPostResponses, CreateTargetCasesCaseIdTargetsPostData, CreateTargetCasesCaseIdTargetsPostErrors, CreateTargetCasesCaseIdTargetsPostResponses, DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostData, DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostErrors, DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses, DetachRunCasesCaseIdRunsRunIdDeleteData, DetachRunCasesCaseIdRunsRunIdDeleteErrors, DetachRunCasesCaseIdRunsRunIdDeleteResponses, DownloadArtifactRunsRunIdArtifactsNameGetData, DownloadArtifactRunsRunIdArtifactsNameGetErrors, DownloadArtifactRunsRunIdArtifactsNameGetResponses, GetCaseCasesCaseIdGetData, GetCaseCasesCaseIdGetErrors, GetCaseCasesCaseIdGetResponses, GetJobJobsJobIdGetData, GetJobJobsJobIdGetErrors, GetJobJobsJobIdGetResponses, GetModelModelsModelIdGetData, GetModelModelsModelIdGetErrors, GetModelModelsModelIdGetResponses, GetReportRunsRunIdReportGetData, GetReportRunsRunIdReportGetErrors, GetReportRunsRunIdReportGetResponses, GetRunRunsRunIdGetData, GetRunRunsRunIdGetErrors, GetRunRunsRunIdGetResponses, HealthHealthGetData, HealthHealthGetResponses, ListAuditAuditGetData, ListAuditAuditGetErrors, ListAuditAuditGetResponses, ListCasesCasesGetData, ListCasesCasesGetResponses, ListEventsRunsRunIdEventsGetData, ListEventsRunsRunIdEventsGetErrors, ListEventsRunsRunIdEventsGetResponses, ListJobsJobsGetData, ListJobsJobsGetErrors, ListJobsJobsGetResponses, ListModelsModelsGetData, ListModelsModelsGetErrors, ListModelsModelsGetResponses, ListRunsRunsGetData, ListRunsRunsGetErrors, ListRunsRunsGetResponses, LoginAuthLoginPostData, LoginAuthLoginPostErrors, LoginAuthLoginPostResponses, LogoutAuthLogoutPostData, LogoutAuthLogoutPostResponses, MeAuthMeGetData, MeAuthMeGetResponses, ModelHistoryModelsModelIdHistoryGetData, ModelHistoryModelsModelIdHistoryGetErrors, ModelHistoryModelsModelIdHistoryGetResponses, PromoteModelModelsModelIdPromotePostData, PromoteModelModelsModelIdPromotePostErrors, PromoteModelModelsModelIdPromotePostResponses, ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostData, ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostErrors, ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostResponses, RetireModelModelsModelIdRetirePostData, RetireModelModelsModelIdRetirePostErrors, RetireModelModelsModelIdRetirePostResponses, RollbackProductionModelsRollbackPostData, RollbackProductionModelsRollbackPostErrors, RollbackProductionModelsRollbackPostResponses, SearchSearchPostData, SearchSearchPostErrors, SearchSearchPostResponses, StreamEventsRunsRunIdEventsStreamGetData, StreamEventsRunsRunIdEventsStreamGetErrors, StreamEventsRunsRunIdEventsStreamGetResponses, StreamJobEventsJobsJobIdEventsStreamGetData, StreamJobEventsJobsJobIdEventsStreamGetErrors, StreamJobEventsJobsJobIdEventsStreamGetResponses, SubmitJobJobsPostData, SubmitJobJobsPostErrors, SubmitJobJobsPostResponses, UpdateCaseCasesCaseIdPatchData, UpdateCaseCasesCaseIdPatchErrors, UpdateCaseCasesCaseIdPatchResponses, VerifyAuditVerifyGetData, VerifyAuditVerifyGetResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -151,6 +151,93 @@ export const rollbackProductionModelsRollbackPost = <ThrowOnError extends boolea
  */
 export const searchSearchPost = <ThrowOnError extends boolean = false>(options: Options<SearchSearchPostData, ThrowOnError>): RequestResult<SearchSearchPostResponses, SearchSearchPostErrors, ThrowOnError> => (options.client ?? client).post<SearchSearchPostResponses, SearchSearchPostErrors, ThrowOnError>({
     url: '/search',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Cases
+ */
+export const listCasesCasesGet = <ThrowOnError extends boolean = false>(options?: Options<ListCasesCasesGetData, ThrowOnError>): RequestResult<ListCasesCasesGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListCasesCasesGetResponses, unknown, ThrowOnError>({ url: '/cases', ...options });
+
+/**
+ * Create Case
+ */
+export const createCaseCasesPost = <ThrowOnError extends boolean = false>(options: Options<CreateCaseCasesPostData, ThrowOnError>): RequestResult<CreateCaseCasesPostResponses, CreateCaseCasesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateCaseCasesPostResponses, CreateCaseCasesPostErrors, ThrowOnError>({
+    url: '/cases',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Case
+ */
+export const getCaseCasesCaseIdGet = <ThrowOnError extends boolean = false>(options: Options<GetCaseCasesCaseIdGetData, ThrowOnError>): RequestResult<GetCaseCasesCaseIdGetResponses, GetCaseCasesCaseIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetCaseCasesCaseIdGetResponses, GetCaseCasesCaseIdGetErrors, ThrowOnError>({ url: '/cases/{case_id}', ...options });
+
+/**
+ * Update Case
+ */
+export const updateCaseCasesCaseIdPatch = <ThrowOnError extends boolean = false>(options: Options<UpdateCaseCasesCaseIdPatchData, ThrowOnError>): RequestResult<UpdateCaseCasesCaseIdPatchResponses, UpdateCaseCasesCaseIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<UpdateCaseCasesCaseIdPatchResponses, UpdateCaseCasesCaseIdPatchErrors, ThrowOnError>({
+    url: '/cases/{case_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Attach Run
+ */
+export const attachRunCasesCaseIdRunsPost = <ThrowOnError extends boolean = false>(options: Options<AttachRunCasesCaseIdRunsPostData, ThrowOnError>): RequestResult<AttachRunCasesCaseIdRunsPostResponses, AttachRunCasesCaseIdRunsPostErrors, ThrowOnError> => (options.client ?? client).post<AttachRunCasesCaseIdRunsPostResponses, AttachRunCasesCaseIdRunsPostErrors, ThrowOnError>({
+    url: '/cases/{case_id}/runs',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Detach Run
+ */
+export const detachRunCasesCaseIdRunsRunIdDelete = <ThrowOnError extends boolean = false>(options: Options<DetachRunCasesCaseIdRunsRunIdDeleteData, ThrowOnError>): RequestResult<DetachRunCasesCaseIdRunsRunIdDeleteResponses, DetachRunCasesCaseIdRunsRunIdDeleteErrors, ThrowOnError> => (options.client ?? client).delete<DetachRunCasesCaseIdRunsRunIdDeleteResponses, DetachRunCasesCaseIdRunsRunIdDeleteErrors, ThrowOnError>({ url: '/cases/{case_id}/runs/{run_id}', ...options });
+
+/**
+ * Create Target
+ */
+export const createTargetCasesCaseIdTargetsPost = <ThrowOnError extends boolean = false>(options: Options<CreateTargetCasesCaseIdTargetsPostData, ThrowOnError>): RequestResult<CreateTargetCasesCaseIdTargetsPostResponses, CreateTargetCasesCaseIdTargetsPostErrors, ThrowOnError> => (options.client ?? client).post<CreateTargetCasesCaseIdTargetsPostResponses, CreateTargetCasesCaseIdTargetsPostErrors, ThrowOnError>({
+    url: '/cases/{case_id}/targets',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Propose Hypothesis
+ */
+export const proposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPost = <ThrowOnError extends boolean = false>(options: Options<ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostData, ThrowOnError>): RequestResult<ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostResponses, ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostErrors, ThrowOnError> => (options.client ?? client).post<ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostResponses, ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostErrors, ThrowOnError>({
+    url: '/cases/{case_id}/targets/{target_id}/hypotheses',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Decide Hypothesis
+ */
+export const decideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePost = <ThrowOnError extends boolean = false>(options: Options<DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostData, ThrowOnError>): RequestResult<DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses, DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostErrors, ThrowOnError> => (options.client ?? client).post<DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses, DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostErrors, ThrowOnError>({
+    url: '/cases/{case_id}/targets/{target_id}/hypotheses/{hypothesis_id}/decide',
     ...options,
     headers: {
         'Content-Type': 'application/json',

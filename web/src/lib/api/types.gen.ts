@@ -41,6 +41,16 @@ export type ArtifactRecord = {
 };
 
 /**
+ * AttachRunRequest
+ */
+export type AttachRunRequest = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+};
+
+/**
  * AuditRecordOut
  */
 export type AuditRecordOut = {
@@ -138,6 +148,128 @@ export type CancelOut = {
 };
 
 /**
+ * CaseCreateRequest
+ */
+export type CaseCreateRequest = {
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * CaseDetail
+ */
+export type CaseDetail = {
+    /**
+     * Case Id
+     */
+    case_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Runs
+     */
+    runs: Array<CaseRunOut>;
+    /**
+     * Targets
+     */
+    targets: Array<TargetOut>;
+};
+
+/**
+ * CaseRunOut
+ */
+export type CaseRunOut = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Attached By
+     */
+    attached_by: string;
+    /**
+     * Attached At
+     */
+    attached_at: string;
+};
+
+/**
+ * CaseSummary
+ */
+export type CaseSummary = {
+    /**
+     * Case Id
+     */
+    case_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Num Runs
+     */
+    num_runs: number;
+    /**
+     * Num Targets
+     */
+    num_targets: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * CaseUpdateRequest
+ */
+export type CaseUpdateRequest = {
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Status
+     */
+    status?: 'open' | 'closed' | null;
+};
+
+/**
  * CheckpointRef
  *
  * Content-addressed weights file.
@@ -163,6 +295,16 @@ export type CheckpointRef = {
  * Config layers, listed lowest → highest precedence.
  */
 export type ConfigLayer = 'profile_default' | 'deployment' | 'case' | 'run_override';
+
+/**
+ * DecideRequest
+ */
+export type DecideRequest = {
+    /**
+     * Status
+     */
+    status: 'confirmed' | 'rejected';
+};
 
 /**
  * EvalReportRef
@@ -194,6 +336,100 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
+};
+
+/**
+ * HypothesisCreateRequest
+ */
+export type HypothesisCreateRequest = {
+    /**
+     * Kind
+     */
+    kind?: 'appearance' | 'face' | 'gait' | 'boarding' | 'alighting' | 'manual';
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Camera Id
+     */
+    camera_id: string;
+    /**
+     * Track Id
+     */
+    track_id: number;
+    /**
+     * Raw Score
+     */
+    raw_score?: number;
+    /**
+     * Probability
+     *
+     * Calibrated P(same identity) as returned by /search; null when the stream was uncalibrated
+     */
+    probability?: number | null;
+    /**
+     * Stream
+     */
+    stream?: string | null;
+};
+
+/**
+ * HypothesisOut
+ */
+export type HypothesisOut = {
+    /**
+     * Hypothesis Id
+     */
+    hypothesis_id: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Camera Id
+     */
+    camera_id: string;
+    /**
+     * Track Id
+     */
+    track_id: number;
+    /**
+     * Raw Score
+     */
+    raw_score: number;
+    /**
+     * Probability
+     */
+    probability: number | null;
+    /**
+     * Stream
+     */
+    stream: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Proposed By
+     */
+    proposed_by: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Decided By
+     */
+    decided_by: string | null;
+    /**
+     * Decided At
+     */
+    decided_at: string | null;
 };
 
 /**
@@ -663,9 +899,67 @@ export type SearchResponse = {
 };
 
 /**
+ * TargetCreateRequest
+ */
+export type TargetCreateRequest = {
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * TargetOut
+ */
+export type TargetOut = {
+    /**
+     * Target Id
+     */
+    target_id: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Members
+     */
+    members: Array<TrackRefOut>;
+    /**
+     * Hypotheses
+     */
+    hypotheses: Array<HypothesisOut>;
+};
+
+/**
  * TimeBaseSource
  */
 export type TimeBaseSource = 'assumed' | 'manual' | 'timestamp_ocr' | 'event_alignment' | 'synchronized';
+
+/**
+ * TrackRefOut
+ */
+export type TrackRefOut = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Camera Id
+     */
+    camera_id: string;
+    /**
+     * Track Id
+     */
+    track_id: number;
+};
 
 /**
  * UserOut
@@ -1367,6 +1661,275 @@ export type SearchSearchPostResponses = {
 };
 
 export type SearchSearchPostResponse = SearchSearchPostResponses[keyof SearchSearchPostResponses];
+
+export type ListCasesCasesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/cases';
+};
+
+export type ListCasesCasesGetResponses = {
+    /**
+     * Response List Cases Cases Get
+     *
+     * Successful Response
+     */
+    200: Array<CaseSummary>;
+};
+
+export type ListCasesCasesGetResponse = ListCasesCasesGetResponses[keyof ListCasesCasesGetResponses];
+
+export type CreateCaseCasesPostData = {
+    body: CaseCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/cases';
+};
+
+export type CreateCaseCasesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCaseCasesPostError = CreateCaseCasesPostErrors[keyof CreateCaseCasesPostErrors];
+
+export type CreateCaseCasesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CaseDetail;
+};
+
+export type CreateCaseCasesPostResponse = CreateCaseCasesPostResponses[keyof CreateCaseCasesPostResponses];
+
+export type GetCaseCasesCaseIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Case Id
+         */
+        case_id: string;
+    };
+    query?: never;
+    url: '/cases/{case_id}';
+};
+
+export type GetCaseCasesCaseIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCaseCasesCaseIdGetError = GetCaseCasesCaseIdGetErrors[keyof GetCaseCasesCaseIdGetErrors];
+
+export type GetCaseCasesCaseIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CaseDetail;
+};
+
+export type GetCaseCasesCaseIdGetResponse = GetCaseCasesCaseIdGetResponses[keyof GetCaseCasesCaseIdGetResponses];
+
+export type UpdateCaseCasesCaseIdPatchData = {
+    body: CaseUpdateRequest;
+    path: {
+        /**
+         * Case Id
+         */
+        case_id: string;
+    };
+    query?: never;
+    url: '/cases/{case_id}';
+};
+
+export type UpdateCaseCasesCaseIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateCaseCasesCaseIdPatchError = UpdateCaseCasesCaseIdPatchErrors[keyof UpdateCaseCasesCaseIdPatchErrors];
+
+export type UpdateCaseCasesCaseIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: CaseDetail;
+};
+
+export type UpdateCaseCasesCaseIdPatchResponse = UpdateCaseCasesCaseIdPatchResponses[keyof UpdateCaseCasesCaseIdPatchResponses];
+
+export type AttachRunCasesCaseIdRunsPostData = {
+    body: AttachRunRequest;
+    path: {
+        /**
+         * Case Id
+         */
+        case_id: string;
+    };
+    query?: never;
+    url: '/cases/{case_id}/runs';
+};
+
+export type AttachRunCasesCaseIdRunsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AttachRunCasesCaseIdRunsPostError = AttachRunCasesCaseIdRunsPostErrors[keyof AttachRunCasesCaseIdRunsPostErrors];
+
+export type AttachRunCasesCaseIdRunsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CaseDetail;
+};
+
+export type AttachRunCasesCaseIdRunsPostResponse = AttachRunCasesCaseIdRunsPostResponses[keyof AttachRunCasesCaseIdRunsPostResponses];
+
+export type DetachRunCasesCaseIdRunsRunIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Case Id
+         */
+        case_id: string;
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/cases/{case_id}/runs/{run_id}';
+};
+
+export type DetachRunCasesCaseIdRunsRunIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DetachRunCasesCaseIdRunsRunIdDeleteError = DetachRunCasesCaseIdRunsRunIdDeleteErrors[keyof DetachRunCasesCaseIdRunsRunIdDeleteErrors];
+
+export type DetachRunCasesCaseIdRunsRunIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DetachRunCasesCaseIdRunsRunIdDeleteResponse = DetachRunCasesCaseIdRunsRunIdDeleteResponses[keyof DetachRunCasesCaseIdRunsRunIdDeleteResponses];
+
+export type CreateTargetCasesCaseIdTargetsPostData = {
+    body: TargetCreateRequest;
+    path: {
+        /**
+         * Case Id
+         */
+        case_id: string;
+    };
+    query?: never;
+    url: '/cases/{case_id}/targets';
+};
+
+export type CreateTargetCasesCaseIdTargetsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateTargetCasesCaseIdTargetsPostError = CreateTargetCasesCaseIdTargetsPostErrors[keyof CreateTargetCasesCaseIdTargetsPostErrors];
+
+export type CreateTargetCasesCaseIdTargetsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: TargetOut;
+};
+
+export type CreateTargetCasesCaseIdTargetsPostResponse = CreateTargetCasesCaseIdTargetsPostResponses[keyof CreateTargetCasesCaseIdTargetsPostResponses];
+
+export type ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostData = {
+    body: HypothesisCreateRequest;
+    path: {
+        /**
+         * Case Id
+         */
+        case_id: string;
+        /**
+         * Target Id
+         */
+        target_id: string;
+    };
+    query?: never;
+    url: '/cases/{case_id}/targets/{target_id}/hypotheses';
+};
+
+export type ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostError = ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostErrors[keyof ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostErrors];
+
+export type ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: HypothesisOut;
+};
+
+export type ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostResponse = ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostResponses[keyof ProposeHypothesisCasesCaseIdTargetsTargetIdHypothesesPostResponses];
+
+export type DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostData = {
+    body: DecideRequest;
+    path: {
+        /**
+         * Case Id
+         */
+        case_id: string;
+        /**
+         * Target Id
+         */
+        target_id: string;
+        /**
+         * Hypothesis Id
+         */
+        hypothesis_id: number;
+    };
+    query?: never;
+    url: '/cases/{case_id}/targets/{target_id}/hypotheses/{hypothesis_id}/decide';
+};
+
+export type DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostError = DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostErrors[keyof DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostErrors];
+
+export type DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HypothesisOut;
+};
+
+export type DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponse = DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses[keyof DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses];
 
 export type ListAuditAuditGetData = {
     body?: never;
