@@ -3,6 +3,7 @@ import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import { Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from "next/font/google";
 import { notFound } from "next/navigation";
+import { Providers } from "@/components/providers";
 import { dirFor, routing } from "@/i18n/routing";
 import "../globals.css";
 
@@ -40,9 +41,12 @@ export default async function LocaleLayout({
       lang={locale}
       dir={dirFor(locale)}
       className={`${geistSans.variable} ${geistMono.variable} ${plexArabic.variable} h-full antialiased`}
+      suppressHydrationWarning // next-themes mutates <html class> pre-paint
     >
-      <body className="min-h-full bg-zinc-950 font-sans text-zinc-100 [html[dir=rtl]_&]:font-[family-name:var(--font-arabic)]">
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+      <body className="min-h-full font-sans">
+        <NextIntlClientProvider>
+          <Providers dir={dirFor(locale)}>{children}</Providers>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

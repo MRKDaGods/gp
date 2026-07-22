@@ -4,6 +4,7 @@
     "subtitle": "Multi-camera forensic tracking platform"
   },
   "nav": {
+    "cases": "Cases",
     "runs": "Runs",
     "jobs": "Jobs",
     "logout": "Log out"
@@ -33,5 +34,8 @@
     "status": "Status",
     "executor": "Executor",
     "cancel": "Cancel"
+  },
+  "theme": {
+    "toggle": "Toggle theme"
   }
 }

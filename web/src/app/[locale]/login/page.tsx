@@ -3,6 +3,17 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { loginAuthLoginPost } from "@/lib/api";
 import "@/lib/client";
 
@@ -24,7 +35,7 @@ export default function LoginPage() {
     });
     setBusy(false);
     if (response?.ok) {
-      router.push(`/${locale}/runs`);
+      router.push(`/${locale}/cases`);
     } else {
       setFailed(true);
     }
@@ -32,48 +43,45 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-sm space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-8"
-      >
-        <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-bold">{t("app.title")}</h1>
-          <p className="text-sm text-zinc-400">{t("app.subtitle")}</p>
-        </div>
-        <label className="block space-y-1">
-          <span className="text-sm text-zinc-300">{t("login.username")}</span>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-            required
-            className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-zinc-400"
-          />
-        </label>
-        <label className="block space-y-1">
-          <span className="text-sm text-zinc-300">{t("login.password")}</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-            className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-zinc-400"
-          />
-        </label>
-        {failed && (
-          <p className="text-sm text-red-400" role="alert">
-            {t("login.failed")}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-md bg-zinc-100 px-3 py-2 font-semibold text-zinc-900 transition hover:bg-white disabled:opacity-50"
-        >
-          {t("login.submit")}
-        </button>
-      </form>
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl">{t("app.title")}</CardTitle>
+          <CardDescription>{t("app.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">{t("login.username")}</Label>
+              <Input
+                id="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">{t("login.password")}</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+            {failed && (
+              <Alert variant="destructive" role="alert">
+                <AlertTitle>{t("login.failed")}</AlertTitle>
+              </Alert>
+            )}
+            <Button type="submit" disabled={busy} className="w-full">
+              {t("login.submit")}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </main>
   );
 }

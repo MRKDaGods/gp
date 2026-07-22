@@ -2,6 +2,17 @@
 
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   cancelJobJobsJobIdCancelPost,
   listJobsJobsGet,
@@ -31,51 +42,51 @@ export default function JobsPage() {
   }
 
   if (jobs === null) {
-    return <p className="text-zinc-500">…</p>;
+    return <Skeleton className="h-32 w-full" />;
   }
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-bold">{t("title")}</h1>
       {jobs.length === 0 ? (
-        <p className="text-zinc-500">{t("empty")}</p>
+        <p className="text-muted-foreground">{t("empty")}</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-800">
-          <table className="w-full text-sm">
-            <thead className="bg-zinc-900 text-zinc-400">
-              <tr>
-                {[t("job_id"), t("kind"), t("status"), t("executor"), ""].map(
-                  (header, i) => (
-                    <th key={i} className="px-4 py-2 text-start font-medium">
-                      {header}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("job_id")}</TableHead>
+                <TableHead>{t("kind")}</TableHead>
+                <TableHead>{t("status")}</TableHead>
+                <TableHead>{t("executor")}</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {jobs.map((job) => (
-                <tr
-                  key={job.job_id}
-                  className="border-t border-zinc-800 hover:bg-zinc-900/50"
-                >
-                  <td className="px-4 py-2 font-mono text-xs">{job.job_id}</td>
-                  <td className="px-4 py-2">{job.kind}</td>
-                  <td className="px-4 py-2">{job.status}</td>
-                  <td className="px-4 py-2">{job.executor}</td>
-                  <td className="px-4 py-2">
+                <TableRow key={job.job_id}>
+                  <TableCell className="font-mono text-xs">
+                    {job.job_id}
+                  </TableCell>
+                  <TableCell>{job.kind}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={job.status ?? "queued"} />
+                  </TableCell>
+                  <TableCell>{job.executor}</TableCell>
+                  <TableCell>
                     {ACTIVE.has(job.status ?? "") && (
-                      <button
+                      <Button
+                        variant="outline"
+                        size="xs"
                         onClick={() => cancel(job.job_id!)}
-                        className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300 transition hover:bg-zinc-800"
                       >
                         {t("cancel")}
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>

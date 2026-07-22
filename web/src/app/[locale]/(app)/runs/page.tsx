@@ -1,19 +1,24 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { StatusBadge } from "@/components/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { listRunsRunsGet, type RunSummary } from "@/lib/api";
 import "@/lib/client";
 
-const STATUS_STYLES: Record<string, string> = {
-  completed: "text-emerald-400",
-  running: "text-sky-400",
-  failed: "text-red-400",
-  cancelled: "text-amber-400",
-};
-
 export default function RunsPage() {
   const t = useTranslations("runs");
+  const locale = useLocale();
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
 
   useEffect(() => {
@@ -21,54 +26,50 @@ export default function RunsPage() {
   }, []);
 
   if (runs === null) {
-    return <p className="text-zinc-500">…</p>;
+    return <Skeleton className="h-32 w-full" />;
   }
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-bold">{t("title")}</h1>
       {runs.length === 0 ? (
-        <p className="text-zinc-500">{t("empty")}</p>
+        <p className="text-muted-foreground">{t("empty")}</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-800">
-          <table className="w-full text-sm">
-            <thead className="bg-zinc-900 text-start text-zinc-400">
-              <tr>
-                {[
-                  t("run_id"),
-                  t("role"),
-                  t("status"),
-                  t("profile"),
-                  t("artifacts"),
-                  t("created"),
-                ].map((header) => (
-                  <th key={header} className="px-4 py-2 text-start font-medium">
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("run_id")}</TableHead>
+                <TableHead>{t("role")}</TableHead>
+                <TableHead>{t("status")}</TableHead>
+                <TableHead>{t("profile")}</TableHead>
+                <TableHead>{t("artifacts")}</TableHead>
+                <TableHead>{t("created")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {runs.map((run) => (
-                <tr
-                  key={run.run_id}
-                  className="border-t border-zinc-800 hover:bg-zinc-900/50"
-                >
-                  <td className="px-4 py-2 font-mono text-xs">{run.run_id}</td>
-                  <td className="px-4 py-2">{run.role}</td>
-                  <td
-                    className={`px-4 py-2 ${STATUS_STYLES[run.status] ?? "text-zinc-300"}`}
-                  >
-                    {run.status}
-                  </td>
-                  <td className="px-4 py-2">{run.profile_name}</td>
-                  <td className="px-4 py-2">{run.num_artifacts}</td>
-                  <td className="px-4 py-2 text-zinc-400">
-                    {new Date(run.created_at).toLocaleString()}
-                  </td>
-                </tr>
+                <TableRow key={run.run_id}>
+                  <TableCell className="font-mono text-xs">
+                    <Link
+                      href={`/${locale}/runs/${run.run_id}`}
+                      className="hover:underline"
+                    >
+                      {run.run_id}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{run.role}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={run.status} />
+                  </TableCell>
+                  <TableCell>{run.profile_name}</TableCell>
+                  <TableCell>{run.num_artifacts}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(run.created_at).toLocaleString(locale)}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
