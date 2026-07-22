@@ -141,6 +141,7 @@ smart cities, streets).
 
 ### Phase 5 — Frontend (enterprise-grade)
 - [ ] Next.js App Router scaffold, design system (shadcn/ui + Tailwind), dark/light, **Arabic/RTL i18n scaffolding from day 1**
+  - [x] **2026-07-22 scaffold LIVE in `web/`** (v1 leftovers stay gitignored in `/frontend/`): Next.js 16 + Turbopack + Tailwind 4 + pnpm; next-intl with **Arabic default + RTL day 1** (html dir/lang per request; IBM Plex Sans Arabic; verified live: /ar/jobs renders RTL with a real job row); hey-api TS client generated from the committed `web/openapi.json` snapshot (`pnpm generate:api`; generated code lint-excluded); login (session cookie) + auth-guarded runs/jobs pages against the real API; CORS added to the API for dev origins (explicit origins — cookie auth). Gotcha recorded: open via localhost, not 127.0.0.1 (SameSite treats them as different sites). Node 22 local vs D19's Node 24 pin — revisit at hardening. Remaining: shadcn-on-BaseUI design system, dark/light, case workspace, SSE-driven job monitoring UI, run detail w/ provenance viewer
 - [ ] Case workspace: galleries, probes, search, results review (confirm/reject hypotheses with audit)
 - [ ] Cross-camera timeline + map view (GPS cameras; Shorouk coords) + evidence clips
 - [ ] Job monitoring (live typed events), run detail with resolved-config + provenance viewer

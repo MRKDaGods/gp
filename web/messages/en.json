@@ -1,0 +1,37 @@
+{
+  "app": {
+    "title": "ATHAR",
+    "subtitle": "Multi-camera forensic tracking platform"
+  },
+  "nav": {
+    "runs": "Runs",
+    "jobs": "Jobs",
+    "logout": "Log out"
+  },
+  "login": {
+    "title": "Sign in",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "failed": "Invalid credentials"
+  },
+  "runs": {
+    "title": "Runs",
+    "empty": "No runs yet",
+    "run_id": "Run id",
+    "role": "Role",
+    "status": "Status",
+    "profile": "Profile",
+    "artifacts": "Artifacts",
+    "created": "Created"
+  },
+  "jobs": {
+    "title": "Jobs",
+    "empty": "No jobs",
+    "job_id": "Job id",
+    "kind": "Kind",
+    "status": "Status",
+    "executor": "Executor",
+    "cancel": "Cancel"
+  }
+}

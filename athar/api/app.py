@@ -65,6 +65,17 @@ def create_app(settings: Optional[ApiSettings] = None) -> FastAPI:
     )
     app.state.services = services
 
+    if settings.cors_origins:
+        from fastapi.middleware.cors import CORSMiddleware
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_credentials=True,  # session cookie
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
     from athar.api.routers import auditlog, auth, jobs, models, runs, search
 
     app.include_router(auth.router)

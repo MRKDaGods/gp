@@ -28,3 +28,7 @@ class ApiSettings(BaseSettings):
     cookie_secure: bool = False
 
     spawn_worker: bool = True  # start a local job worker subprocess on demand
+
+    # Dev origins for the web app (cookies -> allow_credentials, so origins
+    # must be explicit, never "*"). Same-origin production needs none.
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
