@@ -93,25 +93,32 @@ MULTICLASS_DEFAULTS: dict[str, Any] = {
 }
 
 def production_profile() -> RunProfile:
-    """multiclass + the CLIP-SENet fusion stream on the vehicle branch.
+    """multiclass + the CLIP-SENet and DINOv2 fusion streams on the
+    vehicle branch.
 
     Production ≠ parity (D18): gates keep running ``multiclass`` with the
-    v1 components; upgrades land here. Fusion weighting follows the v1 14t
-    recipe reference (w_clipsenet = 0.7 against the TransReID primary).
+    v1 components; upgrades land here. Fusion weighting references the v1
+    recipes: w_clipsenet = 0.7 (14t) and w_dinov2 = 0.525 (14e tertiary)
+    against the TransReID primary.
     """
     profile = multiclass_profile()
     profile.name = "production"
     for branch in profile.branches:
         if EntityClass.CAR in branch.entity_classes:
-            branch.embedders.insert(
-                1,
+            branch.embedders[1:1] = [
                 ComponentSpec(
                     name="clipsenet_v1",
                     config={
                         "weights_path": "models/reid/clipsenet_v6_veri776_best.pth",
                     },
                 ),
-            )
+                ComponentSpec(
+                    name="dinov2_v1",
+                    config={
+                        "weights_path": "models/reid/vehicle_transreid_dinov2_large_cityflowv2_final.pth",
+                    },
+                ),
+            ]
     return profile
 
 
@@ -121,7 +128,11 @@ PRODUCTION_DEFAULTS: dict[str, Any] = {
         **MULTICLASS_DEFAULTS["associate"],
         # weighted per-stream fusion (renormalized over streams carrying
         # both tracklets); absent streams keep weight 1.0
-        "stream_weights": {"transreid_primary": 1.0, "clipsenet": 0.7},
+        "stream_weights": {
+            "transreid_primary": 1.0,
+            "clipsenet": 0.7,
+            "dinov2": 0.525,
+        },
     },
 }
 

@@ -34,12 +34,14 @@ class TestProduction:
             b for b in profile.branches if EntityClass.PERSON in b.entity_classes
         )
         assert [e.name for e in vehicle.embedders] == [
-            "transreid_v1", "clipsenet_v1", "hsv_v1",
+            "transreid_v1", "clipsenet_v1", "dinov2_v1", "hsv_v1",
         ]
-        assert "clipsenet_v1" not in [e.name for e in person.embedders]
-        # 14t recipe reference weighting, renormalized fusion in associate
+        person_embedders = [e.name for e in person.embedders]
+        assert "clipsenet_v1" not in person_embedders
+        assert "dinov2_v1" not in person_embedders
+        # 14t/14e recipe reference weighting, renormalized fusion in associate
         assert defaults["associate"]["stream_weights"] == {
-            "transreid_primary": 1.0, "clipsenet": 0.7,
+            "transreid_primary": 1.0, "clipsenet": 0.7, "dinov2": 0.525,
         }
 
     def test_parity_profile_untouched(self):

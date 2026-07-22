@@ -165,6 +165,104 @@ class ClipSenetEmbedderAdapter:
         return (features * weights[:, np.newaxis]).sum(axis=0)
 
 
+class Dinov2EmbedderAdapter:
+    """DINOv2-L TransReID tertiary stream (14e B1 recipe, CityFlowV2 ckpt).
+
+    Arch is the verbatim 09s-kernel port
+    (:mod:`athar.components.embedders.transreid_dinov2_09s`); constructed
+    OFFLINE (``pretrained=False`` + strict load of the full finetuned
+    state dict — ``num_classes``/``num_cameras`` are inferred from the
+    checkpoint shapes). Eval mirrors the kernel's ``extract_features``:
+    horizontal-flip TTA averaging, then a final L2 re-norm.
+
+    Camera ids are NOT passed at inference (SIE skipped): the checkpoint's
+    camera vocabulary is its CityFlowV2 train split, which is meaningless
+    for deployment footage — same convention as the other v1 streams.
+    """
+
+    def __init__(
+        self,
+        weights_path: str,
+        stream_name: str = "dinov2",
+        device: str = "cpu",
+        batch_size: int = 8,
+        quality_temperature: float = 3.0,
+        flip_augment: bool = True,
+        image_size: Optional[int] = None,  # default: canonical 252
+    ) -> None:
+        import torch
+
+        from athar.components.embedders.transreid_dinov2_09s import (
+            EMBED_DIM,
+            IMG_SIZE,
+            STRIDE_SIZE,
+            VIT_MODEL,
+            TransReID,
+            build_test_transform,
+            infer_checkpoint_dims,
+        )
+
+        img_size = int(image_size) if image_size else IMG_SIZE
+        state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
+        num_classes, num_cameras = infer_checkpoint_dims(state_dict)
+        model = TransReID(
+            num_classes=num_classes,
+            num_cameras=num_cameras,
+            embed_dim=EMBED_DIM,
+            vit_model=VIT_MODEL,
+            pretrained=False,
+            sie_camera=num_cameras > 0,
+            jpm=True,
+            img_size=img_size,
+            stride_size=STRIDE_SIZE,
+        )
+        model.load_state_dict(state_dict, strict=True)
+        self._device = device
+        self._model = model.to(device).eval()
+        self._transform = build_test_transform(img_size)
+        self.stream_name = stream_name
+        self.dim = EMBED_DIM
+        self.model_id: Optional[str] = None
+        self._batch_size = batch_size
+        self._quality_temperature = quality_temperature
+        self._flip_augment = flip_augment
+
+    def _embed_bgr(self, crops: "list[np.ndarray]") -> np.ndarray:
+        import torch
+        import torch.nn.functional as F
+        from PIL import Image
+
+        features: list[np.ndarray] = []
+        with torch.inference_mode():
+            for start in range(0, len(crops), self._batch_size):
+                chunk = crops[start:start + self._batch_size]
+                batch = torch.stack(
+                    [self._transform(Image.fromarray(c[:, :, ::-1])) for c in chunk]
+                ).to(self._device)
+                feats = self._model(batch)
+                if self._flip_augment:
+                    flipped = self._model(torch.flip(batch, [3]))
+                    feats = (feats + flipped) / 2.0
+                features.append(
+                    F.normalize(feats.float(), p=2, dim=1).cpu().numpy()
+                )
+        return np.concatenate(features, axis=0).astype(np.float32)
+
+    def embed(self, crops: np.ndarray) -> np.ndarray:
+        return self._embed_bgr([crops[i] for i in range(crops.shape[0])])
+
+    def embed_tracklet(
+        self, scored_crops: "list[QualityScoredCrop]", cam_index: Optional[int] = None
+    ) -> Optional[np.ndarray]:
+        if not scored_crops:
+            return None
+        features = self._embed_bgr([c.image for c in scored_crops])
+        qualities = np.asarray([c.quality for c in scored_crops], dtype=np.float32)
+        weights = np.exp(qualities * self._quality_temperature)
+        weights = weights / weights.sum()
+        return (features * weights[:, np.newaxis]).sum(axis=0)
+
+
 class HsvEmbedderAdapter:
     """Striped HSV color histogram stream (pure numpy/cv2 — always available).
 
