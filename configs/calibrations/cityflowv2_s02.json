@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "streams": {
+    "clipsenet": {
+      "kind": "logistic",
+      "midpoint": 0.8729289951140334,
+      "scale": 0.058043635493944756,
+      "fitted_on": "cityflowv2-validation-S02@3c99e7d8a3de",
+      "num_pairs": 2268
+    },
+    "dinov2": {
+      "kind": "logistic",
+      "midpoint": 0.6587697586604715,
+      "scale": 0.04974019907390121,
+      "fitted_on": "cityflowv2-validation-S02@3c99e7d8a3de",
+      "num_pairs": 2268
+    },
+    "hsv": {
+      "kind": "logistic",
+      "midpoint": 1.0022129495034497,
+      "scale": 0.07109321939403868,
+      "fitted_on": "cityflowv2-validation-S02@3c99e7d8a3de",
+      "num_pairs": 2268
+    },
+    "transreid_primary": {
+      "kind": "logistic",
+      "midpoint": 0.6827346772809325,
+      "scale": 0.08514523478933751,
+      "fitted_on": "cityflowv2-validation-S02@3c99e7d8a3de",
+      "num_pairs": 2268
+    }
+  }
+}

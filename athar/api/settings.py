@@ -18,7 +18,12 @@ class ApiSettings(BaseSettings):
     jobs_db: Path = Path("data/jobs/jobs.db")
     registry_db: Path = Path("data/registry/models.db")
     app_db: Path = Path("data/app/app.db")
-    calibration_path: Path | None = None  # StreamCalibrations JSON (optional)
+    # StreamCalibrations JSON. None = scores reported without probabilities
+    # (never invented). A benchmark-fitted file ships at
+    # configs/calibrations/cityflowv2_s02.json (vehicle streams, CityFlowV2
+    # validation GT) — deployments opt in via ATHAR_CALIBRATION_PATH; the
+    # mapping is domain-approximate until per-deployment calibration lands.
+    calibration_path: Path | None = None
     weights_manifest: Path = Path("configs/weights_manifest.yaml")
     # Deployment site plan: {camera_id: {lat, lng, label}} for the map view.
     # Optional — deployments without surveyed coordinates simply get no map.

@@ -1,0 +1,98 @@
+{
+  "git_sha": "3c99e7d8a3def2fec20cc24ec74dfc3e8a0574c3",
+  "run_id": "run-20260724-134823-b698a6",
+  "config_hash": "d39193234da9a8eecb2e19e4c13ebe0d1d4f51a0b0fa5741f70b0ec59fc49ad7",
+  "scene": "S02",
+  "cameras": {
+    "c006": {
+      "labeled": 25,
+      "tracklets": 157
+    },
+    "c007": {
+      "labeled": 79,
+      "tracklets": 125
+    },
+    "c008": {
+      "labeled": 86,
+      "tracklets": 155
+    },
+    "c009": {
+      "labeled": 23,
+      "tracklets": 190
+    }
+  },
+  "fitted_on": "cityflowv2-validation-S02@3c99e7d8a3de",
+  "params": {
+    "iou": 0.5,
+    "purity": 0.8,
+    "coverage": 0.5,
+    "neg_per_pos": 20
+  },
+  "streams": {
+    "clipsenet": {
+      "skipped": false,
+      "positives": 108,
+      "negatives": 2160,
+      "mean_pos": 0.8558992072412352,
+      "mean_neg": 0.2853146177880871,
+      "midpoint": 0.8729289951140334,
+      "scale": 0.058043635493944756,
+      "probe": {
+        "0.30": 0.0001,
+        "0.50": 0.0016,
+        "0.70": 0.0484,
+        "0.90": 0.6145
+      }
+    },
+    "dinov2": {
+      "skipped": false,
+      "positives": 108,
+      "negatives": 2160,
+      "mean_pos": 0.8790936951858185,
+      "mean_neg": 0.037926799060246257,
+      "midpoint": 0.6587697586604715,
+      "scale": 0.04974019907390121,
+      "probe": {
+        "0.30": 0.0007,
+        "0.50": 0.0395,
+        "0.70": 0.6961,
+        "0.90": 0.9922
+      }
+    },
+    "hsv": {
+      "skipped": false,
+      "positives": 108,
+      "negatives": 2160,
+      "mean_pos": 0.8216554107504727,
+      "mean_neg": 0.749908196837026,
+      "midpoint": 1.0022129495034497,
+      "scale": 0.07109321939403868,
+      "probe": {
+        "0.30": 0.0001,
+        "0.50": 0.0009,
+        "0.70": 0.0141,
+        "0.90": 0.1919
+      }
+    },
+    "transreid_person": {
+      "skipped": true,
+      "positives": 0,
+      "negatives": 0
+    },
+    "transreid_primary": {
+      "skipped": false,
+      "positives": 108,
+      "negatives": 2160,
+      "mean_pos": 0.6754048025874668,
+      "mean_neg": 0.21880649284036235,
+      "midpoint": 0.6827346772809325,
+      "scale": 0.08514523478933751,
+      "probe": {
+        "0.30": 0.011,
+        "0.50": 0.1047,
+        "0.70": 0.5505,
+        "0.90": 0.9277
+      }
+    }
+  }
+}
