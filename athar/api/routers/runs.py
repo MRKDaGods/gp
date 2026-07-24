@@ -195,6 +195,7 @@ def get_timeline(services: ServicesDep, run_id: str) -> TimelineOut:
         if scene_end:
             span_end = max(span_end, scene_end)
 
+    run_dir = services.store.run_dir(run_id)
     identities: list[TimelineIdentityOut] = []
     for identity in report.get("identities", []):
         members = [
@@ -204,7 +205,9 @@ def get_timeline(services: ServicesDep, run_id: str) -> TimelineOut:
                 start_s=m.get("start_ts_scene_s"),
                 end_s=m.get("end_ts_scene_s"),
                 has_thumbnail=bool(m.get("thumbnail")),
-                clip_available=on_disk.get(m["camera_id"], False),
+                # footage on the box, or a clip pre-cut at package time
+                clip_available=on_disk.get(m["camera_id"], False)
+                or bool(m.get("clip") and (run_dir / m["clip"]).is_file()),
             )
             for m in identity["members"]
         ]
@@ -253,7 +256,7 @@ def get_clip(
 ) -> FileResponse:
     """Evidence clip for a scene-clock span of one camera, transcoded on
     demand (cached under the run dir)."""
-    from athar.serving.clips import ClipError, clip_for_span
+    from athar.serving.clips import ClipError, cached_clip_path, clip_for_span
 
     manifest = _load(services, run_id)
     video = next((v for v in manifest.inputs if v.camera_id == camera_id), None)
@@ -261,6 +264,17 @@ def get_clip(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, f"run has no camera {camera_id!r}"
         )
+    cached = cached_clip_path(
+        services.store.run_dir(run_id), camera_id, start_s, end_s,
+        services.settings.clip_pad_s,
+    )
+    if cached.is_file():  # pre-cut at package time or a prior request —
+        # serveable even when the source footage has left the box
+        audit.append(
+            db, user.username, "clip_exported",
+            run_id=run_id, camera_id=camera_id, start_s=start_s, end_s=end_s,
+        )
+        return FileResponse(cached, media_type="video/mp4", filename=cached.name)
     source = _evidence_path(video, services, manifest)
     if not source.is_file():
         raise HTTPException(

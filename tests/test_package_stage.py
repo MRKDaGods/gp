@@ -160,6 +160,125 @@ class TestPackage:
         assert by_track[1]["end_ts_scene_s"] == 1.5
         assert by_track[2]["clip"] is None
 
+    def test_clips_all_from_video_evidence(self, store, tmp_path):
+        av = pytest.importorskip("av")
+        from fractions import Fraction
+
+        from athar.core.timebase import CameraTimeBase
+
+        video = tmp_path / "camv.mp4"
+        with av.open(str(video), "w") as container:
+            stream = container.add_stream("libx264", rate=Fraction(10, 1))
+            stream.width, stream.height, stream.pix_fmt = 64, 48, "yuv420p"
+            for i in range(40):
+                img = np.full((48, 64, 3), (i * 6) % 255, dtype=np.uint8)
+                frame = av.VideoFrame.from_ndarray(img, format="rgb24")
+                for packet in stream.encode(frame.reformat(format="yuv420p")):
+                    container.mux(packet)
+            for packet in stream.encode(None):
+                container.mux(packet)
+
+        manifest = RunManifest(
+            run_id=new_run_id(), role=RunRole.GALLERY, profile_name="pkg-test"
+        )
+        manifest.config = ResolvedConfig.resolve(
+            [(ConfigLayer.PROFILE_DEFAULT,
+              {"package": {"clips": "all", "clip_pad_s": 0.5}})]
+        )
+        manifest.inputs.append(
+            VideoInput(camera_id="camv", original_path=str(video), sha256="0" * 64)
+        )
+        manifest.timebase.cameras["camv"] = CameraTimeBase(camera_id="camv", fps=10.0)
+        run_dir = store.run_dir(manifest.run_id)
+        (run_dir / "tracklets").mkdir(parents=True)
+        payload = {
+            "schema_version": 1, "camera_id": "camv",
+            "tracklets": [{
+                "key": {"run_id": manifest.run_id, "camera_id": "camv", "track_id": 1},
+                "entity_class": "person",
+                "start_ts_scene_s": 1.0, "end_ts_scene_s": 2.0,
+                "observation_count": 1, "mean_confidence": 0.9,
+            }],
+            "observations": {"1": [_obs(12, 4, 4, 40, 30, 0.9)]},
+        }
+        (run_dir / "tracklets" / "camv.json").write_text(json.dumps(payload), "utf-8")
+        manifest.register_artifact(
+            ArtifactRecord(name="tracklets.camv", relpath="tracklets/camv.json",
+                           schema_version=1, producer="test", row_count=1)
+        )
+        trajectories = {
+            "schema_version": 1,
+            "trajectories": [{
+                "global_id": 0, "entity_class": "person", "confidence": 0.9,
+                "evidence": {},
+                "members": [
+                    {"run_id": manifest.run_id, "camera_id": "camv", "track_id": 1}
+                ],
+            }],
+        }
+        (run_dir / "trajectories.json").write_text(json.dumps(trajectories), "utf-8")
+        manifest.register_artifact(
+            ArtifactRecord(name="associate.trajectories", relpath="trajectories.json",
+                           schema_version=1, producer="test", row_count=1)
+        )
+
+        # thumbnails decode through the profile frame_source — use the real
+        # video source so both thumbs and clips read the same mp4
+        video_profile = _profile().model_copy(
+            update={"frame_source": ComponentSpec(name="video")}
+        )
+        result = PipelineRunner(store, [PackageStage()]).run(manifest, video_profile)
+        assert result.status == RunStatus.COMPLETED
+        report = json.loads(
+            store.artifact_path(result, "package.report").read_text("utf-8")
+        )
+        (member,) = report["identities"][0]["members"]
+        assert member["clip"] is not None and member["clip"].startswith("clips/")
+        clip_path = store.run_dir(result.run_id) / member["clip"]
+        assert clip_path.is_file() and clip_path.stat().st_size > 0
+        import hashlib
+
+        assert member["clip_sha256"] == hashlib.sha256(
+            clip_path.read_bytes()
+        ).hexdigest()
+        # span [1.0, 2.0] padded 0.5 -> media [0.5, 2.5] at 10 fps: 21 frames
+        with av.open(str(clip_path)) as container:
+            frames = sum(1 for _ in container.decode(container.streams.video[0]))
+        assert frames == 21
+
+    def test_clips_cross_camera_mode_skips_single_camera(self, store, gallery):
+        gallery.config = ResolvedConfig.resolve(
+            [(ConfigLayer.PROFILE_DEFAULT,
+              {"package": {"thumb_size": 32, "clips": "cross_camera"}})]
+        )
+        result = _run(store, gallery)
+        report = json.loads(
+            store.artifact_path(result, "package.report").read_text("utf-8")
+        )
+        assert all(
+            m["clip"] is None
+            for identity in report["identities"] for m in identity["members"]
+        )
+
+    def test_clips_degrade_on_undecodable_evidence(self, store, gallery):
+        # image-dir evidence cannot be transcoded — clip stays null, run OK
+        gallery.config = ResolvedConfig.resolve(
+            [(ConfigLayer.PROFILE_DEFAULT,
+              {"package": {"thumb_size": 32, "clips": "all"}})]
+        )
+        from athar.core.timebase import CameraTimeBase
+
+        gallery.timebase.cameras["cam01"] = CameraTimeBase(camera_id="cam01", fps=2.0)
+        result = _run(store, gallery)
+        assert result.status == RunStatus.COMPLETED
+        report = json.loads(
+            store.artifact_path(result, "package.report").read_text("utf-8")
+        )
+        assert all(
+            m["clip"] is None
+            for identity in report["identities"] for m in identity["members"]
+        )
+
     def test_is_complete_skips_rerun(self, store, gallery):
         _run(store, gallery)
         reloaded = store.load(gallery.run_id)

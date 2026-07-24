@@ -11,9 +11,13 @@ export, case UI) starts from:
   skeleton (evidence sha256 -> config hash -> identities) with one entry
   per trajectory, per-member time spans and thumbnail paths.
 
-Evidence CLIPS (short video segments per identity) are deliberately not
-here yet — they need the transcode plumbing planned for the serving
-phase; the report schema already reserves the field.
+Evidence CLIPS: with ``package.clips`` set to ``cross_camera`` or
+``all`` (default ``none`` — parity-safe), each selected member's span is
+pre-cut into ``clips/`` through the same serving plumbing the on-demand
+endpoint uses (identical cache naming, so viewing a pre-cut span never
+re-transcodes), and the report member records the relpath plus the
+clip's own sha256. A member whose evidence cannot be cut (image-dir
+input, missing footage) keeps ``clip: null`` — degraded, never fatal.
 """
 
 from __future__ import annotations
@@ -197,6 +201,65 @@ class PackageStage:
                 out[track_id_str] = rel
         return out
 
+    def _cut_clips(self, ctx: "StageContext", identities: list[dict]) -> None:
+        """Pre-cut evidence clips per ``package.clips`` mode; failures
+        degrade to ``clip: null``, never fail the stage."""
+        import hashlib
+
+        from athar.serving.clips import ClipError, clip_for_span
+
+        config = ctx.manifest.config
+        mode = str(config.get("package.clips", "none"))
+        if mode not in ("cross_camera", "all"):
+            if mode != "none":
+                logger.warning("package: unknown clips mode %r — skipping", mode)
+            return
+        try:
+            import av  # noqa: F401 — the transcode dep is optional
+        except ImportError:
+            logger.warning("package: clips requested but PyAV is unavailable")
+            return
+        pad_s = float(config.get("package.clip_pad_s", 1.0))
+        max_s = float(config.get("package.clip_max_duration_s", 60.0))
+        videos = {v.camera_id: v for v in ctx.manifest.inputs}
+        cut = 0
+        for identity in identities:
+            if mode == "cross_camera" and not identity["cross_camera"]:
+                continue
+            for member in identity["members"]:
+                cam = member["camera_id"]
+                start = member.get("start_ts_scene_s")
+                end = member.get("end_ts_scene_s")
+                video = videos.get(cam)
+                timebase = ctx.manifest.timebase.cameras.get(cam)
+                if video is None or timebase is None or start is None or end is None:
+                    continue
+                # truncate rather than refuse: an eager cut of the sighting's
+                # START beats no clip at all (the interactive endpoint refuses
+                # instead, protecting the server from tape-length requests)
+                if end - start > max_s:
+                    logger.warning(
+                        "package: clip %s/%s truncated to %.0fs", cam,
+                        member["track_id"], max_s,
+                    )
+                    end = start + max_s
+                try:
+                    path = clip_for_span(
+                        ctx.run_dir, video.original_path, cam, timebase,
+                        float(start), float(end),
+                        pad_s=pad_s, max_duration_s=max_s + 2 * pad_s + 1,
+                    )
+                except (ClipError, ValueError) as exc:
+                    logger.warning(
+                        "package: no clip for %s/%s: %s", cam,
+                        member["track_id"], exc,
+                    )
+                    continue
+                member["clip"] = str(path.relative_to(ctx.run_dir)).replace("\\", "/")
+                member["clip_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+                cut += 1
+        logger.info("package: %d evidence clips cut (mode=%s)", cut, mode)
+
     def _build_report(
         self,
         ctx: "StageContext",
@@ -222,7 +285,7 @@ class PackageStage:
                             "start_ts_scene_s": info.get("start_ts_scene_s"),
                             "end_ts_scene_s": info.get("end_ts_scene_s"),
                             "thumbnail": thumb_index.get(cam, {}).get(str(track_id)),
-                            "clip": None,  # reserved: evidence clips land later
+                            "clip": None,  # filled by _cut_clips when enabled
                         }
                     )
                 identities.append(
@@ -235,6 +298,7 @@ class PackageStage:
                         "members": members,
                     }
                 )
+        self._cut_clips(ctx, identities)
         return {
             "schema_version": PACKAGE_SCHEMA_VERSION,
             "run": {

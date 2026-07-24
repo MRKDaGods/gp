@@ -148,6 +148,21 @@ def extract_clip(
     return out_path
 
 
+def cached_clip_path(
+    run_dir: Path, camera_id: str, start_scene_s: float, end_scene_s: float,
+    pad_s: float,
+) -> Path:
+    """Deterministic cache location for a scene-span clip. Shared by the
+    on-demand endpoint and the package stage's eager cuts, so a span cut at
+    package time is served without the source footage ever being needed
+    again."""
+    name = (
+        f"{camera_id}_{round(start_scene_s * 1000)}-{round(end_scene_s * 1000)}"
+        f"_p{round(pad_s * 1000)}.mp4"
+    )
+    return run_dir / "clips" / name
+
+
 def clip_for_span(
     run_dir: Path,
     video_path: Path | str,
@@ -173,11 +188,7 @@ def clip_for_span(
         raise ValueError(
             f"clip span {end - start:0.1f}s exceeds the {max_duration_s:0.0f}s cap"
         )
-    name = (
-        f"{camera_id}_{round(start_scene_s * 1000)}-{round(end_scene_s * 1000)}"
-        f"_p{round(pad_s * 1000)}.mp4"
-    )
-    out_path = run_dir / "clips" / name
+    out_path = cached_clip_path(run_dir, camera_id, start_scene_s, end_scene_s, pad_s)
     if out_path.is_file():
         return out_path
     return extract_clip(video_path, out_path, start, end)
