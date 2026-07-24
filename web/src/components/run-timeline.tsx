@@ -41,14 +41,34 @@ export function RunTimeline({
   const t = useTranslations("timeline");
   const [selected, setSelected] = useState<Selection | null>(null);
 
+  // long tapes squeeze short sightings into slivers — default to a view
+  // clamped around the activity when it covers under half the tape
+  const spans = timeline.identities.flatMap((identity) =>
+    identity.members.filter((m) => m.start_s !== null && m.end_s !== null),
+  );
+  const activityStart = Math.min(...spans.map((m) => m.start_s as number), Infinity);
+  const activityEnd = Math.max(...spans.map((m) => m.end_s as number), 0);
+  const tapeEnd = Math.max(timeline.span_end_s, 1);
+  const hasActivityWindow =
+    spans.length > 0 && activityEnd - activityStart < tapeEnd / 2;
+  const [fitActivity, setFitActivity] = useState(true);
+
   if (timeline.identities.length === 0) {
     return <p className="text-sm text-muted-foreground">{t("no_identities")}</p>;
   }
 
-  const span = Math.max(timeline.span_end_s, 1);
+  const margin = Math.max((activityEnd - activityStart) * 0.1, 2);
+  const viewStart =
+    hasActivityWindow && fitActivity ? Math.max(activityStart - margin, 0) : 0;
+  const viewEnd =
+    hasActivityWindow && fitActivity ? activityEnd + margin : tapeEnd;
+  const span = Math.max(viewEnd - viewStart, 1);
   const step = tickStep(span);
   const ticks: number[] = [];
-  for (let v = 0; v <= span; v += step) ticks.push(v);
+  for (let v = Math.ceil(viewStart / step) * step; v <= viewEnd; v += step) {
+    ticks.push(v);
+  }
+  const pct = (value: number) => ((value - viewStart) / span) * 100;
 
   // one lane per camera; members grouped by camera, carrying their identity
   const lanes = timeline.cameras.map((camera) => ({
@@ -73,12 +93,23 @@ export function RunTimeline({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        {t("summary", {
-          identities: timeline.identities.length,
-          cross: crossCount,
-        })}
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-muted-foreground">
+          {t("summary", {
+            identities: timeline.identities.length,
+            cross: crossCount,
+          })}
+        </p>
+        {hasActivityWindow && (
+          <button
+            type="button"
+            onClick={() => setFitActivity((v) => !v)}
+            className="rounded-md border px-2 py-0.5 text-xs transition-colors hover:bg-muted"
+          >
+            {fitActivity ? t("full_span") : t("fit_activity")}
+          </button>
+        )}
+      </div>
 
       {/* the time axis reads left-to-right in both locales, like any chart */}
       <div dir="ltr" className="space-y-1.5">
@@ -87,7 +118,7 @@ export function RunTimeline({
             <span
               key={tick}
               className="absolute -translate-x-1/2"
-              style={{ left: `${(tick / span) * 100}%` }}
+              style={{ left: `${pct(tick)}%` }}
             >
               {formatClock(tick)}
             </span>
@@ -111,7 +142,7 @@ export function RunTimeline({
                 <div
                   className="absolute inset-y-0 bg-muted"
                   style={{
-                    left: `${(camera.scene_start_s / span) * 100}%`,
+                    left: `${pct(camera.scene_start_s)}%`,
                     width: `${((camera.scene_end_s - camera.scene_start_s) / span) * 100}%`,
                   }}
                 />
@@ -137,7 +168,7 @@ export function RunTimeline({
                       identity.cross_camera ? "border border-foreground/60" : ""
                     }`}
                     style={{
-                      left: `${(start / span) * 100}%`,
+                      left: `${pct(start)}%`,
                       width: `${Math.max(((end - start) / span) * 100, 0.6)}%`,
                       backgroundColor: identityColor(identity.global_id),
                     }}

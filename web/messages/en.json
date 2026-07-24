@@ -151,6 +151,8 @@
     "class_truck": "Truck",
     "class_bus": "Bus",
     "class_motorcycle": "Motorcycle",
-    "class_bicycle": "Bicycle"
+    "class_bicycle": "Bicycle",
+    "fit_activity": "Fit to sightings",
+    "full_span": "Full tape"
   }
 }

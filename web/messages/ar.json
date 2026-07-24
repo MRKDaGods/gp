@@ -151,6 +151,8 @@
     "class_truck": "شاحنة",
     "class_bus": "حافلة",
     "class_motorcycle": "دراجة نارية",
-    "class_bicycle": "دراجة هوائية"
+    "class_bicycle": "دراجة هوائية",
+    "fit_activity": "احتواء الظهورات",
+    "full_span": "كامل التسجيل"
   }
 }
