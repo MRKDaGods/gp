@@ -616,6 +616,69 @@ class TestCases:
             assert expected in actions, expected
         assert client.get("/audit/verify").json()["intact"] is True
 
+    def test_case_report_dossier(self, client, gallery, monkeypatch):
+        login(client, "inv")
+        case = self._create(client, title="Parking lot theft")
+        case_id = case["case_id"]
+        client.post(f"/cases/{case_id}/runs", json={"run_id": gallery.run_id})
+        target = client.post(
+            f"/cases/{case_id}/targets", json={"label": "Suspect vehicle"}
+        ).json()
+        hyp = client.post(
+            f"/cases/{case_id}/targets/{target['target_id']}/hypotheses",
+            json={"run_id": gallery.run_id, "camera_id": "g1", "track_id": 1,
+                  "raw_score": 0.97, "stream": "appearance"},
+        ).json()
+        client.post(
+            f"/cases/{case_id}/targets/{target['target_id']}/hypotheses/"
+            f"{hyp['hypothesis_id']}/decide",
+            json={"status": "confirmed"},
+        )
+
+        html = client.get(f"/cases/{case_id}/report.html?locale=en")
+        assert html.status_code == 200
+        assert html.headers["content-type"].startswith("text/html")
+        text = html.text
+        assert 'dir="ltr"' in text
+        assert "Parking lot theft" in text
+        assert gallery.run_id in text  # attached evidence with manifest facts
+        assert "confirmed" in text  # the decision, not just the proposal
+        assert "uncalibrated" in text  # null probability never invented
+        # the audit slice made it in (actions from the case's own trail)
+        for action in ("case_created", "hypothesis_decided"):
+            assert action in text, action
+
+        import athar.api.routers.cases as cases_router
+
+        monkeypatch.setattr(
+            "athar.reporting.html_to_pdf", lambda html: b"%PDF-1.4 fake"
+        )
+        assert cases_router  # keep the import for the monkeypatch target
+        pdf = client.get(f"/cases/{case_id}/report.pdf")
+        assert pdf.status_code == 200
+        assert pdf.content.startswith(b"%PDF")
+
+        # need-to-know: another investigator cannot export the dossier
+        login(client, "inv2")
+        assert client.get(f"/cases/{case_id}/report.html").status_code == 404
+
+        login(client, "admin")
+        actions = [r["action"] for r in client.get("/audit").json()]
+        assert actions.count("case_report_exported") == 2
+        assert client.get("/audit/verify").json()["intact"] is True
+
+    def test_case_report_missing_run_manifest(self, client, settings, gallery):
+        import shutil
+
+        login(client, "inv")
+        case = self._create(client, title="Ghost run case")
+        case_id = case["case_id"]
+        client.post(f"/cases/{case_id}/runs", json={"run_id": gallery.run_id})
+        shutil.rmtree(settings.runs_root / gallery.run_id)
+        html = client.get(f"/cases/{case_id}/report.html?locale=en")
+        assert html.status_code == 200
+        assert "run manifest not on disk" in html.text
+
     def test_reject_adds_no_member(self, client, gallery):
         login(client, "inv")
         case_id = self._create(client)["case_id"]

@@ -111,7 +111,8 @@
     "search_needs": "Attach at least one gallery and one probe run to search",
     "camera": "Camera",
     "track": "Track",
-    "not_found": "Case not found"
+    "not_found": "Case not found",
+    "report_pdf": "Case file (PDF)"
   },
   "statuses": {
     "completed": "completed",

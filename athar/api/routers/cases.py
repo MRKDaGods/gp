@@ -13,12 +13,16 @@ through an attributed confirm decision — never silently (D7).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+import json
+
+from fastapi import APIRouter, HTTPException, Response, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from athar.api import audit
 from athar.api.db import (
+    AuditRow,
     CaseRow,
     CaseRunRow,
     HypothesisRow,
@@ -408,3 +412,111 @@ def decide_hypothesis(
         track_id=row.track_id,
     )
     return _hypothesis_out(row)
+
+
+# --------------------------------------------------------------------------
+# case report (dossier: decisions + audit slice)
+
+
+def _case_audit_slice(db: Session, case_id: str) -> list[dict]:
+    """Audit rows whose detail cites this case, in chain order. LIKE is a
+    cheap prefilter; the JSON check is authoritative."""
+    rows = db.scalars(
+        select(AuditRow)
+        .where(AuditRow.detail.like(f'%"case_id": "{case_id}"%'))
+        .order_by(AuditRow.seq)
+    ).all()
+    out = []
+    for row in rows:
+        try:
+            if json.loads(row.detail).get("case_id") != case_id:
+                continue
+        except (TypeError, ValueError):
+            continue
+        out.append(
+            {"seq": row.seq, "ts": row.ts, "actor": row.actor,
+             "action": row.action, "detail": row.detail, "hash": row.hash}
+        )
+    return out
+
+
+def _run_evidence(services: ServicesDep, runs) -> list[dict]:
+    """Manifest facts for each attached run; a run whose manifest is gone
+    from the store is reported as missing, never silently dropped."""
+    out = []
+    for run in runs:
+        try:
+            manifest = services.store.load(run.run_id)
+        except RunNotFound:
+            out.append({"run_id": run.run_id, "missing": True})
+            continue
+        out.append(
+            {
+                "run_id": run.run_id,
+                "profile": manifest.profile_name,
+                "config_hash": manifest.config.config_hash if manifest.config else None,
+                "cameras": [
+                    {"camera_id": v.camera_id, "sha256": v.sha256}
+                    for v in manifest.inputs
+                ],
+            }
+        )
+    return out
+
+
+def _case_report_html(
+    db: Session, services: ServicesDep, case: CaseRow, locale: str
+) -> str:
+    from athar.reporting import render_case_report_html
+
+    detail = _case_detail(db, case)
+    runs = db.scalars(
+        select(CaseRunRow).where(CaseRunRow.case_id == case.case_id)
+    ).all()
+    return render_case_report_html(
+        detail.model_dump(mode="json"),
+        _case_audit_slice(db, case.case_id),
+        run_evidence=_run_evidence(services, runs),
+        locale=locale if locale in ("ar", "en") else "ar",
+    )
+
+
+@router.get("/{case_id}/report.html", response_class=HTMLResponse)
+def export_case_report_html(
+    case_id: str, db: DbDep, user: CurrentUser, services: ServicesDep,
+    locale: str = "ar",
+) -> HTMLResponse:
+    """Chromium-free preview of the exact dossier the PDF prints."""
+    case = _get_case(db, case_id, user)
+    html = _case_report_html(db, services, case, locale)
+    audit.append(
+        db, user.username, "case_report_exported",
+        case_id=case_id, locale=locale, fmt="html",
+    )
+    return HTMLResponse(html)
+
+
+@router.get("/{case_id}/report.pdf")
+def export_case_report_pdf(
+    case_id: str, db: DbDep, user: CurrentUser, services: ServicesDep,
+    locale: str = "ar",
+) -> Response:
+    from athar.reporting import ReportError, html_to_pdf
+
+    case = _get_case(db, case_id, user)
+    html = _case_report_html(db, services, case, locale)
+    try:
+        pdf = html_to_pdf(html)
+    except ReportError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from None
+    audit.append(
+        db, user.username, "case_report_exported",
+        case_id=case_id, locale=locale, fmt="pdf",
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="athar-case-{case_id}.pdf"'
+        },
+    )

@@ -1,0 +1,19 @@
+{
+  "id": "mrkdagods/athar-calibration-fit-cityflow",
+  "title": "ATHAR calibration fit CityFlow",
+  "code_file": "athar_calibration_fit.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "mrkdagods/athar-p4-bundle",
+    "mrkdagods/mtmc-veri776-pipeline-weights",
+    "gumfreddy/mtmc-weights"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

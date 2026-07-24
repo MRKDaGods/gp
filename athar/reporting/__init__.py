@@ -6,6 +6,7 @@ embedded as data URIs — nothing fetched at view time, air-gap safe);
 shapes Arabic script correctly (WeasyPrint is Arabic-broken, D19).
 """
 
+from athar.reporting.case import render_case_report_html
 from athar.reporting.html import (
     load_weight_shas,
     models_from_config,
@@ -18,5 +19,6 @@ __all__ = [
     "html_to_pdf",
     "load_weight_shas",
     "models_from_config",
+    "render_case_report_html",
     "render_report_html",
 ]

@@ -2262,6 +2262,74 @@ export type DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDeci
 
 export type DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponse = DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses[keyof DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses];
 
+export type ExportCaseReportHtmlCasesCaseIdReportHtmlGetData = {
+    body?: never;
+    path: {
+        /**
+         * Case Id
+         */
+        case_id: string;
+    };
+    query?: {
+        /**
+         * Locale
+         */
+        locale?: string;
+    };
+    url: '/cases/{case_id}/report.html';
+};
+
+export type ExportCaseReportHtmlCasesCaseIdReportHtmlGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportCaseReportHtmlCasesCaseIdReportHtmlGetError = ExportCaseReportHtmlCasesCaseIdReportHtmlGetErrors[keyof ExportCaseReportHtmlCasesCaseIdReportHtmlGetErrors];
+
+export type ExportCaseReportHtmlCasesCaseIdReportHtmlGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: string;
+};
+
+export type ExportCaseReportHtmlCasesCaseIdReportHtmlGetResponse = ExportCaseReportHtmlCasesCaseIdReportHtmlGetResponses[keyof ExportCaseReportHtmlCasesCaseIdReportHtmlGetResponses];
+
+export type ExportCaseReportPdfCasesCaseIdReportPdfGetData = {
+    body?: never;
+    path: {
+        /**
+         * Case Id
+         */
+        case_id: string;
+    };
+    query?: {
+        /**
+         * Locale
+         */
+        locale?: string;
+    };
+    url: '/cases/{case_id}/report.pdf';
+};
+
+export type ExportCaseReportPdfCasesCaseIdReportPdfGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportCaseReportPdfCasesCaseIdReportPdfGetError = ExportCaseReportPdfCasesCaseIdReportPdfGetErrors[keyof ExportCaseReportPdfCasesCaseIdReportPdfGetErrors];
+
+export type ExportCaseReportPdfCasesCaseIdReportPdfGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type CameraLocationsCamerasLocationsGetData = {
     body?: never;
     path?: never;

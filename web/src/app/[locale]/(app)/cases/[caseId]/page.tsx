@@ -48,7 +48,7 @@ import {
   type SearchResponse,
   type TargetOut,
 } from "@/lib/api";
-import "@/lib/client";
+import { API_URL } from "@/lib/client";
 
 export default function CaseWorkspacePage() {
   const t = useTranslations("cases");
@@ -103,9 +103,17 @@ export default function CaseWorkspacePage() {
             {t("owner")}: {detail.owner}
           </span>
         </div>
-        <Button variant="outline" size="sm" onClick={toggleStatus}>
-          {detail.status === "open" ? t("close_case") : t("reopen_case")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <a
+            className="rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+            href={`${API_URL}/cases/${detail.case_id}/report.pdf?locale=${locale}`}
+          >
+            {t("report_pdf")}
+          </a>
+          <Button variant="outline" size="sm" onClick={toggleStatus}>
+            {detail.status === "open" ? t("close_case") : t("reopen_case")}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
