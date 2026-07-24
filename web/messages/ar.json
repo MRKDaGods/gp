@@ -125,5 +125,31 @@
     "proposed": "مقترح",
     "confirmed": "مؤكد",
     "rejected": "مرفوض"
+  },
+  "timeline": {
+    "title": "الخط الزمني عبر الكاميرات",
+    "map_title": "خريطة الموقع",
+    "summary": "الهويات: {identities} — عبر الكاميرات: {cross}",
+    "no_identities": "لا توجد هويات في هذه المعالجة",
+    "camera": "الكاميرا",
+    "track": "المسار",
+    "confidence": "الثقة",
+    "evidence_terms": "أدلة المطابقة",
+    "clip": "مقطع الدليل",
+    "clip_unavailable": "فيديو الدليل غير متوفر على القرص — لا يمكن استخراج المقطع",
+    "select_hint": "اختر ظهورًا على الخط الزمني لعرض أدلته",
+    "cross_camera_badge": "عبر الكاميرات",
+    "video_missing": "الفيديو غير متوفر",
+    "term_appearance": "المظهر",
+    "term_hsv": "مدرّج الألوان",
+    "term_spatiotemporal": "الزمان والمكان",
+    "no_coordinates": "لا توجد إحداثيات مساحية لكاميرات هذه المعالجة",
+    "no_basemap": "الخريطة الأساسية غير مثبتة — تُعرض العلامات فقط",
+    "class_person": "شخص",
+    "class_car": "سيارة",
+    "class_truck": "شاحنة",
+    "class_bus": "حافلة",
+    "class_motorcycle": "دراجة نارية",
+    "class_bicycle": "دراجة هوائية"
   }
 }

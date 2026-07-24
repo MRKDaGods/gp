@@ -20,6 +20,14 @@ class ApiSettings(BaseSettings):
     app_db: Path = Path("data/app/app.db")
     calibration_path: Path | None = None  # StreamCalibrations JSON (optional)
     weights_manifest: Path = Path("configs/weights_manifest.yaml")
+    # Deployment site plan: {camera_id: {lat, lng, label}} for the map view.
+    # Optional — deployments without surveyed coordinates simply get no map.
+    camera_locations: Path = Path("configs/camera_locations.json")
+
+    # Evidence clips (serving/clips.py): context padding around a sighting
+    # and the hard cap protecting the server from tape-length transcodes.
+    clip_pad_s: float = 1.0
+    clip_max_duration_s: float = 60.0
 
     session_ttl_hours: float = 12.0
     cookie_name: str = "athar_session"

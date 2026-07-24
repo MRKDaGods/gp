@@ -2,8 +2,10 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { EventStream } from "@/components/event-stream";
+import { RunTimeline } from "@/components/run-timeline";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +24,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getRunRunsRunIdGet, type RunManifest } from "@/lib/api";
+import {
+  getRunRunsRunIdGet,
+  getTimelineRunsRunIdTimelineGet,
+  type RunManifest,
+  type TimelineOut,
+} from "@/lib/api";
 import { API_URL } from "@/lib/client";
+
+// maplibre touches window at import time — client-only chunk
+const RunMap = dynamic(
+  () => import("@/components/run-map").then((m) => m.RunMap),
+  { ssr: false },
+);
 
 // The four config layers, lowest -> highest precedence (D6). Anything the
 // profile did not supply verbatim is visually flagged — that per-key
@@ -37,9 +50,11 @@ const LAYER_STYLES: Record<string, string> = {
 
 export default function RunDetailPage() {
   const t = useTranslations("runs");
+  const tl = useTranslations("timeline");
   const locale = useLocale();
   const { runId } = useParams<{ runId: string }>();
   const [run, setRun] = useState<RunManifest | null>(null);
+  const [timeline, setTimeline] = useState<TimelineOut | null>(null);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
@@ -47,6 +62,11 @@ export default function RunDetailPage() {
       ({ data, response }) => {
         if (!response?.ok || !data) setMissing(true);
         else setRun(data);
+      },
+    );
+    getTimelineRunsRunIdTimelineGet({ path: { run_id: runId } }).then(
+      ({ data }) => {
+        if (data) setTimeline(data);  // 404 without package.report -> no cards
       },
     );
   }, [runId]);
@@ -92,6 +112,28 @@ export default function RunDetailPage() {
             {t("error_label")}: {run.error}
           </AlertTitle>
         </Alert>
+      )}
+
+      {timeline && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{tl("title")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RunTimeline runId={runId} timeline={timeline} />
+          </CardContent>
+        </Card>
+      )}
+
+      {timeline && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{tl("map_title")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RunMap timeline={timeline} />
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">

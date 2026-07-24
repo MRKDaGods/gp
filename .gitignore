@@ -54,3 +54,7 @@ skills-lock.json
 # ── OS ──────────────────────────────────────────────────
 Thumbs.db
 .DS_Store
+
+# ── Offline basemap (provisioned per site by scripts/fetch_basemap.py) ──
+.tools/
+web/public/maps/*.pmtiles

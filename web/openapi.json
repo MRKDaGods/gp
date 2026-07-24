@@ -420,6 +420,175 @@
         }
       }
     },
+    "/runs/{run_id}/timeline": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Get Timeline",
+        "description": "Cross-camera timeline: per-camera scene-clock coverage + identity\nspans, derived from package.report and the run's time base.",
+        "operationId": "get_timeline_runs__run_id__timeline_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/thumbs/{camera_id}/{track_id}": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Get Thumbnail",
+        "operationId": "get_thumbnail_runs__run_id__thumbs__camera_id___track_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Camera Id"
+            }
+          },
+          {
+            "name": "track_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Track Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/clips/{camera_id}": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Get Clip",
+        "description": "Evidence clip for a scene-clock span of one camera, transcoded on\ndemand (cached under the run dir).",
+        "operationId": "get_clip_runs__run_id__clips__camera_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Camera Id"
+            }
+          },
+          {
+            "name": "start_s",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "title": "Start S"
+            }
+          },
+          {
+            "name": "end_s",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "title": "End S"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runs/{run_id}/artifacts/{name}": {
       "get": {
         "tags": [
@@ -1454,6 +1623,27 @@
         }
       }
     },
+    "/cameras/locations": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "Camera Locations",
+        "operationId": "camera_locations_cameras_locations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraLocationsOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/audit": {
       "get": {
         "tags": [
@@ -1683,6 +1873,51 @@
           "first_broken_seq"
         ],
         "title": "AuditVerifyOut"
+      },
+      "CameraLocationOut": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "title": "Lng"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lng"
+        ],
+        "title": "CameraLocationOut"
+      },
+      "CameraLocationsOut": {
+        "properties": {
+          "cameras": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CameraLocationOut"
+            },
+            "type": "object",
+            "title": "Cameras"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cameras"
+        ],
+        "title": "CameraLocationsOut"
       },
       "CameraTimeBase": {
         "properties": {
@@ -3021,6 +3256,217 @@
           "synchronized"
         ],
         "title": "TimeBaseSource"
+      },
+      "TimelineCameraOut": {
+        "properties": {
+          "camera_id": {
+            "type": "string",
+            "title": "Camera Id"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "scene_start_s": {
+            "type": "number",
+            "title": "Scene Start S"
+          },
+          "scene_end_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene End S"
+          },
+          "timebase_source": {
+            "type": "string",
+            "title": "Timebase Source"
+          },
+          "timebase_confidence": {
+            "type": "number",
+            "title": "Timebase Confidence"
+          },
+          "video_on_disk": {
+            "type": "boolean",
+            "title": "Video On Disk"
+          }
+        },
+        "type": "object",
+        "required": [
+          "camera_id",
+          "duration_s",
+          "fps",
+          "scene_start_s",
+          "scene_end_s",
+          "timebase_source",
+          "timebase_confidence",
+          "video_on_disk"
+        ],
+        "title": "TimelineCameraOut"
+      },
+      "TimelineIdentityOut": {
+        "properties": {
+          "global_id": {
+            "type": "integer",
+            "title": "Global Id"
+          },
+          "entity_class": {
+            "type": "string",
+            "title": "Entity Class"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "evidence": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Evidence"
+          },
+          "cross_camera": {
+            "type": "boolean",
+            "title": "Cross Camera"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineMemberOut"
+            },
+            "type": "array",
+            "title": "Members"
+          }
+        },
+        "type": "object",
+        "required": [
+          "global_id",
+          "entity_class",
+          "confidence",
+          "evidence",
+          "cross_camera",
+          "members"
+        ],
+        "title": "TimelineIdentityOut"
+      },
+      "TimelineMemberOut": {
+        "properties": {
+          "camera_id": {
+            "type": "string",
+            "title": "Camera Id"
+          },
+          "track_id": {
+            "type": "integer",
+            "title": "Track Id"
+          },
+          "start_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start S"
+          },
+          "end_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End S"
+          },
+          "has_thumbnail": {
+            "type": "boolean",
+            "title": "Has Thumbnail"
+          },
+          "clip_available": {
+            "type": "boolean",
+            "title": "Clip Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "camera_id",
+          "track_id",
+          "start_s",
+          "end_s",
+          "has_thumbnail",
+          "clip_available"
+        ],
+        "title": "TimelineMemberOut"
+      },
+      "TimelineOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "span_start_s": {
+            "type": "number",
+            "title": "Span Start S"
+          },
+          "span_end_s": {
+            "type": "number",
+            "title": "Span End S"
+          },
+          "cameras": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineCameraOut"
+            },
+            "type": "array",
+            "title": "Cameras"
+          },
+          "identities": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineIdentityOut"
+            },
+            "type": "array",
+            "title": "Identities"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "span_start_s",
+          "span_end_s",
+          "cameras",
+          "identities"
+        ],
+        "title": "TimelineOut"
       },
       "TrackRefOut": {
         "properties": {

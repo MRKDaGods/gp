@@ -193,6 +193,53 @@ class CaseDetail(BaseModel):
     targets: list[TargetOut]
 
 
+class TimelineMemberOut(BaseModel):
+    camera_id: str
+    track_id: int
+    start_s: Optional[float]  # scene-clock seconds (null for degenerate tracklets)
+    end_s: Optional[float]
+    has_thumbnail: bool
+    clip_available: bool  # evidence video present on disk -> clip endpoint works
+
+
+class TimelineIdentityOut(BaseModel):
+    global_id: int
+    entity_class: str
+    confidence: Optional[float]
+    evidence: dict[str, float]
+    cross_camera: bool
+    members: list[TimelineMemberOut]
+
+
+class TimelineCameraOut(BaseModel):
+    camera_id: str
+    duration_s: Optional[float]
+    fps: Optional[float]
+    scene_start_s: float  # camera coverage mapped onto the scene clock
+    scene_end_s: Optional[float]
+    timebase_source: str
+    timebase_confidence: float
+    video_on_disk: bool
+
+
+class TimelineOut(BaseModel):
+    run_id: str
+    span_start_s: float
+    span_end_s: float
+    cameras: list[TimelineCameraOut]
+    identities: list[TimelineIdentityOut]
+
+
+class CameraLocationOut(BaseModel):
+    lat: float
+    lng: float
+    label: Optional[str] = None
+
+
+class CameraLocationsOut(BaseModel):
+    cameras: dict[str, CameraLocationOut]
+
+
 class AuditRecordOut(BaseModel):
     seq: int
     ts: str

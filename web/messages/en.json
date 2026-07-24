@@ -125,5 +125,31 @@
     "proposed": "proposed",
     "confirmed": "confirmed",
     "rejected": "rejected"
+  },
+  "timeline": {
+    "title": "Cross-camera timeline",
+    "map_title": "Site map",
+    "summary": "{identities} identities, {cross} cross-camera",
+    "no_identities": "No identities in this run",
+    "camera": "Camera",
+    "track": "Track",
+    "confidence": "Confidence",
+    "evidence_terms": "Match evidence",
+    "clip": "Evidence clip",
+    "clip_unavailable": "Evidence video not on disk - clip unavailable",
+    "select_hint": "Select a sighting on the timeline to view its evidence",
+    "cross_camera_badge": "Cross-camera",
+    "video_missing": "video missing",
+    "term_appearance": "Appearance",
+    "term_hsv": "Color histogram",
+    "term_spatiotemporal": "Spatio-temporal",
+    "no_coordinates": "No surveyed coordinates for this run's cameras",
+    "no_basemap": "Basemap not installed - markers over blank canvas",
+    "class_person": "Person",
+    "class_car": "Car",
+    "class_truck": "Truck",
+    "class_bus": "Bus",
+    "class_motorcycle": "Motorcycle",
+    "class_bicycle": "Bicycle"
   }
 }

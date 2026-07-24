@@ -101,6 +101,36 @@ export type AuditVerifyOut = {
 };
 
 /**
+ * CameraLocationOut
+ */
+export type CameraLocationOut = {
+    /**
+     * Lat
+     */
+    lat: number;
+    /**
+     * Lng
+     */
+    lng: number;
+    /**
+     * Label
+     */
+    label?: string | null;
+};
+
+/**
+ * CameraLocationsOut
+ */
+export type CameraLocationsOut = {
+    /**
+     * Cameras
+     */
+    cameras: {
+        [key: string]: CameraLocationOut;
+    };
+};
+
+/**
  * CameraTimeBase
  *
  * Maps a camera's local frame index to scene-clock seconds.
@@ -944,6 +974,132 @@ export type TargetOut = {
 export type TimeBaseSource = 'assumed' | 'manual' | 'timestamp_ocr' | 'event_alignment' | 'synchronized';
 
 /**
+ * TimelineCameraOut
+ */
+export type TimelineCameraOut = {
+    /**
+     * Camera Id
+     */
+    camera_id: string;
+    /**
+     * Duration S
+     */
+    duration_s: number | null;
+    /**
+     * Fps
+     */
+    fps: number | null;
+    /**
+     * Scene Start S
+     */
+    scene_start_s: number;
+    /**
+     * Scene End S
+     */
+    scene_end_s: number | null;
+    /**
+     * Timebase Source
+     */
+    timebase_source: string;
+    /**
+     * Timebase Confidence
+     */
+    timebase_confidence: number;
+    /**
+     * Video On Disk
+     */
+    video_on_disk: boolean;
+};
+
+/**
+ * TimelineIdentityOut
+ */
+export type TimelineIdentityOut = {
+    /**
+     * Global Id
+     */
+    global_id: number;
+    /**
+     * Entity Class
+     */
+    entity_class: string;
+    /**
+     * Confidence
+     */
+    confidence: number | null;
+    /**
+     * Evidence
+     */
+    evidence: {
+        [key: string]: number;
+    };
+    /**
+     * Cross Camera
+     */
+    cross_camera: boolean;
+    /**
+     * Members
+     */
+    members: Array<TimelineMemberOut>;
+};
+
+/**
+ * TimelineMemberOut
+ */
+export type TimelineMemberOut = {
+    /**
+     * Camera Id
+     */
+    camera_id: string;
+    /**
+     * Track Id
+     */
+    track_id: number;
+    /**
+     * Start S
+     */
+    start_s: number | null;
+    /**
+     * End S
+     */
+    end_s: number | null;
+    /**
+     * Has Thumbnail
+     */
+    has_thumbnail: boolean;
+    /**
+     * Clip Available
+     */
+    clip_available: boolean;
+};
+
+/**
+ * TimelineOut
+ */
+export type TimelineOut = {
+    /**
+     * Run Id
+     */
+    run_id: string;
+    /**
+     * Span Start S
+     */
+    span_start_s: number;
+    /**
+     * Span End S
+     */
+    span_end_s: number;
+    /**
+     * Cameras
+     */
+    cameras: Array<TimelineCameraOut>;
+    /**
+     * Identities
+     */
+    identities: Array<TimelineIdentityOut>;
+};
+
+/**
  * TrackRefOut
  */
 export type TrackRefOut = {
@@ -1337,6 +1493,113 @@ export type ExportReportPdfRunsRunIdReportPdfGetErrors = {
 export type ExportReportPdfRunsRunIdReportPdfGetError = ExportReportPdfRunsRunIdReportPdfGetErrors[keyof ExportReportPdfRunsRunIdReportPdfGetErrors];
 
 export type ExportReportPdfRunsRunIdReportPdfGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetTimelineRunsRunIdTimelineGetData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/runs/{run_id}/timeline';
+};
+
+export type GetTimelineRunsRunIdTimelineGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetTimelineRunsRunIdTimelineGetError = GetTimelineRunsRunIdTimelineGetErrors[keyof GetTimelineRunsRunIdTimelineGetErrors];
+
+export type GetTimelineRunsRunIdTimelineGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TimelineOut;
+};
+
+export type GetTimelineRunsRunIdTimelineGetResponse = GetTimelineRunsRunIdTimelineGetResponses[keyof GetTimelineRunsRunIdTimelineGetResponses];
+
+export type GetThumbnailRunsRunIdThumbsCameraIdTrackIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+        /**
+         * Camera Id
+         */
+        camera_id: string;
+        /**
+         * Track Id
+         */
+        track_id: number;
+    };
+    query?: never;
+    url: '/runs/{run_id}/thumbs/{camera_id}/{track_id}';
+};
+
+export type GetThumbnailRunsRunIdThumbsCameraIdTrackIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetThumbnailRunsRunIdThumbsCameraIdTrackIdGetError = GetThumbnailRunsRunIdThumbsCameraIdTrackIdGetErrors[keyof GetThumbnailRunsRunIdThumbsCameraIdTrackIdGetErrors];
+
+export type GetThumbnailRunsRunIdThumbsCameraIdTrackIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetClipRunsRunIdClipsCameraIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+        /**
+         * Camera Id
+         */
+        camera_id: string;
+    };
+    query: {
+        /**
+         * Start S
+         */
+        start_s: number;
+        /**
+         * End S
+         */
+        end_s: number;
+    };
+    url: '/runs/{run_id}/clips/{camera_id}';
+};
+
+export type GetClipRunsRunIdClipsCameraIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetClipRunsRunIdClipsCameraIdGetError = GetClipRunsRunIdClipsCameraIdGetErrors[keyof GetClipRunsRunIdClipsCameraIdGetErrors];
+
+export type GetClipRunsRunIdClipsCameraIdGetResponses = {
     /**
      * Successful Response
      */
@@ -1998,6 +2261,22 @@ export type DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDeci
 };
 
 export type DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponse = DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses[keyof DecideHypothesisCasesCaseIdTargetsTargetIdHypothesesHypothesisIdDecidePostResponses];
+
+export type CameraLocationsCamerasLocationsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/cameras/locations';
+};
+
+export type CameraLocationsCamerasLocationsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CameraLocationsOut;
+};
+
+export type CameraLocationsCamerasLocationsGetResponse = CameraLocationsCamerasLocationsGetResponses[keyof CameraLocationsCamerasLocationsGetResponses];
 
 export type ListAuditAuditGetData = {
     body?: never;

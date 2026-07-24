@@ -45,6 +45,7 @@ def settings(tmp_path) -> ApiSettings:
         jobs_db=tmp_path / "jobs" / "jobs.db",
         registry_db=tmp_path / "registry" / "models.db",
         app_db=tmp_path / "app" / "app.db",
+        camera_locations=tmp_path / "camera_locations.json",
         cookie_secure=False,
         spawn_worker=False,
     )
@@ -234,6 +235,157 @@ class TestRuns:
         login(client, "admin")
         actions = [r["action"] for r in client.get("/audit").json()]
         assert "report_exported" in actions
+
+
+def _write_media_run(settings, store, gallery):
+    """Turn the gallery fixture into a media-backed run: a real (synthetic)
+    evidence video for camera g1, a missing one for g2, a time base, one
+    thumbnail, and a package.report with a cross-camera identity."""
+    av = pytest.importorskip("av")
+    from fractions import Fraction
+
+    from athar.contracts.manifest import ArtifactRecord
+    from athar.core.timebase import CameraTimeBase, SceneClock
+
+    video = settings.runs_root.parent / "evidence_g1.mp4"
+    with av.open(str(video), "w") as container:
+        stream = container.add_stream("libx264", rate=Fraction(10, 1))
+        stream.width, stream.height, stream.pix_fmt = 64, 48, "yuv420p"
+        for i in range(40):
+            img = np.full((48, 64, 3), (i * 6) % 255, dtype=np.uint8)
+            frame = av.VideoFrame.from_ndarray(img, format="rgb24")
+            for packet in stream.encode(frame.reformat(format="yuv420p")):
+                container.mux(packet)
+        for packet in stream.encode(None):
+            container.mux(packet)
+
+    manifest = store.load(gallery.run_id)
+    manifest.inputs[0].original_path = str(video)
+    manifest.inputs[0].duration_s = 4.0
+    manifest.inputs[0].fps = 10.0
+    manifest.timebase = SceneClock(cameras={
+        "g1": CameraTimeBase(camera_id="g1", fps=10.0),
+        "g2": CameraTimeBase(camera_id="g2", fps=10.0, offset_s=0.5),
+    })
+
+    run_dir = store.run_dir(gallery.run_id)
+    thumb = run_dir / "thumbs" / "g1" / "1.jpg"
+    thumb.parent.mkdir(parents=True)
+    thumb.write_bytes(b"\xff\xd8\xff\xdbfakejpeg")
+
+    report = {
+        "schema_version": 1,
+        "run": {"run_id": gallery.run_id, "role": "gallery", "profile": "p",
+                "config_hash": "ch" * 32, "created_at": "2026-07-22"},
+        "evidence": [],
+        "identities": [
+            {
+                "global_id": 0, "entity_class": "car", "confidence": 0.8,
+                "evidence": {"appearance": 0.7}, "cross_camera": True,
+                "members": [
+                    {"camera_id": "g1", "track_id": 1, "start_ts_scene_s": 0.5,
+                     "end_ts_scene_s": 2.0, "thumbnail": "thumbs/g1/1.jpg",
+                     "clip": None},
+                    {"camera_id": "g2", "track_id": 1, "start_ts_scene_s": 2.5,
+                     "end_ts_scene_s": 3.5, "thumbnail": None, "clip": None},
+                ],
+            },
+        ],
+    }
+    (run_dir / "report_inputs.json").write_text(json.dumps(report), "utf-8")
+    manifest.register_artifact(ArtifactRecord(
+        name="package.report", relpath="report_inputs.json",
+        schema_version=1, producer="package",
+    ))
+    store.save(manifest)
+
+
+class TestTimelineAndClips:
+    def test_timeline_404_without_report(self, client, gallery):
+        login(client, "view")
+        response = client.get(f"/runs/{gallery.run_id}/timeline")
+        assert response.status_code == 404
+        assert "package" in response.json()["detail"]
+
+    def test_timeline(self, client, settings, store, gallery):
+        _write_media_run(settings, store, gallery)
+        login(client, "view")
+        timeline = client.get(f"/runs/{gallery.run_id}/timeline").json()
+        cameras = {c["camera_id"]: c for c in timeline["cameras"]}
+        assert cameras["g1"]["video_on_disk"] is True
+        assert cameras["g2"]["video_on_disk"] is False
+        assert cameras["g2"]["scene_start_s"] == 0.5  # offset surfaces
+        assert timeline["span_end_s"] == 4.0  # g1 coverage beats last sighting
+        (identity,) = timeline["identities"]
+        assert identity["cross_camera"] is True
+        members = {m["camera_id"]: m for m in identity["members"]}
+        assert members["g1"]["has_thumbnail"] and members["g1"]["clip_available"]
+        assert not members["g2"]["has_thumbnail"]
+        assert not members["g2"]["clip_available"]
+
+    def test_thumbnail_and_404(self, client, settings, store, gallery):
+        _write_media_run(settings, store, gallery)
+        login(client, "view")
+        ok = client.get(f"/runs/{gallery.run_id}/thumbs/g1/1")
+        assert ok.status_code == 200
+        assert ok.headers["content-type"] == "image/jpeg"
+        assert client.get(f"/runs/{gallery.run_id}/thumbs/g1/99").status_code == 404
+        assert client.get(f"/runs/{gallery.run_id}/thumbs/gX/1").status_code == 404
+
+    def test_clip_transcode_and_audit(self, client, settings, store, gallery):
+        _write_media_run(settings, store, gallery)
+        login(client, "view")
+        response = client.get(
+            f"/runs/{gallery.run_id}/clips/g1", params={"start_s": 1.0, "end_s": 2.0}
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "video/mp4"
+        assert b"ftyp" in response.content[:16]
+        login(client, "admin")
+        actions = [r["action"] for r in client.get("/audit").json()]
+        assert "clip_exported" in actions
+
+    def test_clip_guards(self, client, settings, store, gallery):
+        _write_media_run(settings, store, gallery)
+        login(client, "view")
+        run = gallery.run_id
+        params = {"start_s": 1.0, "end_s": 2.0}
+        assert client.get(f"/runs/{run}/clips/gX", params=params).status_code == 404
+        missing = client.get(f"/runs/{run}/clips/g2", params=params)
+        assert missing.status_code == 404
+        assert "not on disk" in missing.json()["detail"]
+        empty = client.get(
+            f"/runs/{run}/clips/g1", params={"start_s": 2.0, "end_s": 2.0}
+        )
+        assert empty.status_code == 400
+        too_long = client.get(
+            f"/runs/{run}/clips/g1", params={"start_s": 0.0, "end_s": 500.0}
+        )
+        assert too_long.status_code == 400
+        assert "cap" in too_long.json()["detail"]
+
+
+class TestCameraLocations:
+    def test_empty_without_file(self, client):
+        login(client, "view")
+        assert client.get("/cameras/locations").json() == {"cameras": {}}
+
+    def test_served_from_file(self, client, settings):
+        settings.camera_locations.write_text(json.dumps({
+            "c017": {"lat": 30.14, "lng": 31.62, "label": "Camera 17"},
+        }), "utf-8")
+        login(client, "view")
+        payload = client.get("/cameras/locations").json()
+        assert payload["cameras"]["c017"]["lat"] == 30.14
+        assert payload["cameras"]["c017"]["label"] == "Camera 17"
+
+    def test_malformed_file_503(self, client, settings):
+        settings.camera_locations.write_text("{not json", "utf-8")
+        login(client, "view")
+        assert client.get("/cameras/locations").status_code == 503
+
+    def test_requires_auth(self, client):
+        assert client.get("/cameras/locations").status_code == 401
 
 
 class TestJobs:
