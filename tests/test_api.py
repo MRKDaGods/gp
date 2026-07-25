@@ -750,7 +750,13 @@ class TestAudit:
         actions = [r["action"] for r in records]
         assert "login" in actions and "job_submitted" in actions
         verdict = client.get("/audit/verify").json()
-        assert verdict == {"intact": True, "first_broken_seq": None}
+        assert verdict == {
+            "intact": True,
+            "first_broken_seq": None,
+            "anchors_intact": None,  # anchoring not configured in this fixture
+            "anchors_checked": None,
+            "anchor_mismatches": [],
+        }
 
     def test_tampering_detected(self, client):
         login(client, "admin")
@@ -765,3 +771,90 @@ class TestAudit:
         verdict = client.get("/audit/verify").json()
         assert verdict["intact"] is False
         assert verdict["first_broken_seq"] == 1
+
+
+class TestAuditAnchors:
+    """WORM head anchoring: the external reference the chain alone can't be."""
+
+    @pytest.fixture()
+    def anchored(self, settings):
+        anchor_settings = settings.model_copy(
+            update={"audit_anchor_path": settings.app_db.parent / "worm" / "audit_anchors.jsonl"}
+        )
+        app = create_app(anchor_settings)
+        services = app.state.services
+        with services.session_factory() as db:
+            create_user(db, "admin", PASSWORDS["admin"], Role.ADMIN)
+            db.commit()
+        with TestClient(app) as test_client:
+            test_client.services = services
+            yield test_client
+
+    def test_anchor_roundtrip_and_idempotence(self, anchored):
+        login(anchored, "admin")
+        out = anchored.post("/audit/anchor").json()
+        assert out["anchored"] is True and out["seq"] >= 1 and len(out["hash"]) == 64
+        # unchanged head -> nothing re-written (anchoring itself is not audited)
+        assert anchored.post("/audit/anchor").json()["anchored"] is False
+        verdict = anchored.get("/audit/verify").json()
+        assert verdict["anchors_intact"] is True
+        assert verdict["anchors_checked"] == 1
+        assert verdict["anchor_mismatches"] == []
+
+    def test_self_consistent_chain_rewrite_caught_only_by_anchors(self, anchored):
+        from sqlalchemy import text
+
+        from athar.api.audit import GENESIS, _record_hash
+
+        login(anchored, "admin")
+        assert anchored.post("/audit/anchor").json()["anchored"] is True
+        # attacker with DB access rewrites the ENTIRE chain self-consistently
+        with anchored.services.session_factory() as db:
+            rows = db.execute(
+                text("SELECT seq, ts, actor, action FROM audit_log ORDER BY seq")
+            ).all()
+            prev = GENESIS
+            for seq, ts, actor, action in rows:
+                forged = '{"forged": true}'
+                new_hash = _record_hash(prev, ts, actor, action, forged)
+                db.execute(
+                    text("UPDATE audit_log SET detail=:d, prev_hash=:p, hash=:h WHERE seq=:s"),
+                    {"d": forged, "p": prev, "h": new_hash, "s": seq},
+                )
+                prev = new_hash
+            db.commit()
+        verdict = anchored.get("/audit/verify").json()
+        assert verdict["intact"] is True  # the rewrite fools the chain itself...
+        assert verdict["anchors_intact"] is False  # ...but not the external anchor
+        assert verdict["anchor_mismatches"][0]["problem"] == "hash_mismatch"
+
+    def test_deleted_anchored_row_caught(self, anchored):
+        from sqlalchemy import text
+
+        login(anchored, "admin")
+        anchored.post("/audit/anchor")
+        with anchored.services.session_factory() as db:
+            db.execute(text(
+                "DELETE FROM audit_log WHERE seq = (SELECT MAX(seq) FROM audit_log)"
+            ))
+            db.commit()
+        verdict = anchored.get("/audit/verify").json()
+        assert verdict["anchors_intact"] is False
+        assert any(
+            m["problem"] == "anchored_row_missing" for m in verdict["anchor_mismatches"]
+        )
+
+    def test_unconfigured_anchor_endpoint_409(self, client):
+        login(client, "admin")
+        assert client.post("/audit/anchor").status_code == 409
+
+    def test_startup_exports_head(self, anchored, settings):
+        # first client session wrote audit rows; a RESTART must anchor the head
+        login(anchored, "admin")
+        anchor_path = anchored.services.settings.audit_anchor_path
+        assert not anchor_path.exists()  # empty chain at first startup -> no anchor
+        app = create_app(anchored.services.settings)
+        with TestClient(app):
+            pass  # lifespan startup runs export_head
+        assert anchor_path.exists()
+        assert '"exported_by": "startup"' in anchor_path.read_text("utf-8")

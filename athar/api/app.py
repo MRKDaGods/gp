@@ -51,6 +51,11 @@ def create_app(settings: Optional[ApiSettings] = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        if settings.audit_anchor_path is not None:
+            from athar.api.audit import export_head
+
+            with services.session_factory() as db:
+                export_head(db, settings.audit_anchor_path, exported_by="startup")
         yield
         services.jobs.shutdown()
         services.lifecycle.close()

@@ -250,6 +250,24 @@ class AuditRecordOut(BaseModel):
     hash: str
 
 
+class AuditAnchorMismatchOut(BaseModel):
+    seq: Optional[int]
+    problem: str  # anchored_row_missing | hash_mismatch | unparseable_anchor
+    anchored_hash: Optional[str]
+    current_hash: Optional[str]
+
+
 class AuditVerifyOut(BaseModel):
     intact: bool
     first_broken_seq: Optional[int]
+    # None when no anchor file is configured (ATHAR_AUDIT_ANCHOR_PATH unset)
+    anchors_intact: Optional[bool] = None
+    anchors_checked: Optional[int] = None
+    anchor_mismatches: list[AuditAnchorMismatchOut] = []
+
+
+class AuditAnchorOut(BaseModel):
+    anchored: bool  # False = nothing new (empty chain or head already anchored)
+    seq: Optional[int]
+    hash: Optional[str]
+    exported_at: Optional[str]

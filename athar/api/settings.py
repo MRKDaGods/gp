@@ -34,6 +34,13 @@ class ApiSettings(BaseSettings):
     clip_pad_s: float = 1.0
     clip_max_duration_s: float = 60.0
 
+    # Append-only anchor file for audit-chain heads (athar/api/audit.py:
+    # export_head/verify_anchors). Deployments point ATHAR_AUDIT_ANCHOR_PATH
+    # at WORM storage so a whole-chain rewrite can't fix hashes already
+    # exported off-box. None = anchoring off (dev default); when set, the
+    # head is exported at API startup and via POST /audit/anchor.
+    audit_anchor_path: Path | None = None
+
     session_ttl_hours: float = 12.0
     cookie_name: str = "athar_session"
     # Deployments behind TLS set ATHAR_COOKIE_SECURE=1. Default False because

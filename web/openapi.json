@@ -1815,6 +1815,28 @@
         }
       }
     },
+    "/audit/anchor": {
+      "post": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "Anchor",
+        "description": "Export the current chain head to the configured WORM anchor file.\n\n409 when anchoring is not configured. Idempotent: an unchanged head is\nreported as anchored=False, not re-written.",
+        "operationId": "anchor_audit_anchor_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditAnchorOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -1908,6 +1930,104 @@
         ],
         "title": "AttachRunRequest"
       },
+      "AuditAnchorMismatchOut": {
+        "properties": {
+          "seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seq"
+          },
+          "problem": {
+            "type": "string",
+            "title": "Problem"
+          },
+          "anchored_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchored Hash"
+          },
+          "current_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq",
+          "problem",
+          "anchored_hash",
+          "current_hash"
+        ],
+        "title": "AuditAnchorMismatchOut"
+      },
+      "AuditAnchorOut": {
+        "properties": {
+          "anchored": {
+            "type": "boolean",
+            "title": "Anchored"
+          },
+          "seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seq"
+          },
+          "hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hash"
+          },
+          "exported_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exported At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "anchored",
+          "seq",
+          "hash",
+          "exported_at"
+        ],
+        "title": "AuditAnchorOut"
+      },
       "AuditRecordOut": {
         "properties": {
           "seq": {
@@ -1968,6 +2088,36 @@
               }
             ],
             "title": "First Broken Seq"
+          },
+          "anchors_intact": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchors Intact"
+          },
+          "anchors_checked": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchors Checked"
+          },
+          "anchor_mismatches": {
+            "items": {
+              "$ref": "#/components/schemas/AuditAnchorMismatchOut"
+            },
+            "type": "array",
+            "title": "Anchor Mismatches",
+            "default": []
           }
         },
         "type": "object",

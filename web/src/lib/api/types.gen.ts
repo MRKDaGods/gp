@@ -51,6 +51,50 @@ export type AttachRunRequest = {
 };
 
 /**
+ * AuditAnchorMismatchOut
+ */
+export type AuditAnchorMismatchOut = {
+    /**
+     * Seq
+     */
+    seq: number | null;
+    /**
+     * Problem
+     */
+    problem: string;
+    /**
+     * Anchored Hash
+     */
+    anchored_hash: string | null;
+    /**
+     * Current Hash
+     */
+    current_hash: string | null;
+};
+
+/**
+ * AuditAnchorOut
+ */
+export type AuditAnchorOut = {
+    /**
+     * Anchored
+     */
+    anchored: boolean;
+    /**
+     * Seq
+     */
+    seq: number | null;
+    /**
+     * Hash
+     */
+    hash: string | null;
+    /**
+     * Exported At
+     */
+    exported_at: string | null;
+};
+
+/**
  * AuditRecordOut
  */
 export type AuditRecordOut = {
@@ -98,6 +142,18 @@ export type AuditVerifyOut = {
      * First Broken Seq
      */
     first_broken_seq: number | null;
+    /**
+     * Anchors Intact
+     */
+    anchors_intact?: boolean | null;
+    /**
+     * Anchors Checked
+     */
+    anchors_checked?: number | null;
+    /**
+     * Anchor Mismatches
+     */
+    anchor_mismatches?: Array<AuditAnchorMismatchOut>;
 };
 
 /**
@@ -2393,6 +2449,22 @@ export type VerifyAuditVerifyGetResponses = {
 };
 
 export type VerifyAuditVerifyGetResponse = VerifyAuditVerifyGetResponses[keyof VerifyAuditVerifyGetResponses];
+
+export type AnchorAuditAnchorPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/audit/anchor';
+};
+
+export type AnchorAuditAnchorPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AuditAnchorOut;
+};
+
+export type AnchorAuditAnchorPostResponse = AnchorAuditAnchorPostResponses[keyof AnchorAuditAnchorPostResponses];
 
 export type HealthHealthGetData = {
     body?: never;
