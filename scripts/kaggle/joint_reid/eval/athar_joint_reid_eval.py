@@ -130,14 +130,24 @@ def build_veriwild3000() -> tuple[list, list]:
     return query, gallery
 
 
-def build_vehicleid800() -> dict[int, list[str]]:
+def build_vehicleid800() -> dict[int, list[str]] | None:
+    """None when unusable -- the known maphat upload is password-encrypted on
+    EVERY member (probed 2026-07-25); the matrix then simply omits the column."""
     zip_path = next(INPUT.rglob("VehicleID_V1.0.zip"), None)
-    assert zip_path, "VehicleID zip not mounted"
+    if zip_path is None:
+        print("[vehicleid-800] not mounted; skipping")
+        return None
     ex = TMP / "vehicleid"
     if not (ex / ".done").exists():
-        print("[vehicleid] extracting ...")
         with zipfile.ZipFile(str(zip_path)) as zf:
-            zf.extractall(str(ex))
+            needed = [m for m in zf.infolist()
+                      if any(f"{d}/" in f"/{m.filename}" for d in ("/image", "/train_test_split"))
+                      and not m.is_dir()]
+            if any(m.flag_bits & 0x1 for m in needed):
+                print("[vehicleid-800] SKIPPED: needed members are password-encrypted")
+                return None
+            print("[vehicleid] extracting image/ + train_test_split/ ...")
+            zf.extractall(str(ex), members=[m.filename for m in needed])
         (ex / ".done").touch()
     split_file = next(ex.rglob("train_test_split/test_list_800.txt"), None)
     assert split_file, "test_list_800.txt not found"
@@ -417,6 +427,8 @@ def main() -> None:
             print(f"{model_name} x {ds_name}: {json.dumps(res)}", flush=True)
 
         # VehicleID: 10 seeded trials, 1 random gallery image per id
+        if not vehicleid:
+            continue
         import numpy as _np
 
         all_rows = [(p, pid, 0) for pid, paths in sorted(vehicleid.items()) for p in paths]

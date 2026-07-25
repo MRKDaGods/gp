@@ -133,16 +133,48 @@ def build_veri776() -> tuple[list, list, list]:
     return train, splits["image_query"], splits["image_test"]
 
 
-def build_vehicleid() -> list:
-    """Mounted maphat/vehicleid zip -> extract -> parse train_list.txt."""
+def _vehicleid_members(zf: zipfile.ZipFile) -> list:
+    """Members we actually need: images + split lists (attribute/ etc. are
+    per-member ENCRYPTED in the maphat upload -- never touch them)."""
+    # match member paths with AND without a leading archive prefix
+    return [
+        m for m in zf.infolist()
+        if any(f"{d}/" in f"/{m.filename}" for d in ("/image", "/train_test_split"))
+        and not m.is_dir()
+    ]
+
+
+def preflight_vehicleid() -> Path | None:
+    """Seconds-cheap check BEFORE any heavy downloads. The maphat upload has
+    per-member zip encryption on at least attribute/ -- if the members we
+    need (image/, train_test_split/) are encrypted too, the domain is
+    unusable without the official password: DROP it (recorded in provenance)
+    rather than fail the joint run."""
     zip_path = next(INPUT.rglob("VehicleID_V1.0.zip"), None)
     if zip_path is None:
         raise RuntimeError("VehicleID zip not mounted (attach maphat/vehicleid)")
+    with zipfile.ZipFile(str(zip_path)) as zf:
+        needed = _vehicleid_members(zf)
+        encrypted = [m for m in needed if m.flag_bits & 0x1]
+        n_img = sum(1 for m in needed if "image/" in m.filename)
+        n_split = len(needed) - n_img
+        print(f"[vehicleid preflight] needed members: {len(needed)} "
+              f"({n_img} images, {n_split} split files), encrypted: {len(encrypted)}")
+        assert n_img > 100_000 and n_split >= 2, "VehicleID zip layout unexpected"
+        if encrypted:
+            print(f"[vehicleid preflight] DROPPING DOMAIN: {len(encrypted)} needed "
+                  f"members are password-encrypted (e.g. {encrypted[0].filename})")
+            return None
+    return zip_path
+
+
+def build_vehicleid(zip_path: Path) -> list:
+    """Extract ONLY the needed unencrypted members, then parse train_list."""
     ex = TMP / "vehicleid"
     if not (ex / ".done").exists():
-        print(f"[vehicleid] extracting {zip_path} ...")
+        print(f"[vehicleid] extracting image/ + train_test_split/ from {zip_path} ...")
         with zipfile.ZipFile(str(zip_path)) as zf:
-            zf.extractall(str(ex))
+            zf.extractall(str(ex), members=[m.filename for m in _vehicleid_members(zf)])
         (ex / ".done").touch()
     split_file = next(ex.rglob("train_test_split/train_list.txt"), None)
     assert split_file, "train_list.txt not found in VehicleID archive"
@@ -215,6 +247,15 @@ def build_cityflow() -> list:
 
     crop_dir = TMP / "cityflow_crops"
     staging = TMP / "_aic22_staging"
+    # A prior session's output (mounted when resuming) carries the finished
+    # crops -- reuse instead of re-staging the 20GB archive (~45 min saved).
+    cached = next(INPUT.rglob("cityflow_crops.tarbin"), None) if INPUT.exists() else None
+    if not (crop_dir / ".done").exists() and cached is not None:
+        crop_dir.mkdir(parents=True, exist_ok=True)
+        r = sh(f"tar -xf {cached} -C {crop_dir}")
+        assert r.returncode == 0, r.stderr[-400:]
+        (crop_dir / ".done").touch()
+        print(f"[cityflow] reused {len(list(crop_dir.glob('*.jpg')))} cached crops from {cached}")
     if not (crop_dir / ".done").exists():
         if not any(staging.rglob("vdo.avi")):
             archive = TMP / "AIC22_Track1_MTMC_Tracking.zip"
@@ -306,6 +347,12 @@ def build_cityflow() -> list:
 
         shutil.rmtree(staging, ignore_errors=True)
         (crop_dir / ".done").touch()
+        # persist the crops as kernel output so later sessions skip staging
+        WORK.mkdir(parents=True, exist_ok=True)
+        r = sh(f"tar -C {crop_dir} -cf {WORK / 'cityflow_crops.tarbin'} .")
+        assert r.returncode == 0, r.stderr[-400:]
+        print(f"[cityflow] crops cached to output "
+              f"({(WORK / 'cityflow_crops.tarbin').stat().st_size / 1e6:.0f} MB)")
 
     rows = []
     for f in sorted(crop_dir.glob("*.jpg")):
@@ -381,13 +428,12 @@ def main() -> None:
     if LOCAL_SMOKE:
         domain_rows, veri_query, veri_gallery = build_local_smoke_domains()
     else:
+        vehicleid_zip = preflight_vehicleid()  # decide the domain set BEFORE the 20GB download
         veri_train, veri_query, veri_gallery = build_veri776()
-        domain_rows = {
-            "veri776": veri_train,
-            "cityflow": build_cityflow(),
-            "vehicleid": build_vehicleid(),
-            "veriwild": build_veriwild(),
-        }
+        domain_rows = {"veri776": veri_train, "cityflow": build_cityflow()}
+        if vehicleid_zip is not None:
+            domain_rows["vehicleid"] = build_vehicleid(vehicleid_zip)
+        domain_rows["veriwild"] = build_veriwild()
 
     if SMOKE_TEST and not LOCAL_SMOKE:
         for name, rows in domain_rows.items():
@@ -395,7 +441,7 @@ def main() -> None:
             relabel = {pid: i for i, pid in enumerate(keep)}
             domain_rows[name] = [(p, relabel[pid], c) for p, pid, c in rows if pid in relabel]
 
-    domain_order = ["veri776", "cityflow", "vehicleid", "veriwild"]
+    domain_order = list(domain_rows)  # round-robin over the domains that made it
     offsets, total_classes = {}, 0
     for name in domain_order:
         offsets[name] = total_classes
@@ -767,6 +813,8 @@ def main() -> None:
         "steps_per_epoch": STEPS_PER_EPOCH, "warmup": WARMUP,
         "backbone_lr": BACKBONE_LR, "head_lr": HEAD_LR, "weight_decay": WD, "llrd": LLRD,
         "losses": "ce_ls0.1 + jpm_aux0.5 + triplet0.3 (center OFF: fp16 NaN trap at 45k classes)",
+        "domains_dropped": [d for d in ("veri776", "cityflow", "vehicleid", "veriwild")
+                            if d not in domain_rows],
         "sie": False,
         "seed": SEED,
         "smoke_test": SMOKE_TEST,

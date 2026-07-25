@@ -16,7 +16,9 @@ import pytest
 RESULTS_DIR = Path(__file__).resolve().parents[1] / "scripts" / "kaggle" / "joint_reid" / "results"
 FROZEN = sorted(RESULTS_DIR.glob("cross_domain_matrix_*.json"))
 
-DATASETS = {"veri776", "veriwild_3000", "vehicleid_800", "cityflow_s02"}
+# vehicleid_800 is optional: the only known Kaggle upload is password-
+# encrypted on every member (probed 2026-07-25), so the matrix may lack it
+DATASETS = {"veri776", "veriwild_3000", "cityflow_s02"}
 
 
 @pytest.mark.skipif(not FROZEN, reason="cross-domain matrix not frozen yet")

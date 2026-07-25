@@ -4,17 +4,17 @@ ONE joint domain-balanced retrain over four vehicle ReID domains (never
 sequential fine-tuning), plus a cross-domain eval matrix against the frozen
 VeRi-only `transreid_primary` checkpoint. All heavy work runs on Kaggle.
 
-## Dataset reachability (scouted 2026-07-25 — all four obtainable)
+## Dataset reachability (scouted + probed 2026-07-25 — three of four obtainable)
 
 | Domain | Source on Kaggle | Status |
 | --- | --- | --- |
-| VeRi-776 | `abhyudaya12/veri-vehicle-re-identification-dataset` (public) | proven mount (veri-canon train kernels) |
-| VehicleID | `maphat/vehicleid` (public, `VehicleID_V1.0.zip`) | proven mount (13v CLIP-SENet VehicleID train) |
-| VeRi-Wild | `mrkdagods/veriwild-train` (private, staged by Stage A) | full archive fetchable via the 23-part GDrive rars (proven by July's `veriwild-prep-bin`); train images 277,797 / 30,671 ids |
-| CityFlowV2 | GDrive archive `13wNJpS_Oaoe-7y5Dzexg_Ol7bKu1OWuC`, GT crops in-kernel | proven (09q recipe + our calibration kernel) |
+| VeRi-776 | `abhyudaya12/veri-vehicle-re-identification-dataset` (public) | proven mount (576 train ids / 37,778 imgs — verified against the local canonical copy) |
+| VeRi-Wild | `mrkdagods/veriwild-train` (private, staged by Stage A) | **STAGED**: 277,797 train imgs / 30,671 ids in two tarbins, 0 missing |
+| CityFlowV2 | GDrive archive `13wNJpS_Oaoe-7y5Dzexg_Ol7bKu1OWuC`, GT crops in-kernel | proven (v2 run: 14,065 crops / 184 ids from S01/S03/S04; zero S02 identity overlap) |
+| VehicleID | `maphat/vehicleid` (public upload of the official archive) | **UNUSABLE** — every member is password-encrypted (probed via `mrkdagods/vehicleid-probe`); no other Kaggle copy exists. Kernels preflight and DROP the domain gracefully (recorded in provenance); restoring it needs the official PKU password — a user action. |
 
-The permission gates on VeRi-Wild/VehicleID turned out to be bypassed by
-existing public/staged copies — no user action needed.
+So the joint run is **3-domain** (VeRi-776 + CityFlowV2 + VeRi-Wild,
+~330k imgs / ~31k ids) until a usable VehicleID copy exists.
 
 ## Stages
 
