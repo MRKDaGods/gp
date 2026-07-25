@@ -159,6 +159,7 @@ smart cities, streets).
 - [ ] Collect: mall interior, open mall, street, night/IR footage → bench v1
 
 ### Phase 7 — Hardening & delivery
+- [x] Audit-chain head export to WORM storage — **DONE 2026-07-25** (370205c): `export_head`/`verify_anchors` in athar/api/audit.py — the head (seq+hash) is appended to an external append-only JSONL (`ATHAR_AUDIT_ANCHOR_PATH` → WORM mount; fsynced) at API startup and via admin `POST /audit/anchor` (idempotent; deliberately unaudited — anchoring the anchor would stale it instantly); `GET /audit/verify` reports anchor status beside chain intactness. Adversarial test proves the point of the feature: a self-consistent whole-chain rewrite passes `verify_chain` but is caught by the anchors.
 - [ ] Ingest fuzzing (malformed/truncated/VFR video), kill-and-resume chaos tests, scale test (≥14 cams)
 - [ ] Locked envs (uv/conda-lock) + Docker + offline air-gapped installer bundle
 - [ ] Determinism policy doc (seeds, CUDA flags, tolerance bands)
