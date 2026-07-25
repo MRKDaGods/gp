@@ -96,6 +96,7 @@ def build_veri776() -> tuple[list, list]:
                 rows.append((str(root / split / fname), int(m.group(1)), int(m.group(2)) - 1))
         out[split] = rows
     print(f"[veri776] query {len(out['image_query'])} gallery {len(out['image_test'])}")
+    assert len(out["image_query"]) == 1678 and len(out["image_test"]) == 11579, "bad VeRi mount"
     return out["image_query"], out["image_test"]
 
 
