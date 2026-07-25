@@ -1,0 +1,22 @@
+{
+  "id": "mrkdagods/athar-joint-reid-eval",
+  "title": "ATHAR joint ReID eval",
+  "code_file": "athar_joint_reid_eval.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "abhyudaya12/veri-vehicle-re-identification-dataset",
+    "maphat/vehicleid",
+    "mrkdagods/veriwild-test-bin",
+    "mrkdagods/mtmc-veri776-pipeline-weights"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "mrkdagods/athar-joint-reid-train"
+  ],
+  "model_sources": []
+}
