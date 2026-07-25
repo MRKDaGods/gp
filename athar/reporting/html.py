@@ -43,6 +43,7 @@ _LABELS = {
         "from": "من (ث)",
         "to": "إلى (ث)",
         "thumbnail": "صورة",
+        "clip": "مقطع الدليل",
         "yes": "نعم",
         "no": "لا",
         "no_identities": "لا توجد هويات في هذه المعالجة",
@@ -75,6 +76,7 @@ _LABELS = {
         "from": "From (s)",
         "to": "To (s)",
         "thumbnail": "Image",
+        "clip": "Evidence clip",
         "yes": "yes",
         "no": "no",
         "no_identities": "no identities in this run",
@@ -145,6 +147,17 @@ def _thumb_cell(relpath: Optional[str], run_dir: Optional[Path]) -> str:
         return ""
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f'<img class="thumb" src="data:image/jpeg;base64,{encoded}" />'
+
+
+def _clip_cell(member: Mapping[str, Any]) -> str:
+    """Reference to the package-time evidence clip (path + pinned hash) —
+    the clip file itself stays beside the run, referenced not embedded."""
+    clip = member.get("clip")
+    if not clip:
+        return "—"
+    sha = member.get("clip_sha256")
+    sha_html = f"<br/><code>{_esc(sha)}</code>" if sha else ""
+    return f"<code>{_esc(clip)}</code>{sha_html}"
 
 
 def render_report_html(
@@ -219,7 +232,8 @@ def render_report_html(
         )
         parts.append(
             f"<table><tr><th>{t['camera']}</th><th>{t['track']}</th>"
-            f"<th>{t['from']}</th><th>{t['to']}</th><th>{t['thumbnail']}</th></tr>"
+            f"<th>{t['from']}</th><th>{t['to']}</th><th>{t['thumbnail']}</th>"
+            f"<th>{t['clip']}</th></tr>"
         )
         for member in identity.get("members", []):
             parts.append(
@@ -227,7 +241,8 @@ def render_report_html(
                 f"<td>{_esc(member.get('track_id'))}</td>"
                 f"<td>{_esc(member.get('start_ts_scene_s'))}</td>"
                 f"<td>{_esc(member.get('end_ts_scene_s'))}</td>"
-                f"<td>{_thumb_cell(member.get('thumbnail'), run_dir)}</td></tr>"
+                f"<td>{_thumb_cell(member.get('thumbnail'), run_dir)}</td>"
+                f"<td>{_clip_cell(member)}</td></tr>"
             )
         parts.append("</table>")
 

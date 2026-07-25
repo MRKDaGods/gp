@@ -88,6 +88,26 @@ class TestHtml:
         html = render_report_html(report, locale="en")
         assert "<script>" not in html
 
+    def test_clip_reference_rendered_with_hash(self):
+        member = dict(
+            REPORT["identities"][0]["members"][0],
+            clip="clips/cam-01_1000-9500_p1000.mp4",
+            clip_sha256="cd" * 32,
+        )
+        report = dict(
+            REPORT,
+            identities=[dict(REPORT["identities"][0], members=[member])],
+        )
+        html = render_report_html(report, locale="en")
+        assert "Evidence clip" in html
+        assert "clips/cam-01_1000-9500_p1000.mp4" in html
+        assert "cd" * 32 in html
+
+    def test_missing_clip_renders_dash_not_invented(self):
+        html = render_report_html(REPORT, locale="en")  # member has clip=None
+        assert "Evidence clip" in html
+        assert "<td>—</td>" in html
+
 
 class TestModelRefs:
     def test_from_config_values(self):
