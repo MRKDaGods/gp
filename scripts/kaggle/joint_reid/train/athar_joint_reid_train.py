@@ -125,7 +125,10 @@ def build_veri776() -> tuple[list, list, list]:
     train = [(p, pid2label[pid], c) for p, pid, c in train]
     print(f"[veri776] train {len(train)} imgs / {len(pid2label)} ids; "
           f"query {len(splits['image_query'])} gallery {len(splits['image_test'])}")
-    assert len(pid2label) == 575, f"unexpected VeRi train ids {len(pid2label)} (bad mount?)"
+    # 576 train ids / 37,778 imgs verified against both the local canonical
+    # copy and the official spec (the canon kernel's "575" was wrong)
+    assert len(pid2label) == 576, f"unexpected VeRi train ids {len(pid2label)} (bad mount?)"
+    assert len(train) == 37_778, f"unexpected VeRi train imgs {len(train)}"
     assert len(splits["image_query"]) == 1678 and len(splits["image_test"]) == 11579
     return train, splits["image_query"], splits["image_test"]
 
