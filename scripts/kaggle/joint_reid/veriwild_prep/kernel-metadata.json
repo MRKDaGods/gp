@@ -1,0 +1,14 @@
+{
+  "id": "mrkdagods/veriwild-train-prep",
+  "title": "VeRiWild Train Prep",
+  "code_file": "veriwild_train_prep.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
