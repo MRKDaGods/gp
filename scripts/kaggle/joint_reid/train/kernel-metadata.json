@@ -14,6 +14,8 @@
     "mrkdagods/veriwild-train"
   ],
   "competition_sources": [],
-  "kernel_sources": [],
+  "kernel_sources": [
+    "mrkdagods/athar-joint-reid-train"
+  ],
   "model_sources": []
 }
