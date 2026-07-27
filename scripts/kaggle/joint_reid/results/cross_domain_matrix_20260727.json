@@ -1,0 +1,73 @@
+{
+  "protocol": {
+    "mode": "deployed single-stream: CLIP-norm 224 BICUBIC, flip TTA, post-BN L2 features, SIE skipped, no rerank/AQE",
+    "note": "baseline veri776 is intentionally below the 93.3 paper figure (paper used SIE cams + AQE + rerank + fusion)",
+    "vehicleid_trials": 10,
+    "seed": 0
+  },
+  "checkpoints": {
+    "baseline_veri776": {
+      "path": "/kaggle/input/datasets/mrkdagods/mtmc-veri776-pipeline-weights/vehicle_transreid_vit_base_veri776.pth",
+      "sha256": "8d32334a41933cbf0514fbc72e462124f8785a8057d02b475aca8abf65dbe5e9"
+    },
+    "joint4d": {
+      "path": "/kaggle/input/notebooks/mrkdagods/athar-joint-reid-train/transreid_joint4d_best.pth",
+      "sha256": "04b3e2263eb95690671f129d6e7c1e14d34dcd4d53ce4016aead5d2c894f735d"
+    }
+  },
+  "matrix": {
+    "baseline_veri776": {
+      "veri776": {
+        "mAP": 0.8021215335826888,
+        "R1": 0.9594755661501788,
+        "R5": 0.9874851013110846,
+        "valid_queries": 1678,
+        "n_query": 1678,
+        "n_gallery": 11579
+      },
+      "cityflow_s02": {
+        "mAP": 0.3003912620073489,
+        "R1": 0.46,
+        "R5": 0.5422222222222223,
+        "valid_queries": 450,
+        "n_query": 450,
+        "n_gallery": 6948
+      },
+      "veriwild_3000": {
+        "mAP": 0.3132465992216783,
+        "R1": 0.5836680053547524,
+        "R5": 0.786479250334672,
+        "valid_queries": 2988,
+        "n_query": 3000,
+        "n_gallery": 38861
+      }
+    },
+    "joint4d": {
+      "veri776": {
+        "mAP": 0.8248068267190578,
+        "R1": 0.965435041716329,
+        "R5": 0.9874851013110846,
+        "valid_queries": 1678,
+        "n_query": 1678,
+        "n_gallery": 11579
+      },
+      "cityflow_s02": {
+        "mAP": 0.4025092273472805,
+        "R1": 0.5822222222222222,
+        "R5": 0.6711111111111111,
+        "valid_queries": 450,
+        "n_query": 450,
+        "n_gallery": 6948
+      },
+      "veriwild_3000": {
+        "mAP": 0.6889119983978059,
+        "R1": 0.8765060240963856,
+        "R5": 0.9615127175368139,
+        "valid_queries": 2988,
+        "n_query": 3000,
+        "n_gallery": 38861
+      }
+    }
+  },
+  "elapsed_hours": 0.204
+}
