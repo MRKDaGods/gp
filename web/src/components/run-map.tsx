@@ -22,6 +22,15 @@ const BASEMAP_URL = "/maps/basemap.pmtiles";
 let protocolRegistered = false;
 function ensurePmtilesProtocol() {
   if (!protocolRegistered) {
+    // Self-hosted worker: maplibre's defaultWorkerUrl() derives the worker
+    // URL from import.meta.url, which is not an http(s) URL under
+    // Turbopack — the worker then silently never spawns and vector
+    // sources never load a single tile (background + DOM markers still
+    // render, so the failure looks like a subtly empty basemap). The
+    // worker + its shared chunk are copied into public/maplibre/ (same
+    // self-hosting policy as the pmtiles basemap; version-locked to the
+    // installed maplibre-gl — recopy from node_modules on upgrade).
+    maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
     maplibregl.addProtocol("pmtiles", new Protocol().tile);
     protocolRegistered = true;
   }

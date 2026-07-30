@@ -1,0 +1,96 @@
+{
+  "c017": {
+    "start": {
+      "lag_frames": 0,
+      "lag_s": 0.0,
+      "corr": 0.8713,
+      "ok": true
+    },
+    "mid_10min": {
+      "lag_frames": -1,
+      "lag_s": -0.04,
+      "corr": 0.9615,
+      "ok": true
+    },
+    "drift_frames": -1,
+    "pass": true
+  },
+  "c018": {
+    "start": {
+      "lag_frames": 0,
+      "lag_s": 0.0,
+      "corr": 0.7607,
+      "ok": true
+    },
+    "mid_10min": {
+      "lag_frames": -1,
+      "lag_s": -0.04,
+      "corr": 0.9319,
+      "ok": true
+    },
+    "drift_frames": -1,
+    "pass": true
+  },
+  "c019": {
+    "start": {
+      "lag_frames": -1,
+      "lag_s": -0.04,
+      "corr": 0.6689,
+      "ok": true
+    },
+    "mid_10min": {
+      "lag_frames": -3,
+      "lag_s": -0.12,
+      "corr": 0.912,
+      "ok": true
+    },
+    "drift_frames": -2,
+    "pass": true
+  },
+  "c021": {
+    "start": {
+      "lag_frames": 0,
+      "lag_s": 0.0,
+      "corr": 0.6655,
+      "ok": true
+    },
+    "mid_10min": {
+      "lag_frames": 0,
+      "lag_s": 0.0,
+      "corr": 0.7757,
+      "ok": true
+    },
+    "drift_frames": 0,
+    "pass": true
+  },
+  "c020": {
+    "start": {
+      "lag_frames": 147,
+      "lag_s": 5.88,
+      "corr": 0.5306,
+      "ok": false
+    },
+    "mid_10min": {
+      "lag_frames": -1,
+      "lag_s": -0.04,
+      "corr": 0.6994,
+      "ok": true
+    },
+    "drift_frames": -148,
+    "pass": true,
+    "recheck_motion_rich_windows": {
+      "t230s": {
+        "lag_frames": -1,
+        "lag_s": -0.04,
+        "corr": 0.9266
+      },
+      "t830s": {
+        "lag_frames": 0,
+        "lag_s": 0.0,
+        "corr": 0.9646
+      },
+      "verdict": "start-window +147 is a false peak in a low-motion stretch (corr 0.53); three motion-rich windows agree on lag 0/-1 \u2014 c020 is aligned"
+    }
+  },
+  "_summary": "All five demo cameras (c017/c018/c019/c020/c021) aligned within 3 frames (<=0.12s) between local originals and the Kaggle rebuild; no drift at the 10-minute mark. Verified 2026-07-30."
+}
