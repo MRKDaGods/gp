@@ -1,0 +1,20 @@
+{
+  "id": "mrkdagods/athar-shorouk-demo",
+  "title": "ATHAR shorouk demo",
+  "code_file": "athar_shorouk_demo.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "mrkdagods/athar-p4-bundle",
+    "mrkdagods/mtmc-veri776-pipeline-weights",
+    "gumfreddy/mtmc-weights",
+    "mrkdagods/shorouk-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
