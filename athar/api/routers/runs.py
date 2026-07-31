@@ -230,6 +230,59 @@ def get_timeline(services: ServicesDep, run_id: str) -> TimelineOut:
     )
 
 
+@router.get("/{run_id}/identities/{global_id}/export")
+def export_identity_video(
+    services: ServicesDep, run_id: str, global_id: int, db: DbDep, user: CurrentUser,
+) -> FileResponse:
+    """Concatenated cross-camera evidence video for one identity — every
+    camera sighting stitched into one downloadable MP4, chronological
+    order. Built from pre-cut clips (``package.clips`` mode); cached under
+    the run dir so repeat downloads never re-encode."""
+    from athar.serving.clips import ClipError, concat_clips
+
+    manifest = _load(services, run_id)
+    report = _load_report(services, manifest)
+    run_dir = services.store.run_dir(run_id)
+
+    identity = next(
+        (i for i in report.get("identities", []) if i["global_id"] == global_id), None
+    )
+    if identity is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, f"no identity {global_id} in this run"
+        )
+
+    out_path = (run_dir / "exports" / f"identity_{global_id}.mp4").resolve()
+    if not out_path.is_relative_to(run_dir.resolve()):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid identity id")
+    if not out_path.is_file():
+        members = sorted(
+            identity["members"], key=lambda m: m.get("start_ts_scene_s") or 0.0
+        )
+        clip_paths = [
+            run_dir / m["clip"] for m in members
+            if m.get("clip") and (run_dir / m["clip"]).is_file()
+        ]
+        if not clip_paths:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                "no evidence clips available to export for this identity "
+                "(run without package.clips)",
+            )
+        try:
+            concat_clips(clip_paths, out_path)
+        except ClipError as exc:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from None
+
+    audit.append(
+        db, user.username, "video_exported", run_id=run_id, global_id=global_id,
+    )
+    return FileResponse(
+        out_path, media_type="video/mp4",
+        filename=f"athar-identity-{global_id}-{run_id}.mp4",
+    )
+
+
 @router.get("/{run_id}/thumbs/{camera_id}/{track_id}")
 def get_thumbnail(
     services: ServicesDep, run_id: str, camera_id: str, track_id: int

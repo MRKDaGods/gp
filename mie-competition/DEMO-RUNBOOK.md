@@ -21,7 +21,8 @@ packaging) on a Kaggle T4 — imported here with the run store + footage.
 - [ ] Footage present: `data/raw/shorouk_demo/c017,c018,c019,c020,c021/vdo.mp4`
       (re-download: `python scripts/kaggle/shorouk_demo/fetch_footage.py`).
 - [ ] Demo case seeded: "El Shorouk — Finals Demo" (see §3).
-- [ ] Dry-run the click-path (§4) once, end to end.
+- [ ] Dry-run the click-path (§4) once, end to end — this also pre-warms
+      the "Export video" cache for #109/#86 so it's instant on stage.
 
 ## 1. Boot (2 terminals, both from repo root)
 
@@ -77,10 +78,20 @@ the audit trail is genuine.
   hop, connected by arrows, camera id + timestamp under each photo. This
   is the headline visual and answers "is it cross-camera, for both
   classes?" at a glance, before any click.
-- Below that, the per-camera lane timeline **also carries real thumbnail
-  photos** — a small circular crop at each sighting's position on the
-  colored bar, plus a camera preview thumbnail next to every camera's
-  label (not just a code like `c017`).
+- Below that, the per-camera lane timeline is a real **video-editor-style
+  filmstrip** — big circular photo markers at each sighting's position
+  on the colored bar (not bare color), a camera preview thumbnail next
+  to every camera's label, and bigger click targets throughout (nothing
+  needs a pixel-precise click).
+- The gallery and lane timeline both feed one **always-visible evidence
+  player** (never an empty "click something" state — it opens already
+  showing the strongest cross-camera identity). It has a camera-angle
+  switcher (chips to flip between the identity's cameras), transport
+  controls (±1s step, 0.5x/1x/2x speed) on top of the native scrub bar,
+  and an **"Export video" button** that downloads the identity's full
+  cross-camera journey as ONE stitched MP4 (server-side concatenation of
+  its per-camera clips, cached after the first request — instant on
+  repeat).
 - The case workspace (targets/hypotheses) shows a **real thumbnail next
   to every confirmed member and every hypothesis row** — a vehicle photo
   or a person photo, not just `c021#10000067`.
@@ -121,12 +132,15 @@ camera c020. Find where else they appear across the compound."*
    thumbnails per camera hop. Point at this first — it's the visual
    proof of cross-camera tracking for both classes before anything is
    clicked. Click **identity #109**'s thumbnail (person, c018→c019→c021)
-   → evidence panel: per-term match evidence (appearance/HSV/
-   spatiotemporal bars), thumbnail, and the **evidence clip playing
-   inline** — the person visibly walks through the frame. Scroll down to
-   the **per-camera lane timeline** below the gallery to show the same
-   identity's spans, now with thumbnail photos on the bars themselves.
-   ~75s
+   → the **evidence player** below loads it: per-term match evidence
+   (appearance/HSV/spatiotemporal bars), thumbnail, and the clip playing.
+   Click the **camera-angle chips** (c018 / c019 / c021) to flip the
+   player between his three camera sightings live — this is the beat
+   that sells "the same person, three different cameras." Point at the
+   **"Export video"** button — one click downloads his whole journey
+   stitched into a single MP4. Scroll down to the **filmstrip timeline**
+   below the player to show the same identity's spans with photo markers
+   across all four camera lanes at once. ~90s
 5. Scroll to the **map**: camera pins on the actual compound (offline
    basemap), dashed lines tracing the identity's cross-camera journey.
    ~20s
@@ -135,7 +149,7 @@ camera c020. Find where else they appear across the compound."*
    clips; ~7.7 MB, takes ~5s to generate — don't re-click). Open it,
    scroll once. ~25s
 
-Total ≈ 3 min. Backup: the same path recorded at
+Total ≈ 3.5 min. Backup: the same path recorded at
 `mie-competition/assets/demo-happy-path-ar-dark.webm`.
 
 ## 5. Troubleshooting
@@ -149,13 +163,16 @@ Total ≈ 3 min. Backup: the same path recorded at
 | Runs missing from القائمة | `python scripts/kaggle/shorouk_demo/fetch_results.py` (needs Kaggle token; do NOT do this on stage) |
 | Case gone / demo DB broken | reseed per §3 (new case), or restore `data/app/app.db` from the `.pre-finals` backup |
 | PDF button hangs | first PDF spawns headless Chromium (~3s warmup); wait, don't re-click |
+| Export video button is slow the first time | it's stitching clips server-side (~1-2s for a 2-3 camera identity); cached after — instant on repeat. Pre-warm #109 and #86 the night before so it's cached on stage |
 | Everything on fire | play `mie-competition/assets/demo-happy-path-ar-dark.webm` full-screen |
 
 ## 6. What NOT to touch
 
 - `data/runs/run-20260730-201635-81157c` + `run-20260731-005450-b6a70b` — the imported evidence
   (chain-of-custody hashes match the Kaggle-processed footage in
-  `data/raw/shorouk_demo/`).
+  `data/raw/shorouk_demo/`). `data/runs/*/exports/` is a separate,
+  regeneratable cache of "Export video" downloads — not evidence, safe
+  to delete.
 - Frozen parity baselines, calibrations, model registry — the demo needs
   none of them modified.
 - No Kaggle/network access during the demo — everything is local.

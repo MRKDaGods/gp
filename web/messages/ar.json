@@ -160,6 +160,10 @@
     "gallery_vehicles": "مركبات عبر الكاميرات",
     "gallery_persons": "أشخاص عبر الكاميرات",
     "gallery_none_vehicles": "لا توجد مركبات عبر الكاميرات في هذه المعالجة",
-    "gallery_none_persons": "لا يوجد أشخاص عبر الكاميرات في هذه المعالجة"
+    "gallery_none_persons": "لا يوجد أشخاص عبر الكاميرات في هذه المعالجة",
+    "export_video": "تصدير الفيديو",
+    "camera_angle": "زاوية الكاميرا",
+    "back_1s": "-١ث",
+    "forward_1s": "+١ث"
   }
 }

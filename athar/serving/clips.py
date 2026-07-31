@@ -148,6 +148,77 @@ def extract_clip(
     return out_path
 
 
+def concat_clips(clip_paths: list[Path], out_path: Path) -> Path:
+    """Stitch already-cut evidence clips into one continuous MP4, in the
+    given order — the cross-camera "export video" for an identity.
+
+    Clips may come from different cameras (different resolutions); every
+    frame is reformatted to the first clip's dimensions. Output plays at
+    the first clip's frame rate — clips from a differently-clocked camera
+    play at a proportionally off speed, an acceptable artifact for a
+    highlight reel (this is presentation media, not an evidence clip).
+    """
+    import av
+
+    clip_paths = [Path(p) for p in clip_paths if Path(p).is_file()]
+    if not clip_paths:
+        raise ClipError("no clips to concatenate")
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = out_path.with_suffix(f".tmp-{os.getpid()}.mp4")
+
+    frames_written = 0
+    try:
+        with av.open(
+            str(tmp_path), "w", format="mp4", options={"movflags": "+faststart"}
+        ) as out:
+            out_stream = None
+            out_rate: Fraction | None = None
+            for clip_path in clip_paths:
+                with av.open(str(clip_path)) as src:
+                    in_stream = next(
+                        (s for s in src.streams if s.type == "video"), None
+                    )
+                    if in_stream is None:
+                        continue
+                    if out_stream is None:
+                        out_rate = Fraction(in_stream.average_rate or Fraction(25, 1))
+                        out_stream = _open_encoder(out, in_stream, out_rate)
+                    for frame in src.decode(in_stream):
+                        reformatted = frame.reformat(
+                            width=out_stream.width,
+                            height=out_stream.height,
+                            format="yuv420p",
+                        )
+                        reformatted.pts = frames_written
+                        reformatted.time_base = Fraction(
+                            out_rate.denominator, out_rate.numerator
+                        )
+                        for packet in out_stream.encode(reformatted):
+                            out.mux(packet)
+                        frames_written += 1
+            if out_stream is not None:
+                for packet in out_stream.encode(None):
+                    out.mux(packet)
+    except av.FFmpegError as exc:
+        tmp_path.unlink(missing_ok=True)
+        raise ClipError(f"concat failed: {exc}") from exc
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    if frames_written == 0:
+        tmp_path.unlink(missing_ok=True)
+        raise ClipError("concat yielded no frames (all input clips unreadable?)")
+    os.replace(tmp_path, out_path)
+    logger.info(
+        "concat: %d clips -> %s (%d frames)",
+        len(clip_paths), out_path.name, frames_written,
+    )
+    return out_path
+
+
 def cached_clip_path(
     run_dir: Path, camera_id: str, start_scene_s: float, end_scene_s: float,
     pad_s: float,

@@ -160,6 +160,10 @@
     "gallery_vehicles": "Vehicles crossing cameras",
     "gallery_persons": "People crossing cameras",
     "gallery_none_vehicles": "No cross-camera vehicles in this run",
-    "gallery_none_persons": "No cross-camera people in this run"
+    "gallery_none_persons": "No cross-camera people in this run",
+    "export_video": "Export video",
+    "camera_angle": "Camera angle",
+    "back_1s": "-1s",
+    "forward_1s": "+1s"
   }
 }

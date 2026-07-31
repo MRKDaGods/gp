@@ -150,7 +150,7 @@ function IdentityCard({
               <button
                 type="button"
                 onClick={() => onSelect({ identity, member })}
-                className={`flex shrink-0 flex-col items-center gap-0.5 rounded-md p-1 transition-colors hover:bg-muted ${
+                className={`flex shrink-0 cursor-pointer flex-col items-center gap-1 rounded-md p-1.5 transition-all hover:scale-105 hover:bg-muted ${
                   isSelected ? "ring-2 ring-foreground" : ""
                 }`}
               >
@@ -159,23 +159,23 @@ function IdentityCard({
                   <img
                     src={`${API_URL}/runs/${runId}/thumbs/${member.camera_id}/${member.track_id}`}
                     alt={`#${identity.global_id} ${member.camera_id}`}
-                    className="size-16 rounded-md border object-cover"
+                    className="size-20 rounded-md border object-cover"
                     onError={(e) => {
                       e.currentTarget.style.visibility = "hidden";
                     }}
                   />
                 ) : (
                   <div
-                    className="flex size-16 items-center justify-center rounded-md border bg-muted text-[10px] text-muted-foreground"
+                    className="flex size-20 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground"
                     style={{ borderColor: identityColor(identity.global_id) }}
                   >
                     {entityLabel(identity.entity_class)}
                   </div>
                 )}
-                <span className="font-mono text-[10px] text-muted-foreground">
+                <span className="font-mono text-xs text-muted-foreground">
                   {member.camera_id}
                 </span>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {member.start_s !== null ? formatClock(member.start_s) : ""}
                 </span>
               </button>
