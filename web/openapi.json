@@ -81,6 +81,73 @@
         }
       }
     },
+    "/ingest/profiles": {
+      "get": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "List Profiles",
+        "operationId": "list_profiles_ingest_profiles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IngestProfileOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Profiles Ingest Profiles Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/upload": {
+      "post": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "Upload Video",
+        "description": "Store one evidence video under the uploads root, hashing it while\nit streams in. The returned ``path`` is what POST /jobs expects in its\n``videos`` map.",
+        "operationId": "upload_video_ingest_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_video_ingest_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runs": {
       "get": {
         "tags": [
@@ -447,6 +514,56 @@
                 "schema": {
                   "$ref": "#/components/schemas/TimelineOut"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/identities/{global_id}/export": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Export Identity Video",
+        "description": "Concatenated cross-camera evidence video for one identity \u2014 every\ncamera sighting stitched into one downloadable MP4, chronological\norder. Built from pre-cut clips (``package.clips`` mode); cached under\nthe run dir so repeat downloads never re-encode.",
+        "operationId": "export_identity_video_runs__run_id__identities__global_id__export_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "global_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Global Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -2127,6 +2244,30 @@
         ],
         "title": "AuditVerifyOut"
       },
+      "Body_upload_video_ingest_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "camera_id": {
+            "type": "string",
+            "title": "Camera Id"
+          },
+          "batch_id": {
+            "type": "string",
+            "title": "Batch Id",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "camera_id"
+        ],
+        "title": "Body_upload_video_ingest_upload_post"
+      },
       "CameraLocationOut": {
         "properties": {
           "lat": {
@@ -2677,6 +2818,24 @@
           "decided_at"
         ],
         "title": "HypothesisOut"
+      },
+      "IngestProfileOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "IngestProfileOut"
       },
       "Job": {
         "properties": {
@@ -3743,6 +3902,39 @@
           "track_id"
         ],
         "title": "TrackRefOut"
+      },
+      "UploadOut": {
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "title": "Batch Id"
+          },
+          "camera_id": {
+            "type": "string",
+            "title": "Camera Id"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_id",
+          "camera_id",
+          "path",
+          "size_bytes",
+          "sha256"
+        ],
+        "title": "UploadOut"
       },
       "UserOut": {
         "properties": {

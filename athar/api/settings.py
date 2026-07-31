@@ -15,6 +15,9 @@ class ApiSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ATHAR_", extra="ignore")
 
     runs_root: Path = Path("data/runs")
+    # Footage uploaded through the web ingest flow lands here (one folder
+    # per upload batch) before a job turns it into a run.
+    uploads_root: Path = Path("data/uploads")
     jobs_db: Path = Path("data/jobs/jobs.db")
     registry_db: Path = Path("data/registry/models.db")
     app_db: Path = Path("data/app/app.db")

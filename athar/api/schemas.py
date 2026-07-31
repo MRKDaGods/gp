@@ -35,6 +35,19 @@ class RunSummary(BaseModel):
     error: Optional[str]
 
 
+class IngestProfileOut(BaseModel):
+    name: str
+    description: str
+
+
+class UploadOut(BaseModel):
+    batch_id: str
+    camera_id: str
+    path: str  # server-side path — feed to JobSubmitRequest.videos
+    size_bytes: int
+    sha256: str
+
+
 class JobSubmitRequest(BaseModel):
     videos: dict[str, str] = Field(default_factory=dict)
     profile: str = "multiclass"

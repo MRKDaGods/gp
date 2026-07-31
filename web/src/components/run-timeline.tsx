@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CrossCameraGallery } from "@/components/cross-camera-gallery";
@@ -58,6 +58,26 @@ export function RunTimeline({
   const [selected, setSelected] = useState<Selection | null>(() =>
     defaultSelection(timeline),
   );
+
+  // live playhead: scene-clock position of the playing clip, drawn as a
+  // vertical line through every camera lane (the v1 NLE feel)
+  const [playheadS, setPlayheadS] = useState<number | null>(null);
+
+  // journey playback: when a clip ends, hop to the identity's next camera
+  // sighting — pressing play once walks the whole cross-camera journey
+  const advanceToNextHop = useCallback(() => {
+    setSelected((sel) => {
+      if (!sel) return sel;
+      const hops = sel.identity.members
+        .filter((m) => m.start_s !== null && m.clip_available)
+        .sort((a, b) => (a.start_s as number) - (b.start_s as number));
+      const idx = hops.indexOf(sel.member);
+      if (idx >= 0 && idx + 1 < hops.length) {
+        return { identity: sel.identity, member: hops[idx + 1] };
+      }
+      return sel;
+    });
+  }, []);
 
   // a real multi-camera run carries hundreds of single-camera identities;
   // the investigator's stars are the cross-camera ones, so dense runs
@@ -173,7 +193,15 @@ export function RunTimeline({
         onSelect={setSelected}
       />
 
-      {selected && <EvidencePlayer runId={runId} selection={selected} onSelect={setSelected} />}
+      {selected && (
+        <EvidencePlayer
+          runId={runId}
+          selection={selected}
+          onSelect={setSelected}
+          onTime={setPlayheadS}
+          onEnded={advanceToNextHop}
+        />
+      )}
 
       {/* the time axis reads left-to-right in both locales, like any chart */}
       <div dir="ltr" className="space-y-2">
@@ -219,6 +247,15 @@ export function RunTimeline({
                 )}
               </div>
               <div className="relative h-11 flex-1 overflow-hidden rounded-md bg-muted/60">
+                {playheadS !== null &&
+                  playheadS >= viewStart &&
+                  playheadS <= viewEnd && (
+                    <div
+                      className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-foreground/80"
+                      style={{ left: `${pct(playheadS)}%` }}
+                      aria-hidden
+                    />
+                  )}
                 {camera.scene_end_s !== null && (
                   <div
                     className="absolute inset-y-0 bg-muted"
@@ -287,6 +324,11 @@ export function RunTimeline({
 
 const SPEED_OPTIONS = [0.5, 1, 2] as const;
 
+// Serving pads every clip by 1s of context on each side (settings
+// clip_pad_s default); video time 0 therefore maps to start_s - 1 on the
+// scene clock. Good to well under a second for the playhead.
+const CLIP_PAD_S = 1;
+
 // The centerpiece: always-visible player (never an empty "click something"
 // state), a camera-angle switcher for the current identity, a light
 // transport bar (play/pause, ±1s step, speed) on top of the native
@@ -296,10 +338,14 @@ function EvidencePlayer({
   runId,
   selection,
   onSelect,
+  onTime,
+  onEnded,
 }: {
   runId: string;
   selection: Selection;
   onSelect: (selection: Selection) => void;
+  onTime?: (sceneS: number | null) => void;
+  onEnded?: () => void;
 }) {
   const t = useTranslations("timeline");
   const { identity, member } = selection;
@@ -401,6 +447,15 @@ function EvidencePlayer({
                 controls
                 autoPlay
                 muted
+                onTimeUpdate={(e) => {
+                  const v = e.currentTarget;
+                  if (member.start_s !== null) {
+                    onTime?.(
+                      Math.max(member.start_s - CLIP_PAD_S, 0) + v.currentTime,
+                    );
+                  }
+                }}
+                onEnded={() => onEnded?.()}
                 className="max-h-[28rem] w-full rounded-md border bg-black"
               />
               <div className="flex flex-wrap items-center gap-2">

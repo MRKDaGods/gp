@@ -157,6 +157,24 @@ export type AuditVerifyOut = {
 };
 
 /**
+ * Body_upload_video_ingest_upload_post
+ */
+export type BodyUploadVideoIngestUploadPost = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Camera Id
+     */
+    camera_id: string;
+    /**
+     * Batch Id
+     */
+    batch_id?: string;
+};
+
+/**
  * CameraLocationOut
  */
 export type CameraLocationOut = {
@@ -516,6 +534,20 @@ export type HypothesisOut = {
      * Decided At
      */
     decided_at: string | null;
+};
+
+/**
+ * IngestProfileOut
+ */
+export type IngestProfileOut = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description: string;
 };
 
 /**
@@ -1174,6 +1206,32 @@ export type TrackRefOut = {
 };
 
 /**
+ * UploadOut
+ */
+export type UploadOut = {
+    /**
+     * Batch Id
+     */
+    batch_id: string;
+    /**
+     * Camera Id
+     */
+    camera_id: string;
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Sha256
+     */
+    sha256: string;
+};
+
+/**
  * UserOut
  */
 export type UserOut = {
@@ -1323,6 +1381,49 @@ export type MeAuthMeGetResponses = {
 };
 
 export type MeAuthMeGetResponse = MeAuthMeGetResponses[keyof MeAuthMeGetResponses];
+
+export type ListProfilesIngestProfilesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/ingest/profiles';
+};
+
+export type ListProfilesIngestProfilesGetResponses = {
+    /**
+     * Response List Profiles Ingest Profiles Get
+     *
+     * Successful Response
+     */
+    200: Array<IngestProfileOut>;
+};
+
+export type ListProfilesIngestProfilesGetResponse = ListProfilesIngestProfilesGetResponses[keyof ListProfilesIngestProfilesGetResponses];
+
+export type UploadVideoIngestUploadPostData = {
+    body: BodyUploadVideoIngestUploadPost;
+    path?: never;
+    query?: never;
+    url: '/ingest/upload';
+};
+
+export type UploadVideoIngestUploadPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadVideoIngestUploadPostError = UploadVideoIngestUploadPostErrors[keyof UploadVideoIngestUploadPostErrors];
+
+export type UploadVideoIngestUploadPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: UploadOut;
+};
+
+export type UploadVideoIngestUploadPostResponse = UploadVideoIngestUploadPostResponses[keyof UploadVideoIngestUploadPostResponses];
 
 export type ListRunsRunsGetData = {
     body?: never;
@@ -1584,6 +1685,38 @@ export type GetTimelineRunsRunIdTimelineGetResponses = {
 };
 
 export type GetTimelineRunsRunIdTimelineGetResponse = GetTimelineRunsRunIdTimelineGetResponses[keyof GetTimelineRunsRunIdTimelineGetResponses];
+
+export type ExportIdentityVideoRunsRunIdIdentitiesGlobalIdExportGetData = {
+    body?: never;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+        /**
+         * Global Id
+         */
+        global_id: number;
+    };
+    query?: never;
+    url: '/runs/{run_id}/identities/{global_id}/export';
+};
+
+export type ExportIdentityVideoRunsRunIdIdentitiesGlobalIdExportGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportIdentityVideoRunsRunIdIdentitiesGlobalIdExportGetError = ExportIdentityVideoRunsRunIdIdentitiesGlobalIdExportGetErrors[keyof ExportIdentityVideoRunsRunIdIdentitiesGlobalIdExportGetErrors];
+
+export type ExportIdentityVideoRunsRunIdIdentitiesGlobalIdExportGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type GetThumbnailRunsRunIdThumbsCameraIdTrackIdGetData = {
     body?: never;

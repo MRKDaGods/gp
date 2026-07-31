@@ -42,6 +42,7 @@ PASSWORDS = {
 def settings(tmp_path) -> ApiSettings:
     return ApiSettings(
         runs_root=tmp_path / "runs",
+        uploads_root=tmp_path / "uploads",
         jobs_db=tmp_path / "jobs" / "jobs.db",
         registry_db=tmp_path / "registry" / "models.db",
         app_db=tmp_path / "app" / "app.db",
@@ -858,3 +859,67 @@ class TestAuditAnchors:
             pass  # lifespan startup runs export_head
         assert anchor_path.exists()
         assert '"exported_by": "startup"' in anchor_path.read_text("utf-8")
+
+
+class TestIngest:
+    def test_profiles_listed(self, client):
+        login(client, "view")
+        names = [p["name"] for p in client.get("/ingest/profiles").json()]
+        assert names == ["multiclass", "production"]
+
+    def test_upload_hashes_and_stores(self, client, settings):
+        import hashlib
+
+        login(client, "inv")
+        payload = b"fake-video-bytes" * 64
+        response = client.post(
+            "/ingest/upload",
+            files={"file": ("cam_a.mp4", payload, "video/mp4")},
+            data={"camera_id": "cam_a"},
+        )
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["sha256"] == hashlib.sha256(payload).hexdigest()
+        assert body["size_bytes"] == len(payload)
+        from pathlib import Path
+
+        stored = Path(body["path"])
+        assert stored.is_relative_to(settings.uploads_root)
+        assert stored.read_bytes() == payload
+        # second file reuses the batch
+        second = client.post(
+            "/ingest/upload",
+            files={"file": ("cam_b.mp4", b"x" * 10, "video/mp4")},
+            data={"camera_id": "cam_b", "batch_id": body["batch_id"]},
+        ).json()
+        assert second["batch_id"] == body["batch_id"]
+
+    def test_upload_rejects_bad_inputs(self, client):
+        login(client, "inv")
+        bad_ext = client.post(
+            "/ingest/upload",
+            files={"file": ("x.exe", b"zz", "application/octet-stream")},
+            data={"camera_id": "cam"},
+        )
+        assert bad_ext.status_code == 400
+        traversal = client.post(
+            "/ingest/upload",
+            files={"file": ("a.mp4", b"zz", "video/mp4")},
+            data={"camera_id": "../evil"},
+        )
+        assert traversal.status_code == 400
+        empty = client.post(
+            "/ingest/upload",
+            files={"file": ("a.mp4", b"", "video/mp4")},
+            data={"camera_id": "cam"},
+        )
+        assert empty.status_code == 400
+
+    def test_upload_requires_investigator(self, client):
+        login(client, "view")
+        response = client.post(
+            "/ingest/upload",
+            files={"file": ("a.mp4", b"zz", "video/mp4")},
+            data={"camera_id": "cam"},
+        )
+        assert response.status_code == 403

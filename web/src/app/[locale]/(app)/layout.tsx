@@ -53,6 +53,7 @@ export default function AppShell({
   }
 
   const tabs = [
+    { href: `/${locale}/ingest`, label: t("nav.ingest") },
     { href: `/${locale}/cases`, label: t("nav.cases") },
     { href: `/${locale}/runs`, label: t("nav.runs") },
     { href: `/${locale}/jobs`, label: t("nav.jobs") },

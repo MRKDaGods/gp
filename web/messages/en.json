@@ -7,7 +7,8 @@
     "cases": "Cases",
     "runs": "Runs",
     "jobs": "Jobs",
-    "logout": "Log out"
+    "logout": "Log out",
+    "ingest": "Add footage"
   },
   "login": {
     "title": "Sign in",
@@ -165,5 +166,33 @@
     "camera_angle": "Camera angle",
     "back_1s": "-1s",
     "forward_1s": "+1s"
+  },
+  "ingest": {
+    "title": "Add footage",
+    "subtitle": "Upload evidence videos, then either build a searchable gallery or find a target across one you already built.",
+    "step_goal": "What do you want to do?",
+    "goal_gallery": "Preprocess a video set",
+    "goal_gallery_hint": "Build a searchable gallery from multi-camera footage. Do it once - search it any time later.",
+    "goal_probe": "Find someone in new footage",
+    "goal_probe_hint": "Process new footage and search it against a gallery you already built.",
+    "pick_gallery": "Search against which gallery?",
+    "no_galleries": "No completed galleries yet - build one first.",
+    "step_footage": "Add the videos",
+    "drop_hint": "Click to choose video files",
+    "drop_formats": "MP4 / AVI / MKV / MOV / TS - one file per camera",
+    "camera_id": "Camera ID",
+    "camera_ids_invalid": "Camera IDs must be unique (letters, digits, - or _ only).",
+    "upload_all": "Upload {count} files",
+    "uploading": "Uploading...",
+    "step_pipeline": "Choose the pipeline",
+    "start_run": "Start processing",
+    "starting": "Starting...",
+    "gallery_required": "Pick a gallery to search against first.",
+    "processing_title": "Processing footage",
+    "processing_hint": "Detection, tracking, ReID embedding, indexing, cross-camera association, evidence packaging. You can leave this page - the job keeps running.",
+    "processing_failed": "The job did not complete - check the events below or the Jobs page.",
+    "open_timeline": "Open the timeline",
+    "open_as_case": "Open as a case (search it)",
+    "case_title": "Investigation {date}"
   }
 }

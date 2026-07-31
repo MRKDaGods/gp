@@ -82,10 +82,11 @@ def create_app(settings: Optional[ApiSettings] = None) -> FastAPI:
         )
 
     from athar.api.routers import (
-        auditlog, auth, cameras, cases, jobs, models, runs, search,
+        auditlog, auth, cameras, cases, ingest, jobs, models, runs, search,
     )
 
     app.include_router(auth.router)
+    app.include_router(ingest.router)
     app.include_router(runs.router)
     app.include_router(jobs.router)
     app.include_router(models.router)

@@ -92,6 +92,11 @@ the audit trail is genuine.
   cross-camera journey as ONE stitched MP4 (server-side concatenation of
   its per-camera clips, cached after the first request — instant on
   repeat).
+- **The timeline is live**: while a clip plays, a playhead line sweeps
+  through every camera lane at the matching scene-clock position, and
+  when a clip ends the player auto-hops to the identity's NEXT camera
+  sighting — press play once and watch the whole cross-camera journey
+  continuously (the v1 NLE feel).
 - The case workspace (targets/hypotheses) shows a **real thumbnail next
   to every confirmed member and every hypothesis row** — a vehicle photo
   or a person photo, not just `c021#10000067`.
@@ -111,6 +116,28 @@ the audit trail is genuine.
 - Search scores show "(غير معاير)" — uncalibrated — deliberately: no
   probability is invented without a per-deployment calibration fit.
   That's the forensic-honesty pitch, not a gap.
+
+### The "Add footage" wizard (إضافة تسجيلات — first nav tab)
+
+The answer to "how does footage get in?" is now IN the app (v1-style
+guided flow, no CLI):
+
+1. **Goal**: "Preprocess a video set" (build a searchable gallery) or
+   "Find someone in new footage" (probe against an existing gallery —
+   shows a picker of completed galleries).
+2. **Videos**: click-to-choose files (one per camera), camera id
+   auto-derived from the filename and editable, per-file upload progress
+   bar, SHA-256 shown on arrival (chain of custody starts at upload).
+3. **Pipeline**: profile cards (multiclass = fastest / production = best
+   accuracy) → **Start processing** → live pipeline events stream on the
+   page; when done, buttons jump straight to the run timeline, or (probe
+   mode) one click creates a case with gallery+probe attached and lands
+   in the search panel.
+
+If asked live, USE IT: upload any short mp4 as a probe against the
+Shorouk gallery — a real local job runs (CPU; a few minutes for a short
+clip). Don't do this inside the 15-minute slot unless asked; point at
+the wizard and narrate instead.
 
 ## 4. The 3-minute click-path (rehearse this)
 
