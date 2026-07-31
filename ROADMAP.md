@@ -4,7 +4,33 @@
 > checklist, parity gates, and open items. Update it in every working session —
 > mark items done, add discoveries, never delete decision history.
 >
-> Last updated: **2026-07-25** · Current phase: **Phase 6 — Domain campaign IN PROGRESS** (calibrations frozen; joint multi-domain retrain launched on Kaggle — see `scripts/kaggle/joint_reid/README.md`; ATHAR-Bench annotation parked) · Phase 5 frontend COMPLETE · gates P1–P4 settled
+> Last updated: **2026-07-31** · Current phase: **MIE finals demo READY** (real Shorouk end-to-end runs + case + runbook — see `mie-competition/DEMO-RUNBOOK.md`) · Phase 6 joint retrain + eval matrix DONE · Phase 5 frontend COMPLETE · gates P1–P4 settled
+
+### MIE finals demo (2026-07-31, for Sat 2026-08-01)
+
+- [x] **Real end-to-end demo runs on El Shorouk footage** — kernel
+  `mrkdagods/athar-shorouk-demo` (T4, 5.5h): production profile over
+  gallery c017/c018/c019/c021 + probe c020 (full 21.6-min sync window,
+  from the `mrkdagods/shorouk-dataset` rebuild). 574 identities, 17
+  cross-camera (10 vehicles, 7 persons — incl. a person crossing 3 cams
+  and a person + 2 cars crossing all 4), 342 pre-cut evidence clips.
+  Imported: gallery `run-20260730-201635-81157c`, probe
+  `run-20260731-005450-b6a70b`; footage = bit-exact Kaggle copies at
+  `data/raw/shorouk_demo/` (manifest sha256s verified MATCH; local↔Kaggle
+  per-camera sync verified ≤3 frames by frame-signature correlation —
+  `scripts/kaggle/shorouk_demo/sync_report.json`).
+- [x] Demo case `case-20260731-020923-301c1b` "El Shorouk — Finals Demo"
+  seeded through the audited API on a fresh app DB (old DB backed up
+  `.pre-finals`); probe→gallery search hits confirmed for one person +
+  one vehicle target.
+- [x] **maplibre worker fix** (real bug): Turbopack never spawned the
+  tile worker (import.meta.url not http) — basemap silently empty since
+  07-24. Worker + shared chunk self-hosted in `web/public/maplibre/`,
+  `setWorkerUrl` wired. Timeline gained a cross-camera-only filter
+  (default on for dense runs).
+- [x] Runbook `mie-competition/DEMO-RUNBOOK.md` (boot, click-path,
+  troubleshooting) + fallback recordings/screenshots/sample PDF in
+  `mie-competition/assets/`.
 
 ---
 
