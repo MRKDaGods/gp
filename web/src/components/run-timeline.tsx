@@ -41,9 +41,21 @@ export function RunTimeline({
   const t = useTranslations("timeline");
   const [selected, setSelected] = useState<Selection | null>(null);
 
+  // a real multi-camera run carries hundreds of single-camera identities;
+  // the investigator's stars are the cross-camera ones, so dense runs
+  // default to showing only those (toggleable)
+  const [crossOnly, setCrossOnly] = useState(
+    () =>
+      timeline.identities.length > 30 &&
+      timeline.identities.some((i) => i.cross_camera),
+  );
+  const visibleIdentities = crossOnly
+    ? timeline.identities.filter((i) => i.cross_camera)
+    : timeline.identities;
+
   // long tapes squeeze short sightings into slivers — default to a view
   // clamped around the activity when it covers under half the tape
-  const spans = timeline.identities.flatMap((identity) =>
+  const spans = visibleIdentities.flatMap((identity) =>
     identity.members.filter((m) => m.start_s !== null && m.end_s !== null),
   );
   const activityStart = Math.min(...spans.map((m) => m.start_s as number), Infinity);
@@ -73,7 +85,7 @@ export function RunTimeline({
   // one lane per camera; members grouped by camera, carrying their identity
   const lanes = timeline.cameras.map((camera) => ({
     camera,
-    entries: timeline.identities.flatMap((identity) =>
+    entries: visibleIdentities.flatMap((identity) =>
       identity.members
         .filter(
           (member) =>
@@ -107,6 +119,17 @@ export function RunTimeline({
             className="rounded-md border px-2 py-0.5 text-xs transition-colors hover:bg-muted"
           >
             {fitActivity ? t("full_span") : t("fit_activity")}
+          </button>
+        )}
+        {crossCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setCrossOnly((v) => !v)}
+            className={`rounded-md border px-2 py-0.5 text-xs transition-colors hover:bg-muted ${
+              crossOnly ? "border-primary text-primary" : ""
+            }`}
+          >
+            {crossOnly ? t("show_all_identities") : t("cross_camera_only")}
           </button>
         )}
       </div>

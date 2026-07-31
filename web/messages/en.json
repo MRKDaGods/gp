@@ -153,6 +153,8 @@
     "class_motorcycle": "Motorcycle",
     "class_bicycle": "Bicycle",
     "fit_activity": "Fit to sightings",
-    "full_span": "Full tape"
+    "full_span": "Full tape",
+    "cross_camera_only": "Cross-camera only",
+    "show_all_identities": "Show all identities"
   }
 }

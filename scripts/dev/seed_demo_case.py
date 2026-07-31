@@ -98,7 +98,14 @@ def main() -> int:
         if not hits:
             print(f"{label}: NO HITS on {stream} — skipping", file=sys.stderr)
             continue
+        # top_k limits hits PER PROBE TRACKLET; a real case files hypotheses
+        # for ONE suspect, so keep only the best probe tracklet's hits
         best = hits[0]
+        suspect = (best["probe_camera_id"], best["probe_track_id"])
+        hits = [
+            h for h in hits
+            if (h["probe_camera_id"], h["probe_track_id"]) == suspect
+        ][: args.top_k]
         print(f"{label}: {len(hits)} hits on {stream}; best "
               f"{best['probe_camera_id']}/{best['probe_track_id']} -> "
               f"{best['gallery_camera_id']}/{best['gallery_track_id']} "

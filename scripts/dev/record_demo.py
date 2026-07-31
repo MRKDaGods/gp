@@ -46,6 +46,9 @@ def main() -> int:
     parser.add_argument("--user", default="demo")
     parser.add_argument("--password", default="demo-pass-1")
     parser.add_argument("--theme", default="dark", choices=("dark", "light"))
+    parser.add_argument("--identity", type=int, default=None,
+                        help="global_id of the timeline identity to feature "
+                             "(default: first cross-camera span)")
     args = parser.parse_args()
 
     out_dir = PROJECT_ROOT / args.out
@@ -98,31 +101,41 @@ def main() -> int:
 
         # ---- gallery run: timeline + map + evidence --------------------
         page.goto(f"{BASE}/{L}/runs/{args.gallery}", wait_until="load")
-        time.sleep(3)  # timeline + map render
+        time.sleep(6)  # timeline + map render
+        # the live events feed scrolls the page — pin back to the timeline
+        page.evaluate("window.scrollTo(0, 0)")
+        time.sleep(1.5)
         shot(page, out_dir, f"04-run-timeline-{L}")
 
-        # click the first cross-camera identity span on the timeline
-        # (canvas-based — click by the first identity legend/row if present)
-        clicked = False
-        for selector in ("[data-identity-span]", "[data-testid=timeline-span]",
-                         "canvas"):
-            el = page.query_selector(selector)
-            if el is not None:
-                el.click(position={"x": 200, "y": 40})
-                clicked = True
-                break
+        # click a cross-camera identity span (spans are slivers — JS click;
+        # cross-camera spans carry the border class)
+        selector = (
+            f'button[title^="#{args.identity} "]'
+            if args.identity is not None
+            else 'div[dir="ltr"] button.border'
+        )
+        clicked = page.evaluate(
+            f"() => {{ const el = document.querySelector('{selector}');"
+            "if (el) el.click(); return !!el; }"
+        )
         if clicked:
             time.sleep(2)
+            page.evaluate(
+                "document.querySelector('video')?.scrollIntoView({block: 'center'})"
+            )
+            time.sleep(1)
             shot(page, out_dir, f"05-evidence-panel-{L}")
             video_el = page.query_selector("video")
             if video_el is not None:
                 # let the clip actually play a few seconds into the recording
                 page.evaluate("v => v.play()", video_el)
-                time.sleep(6)
+                time.sleep(7)
                 shot(page, out_dir, f"06-clip-playing-{L}")
 
         # scroll to the map
-        page.mouse.wheel(0, 900)
+        page.evaluate(
+            "document.querySelector('.maplibregl-map')?.scrollIntoView({block: 'center'})"
+        )
         time.sleep(2.5)
         shot(page, out_dir, f"07-map-{L}")
 

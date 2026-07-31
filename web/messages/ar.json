@@ -153,6 +153,8 @@
     "class_motorcycle": "دراجة نارية",
     "class_bicycle": "دراجة هوائية",
     "fit_activity": "احتواء الظهورات",
-    "full_span": "كامل التسجيل"
+    "full_span": "كامل التسجيل",
+    "cross_camera_only": "عبر الكاميرات فقط",
+    "show_all_identities": "عرض كل الهويات"
   }
 }
