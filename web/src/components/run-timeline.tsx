@@ -1,8 +1,9 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { CrossCameraGallery } from "@/components/cross-camera-gallery";
 import type {
   TimelineIdentityOut,
   TimelineMemberOut,
@@ -64,6 +65,20 @@ export function RunTimeline({
   const hasActivityWindow =
     spans.length > 0 && activityEnd - activityStart < tapeEnd / 2;
   const [fitActivity, setFitActivity] = useState(true);
+
+  // a real photo of each camera's feed, not just its id — the first
+  // thumbnailed sighting on that camera, from any identity
+  const cameraPreview = useMemo(() => {
+    const preview = new Map<string, TimelineMemberOut>();
+    for (const identity of timeline.identities) {
+      for (const member of identity.members) {
+        if (member.has_thumbnail && !preview.has(member.camera_id)) {
+          preview.set(member.camera_id, member);
+        }
+      }
+    }
+    return preview;
+  }, [timeline.identities]);
 
   if (timeline.identities.length === 0) {
     return <p className="text-sm text-muted-foreground">{t("no_identities")}</p>;
@@ -134,9 +149,16 @@ export function RunTimeline({
         )}
       </div>
 
+      <CrossCameraGallery
+        runId={runId}
+        identities={timeline.identities}
+        selected={selected}
+        onSelect={setSelected}
+      />
+
       {/* the time axis reads left-to-right in both locales, like any chart */}
       <div dir="ltr" className="space-y-1.5">
-        <div className="relative ms-28 h-4 text-[10px] text-muted-foreground">
+        <div className="relative ms-36 h-4 text-[10px] text-muted-foreground">
           {ticks.map((tick) => (
             <span
               key={tick}
@@ -147,60 +169,97 @@ export function RunTimeline({
             </span>
           ))}
         </div>
-        {lanes.map(({ camera, entries }) => (
-          <div key={camera.camera_id} className="flex items-center gap-2">
-            <div className="w-26 shrink-0 truncate text-end text-xs">
-              <span className="font-mono">{camera.camera_id}</span>
-              {!camera.video_on_disk && (
-                <span
-                  className="ms-1 text-muted-foreground"
-                  title={t("video_missing")}
-                >
-                  ⚠
-                </span>
-              )}
-            </div>
-            <div className="relative h-8 flex-1 overflow-hidden rounded-md bg-muted/60">
-              {camera.scene_end_s !== null && (
-                <div
-                  className="absolute inset-y-0 bg-muted"
-                  style={{
-                    left: `${pct(camera.scene_start_s)}%`,
-                    width: `${((camera.scene_end_s - camera.scene_start_s) / span) * 100}%`,
-                  }}
-                />
-              )}
-              {entries.map(({ identity, member }) => {
-                const start = member.start_s as number;
-                const end = member.end_s as number;
-                const dim =
-                  selected !== null &&
-                  selected.identity.global_id !== identity.global_id;
-                const isSelected =
-                  selected?.member === member &&
-                  selected.identity.global_id === identity.global_id;
-                return (
-                  <button
-                    key={`${identity.global_id}-${member.track_id}`}
-                    type="button"
-                    onClick={() => setSelected({ identity, member })}
-                    title={`#${identity.global_id} ${entityLabel(identity.entity_class)} · ${formatClock(start)}–${formatClock(end)}`}
-                    className={`absolute inset-y-1 rounded-sm transition-opacity ${
-                      dim ? "opacity-25" : "opacity-90 hover:opacity-100"
-                    } ${isSelected ? "ring-2 ring-foreground" : ""} ${
-                      identity.cross_camera ? "border border-foreground/60" : ""
-                    }`}
-                    style={{
-                      left: `${pct(start)}%`,
-                      width: `${Math.max(((end - start) / span) * 100, 0.6)}%`,
-                      backgroundColor: identityColor(identity.global_id),
+        {lanes.map(({ camera, entries }) => {
+          const preview = cameraPreview.get(camera.camera_id);
+          return (
+            <div key={camera.camera_id} className="flex items-center gap-2">
+              <div className="flex w-36 shrink-0 items-center justify-end gap-1.5 text-end text-xs">
+                <div className="min-w-0">
+                  <span className="font-mono">{camera.camera_id}</span>
+                  {!camera.video_on_disk && (
+                    <span
+                      className="ms-1 text-muted-foreground"
+                      title={t("video_missing")}
+                    >
+                      ⚠
+                    </span>
+                  )}
+                </div>
+                {preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- API-served evidence crop
+                  <img
+                    src={`${API_URL}/runs/${runId}/thumbs/${preview.camera_id}/${preview.track_id}`}
+                    alt={camera.camera_id}
+                    className="size-8 shrink-0 rounded border object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.visibility = "hidden";
                     }}
                   />
-                );
-              })}
+                ) : (
+                  <div className="size-8 shrink-0 rounded border bg-muted" />
+                )}
+              </div>
+              <div className="relative h-8 flex-1 overflow-hidden rounded-md bg-muted/60">
+                {camera.scene_end_s !== null && (
+                  <div
+                    className="absolute inset-y-0 bg-muted"
+                    style={{
+                      left: `${pct(camera.scene_start_s)}%`,
+                      width: `${((camera.scene_end_s - camera.scene_start_s) / span) * 100}%`,
+                    }}
+                  />
+                )}
+                {entries.map(({ identity, member }) => {
+                  const start = member.start_s as number;
+                  const end = member.end_s as number;
+                  const mid = (start + end) / 2;
+                  const dim =
+                    selected !== null &&
+                    selected.identity.global_id !== identity.global_id;
+                  const isSelected =
+                    selected?.member === member &&
+                    selected.identity.global_id === identity.global_id;
+                  return (
+                    <Fragment key={`${identity.global_id}-${member.track_id}`}>
+                      <button
+                        type="button"
+                        onClick={() => setSelected({ identity, member })}
+                        title={`#${identity.global_id} ${entityLabel(identity.entity_class)} · ${formatClock(start)}–${formatClock(end)}`}
+                        className={`absolute inset-y-1 rounded-sm transition-opacity ${
+                          dim ? "opacity-25" : "opacity-90 hover:opacity-100"
+                        } ${isSelected ? "ring-2 ring-foreground" : ""} ${
+                          identity.cross_camera ? "border border-foreground/60" : ""
+                        }`}
+                        style={{
+                          left: `${pct(start)}%`,
+                          width: `${Math.max(((end - start) / span) * 100, 0.6)}%`,
+                          backgroundColor: identityColor(identity.global_id),
+                        }}
+                      />
+                      {member.has_thumbnail && (
+                        // eslint-disable-next-line @next/next/no-img-element -- API-served evidence crop
+                        <img
+                          src={`${API_URL}/runs/${runId}/thumbs/${member.camera_id}/${member.track_id}`}
+                          alt=""
+                          className={`pointer-events-none absolute top-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 object-cover shadow transition-opacity ${
+                            dim ? "opacity-25" : "opacity-100"
+                          }`}
+                          style={{
+                            left: `${pct(mid)}%`,
+                            borderColor: identityColor(identity.global_id),
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.style.visibility = "hidden";
+                          }}
+                        />
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {selected === null ? (

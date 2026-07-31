@@ -71,11 +71,26 @@ the audit trail is genuine.
 - Current seeded case: `case-20260731-020923-301c1b`. 574 identities in
   the gallery, **17 cross-camera** (10 vehicles, 7 persons), 342 pre-cut
   evidence clips.
+- **The run page opens on a photo gallery, not a table**: two columns —
+  "Vehicles crossing cameras" and "People crossing cameras" — each
+  cross-camera identity is a real thumbnail strip, one crop per camera
+  hop, connected by arrows, camera id + timestamp under each photo. This
+  is the headline visual and answers "is it cross-camera, for both
+  classes?" at a glance, before any click.
+- Below that, the per-camera lane timeline **also carries real thumbnail
+  photos** — a small circular crop at each sighting's position on the
+  colored bar, plus a camera preview thumbnail next to every camera's
+  label (not just a code like `c017`).
+- The case workspace (targets/hypotheses) shows a **real thumbnail next
+  to every confirmed member and every hypothesis row** — a vehicle photo
+  or a person photo, not just `c021#10000067`.
 - The timeline defaults to **"عبر الكاميرات فقط"** (cross-camera only) on
   dense runs — the toggle chip switches back to all identities.
 - **Star identities to click on stage** (clean, verified clips):
   - **#109 — person** walking c018 → c019 → c021, confidence 65.6%,
-    spatiotemporal evidence 0.969. The clip shows him mid-frame.
+    spatiotemporal evidence 0.969. The clip shows him mid-frame. Click
+    his thumbnail directly in the gallery card, or his span in the c019
+    lane — both open the same evidence panel.
   - **#86 — car** c017 → c019, confidence 65.9%.
 - The three LARGE identities (#5, #6 cars; #3 person) are appearance
   clusters — the graph groups the compound's recurring similar white
@@ -94,17 +109,24 @@ camera c020. Find where else they appear across the compound."*
 1. **Login** as `demo` → lands on القضايا (Cases). ~10s
 2. Open **"El Shorouk — Finals Demo"** → case workspace: two targets
    (vehicle + person of interest), each with ranked hypotheses and one
-   CONFIRMED cross-camera match; every action attributed + audited. ~30s
+   CONFIRMED cross-camera match — every hypothesis and confirmed member
+   shows its actual photo, not just a track code; every action
+   attributed + audited. ~30s
 3. In the search panel: pick probe `run-20260731-005450-b6a70b` → run a live search
    (vehicle stream) → ranked hits with scores appear in ~1s (CPU FAISS).
    Attach a hit as a hypothesis live if asked "is this real?". ~40s
 4. Click through to the **gallery run** `run-20260730-201635-81157c` →
-   **cross-camera timeline**: per-camera lanes, colored identity spans
-   (cross-camera-only filter is on by default). Click **identity #109**
-   (blue spans on c018/c019/c021) → evidence panel: per-term match
-   evidence (appearance/HSV/spatiotemporal bars), thumbnail, and the
-   **evidence clip playing inline** — the person visibly walks through
-   the frame. ~60s
+   opens on the **cross-camera photo gallery**: "Vehicles crossing
+   cameras · 10" and "People crossing cameras · 7", each a row of real
+   thumbnails per camera hop. Point at this first — it's the visual
+   proof of cross-camera tracking for both classes before anything is
+   clicked. Click **identity #109**'s thumbnail (person, c018→c019→c021)
+   → evidence panel: per-term match evidence (appearance/HSV/
+   spatiotemporal bars), thumbnail, and the **evidence clip playing
+   inline** — the person visibly walks through the frame. Scroll down to
+   the **per-camera lane timeline** below the gallery to show the same
+   identity's spans, now with thumbnail photos on the bars themselves.
+   ~75s
 5. Scroll to the **map**: camera pins on the actual compound (offline
    basemap), dashed lines tracing the identity's cross-camera journey.
    ~20s

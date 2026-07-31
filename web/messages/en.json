@@ -38,6 +38,7 @@
     "config_hash": "Config hash",
     "no_config": "No frozen configuration",
     "inputs": "Evidence inputs",
+    "no_preview": "No preview",
     "camera": "Camera",
     "sha256": "SHA-256",
     "duration": "Duration (s)",
@@ -155,6 +156,10 @@
     "fit_activity": "Fit to sightings",
     "full_span": "Full tape",
     "cross_camera_only": "Cross-camera only",
-    "show_all_identities": "Show all identities"
+    "show_all_identities": "Show all identities",
+    "gallery_vehicles": "Vehicles crossing cameras",
+    "gallery_persons": "People crossing cameras",
+    "gallery_none_vehicles": "No cross-camera vehicles in this run",
+    "gallery_none_persons": "No cross-camera people in this run"
   }
 }

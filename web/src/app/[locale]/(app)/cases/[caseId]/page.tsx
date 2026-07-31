@@ -308,15 +308,25 @@ function TargetCard({
         {target.members.length === 0 ? (
           <p className="text-xs text-muted-foreground">{t("no_members")}</p>
         ) : (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-2">
             {target.members.map((m) => (
-              <Badge
+              <div
                 key={`${m.run_id}/${m.camera_id}/${m.track_id}`}
-                variant="secondary"
-                className="font-mono text-xs"
+                className="flex items-center gap-1.5 rounded-md border bg-muted/40 py-1 pe-2 ps-1"
               >
-                {m.camera_id}#{m.track_id}
-              </Badge>
+                {/* eslint-disable-next-line @next/next/no-img-element -- API-served evidence crop */}
+                <img
+                  src={`${API_URL}/runs/${m.run_id}/thumbs/${m.camera_id}/${m.track_id}`}
+                  alt=""
+                  className="size-8 rounded object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
+                <span className="font-mono text-xs">
+                  {m.camera_id}#{m.track_id}
+                </span>
+              </div>
             ))}
           </div>
         )}
@@ -335,6 +345,15 @@ function TargetCard({
               className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
             >
               <span className="flex items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element -- API-served evidence crop */}
+                <img
+                  src={`${API_URL}/runs/${hyp.run_id}/thumbs/${hyp.camera_id}/${hyp.track_id}`}
+                  alt=""
+                  className="size-9 shrink-0 rounded object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
                 <Badge variant="outline">{hyp.kind}</Badge>
                 <span className="font-mono text-xs">
                   {hyp.camera_id}#{hyp.track_id}
@@ -543,6 +562,7 @@ function SearchPanel({
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead />
                       <TableHead>{t("camera")}</TableHead>
                       <TableHead>{t("track")}</TableHead>
                       <TableHead>{t("score")}</TableHead>
@@ -553,6 +573,17 @@ function SearchPanel({
                   <TableBody>
                     {result.hits.map((hit, index) => (
                       <TableRow key={index}>
+                        <TableCell>
+                          {/* eslint-disable-next-line @next/next/no-img-element -- API-served evidence crop */}
+                          <img
+                            src={`${API_URL}/runs/${galleryId}/thumbs/${hit.gallery_camera_id}/${hit.gallery_track_id}`}
+                            alt=""
+                            className="size-9 rounded object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        </TableCell>
                         <TableCell className="font-mono text-xs">
                           {hit.gallery_camera_id}
                         </TableCell>

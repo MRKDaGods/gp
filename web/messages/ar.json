@@ -38,6 +38,7 @@
     "config_hash": "بصمة الإعدادات",
     "no_config": "لا توجد إعدادات مجمدة",
     "inputs": "مدخلات الأدلة",
+    "no_preview": "لا معاينة",
     "camera": "الكاميرا",
     "sha256": "البصمة",
     "duration": "المدة (ث)",
@@ -155,6 +156,10 @@
     "fit_activity": "احتواء الظهورات",
     "full_span": "كامل التسجيل",
     "cross_camera_only": "عبر الكاميرات فقط",
-    "show_all_identities": "عرض كل الهويات"
+    "show_all_identities": "عرض كل الهويات",
+    "gallery_vehicles": "مركبات عبر الكاميرات",
+    "gallery_persons": "أشخاص عبر الكاميرات",
+    "gallery_none_vehicles": "لا توجد مركبات عبر الكاميرات في هذه المعالجة",
+    "gallery_none_persons": "لا يوجد أشخاص عبر الكاميرات في هذه المعالجة"
   }
 }

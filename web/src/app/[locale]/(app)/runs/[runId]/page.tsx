@@ -3,7 +3,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EventStream } from "@/components/event-stream";
 import { RunTimeline } from "@/components/run-timeline";
 import { StatusBadge } from "@/components/status-badge";
@@ -70,6 +70,20 @@ export default function RunDetailPage() {
       },
     );
   }, [runId]);
+
+  // a real photo of each camera's feed, not just its id — the first
+  // thumbnailed sighting on that camera, from any identity
+  const cameraPreview = useMemo(() => {
+    const preview = new Map<string, { camera_id: string; track_id: number }>();
+    for (const identity of timeline?.identities ?? []) {
+      for (const member of identity.members) {
+        if (member.has_thumbnail && !preview.has(member.camera_id)) {
+          preview.set(member.camera_id, member);
+        }
+      }
+    }
+    return preview;
+  }, [timeline]);
 
   if (missing) {
     return (
@@ -145,28 +159,61 @@ export default function RunDetailPage() {
             {(run.inputs ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("empty")}</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("camera")}</TableHead>
-                    <TableHead>{t("sha256")}</TableHead>
-                    <TableHead>{t("duration")}</TableHead>
-                    <TableHead>{t("fps")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(run.inputs ?? []).map((input) => (
-                    <TableRow key={input.camera_id}>
-                      <TableCell>{input.camera_id}</TableCell>
-                      <TableCell className="font-mono text-xs" dir="ltr">
-                        {input.sha256.slice(0, 16)}…
-                      </TableCell>
-                      <TableCell>{input.duration_s ?? "—"}</TableCell>
-                      <TableCell>{input.fps ?? "—"}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {(run.inputs ?? []).map((input) => {
+                  const preview = cameraPreview.get(input.camera_id);
+                  const onDisk = timeline?.cameras.find(
+                    (c) => c.camera_id === input.camera_id,
+                  )?.video_on_disk;
+                  return (
+                    <div
+                      key={input.camera_id}
+                      className="overflow-hidden rounded-md border"
+                    >
+                      {preview ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- API-served evidence crop
+                        <img
+                          src={`${API_URL}/runs/${run.run_id}/thumbs/${preview.camera_id}/${preview.track_id}`}
+                          alt={input.camera_id}
+                          className="aspect-video w-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="flex aspect-video w-full items-center justify-center bg-muted text-xs text-muted-foreground">
+                          {t("no_preview")}
+                        </div>
+                      )}
+                      <div className="space-y-0.5 p-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono font-medium">
+                            {input.camera_id}
+                          </span>
+                          {onDisk === false && (
+                            <span
+                              className="text-muted-foreground"
+                              title={tl("video_missing")}
+                            >
+                              ⚠
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {input.duration_s ?? "—"}s · {input.fps ?? "—"} {t("fps")}
+                        </div>
+                        <div
+                          className="truncate font-mono text-muted-foreground"
+                          dir="ltr"
+                          title={input.sha256}
+                        >
+                          {input.sha256.slice(0, 12)}…
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
